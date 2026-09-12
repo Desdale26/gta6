@@ -4,6 +4,7 @@
 // handful of materials. Animation is entirely procedural — no clips, no skeleton data, just
 // sine-driven joint angles that respond to actual walk speed.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, damp, wrapAngle, angleDelta, TAU } from '../core/mathx.js';
 import { CharacterController, Ragdoll, MOVE_STATE } from '../physics/character.js';
 import { BoxCollider, LAYER, SURFACE, MASK_SOLID } from '../physics/world.js';
@@ -28,33 +29,118 @@ export const PED_STATE = {
 let GEO = null;
 function buildGeometry() {
   if (GEO) return GEO;
-  const cap = (r, h, seg = 7) => {
-    const g = new THREE.CapsuleGeometry(r, Math.max(0.01, h - r * 2), 2, seg);
+
+  // Every ped in the city shares this one table, so resolution here is a fixed
+  // cost no matter how many are on screen. Capsules and spheres could never be
+  // more than a blocked-out figure; lathed profiles give real anatomy — a chest
+  // that tapers to a waist, calves, a heel — at a resolution worth looking at.
+  const RAD = 16;
+
+  /** A solid of revolution from [radius, y] pairs, capped at both ends. */
+  const lathe = (profile, seg = RAD) => {
+    const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(0.0008, r), y));
+    const g = new THREE.LatheGeometry(pts, seg);
+    g.computeVertexNormals();
     return g;
   };
+
+  /** A tapered limb segment with rounded ends. */
+  const limb = (rTop, rMid, rBot, len, seg = RAD) => {
+    const h = len / 2;
+    return lathe([
+      [0, -h], [rBot * 0.55, -h * 0.985], [rBot, -h * 0.90],
+      [rMid, 0], [rTop, h * 0.90], [rTop * 0.55, h * 0.985], [0, h],
+    ], seg);
+  };
+
+  const merge = (list) => mergeGeometries(list.filter(Boolean), false) || list[0];
+
+  // ---- head: skull, brow, nose, ears, all one skin-coloured mesh ----
+  const skull = lathe([
+    [0, -0.115], [0.052, -0.112], [0.075, -0.088], [0.086, -0.045],
+    [0.092, 0.0], [0.090, 0.045], [0.078, 0.085], [0.046, 0.112], [0, 0.120],
+  ], RAD);
+  skull.scale(1.0, 1.0, 0.92);
+  const brow = new THREE.BoxGeometry(0.13, 0.022, 0.03);
+  brow.translate(0, 0.016, 0.079);
+  const nose = new THREE.BoxGeometry(0.028, 0.05, 0.034);
+  nose.translate(0, -0.018, 0.083);
+  const chin = new THREE.SphereGeometry(0.045, 8, 6);
+  chin.scale(1.25, 0.85, 1.0);
+  chin.translate(0, -0.072, 0.038);
+  const earL = new THREE.SphereGeometry(0.021, 6, 5); earL.scale(0.5, 1.25, 1);
+  earL.translate(-0.086, 0.0, 0.004);
+  const earR = earL.clone(); earR.translate(0.172, 0, 0);
+  const head = merge([skull, brow, nose, chin, earL, earR]);
+
+  // ---- torso: shoulders down to a waist, plus collarbones ----
+  const chest = lathe([
+    [0, -0.26], [0.10, -0.255], [0.125, -0.20], [0.132, -0.09],
+    [0.150, 0.04], [0.163, 0.14], [0.150, 0.215], [0.09, 0.255], [0, 0.26],
+  ], RAD);
+  chest.scale(1.06, 1, 0.70);
+  const deltoidL = new THREE.SphereGeometry(0.072, 10, 8); deltoidL.scale(1, 0.9, 0.85);
+  deltoidL.translate(-0.165, 0.175, 0);
+  const deltoidR = deltoidL.clone(); deltoidR.translate(0.33, 0, 0);
+  const torso = merge([chest, deltoidL, deltoidR]);
+
+  // ---- pelvis ----
+  const hips = lathe([
+    [0, -0.13], [0.09, -0.126], [0.122, -0.08], [0.138, 0.0],
+    [0.132, 0.075], [0.10, 0.122], [0, 0.13],
+  ], RAD);
+  hips.scale(1.08, 1, 0.78);
+
+  // ---- hand: palm plus a thumb and a fused finger block ----
+  const palm = new THREE.SphereGeometry(0.042, 10, 8);
+  palm.scale(0.78, 1.25, 1.12);
+  const fingers = new THREE.BoxGeometry(0.052, 0.062, 0.030);
+  fingers.translate(0, -0.055, 0.002);
+  const thumb = new THREE.BoxGeometry(0.020, 0.040, 0.020);
+  thumb.translate(0.031, -0.020, 0.010);
+  const hand = merge([palm, fingers, thumb]);
+
+  // ---- foot: heel, arch and toe rather than a shoebox ----
+  const sole = new THREE.BoxGeometry(0.098, 0.035, 0.255);
+  sole.translate(0, -0.020, 0.048);
+  const upper = new THREE.BoxGeometry(0.094, 0.062, 0.145);
+  upper.translate(0, 0.012, -0.005);
+  const toe = new THREE.SphereGeometry(0.049, 10, 6);
+  toe.scale(1.0, 0.62, 1.35);
+  toe.translate(0, -0.004, 0.136);
+  const heel = new THREE.SphereGeometry(0.047, 10, 6);
+  heel.scale(1.0, 0.78, 0.9);
+  heel.translate(0, 0.004, -0.058);
+  const foot = merge([sole, upper, toe, heel]);
+
   GEO = {
-    head: new THREE.SphereGeometry(0.115, 10, 8),
-    jaw: new THREE.BoxGeometry(0.15, 0.1, 0.14),
-    hair: new THREE.SphereGeometry(0.122, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    torso: cap(0.135, 0.5),
-    hips: cap(0.13, 0.22),
-    upperArm: cap(0.052, 0.28),
-    lowerArm: cap(0.046, 0.26),
-    hand: new THREE.SphereGeometry(0.052, 6, 5),
-    thigh: cap(0.075, 0.4),
-    shin: cap(0.062, 0.4),
-    foot: new THREE.BoxGeometry(0.1, 0.07, 0.24),
-    cap_: new THREE.CylinderGeometry(0.125, 0.125, 0.06, 10),
+    head,
+    hair: (() => {
+      const g = lathe([
+        [0, -0.02], [0.062, -0.018], [0.090, 0.020], [0.098, 0.058],
+        [0.082, 0.100], [0.046, 0.124], [0, 0.130],
+      ], RAD);
+      g.scale(1.02, 1.0, 0.96);
+      return g;
+    })(),
+    torso,
+    hips,
+    upperArm: limb(0.058, 0.052, 0.044, 0.30),
+    lowerArm: limb(0.044, 0.040, 0.034, 0.27),
+    hand,
+    thigh: limb(0.088, 0.079, 0.062, 0.42),
+    shin: limb(0.062, 0.056, 0.040, 0.42),
+    foot,
+    cap_: new THREE.CylinderGeometry(0.125, 0.122, 0.062, 16),
     bagGeo: new THREE.BoxGeometry(0.22, 0.26, 0.1),
     phoneGeo: new THREE.BoxGeometry(0.07, 0.13, 0.012),
   };
-  GEO.foot.translate(0, 0, 0.05);
-  // Accessories used to be allocated per ped, so every despawn leaked a handful
-  // of buffers; they are fixed-size, so they belong in the shared table too.
+  // Accessories are fixed-size, so they belong in the shared table too —
+  // allocating them per ped leaked a handful of buffers on every despawn.
   GEO.capPeak = new THREE.BoxGeometry(0.17, 0.02, 0.1);
-  GEO.coffee = new THREE.CylinderGeometry(0.035, 0.03, 0.11, 7);
+  GEO.coffee = new THREE.CylinderGeometry(0.035, 0.03, 0.11, 10);
   GEO.camera = new THREE.BoxGeometry(0.1, 0.07, 0.07);
-  GEO.umbrella = new THREE.CylinderGeometry(0.015, 0.015, 0.7, 5);
+  GEO.umbrella = new THREE.CylinderGeometry(0.015, 0.015, 0.7, 8);
   GEO.skateboard = new THREE.BoxGeometry(0.18, 0.03, 0.72);
   GEO.surfboard = new THREE.BoxGeometry(0.36, 0.06, 1.9);
   return GEO;
@@ -187,11 +273,9 @@ export class Ped {
     };
 
     // torso + hips
-    this.torso = mk(g.torso, topM, 0, 1.16 * s, 0);
-    this.torso.scale.set(1.05, 1, 0.78);
+    this.torso = mk(g.torso, topM, 0, 1.18 * s, 0);
     root.add(this.torso);
-    this.hips = mk(g.hips, botM, 0, 0.94 * s, 0);
-    this.hips.scale.set(1.05, 1, 0.82);
+    this.hips = mk(g.hips, botM, 0, 0.93 * s, 0);
     root.add(this.hips);
 
     // head
@@ -199,10 +283,8 @@ export class Ped {
     this.neck.position.set(0, 1.42 * s, 0);
     root.add(this.neck);
     this.head = mk(g.head, skinM, 0, 0.06, 0);
-    this.head.scale.set(0.94, 1.06, 1);
     this.neck.add(this.head);
-    const hair = mk(g.hair, hairM, 0, 0.075, 0);
-    hair.scale.setScalar(1.02);
+    const hair = mk(g.hair, hairM, 0, 0.06, 0);
     this.neck.add(hair);
     if (this.hasHat) {
       const cap = mk(g.cap_, accM, 0, 0.16, 0);
@@ -217,14 +299,14 @@ export class Ped {
       const shoulder = new THREE.Group();
       shoulder.position.set(side * 0.19, 1.36 * s, 0);
       root.add(shoulder);
-      const upper = mk(g.upperArm, topM, 0, -0.14, 0);
+      const upper = mk(g.upperArm, topM, 0, -0.15, 0);
       shoulder.add(upper);
       const elbow = new THREE.Group();
-      elbow.position.set(0, -0.28, 0);
+      elbow.position.set(0, -0.30, 0);
       shoulder.add(elbow);
-      const lower = mk(g.lowerArm, skinM, 0, -0.13, 0);
+      const lower = mk(g.lowerArm, skinM, 0, -0.135, 0);
       elbow.add(lower);
-      const hand = mk(g.hand, skinM, 0, -0.27, 0);
+      const hand = mk(g.hand, skinM, 0, -0.30, 0);
       elbow.add(hand);
       this.arms.push({ shoulder, elbow, hand, side });
     }
@@ -235,14 +317,14 @@ export class Ped {
       const hip = new THREE.Group();
       hip.position.set(side * 0.10, 0.88 * s, 0);
       root.add(hip);
-      const thigh = mk(g.thigh, botM, 0, -0.2, 0);
+      const thigh = mk(g.thigh, botM, 0, -0.21, 0);
       hip.add(thigh);
       const knee = new THREE.Group();
-      knee.position.set(0, -0.4, 0);
+      knee.position.set(0, -0.42, 0);
       hip.add(knee);
-      const shin = mk(g.shin, botM, 0, -0.2, 0);
+      const shin = mk(g.shin, botM, 0, -0.21, 0);
       knee.add(shin);
-      const foot = mk(g.foot, shoeM, 0, -0.4, 0.02);
+      const foot = mk(g.foot, shoeM, 0, -0.44, 0.02);
       knee.add(foot);
       this.legs.push({ hip, knee, foot, side });
     }
@@ -530,67 +612,114 @@ export class Ped {
   // ---- animation ----------------------------------------------------------
   _animate(dt) {
     const hSpeed = Math.hypot(this.body.velocity.x, this.body.velocity.z);
-    const stride = clamp(hSpeed / 1.6, 0, 2.4);
-    this.animPhase += dt * (3.4 + stride * 3.6);
+
+    // Everything below drives a *target* pose, and every joint eases toward its
+    // target rather than being assigned. That single change is most of what
+    // separates fluid movement from the snapping this used to do when a ped
+    // changed state, because a walk now blends into a sprint or a gun-raise
+    // over a few frames instead of cutting to it.
+    const blend = this.lodLevel === 0 ? 16 : 10;
+    const to = (obj, axis, target, rate = blend) => {
+      obj.rotation[axis] = damp(obj.rotation[axis], target, rate, dt);
+    };
+
+    // Smoothed gait speed, so the stride grows and shrinks instead of popping.
+    this.gait = damp(this.gait ?? 0, hSpeed, 8, dt);
+    const stride = clamp(this.gait / 1.6, 0, 2.4);
+    const running = this.gait > 3.1;
+
+    // Stride frequency rises with speed the way a real gait does, and the phase
+    // is continuous across the walk/run transition so nothing ever jumps.
+    this.animPhase += dt * (2.6 + Math.sqrt(Math.max(0, this.gait)) * 3.4);
     const ph = this.animPhase;
-    const swing = Math.sin(ph) * clamp(stride * 0.55, 0.06, 0.95);
-    const swing2 = Math.sin(ph + Math.PI) * clamp(stride * 0.55, 0.06, 0.95);
-    const bob = Math.abs(Math.sin(ph)) * 0.035 * stride;
+    const amp = clamp(stride * 0.58, 0.05, 1.0);
+    const swing = Math.sin(ph) * amp;
+    const swingB = Math.sin(ph + Math.PI) * amp;
     const airborne = !this.body.grounded;
+    const crouch = this.body.crouching;
 
-    this.root.position.y = bob;
-    this.torso.rotation.x = -0.04 - stride * 0.06;
-    this.torso.rotation.z = Math.sin(ph) * 0.03 * stride;
+    // --- body: bob, lean into acceleration, bank into turns ---
+    const bob = (running ? 0.055 : 0.035) * stride * Math.abs(Math.sin(ph));
+    this.root.position.y = damp(this.root.position.y, bob, 14, dt);
 
-    // legs
+    const turn = angleDelta(this._prevYaw ?? this.yaw, this.yaw) / Math.max(dt, 1e-3);
+    this._prevYaw = this.yaw;
+    this.turnRate = damp(this.turnRate ?? 0, clamp(turn, -4, 4), 6, dt);
+    const accel = (this.gait - (this._lastGait ?? this.gait)) / Math.max(dt, 1e-3);
+    this._lastGait = this.gait;
+    this.leanF = damp(this.leanF ?? 0, clamp(accel * 0.02, -0.18, 0.30) + stride * 0.07, 5, dt);
+
+    to(this.torso, 'x', crouch ? 0.42 : -0.03 + this.leanF);
+    to(this.torso, 'z', -this.turnRate * 0.06 + Math.sin(ph) * 0.025 * stride);
+    // Shoulders counter-rotate against the pelvis — without this a walk reads
+    // as a shop mannequin sliding along.
+    to(this.torso, 'y', -Math.sin(ph) * 0.14 * stride);
+    to(this.hips, 'y', Math.sin(ph) * 0.10 * stride);
+    to(this.hips, 'x', crouch ? 0.2 : 0);
+
+    // --- legs ---
     for (let i = 0; i < this.legs.length; i++) {
       const leg = this.legs[i];
-      const s = i === 0 ? swing : swing2;
+      const sw = i === 0 ? swing : swingB;
+      let hipX, kneeX, footX;
       if (airborne) {
-        leg.hip.rotation.x = 0.35;
-        leg.knee.rotation.x = -0.6;
-      } else if (this.body.crouching) {
-        leg.hip.rotation.x = 0.85;
-        leg.knee.rotation.x = -1.5;
+        hipX = 0.34 + sw * 0.15; kneeX = -0.62; footX = 0.16;
+      } else if (crouch) {
+        hipX = 0.88; kneeX = -1.52; footX = 0.5;
       } else {
-        leg.hip.rotation.x = s * 0.8;
-        leg.knee.rotation.x = -Math.max(0, -s * 1.2 + 0.1) - 0.05;
+        hipX = sw * (running ? 1.05 : 0.78);
+        // The knee only folds while the leg is travelling forward through its
+        // swing; a straight leg on the ground is what makes a stride land.
+        const lift = Math.max(0, -sw);
+        kneeX = -(lift * (running ? 1.9 : 1.25) + 0.06);
+        // Heel strike then toe off: the ankle leads the foot into the ground
+        // and pushes off behind, which is what stops feet skating.
+        footX = -kneeX * 0.35 - sw * 0.30;
       }
-      leg.foot.rotation.x = -leg.knee.rotation.x * 0.4;
+      to(leg.hip, 'x', hipX);
+      to(leg.knee, 'x', kneeX);
+      to(leg.foot, 'x', footX);
+      to(leg.hip, 'z', leg.side * 0.02);
     }
 
-    // arms
+    // --- arms ---
     const combat = this.state === PED_STATE.COMBAT && this.armed;
+    const fleeing = this.state === PED_STATE.FLEE || this.state === PED_STATE.PANIC;
     for (let i = 0; i < this.arms.length; i++) {
       const arm = this.arms[i];
-      const s = i === 0 ? swing2 : swing;
+      const sw = i === 0 ? swingB : swing;
+      let shX, shZ, elX;
       if (combat) {
-        arm.shoulder.rotation.x = -1.45;
-        arm.shoulder.rotation.z = arm.side * 0.16;
-        arm.elbow.rotation.x = -0.28;
-      } else if (this.state === PED_STATE.FLEE || this.state === PED_STATE.PANIC) {
-        arm.shoulder.rotation.x = -2.2 + Math.sin(ph * 1.4 + i) * 0.35;
-        arm.shoulder.rotation.z = arm.side * 0.5;
-        arm.elbow.rotation.x = -0.7;
+        shX = -1.45; shZ = arm.side * 0.16; elX = -0.28;
+      } else if (fleeing) {
+        shX = -2.2 + Math.sin(ph * 1.4 + i) * 0.35; shZ = arm.side * 0.5; elX = -0.7;
       } else if (this.prop === 'phone' && i === 1) {
-        arm.shoulder.rotation.x = -1.1;
-        arm.shoulder.rotation.z = arm.side * 0.2;
-        arm.elbow.rotation.x = -1.2;
+        shX = -1.1; shZ = arm.side * 0.2; elX = -1.2;
       } else {
-        arm.shoulder.rotation.x = s * 0.62;
-        arm.shoulder.rotation.z = arm.side * (0.1 + stride * 0.03);
-        arm.elbow.rotation.x = -Math.max(0, s * 0.5) - 0.12;
+        shX = sw * (running ? 0.92 : 0.58);
+        shZ = arm.side * (0.10 + stride * 0.04);
+        // The elbow closes on the forward swing and opens behind, and it stays
+        // more bent at a run — the detail that reads as momentum.
+        elX = -(Math.max(0, sw) * (running ? 1.15 : 0.55) + (running ? 0.55 : 0.14));
       }
+      to(arm.shoulder, 'x', shX);
+      to(arm.shoulder, 'z', shZ);
+      to(arm.elbow, 'x', elX);
     }
 
-    // head look + blink
-    this.neck.rotation.y = clamp(angleDelta(this.yaw, this.lookYaw), -0.9, 0.9);
-    this.neck.rotation.x = Math.sin(ph * 0.5) * 0.03;
+    // --- head: leads the turn, settles on what the ped is looking at ---
+    const lookY = clamp(angleDelta(this.yaw, this.lookYaw), -0.9, 0.9);
+    to(this.neck, 'y', lookY, 9);
+    to(this.neck, 'x', clamp(-this.leanF * 0.5, -0.25, 0.25) + Math.sin(ph * 0.5) * 0.02, 9);
+
     this.blinkTimer -= dt;
     if (this.blinkTimer < 0) {
       this.blinkTimer = 2 + this.rng.float() * 4;
-      this.head.scale.y = 0.86;
-      setTimeout(() => { if (this.head) this.head.scale.y = 1.06; }, 90);
+      this._blink = 0.12;
+    }
+    if (this._blink > 0) {
+      this._blink -= dt;
+      this.head.scale.y = this._blink > 0 ? 0.86 : 1;
     }
   }
 
