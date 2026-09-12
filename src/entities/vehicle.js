@@ -18,6 +18,7 @@ export class Vehicle {
     this.def = def;
     this.id = _vid++;
     this.dead = false;
+    this.spawnedAt = ctx.time ? ctx.time.elapsed : 0;
     this.isVehicle = true;
     this.persistent = !!opts.persistent;
     this.plate = opts.plate || randomPlate(ctx.rng);

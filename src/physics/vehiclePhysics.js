@@ -192,6 +192,10 @@ export class VehicleSim {
     this.nWheels = this.wheels.length;
     this.staticWheelLoad = (this.mass * 9.81) / this.nWheels;
     this.rideHeight = suspensionFor(def).rideHeight;
+    // Height of the roll centre above the contact patch. Real saloons sit
+    // somewhere around a tenth of a metre; scaling with the centre of gravity
+    // keeps tall vehicles from being trivially trippable.
+    this.rollCentre = clamp((def.cogHeight ?? 0.55) * 0.55, 0.05, 0.7);
     this.isBike = def.body.kind === 'bike';
     this.isBoat = def.body.kind === 'boat';
 
@@ -812,9 +816,18 @@ export class VehicleSim {
     wheel.spin += wheel.angularVel * dt;
 
     // --- apply to body ---
+    // Longitudinal force acts at the contact patch, but lateral force acts
+    // through the suspension's roll centre, which sits above it. Applying side
+    // force at the road surface gives it the full height of the car as a lever,
+    // which is what trips a sliding car onto its roof; through the roll centre
+    // the same grip turns the car instead of rolling it.
     const cp = wheel.contactPoint;
     this.applyForceAt(_v1.x * fLong, _v1.y * fLong, _v1.z * fLong, cp.x, cp.y, cp.z);
-    this.applyForceAt(_v2.x * fLat, _v2.y * fLat, _v2.z * fLat, cp.x, cp.y, cp.z);
+    const rc = this.rollCentre;
+    this.applyForceAt(
+      _v2.x * fLat, _v2.y * fLat, _v2.z * fLat,
+      cp.x + this.up.x * rc, cp.y + this.up.y * rc, cp.z + this.up.z * rc,
+    );
     wheel.forceLong = fLong; wheel.forceLat = fLat;
 
     // --- skid amount drives smoke, marks and sound ---

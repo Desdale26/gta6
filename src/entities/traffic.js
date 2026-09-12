@@ -352,6 +352,17 @@ export class TrafficManager {
         this._stats.despawned++;
         continue;
       }
+      // An ambient car that has come to rest on its roof is scenery now, and it
+      // never rights itself. Once it has been like that for a few seconds and is
+      // far enough back not to vanish in front of anyone, let it go — otherwise
+      // wrecks accumulate until a third of the traffic in the city is upside
+      // down. The player's own car is never touched.
+      if (v !== player.vehicle && v.sim.flipTimer > 5 && dist2 > 55 * 55) {
+        v.dispose();
+        this.vehicles.splice(i, 1);
+        this._stats.despawned++;
+        continue;
+      }
       if (v.aiDriver && v !== player.vehicle) v.aiDriver.update(dt);
       v.update(dt);
     }

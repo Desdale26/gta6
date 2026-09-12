@@ -389,7 +389,13 @@ export class Game {
     // Ambient traffic that is mostly upside-down or mostly wrecked means the
     // drivers or the physics are failing, not that the city is having a bad day.
     if (trafficAlive >= 6) {
-      if (trafficRolled / trafficAlive > 0.25) bad.push(`${trafficRolled} of ${trafficAlive} traffic cars are on their roof`);
+      if (trafficRolled / trafficAlive > 0.25) {
+        const ex = ctx.traffic.all().find((v) => !v.dead && v.sim.up.y < 0.2);
+        const d = ex ? ` e.g. ${ex.def.id} at ${ex.sim.position.x.toFixed(0)},${ex.sim.position.z.toFixed(0)}`
+          + ` doing ${(ex.sim.speed * 3.6).toFixed(0)} km/h, up.y=${ex.sim.up.y.toFixed(2)},`
+          + ` wheels=${ex.sim.wheelsOnGround}, hp=${Math.round(ex.sim.health)}, age=${(ctx.time.elapsed - (ex.spawnedAt ?? 0)).toFixed(0)}s` : '';
+        bad.push(`${trafficRolled} of ${trafficAlive} traffic cars are on their roof${d}`);
+      }
       if (trafficWrecked / trafficAlive > 0.5) bad.push(`${trafficWrecked} of ${trafficAlive} traffic cars are wrecked`);
     }
 
