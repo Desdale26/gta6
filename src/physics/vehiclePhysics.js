@@ -570,6 +570,23 @@ export class VehicleSim {
       return 0;
     }
 
+    // A ray that starts inside a collider reports a hit at no distance at all.
+    // When a nose buries itself in a wall that happens to every front wheel at
+    // once, the spring reads as fully bottomed, and four corners firing six g
+    // apiece threw cars several metres into the air off a purely horizontal
+    // impact. A wheel that deep is embedded in something, not resting on it —
+    // let the hull collision push it back out instead.
+    if (hit.dist < wheel.radius * 0.5) {
+      wheel.contact = false; wheel.grounded = false;
+      wheel.suspensionLength = wheel.maxLength;
+      wheel.compression = 0; wheel.load = 0;
+      wheel.forceLong = 0; wheel.forceLat = 0;
+      wheel.onGroundTime = 0;
+      wheel.skid *= 0.9;
+      wheel.prevLen = wheel.maxLength;
+      return 0;
+    }
+
     const len = clamp(hit.dist - wheel.radius, 0, wheel.maxLength);
     // 0 at full droop, 1 when the shaft is fully collapsed. Measuring this over
     // `travel` instead used to report a bump-stop hit during ordinary cornering,

@@ -61,9 +61,14 @@ const SCENARIOS = [
       if (!Number.isFinite(sim.position.y)) bad.push('vehicle Y not finite');
       if (sim.position.y < -20) bad.push('vehicle fell through the world');
       if (sim.engineRpm < sim.def.engine.idleRpm * 0.8) bad.push('engine rpm below idle under throttle');
-      // A car can legitimately be a few centimetres airborne off a kerb at the
-      // instant the assert runs; being airborne for seconds is the real failure.
-      if (sim.airTime > 2.5) bad.push(`airborne for ${sim.airTime.toFixed(1)}s at full throttle`);
+      // `wheelsOnGround === 0` is not the same as flying: a car that has rammed
+      // a building and is left leaning nose-up against it has no wheel contact
+      // either, and that is a crash, not a physics failure. What would be a
+      // failure is a car well above where it could ever rest.
+      const restY = c.physics.groundHeight(sim.position.x, sim.position.z) + sim.rideHeight;
+      if (sim.airTime > 2.5 && sim.position.y > restY + 2.5) {
+        bad.push(`flying: ${(sim.position.y - restY).toFixed(1)} m up after ${sim.airTime.toFixed(1)}s airborne`);
+      }
       // Holding W for fourteen seconds can end in a building. A car that hits one
       // at 20 m/s, spins, and trips over its own tyres has rolled for real
       // reasons; a car that ends up inverted having hit nothing has not.
