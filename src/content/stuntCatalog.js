@@ -184,7 +184,9 @@ export function validateStunts() {
     if (!kinds.has(s.kind)) problems.push(`${s.id}: unknown kind ${s.kind}`);
     if (s.x < -1500 || s.x > 1100 || s.z < -1500 || s.z > 1500) problems.push(`${s.id}: out of bounds`);
     if (s.params.radius !== undefined && (s.params.radius < 4 || s.params.radius > 20)) problems.push(`${s.id}: radius out of range`);
-    if (s.params.angleDeg !== undefined && (s.params.angleDeg < 5 || s.params.angleDeg > 60)) problems.push(`${s.id}: ramp angle out of range`);
+    // Wallrides are deliberately near-vertical; every other ramp must be drivable.
+    const maxAngle = s.kind === 'wallride' ? 85 : 60;
+    if (s.params.angleDeg !== undefined && (s.params.angleDeg < 5 || s.params.angleDeg > maxAngle)) problems.push(`${s.id}: ramp angle out of range`);
     if (s.params.gapLength !== undefined && (s.params.gapLength < 10 || s.params.gapLength > 60)) problems.push(`${s.id}: gap out of range`);
     if (s.challenge) {
       const c = s.challenge;
