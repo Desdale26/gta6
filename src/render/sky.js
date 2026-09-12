@@ -95,7 +95,10 @@ const SKY_FRAG = /* glsl */`
       // light the clouds from the sun side
       float lighting = clamp(dot(normalize(vec3(dir.x, max(up, 0.05), dir.z)), uSunDir) * 0.5 + 0.5, 0.0, 1.0);
       vec3 lit = mix(uFogColor * 0.42, uSunColor * 1.05 + uFogColor * 0.5, pow(lighting, 1.6));
-      lit = mix(lit * (1.0 - uStorm * 0.72), lit, 1.0 - uStorm * 0.5);
+      // Storm cloud is dark slate, not black. Crushing it to a quarter — which
+      // is what this collapsed to at full storm — made the sky itself the
+      // darkest thing on screen during an afternoon thunderstorm.
+      lit *= 1.0 - uStorm * 0.26;
       sky = mix(sky, lit, clamp(density * (0.55 + 0.45 * cover), 0.0, 0.97));
     }
 
@@ -291,8 +294,8 @@ export class Sky {
     // the same sky, so take the stronger of the two rather than stacking them —
     // multiplying both left a thunderstorm at two in the afternoon darker than
     // midnight.
-    const cloudCut = Math.max(overcast * 0.62, storm * 0.78);
-    const dim = 1 - Math.max(storm * 0.5, overcast * 0.3);
+    const cloudCut = Math.max(overcast * 0.62, storm * 0.68);
+    const dim = 1 - Math.max(storm * 0.34, overcast * 0.3);
     u.uZenith.value.copy(p.zenith).multiplyScalar(dim);
     u.uHorizon.value.copy(p.horizon).multiplyScalar(dim);
     u.uGround.value.copy(p.ground);
@@ -308,7 +311,10 @@ export class Sky {
     u.uMie.value = 1 - overcast * 0.5;
 
     const fog = p.fog.clone();
-    if (storm > 0) fog.lerp(new THREE.Color(0x3c4350), storm * 0.7);
+    // Slate grey, not near-black: this colour is what the horizon, the aerial
+    // haze and the distance fog all resolve to, so it sets the floor for how
+    // dark a storm can make the whole frame.
+    if (storm > 0) fog.lerp(new THREE.Color(0x6d7784), storm * 0.7);
     if (weather && weather.fog > 0) fog.lerp(new THREE.Color(0xb9c4cc), weather.fog * 0.6);
     u.uFogColor.value.copy(fog);
 
@@ -352,8 +358,13 @@ export class Sky {
     this.sun.target.updateMatrixWorld();
 
     // --- environment probe, refreshed lazily ---
+    // The probe is what most surfaces get their brightness from — wet asphalt is
+    // almost entirely environment — so a stale one keeps the world lit by the
+    // previous sky. `envNeedsUpdate` was set once and never read, which meant a
+    // weather change took up to four seconds to reach anything reflective.
     this._envTimer -= dt;
-    if (this._envTimer <= 0 || Math.abs(hour - this._lastEnvHour) > 0.28) {
+    if (this._envTimer <= 0 || this.envNeedsUpdate || Math.abs(hour - this._lastEnvHour) > 0.28) {
+      this.envNeedsUpdate = false;
       this._envTimer = this._envInterval ?? 4;
       this._lastEnvHour = hour;
       this.refreshEnvironment();

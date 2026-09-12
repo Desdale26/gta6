@@ -89,6 +89,9 @@ export class Weather {
     if (!t) return;
     const changed = this.type !== type;
     this.type = type;
+    // Reflective surfaces read the sky through the probe, so it has to be
+    // retaken when the sky changes.
+    if (this.ctx.sky) this.ctx.sky.envNeedsUpdate = true;
     this.target = t;
     if (instant) {
       this.cloudCover = t.cloud; this.rain = t.rain; this.fog = t.fog;
