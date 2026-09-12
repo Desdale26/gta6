@@ -157,6 +157,8 @@ export class Sky {
     this.envNeedsUpdate = true;
     this._envTimer = 0;
     this._lastEnvHour = -99;
+    this.reflections = true;     // set from the quality preset in setQuality()
+    this._envInterval = 4;
 
     const geo = new THREE.SphereGeometry(1, 32, 18);
     this.material = new THREE.ShaderMaterial({
@@ -243,6 +245,11 @@ export class Sky {
     }
     this.sun.castShadow = !!preset.shadows;
     this._setShadowExtent(preset.cascades >= 4 ? 190 : preset.cascades >= 3 ? 150 : 110);
+    // The environment probe is what puts the sky and the neon into every wet
+    // road and car body, so it is the reflection budget.
+    this.reflections = preset.reflections !== false;
+    this._envInterval = this.reflections ? 4 : 14;
+    if (this.pmrem) this.refreshEnvironment();   // not yet built during boot
   }
 
   /**
@@ -336,7 +343,7 @@ export class Sky {
     // --- environment probe, refreshed lazily ---
     this._envTimer -= dt;
     if (this._envTimer <= 0 || Math.abs(hour - this._lastEnvHour) > 0.28) {
-      this._envTimer = 4;
+      this._envTimer = this._envInterval ?? 4;
       this._lastEnvHour = hour;
       this.refreshEnvironment();
     }
@@ -349,7 +356,9 @@ export class Sky {
       this.envSky.position.set(0, 0, 0);
       this.envRT = this.pmrem.fromScene(this.envScene, 0.02, 1, 400);
       this.scene.environment = this.envRT.texture;
-      this.scene.environmentIntensity = 0.55;
+      // Without a reflection budget the probe still lights the scene, it just
+      // stops being a mirror.
+      this.scene.environmentIntensity = this.reflections === false ? 0.34 : 0.55;
       if (prev) prev.dispose();
     } catch (e) {
       console.warn('[sky] environment probe failed', e);
