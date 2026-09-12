@@ -20,6 +20,10 @@ There is no bundler and no transpiler. `index.html` declares an import map and
 the browser loads the ES modules directly, so editing a file and refreshing is
 the whole development loop.
 
+To hand somebody a copy, `node tools/bundle.mjs` flattens the whole module
+graph, three.js and the stylesheet into a single `vice-coast.html` that runs
+straight off the filesystem with no server at all.
+
 ## Controls
 
 | | On foot | Driving |
@@ -47,13 +51,14 @@ the whole development loop.
 | | |
 |---|---|
 | Vehicles | 63 across 23 classes — hatchbacks to hypercars, bikes, buses, a fire engine, an APC, boats |
-| Weapons | 45 |
+| Weapons | 80 across 10 slots — fists, melee, sidearms, SMGs, shotguns, rifles, precision, heavy, thrown, specials |
 | Pedestrian archetypes | 40, with generated names, outfits, gangs and daily routines |
 | Districts | 16, each with its own architecture, traffic mix and crowd |
 | Shops | 16 types, ~80 placed — all robbable |
 | Stunt spots | 28, with 23 named tricks to land |
 | Radio | 9 stations, 36 generated tracks |
-| Missions | 33 |
+| Missions | 136 — a six-act story of 74 missions and heists, five interludes, and 57 side jobs across 16 job types |
+| Story | ~20 hours, 478 objectives, 995 lines of written dialogue |
 
 The city is roughly 3.2 km square: a heightfield with roads carved into it (roads
 are genuinely flat ground, not painted stripes), ~2,200 buildings, ~1,000 road
@@ -88,8 +93,17 @@ Some details worth knowing:
   Worley cells, and facade builders that lay out real windows at real floor and
   bay spacing.
 - **Vehicles** use raycast suspension at 120 Hz with Pacejka tyre curves, a real
-  gearbox and differential, aerodynamics, a friction circle, ABS and traction
-  control, and hull deformation from impacts.
+  gearbox and differential, Ackermann steering, a friction circle, closed-loop
+  ABS holding 14% slip, traction control and hull deformation from impacts.
+- **Tyres and brakes have temperature.** Heat comes from sliding at the contact
+  patch and from the carcass flexing as it rolls, so a cruise settles near 45 °C,
+  hard driving sits in the grip window and a long drift cooks the driven corners
+  past 100 °C and wears them out. Brakes have their own thermal mass and fade
+  from around 310 °C. Shoot a tyre out and the car keeps going, badly.
+- **Aerodynamics** work against airspeed, not ground speed, with reference areas
+  taken from each body's own box — so wind is real (a storm shoves a motorcycle
+  four times as far as a truck), a slide presents the flank to the air, and
+  downforce costs induced drag instead of being free.
 - **Audio** is synthesised sample by sample: an 80-sound effects bank, real-time
   engine noise built from the actual crank speed, and a lookahead-scheduled
   generative radio.
@@ -104,6 +118,7 @@ npm run smoke              # boots the game headless and runs 600 frames
 node tools/scenarios.mjs   # 16 gameplay scenarios: driving, shooting, robbing, stunts, weather, lighting…
 node tools/shots.mjs       # writes screenshots to shots/
 node tools/diag.mjs        # one-shot diagnostic dump
+node tools/bundle.mjs      # writes a standalone vice-coast.html
 ```
 
 All of these drive a real browser through Playwright and fail on any console

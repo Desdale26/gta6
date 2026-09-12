@@ -5,10 +5,12 @@
   "type": "module",
   "name": "vice-coast",
   "version": "1.0.0",
-  "description": "Vice Coast: Leonida — an open-world action game that runs entirely in the browser.",
+  "description": "Vice Coast: Leonida \u2014 an open-world action game that runs entirely in the browser.",
   "scripts": {
     "start": "node tools/serve.js",
     "serve": "node tools/serve.js",
-    "smoke": "node tools/smoke.js"
+    "smoke": "node tools/smoke.js",
+    "bundle": "node tools/bundle.mjs",
+    "scenarios": "node tools/scenarios.mjs"
   }
 }
