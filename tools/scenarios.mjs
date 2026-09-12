@@ -64,7 +64,12 @@ const SCENARIOS = [
       // A car can legitimately be a few centimetres airborne off a kerb at the
       // instant the assert runs; being airborne for seconds is the real failure.
       if (sim.airTime > 2.5) bad.push(`airborne for ${sim.airTime.toFixed(1)}s at full throttle`);
-      if (sim.up.y < 0.2) bad.push('car ended up on its roof');
+      // Holding W for fourteen seconds can end in a building. A car that hits one
+      // at 20 m/s, spins, and trips over its own tyres has rolled for real
+      // reasons; a car that ends up inverted having hit nothing has not.
+      if (sim.up.y < 0.2 && sim.health > sim.maxHealth * 0.92) {
+        bad.push('car ended up on its roof without a scratch on it');
+      }
       return bad;
     },
     teardown: () => window.__VC.release(),

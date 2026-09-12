@@ -157,6 +157,7 @@ export class Game {
     while (ctx.time.hour >= 24) { ctx.time.hour -= 24; ctx.time.day++; }
 
     ctx.input.beginFrame();
+    this._adaptQuality(rawDt);
 
     // Menus and the pause state run on unscaled time so the UI stays responsive.
     ctx.menus.update(rawDt);
@@ -256,6 +257,43 @@ export class Game {
   // -------------------------------------------------------------------------
   setTimeScale(s) { this.targetTimeScale = s; }
   setPaused(p) { this.paused = p; }
+
+  /**
+   * Adaptive quality preset. Adaptive *resolution* alone cannot rescue a machine
+   * that simply cannot draw this many cars, pedestrians and lights, so when the
+   * frame time stays bad after the resolution has already bottomed out, drop a
+   * preset; climb back only after a long, comfortable stretch, and never past
+   * where we last had to come down.
+   */
+  _adaptQuality(rawDt) {
+    const ctx = this.ctx;
+    if (!ctx.settings.get('autoQuality') || this.paused) return;
+    this._qualityTimer = (this._qualityTimer || 0) + rawDt;
+    if (this._qualityTimer < 3) return;
+    this._qualityTimer = 0;
+    // Give the world a few seconds after loading before judging it.
+    if (ctx.time.elapsed < 8) return;
+
+    const target = 1000 / (ctx.settings.get('targetFps') || 60);
+    const avg = ctx.renderer.frameMs.avg;
+    const order = ['potato', 'low', 'medium', 'high', 'ultra'];
+    const at = order.indexOf(ctx.settings.data.quality);
+
+    if (avg > target * 1.5 && ctx.renderer.resolutionScale <= 0.62) {
+      this._qualityCeiling = Math.max(0, at - 1);
+      if (ctx.settings.stepDown()) { this.applyQuality(); this._goodStreak = 0; }
+      return;
+    }
+    if (avg < target * 0.62) {
+      this._goodStreak = (this._goodStreak || 0) + 3;
+      if (this._goodStreak > 25 && at < (this._qualityCeiling ?? order.length - 1)
+          && ctx.renderer.resolutionScale >= 0.98) {
+        if (ctx.settings.stepUp()) { this.applyQuality(); this._goodStreak = 0; }
+      }
+    } else {
+      this._goodStreak = 0;
+    }
+  }
 
   applyQuality() {
     const ctx = this.ctx;

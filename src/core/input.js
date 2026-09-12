@@ -46,6 +46,10 @@ export class Input {
     this.mouse = { x: 0, y: 0, dx: 0, dy: 0, wheel: 0, left: false, right: false, middle: false,
                    leftEdge: false, rightEdge: false, leftUpEdge: false };
     this.pointerLocked = false;
+    // Some embedders (an iframe without allow="pointer-lock") refuse to capture
+    // the cursor. Mouse look has to keep working there, so fall back to reading
+    // raw movement without capture once a request has actually been refused.
+    this.pointerLockAvailable = true;
     this.gamepadIndex = null;
     this.gp = { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, buttons: [], prevButtons: [] };
     this.enabled = true;
@@ -86,17 +90,16 @@ export class Input {
       if (e.button === 2) this.mouse.right = false;
     };
     b.mousemove = (e) => {
-      if (this.pointerLocked) {
+      if (this.pointerLocked || !this.pointerLockAvailable) {
         this.mouse.dx += e.movementX || 0;
         this.mouse.dy += e.movementY || 0;
-      } else {
-        this.mouse.dx += 0; this.mouse.dy += 0;
       }
       this.mouse.x = e.clientX; this.mouse.y = e.clientY;
     };
     b.wheel = (e) => { this.mouse.wheel += Math.sign(e.deltaY); if (this.pointerLocked) e.preventDefault(); };
     b.contextmenu = (e) => { e.preventDefault(); };
     b.plock = () => { this.pointerLocked = document.pointerLockElement === this.el; };
+    b.plockerr = () => { this.pointerLockAvailable = false; this.pointerLocked = false; };
     b.gpconnect = (e) => { this.gamepadIndex = e.gamepad.index; };
     b.gpdisconnect = () => { this.gamepadIndex = null; };
 
@@ -109,6 +112,7 @@ export class Input {
     window.addEventListener('wheel', b.wheel, { passive: false });
     this.el.addEventListener('contextmenu', b.contextmenu);
     document.addEventListener('pointerlockchange', b.plock);
+    document.addEventListener('pointerlockerror', b.plockerr);
     window.addEventListener('gamepadconnected', b.gpconnect);
     window.addEventListener('gamepaddisconnected', b.gpdisconnect);
   }
@@ -124,14 +128,26 @@ export class Input {
     window.removeEventListener('wheel', b.wheel);
     this.el.removeEventListener('contextmenu', b.contextmenu);
     document.removeEventListener('pointerlockchange', b.plock);
+    document.removeEventListener('pointerlockerror', b.plockerr);
     window.removeEventListener('gamepadconnected', b.gpconnect);
     window.removeEventListener('gamepaddisconnected', b.gpdisconnect);
   }
 
   lockPointer() {
-    if (this.pointerLocked) return;
-    const p = this.el.requestPointerLock?.({ unadjustedMovement: true });
-    if (p && typeof p.catch === 'function') p.catch(() => { try { this.el.requestPointerLock(); } catch (e) { /* ignore */ } });
+    if (this.pointerLocked || !this.pointerLockAvailable) return;
+    // Second refusal: stop asking and read movement uncaptured instead.
+    const denied = () => { this.pointerLockAvailable = false; };
+    let p;
+    try { p = this.el.requestPointerLock?.({ unadjustedMovement: true }); }
+    catch (e) { denied(); return; }
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        try {
+          const q = this.el.requestPointerLock();
+          if (q && typeof q.catch === 'function') q.catch(denied);
+        } catch (e) { denied(); }
+      });
+    }
   }
   unlockPointer() { if (document.pointerLockElement) document.exitPointerLock(); }
 

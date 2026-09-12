@@ -172,10 +172,12 @@ export class Vehicle {
     // steer the front wheels' rack angle
     for (const w of sim.wheels) if (w.steered) w.steerAngle = sim.steerAngle;
 
-    // damage deformation, throttled
-    if (dt > 0 && sim.lastImpactSpeed > 0) {
+    // Crumple the bodywork once per impact. The sim clears `lastImpactSpeed` at
+    // the top of its own step, so this fires on the frame of the hit and not
+    // again — and the reading survives for whoever looks at it next frame.
+    if (dt > 0 && sim.lastImpactSpeed > 0 && sim.lastImpactSpeed !== this._deformedAt) {
       applyDeformation(this.bodyMesh, this.restPositions, sim.deformation, this.def);
-      sim.lastImpactSpeed = 0;
+      this._deformedAt = sim.lastImpactSpeed;
     }
   }
 

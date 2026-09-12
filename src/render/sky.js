@@ -319,7 +319,9 @@ export class Sky {
     const f = this.scene.fog;
     if (f) {
       f.color.copy(fog);
-      const base = 0.00042;
+      // Thin enough that the skyline keeps its shape from across the bay;
+      // weather still thickens it properly.
+      const base = 0.00032;
       f.density = base + (weather ? weather.fog * 0.0055 : 0) + storm * 0.0016 + overcast * 0.00035;
     }
 

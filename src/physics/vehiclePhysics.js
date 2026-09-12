@@ -286,10 +286,20 @@ export class VehicleSim {
     this._ty += rz * fx - rx * fz;
     this._tz += rx * fy - ry * fx;
   }
-  applyImpulseAt(ix, iy, iz, wx, wy, wz) {
+  /**
+   * @param spin how much of the impulse's rotation to keep, 0..1. A rigid body
+   *   hitting a wall at 20 m/s is entitled, on paper, to cartwheel — the contact
+   *   point is a whole car length from the centre of mass and the impulse is
+   *   enormous. Real cars crumple and absorb most of that instead of pivoting
+   *   about the corner, and a car that flips every time it clips a building is
+   *   no fun to drive, so collisions keep their full linear punch and only a
+   *   share of the rotation.
+   */
+  applyImpulseAt(ix, iy, iz, wx, wy, wz, spin = 1) {
     this.velocity.x += ix * this.invMass;
     this.velocity.y += iy * this.invMass;
     this.velocity.z += iz * this.invMass;
+    if (spin <= 0) return;
     const rx = wx - this.position.x, ry = wy - this.position.y, rz = wz - this.position.z;
     // torque impulse in world → body space → scaled by inverse inertia → back to world
     _v1.set(ry * iz - rz * iy, rz * ix - rx * iz, rx * iy - ry * ix);
@@ -297,7 +307,7 @@ export class VehicleSim {
     _v1.applyQuaternion(_q1);
     _v1.x *= this.invInertia.x; _v1.y *= this.invInertia.y; _v1.z *= this.invInertia.z;
     _v1.applyQuaternion(this.quaternion);
-    this.angularVelocity.add(_v1);
+    this.angularVelocity.addScaledVector(_v1, spin);
   }
 
   // -------------------------------------------------------------------------
@@ -370,6 +380,11 @@ export class VehicleSim {
   // -------------------------------------------------------------------------
   update(dt) {
     if (this.exploded) return;
+    // An impact reported here has to survive until the next frame's readers. The
+    // occupant's crash damage and the camera shake are read from the game loop
+    // *before* vehicles step, so clearing it at the end of the step (as the
+    // bodywork code used to) meant nobody outside this class ever saw a crash.
+    this.lastImpactSpeed = 0;
     // Fixed 120 Hz substeps keep the tyre model stable at any frame rate.
     const H = 1 / 120;
     this._accum += Math.min(dt, 0.1);
@@ -483,6 +498,15 @@ export class VehicleSim {
     this._syncBasis();
     this._syncCollider();
     this._collide(dt);
+    // Collision impulses land after the integrator's own spin limit, and a hard
+    // corner impact could hand the body sixty radians a second — ten full
+    // rotations — so cap it again once the impulses are in.
+    const postSpin = 12;
+    if (this.angularVelocity.lengthSq() > postSpin * postSpin) this.angularVelocity.setLength(postSpin);
+    if (this.speed > 0) {
+      const v = this.velocity.length();
+      if (v > 140) this.velocity.multiplyScalar(140 / v);
+    }
     this._unbury();
   }
 
@@ -631,11 +655,22 @@ export class VehicleSim {
     const stiff = (this.def.handling.rollStiffness ?? 0.45) * this.mass * 48;
     for (let i = 0; i + 1 < this.nWheels; i += 2) {
       const a = this.wheels[i], b = this.wheels[i + 1];
+      // A real bar only transfers load between two loaded wheels; with one in
+      // the air it just droops. Applying its force to the grounded wheel alone
+      // is a net lift with a lever arm, which quietly rolled stopped cars over.
+      if (!a.contact || !b.contact) continue;
       const diff = (a.compression - b.compression);
       if (Math.abs(diff) < 1e-4) continue;
-      const f = diff * stiff;
-      if (a.contact) this.applyForceAt(-this.up.x * f, -this.up.y * f, -this.up.z * f, a.worldPos.x, a.worldPos.y, a.worldPos.z);
-      if (b.contact) this.applyForceAt(this.up.x * f, this.up.y * f, this.up.z * f, b.worldPos.x, b.worldPos.y, b.worldPos.z);
+      // The bar must lift the body on the side that is compressed further and
+      // pull it down on the side that has extended — the other way round this is
+      // a *pro*-roll bar, and the car rolls itself over pulling away from a kerb.
+      // The bar must lift the body on the side that is compressed further and
+      // pull it down on the side that has extended — the other way round this is
+      // a *pro*-roll bar, and the car rolls itself over pulling away from a kerb.
+      // Bounded so it can never overpower the springs it is helping.
+      const f = clamp(diff * stiff, -this.staticWheelLoad * 2.5, this.staticWheelLoad * 2.5);
+      this.applyForceAt(this.up.x * f, this.up.y * f, this.up.z * f, a.worldPos.x, a.worldPos.y, a.worldPos.z);
+      this.applyForceAt(-this.up.x * f, -this.up.y * f, -this.up.z * f, b.worldPos.x, b.worldPos.y, b.worldPos.z);
     }
   }
 
@@ -840,28 +875,35 @@ export class VehicleSim {
       if (s.dead) continue;
       const res = obbVsObb(c, s, _sat);
       if (!res) continue;
-      // Separate (normal points from vehicle to static, so push back along -n).
-      const push = Math.min(res.depth, 0.5);
+      // Separate gradually (the normal points from vehicle to static, so push
+      // back along -n). Correcting the whole overlap every substep is a teleport
+      // at 120 Hz, and teleporting a car wedged against a kerb threw it across
+      // the street; a partial push still clears in a few milliseconds.
+      const push = Math.min(res.depth * 0.55, 0.06);
       this.position.x -= res.nx * push;
       this.position.y -= res.ny * push;
       this.position.z -= res.nz * push;
       this._syncCollider();
 
-      // Contact point ≈ deepest point of the vehicle along the axis.
-      _v1.set(c.x + res.nx * c.hw * 0.9, c.y + res.ny * c.hh * 0.9, c.z + res.nz * c.hd * 0.9);
+      // Contact point ≈ deepest point of the vehicle along the axis, drawn in
+      // toward the centre of mass so a corner graze cannot hand the body more
+      // spin than the hit deserves.
+      _v1.set(c.x + res.nx * c.hw * 0.55, c.y + res.ny * c.hh * 0.55, c.z + res.nz * c.hd * 0.55);
       this.pointVelocity(_v1.x, _v1.y, _v1.z, _v2);
       const vn = _v2.x * res.nx + _v2.y * res.ny + _v2.z * res.nz;
-      if (vn > 0) {
+      // Ignore the millimetre-per-second chatter of a car simply resting
+      // against something; only real closing speed earns an impulse.
+      if (vn > 0.25) {
         const rest = s.restitution ?? 0.14;
         const j = -(1 + rest) * vn * this.mass * 0.82;
-        this.applyImpulseAt(res.nx * j, res.ny * j, res.nz * j, _v1.x, _v1.y, _v1.z);
+        this.applyImpulseAt(res.nx * j, res.ny * j, res.nz * j, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
         // tangential friction
         _v3.set(_v2.x - res.nx * vn, _v2.y - res.ny * vn, _v2.z - res.nz * vn);
         const tl = _v3.length();
         if (tl > 0.05) {
           const fr = Math.min(tl * this.mass * 0.32, Math.abs(j) * (s.friction ?? 0.8));
           _v3.multiplyScalar(-fr / tl);
-          this.applyImpulseAt(_v3.x, _v3.y, _v3.z, _v1.x, _v1.y, _v1.z);
+          this.applyImpulseAt(_v3.x, _v3.y, _v3.z, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
         }
         biggest = Math.max(biggest, vn);
         if (s.breakable && vn > 2.4) this._impacts.push({ type: 'break', collider: s, speed: vn, x: _v1.x, y: _v1.y, z: _v1.z });
@@ -881,7 +923,7 @@ export class VehicleSim {
       const otherMass = other ? other.mass : 1e6;
       const total = this.mass + otherMass;
       const myShare = otherMass / total;
-      const push = Math.min(res.depth, 0.4);
+      const push = Math.min(res.depth * 0.55, 0.06);
       this.position.x -= res.nx * push * myShare;
       this.position.y -= res.ny * push * myShare * 0.4;
       this.position.z -= res.nz * push * myShare;
@@ -891,10 +933,10 @@ export class VehicleSim {
       this.pointVelocity(_v1.x, _v1.y, _v1.z, _v2);
       if (other) { other.pointVelocity(_v1.x, _v1.y, _v1.z, _v4); _v2.sub(_v4); }
       const vn = _v2.x * res.nx + _v2.y * res.ny + _v2.z * res.nz;
-      if (vn > 0) {
+      if (vn > 0.25) {
         const j = -(1 + 0.22) * vn * (this.mass * otherMass) / total;
-        this.applyImpulseAt(res.nx * j, res.ny * j, res.nz * j, _v1.x, _v1.y, _v1.z);
-        if (other) other.applyImpulseAt(-res.nx * j, -res.ny * j, -res.nz * j, _v1.x, _v1.y, _v1.z);
+        this.applyImpulseAt(res.nx * j, res.ny * j, res.nz * j, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
+        if (other) other.applyImpulseAt(-res.nx * j, -res.ny * j, -res.nz * j, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
         biggest = Math.max(biggest, vn);
         if (vn > 2) this._impacts.push({ type: 'vehicle', other: o, speed: vn, x: _v1.x, y: _v1.y, z: _v1.z });
       }
@@ -1015,3 +1057,5 @@ export class VehicleSim {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+// Share of a collision impulse's rotation that reaches the body (see applyImpulseAt).
+const COLLISION_SPIN = 0.3;

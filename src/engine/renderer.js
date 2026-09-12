@@ -351,6 +351,9 @@ export class Renderer {
     if (this.bloomPass) this.bloomPass.setSize(w * ratio, h * ratio);
   }
 
+  /** Current render-resolution multiplier, 0.55 to 1. */
+  get resolutionScale() { return this._resolutionScale; }
+
   /** Adaptive resolution: keep the frame time near the target. */
   _autoScale(dt, frameMs) {
     if (!this.settings.get('autoQuality')) return;
