@@ -1,9 +1,10 @@
 // renderer.js — WebGL renderer, camera, and the HDR post-processing chain.
 //
 // Pipeline:  scene → HDR target (linear, half-float, + depth texture)
-//            → GTAO (ambient occlusion)  → bloom (still linear HDR)
-//            → composite (ACES tonemap, grade, camera motion blur, DOF haze,
-//                         chromatic aberration, grain, vignette, wet lens)
+//            → bloom (still linear HDR)
+//            → composite (depth-only ambient occlusion, camera motion blur,
+//                         depth of field, chromatic aberration, aerial haze,
+//                         ACES tonemap, grade, grain, vignette, wet lens)
 //            → SMAA → screen
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -13,6 +14,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { clamp, RollingAverage } from '../core/mathx.js';
+
+// Radius of the ambient-occlusion sample disc, in metres of world space.
+const AO_WORLD_RADIUS = 0.9;
 
 const COMPOSITE_SHADER = {
   name: 'ViceComposite',
@@ -39,6 +43,8 @@ const COMPOSITE_SHADER = {
     uDofStrength: { value: 0.0 },
     uFogColor: { value: new THREE.Color(0.6, 0.7, 0.85) },
     uHazeStrength: { value: 0.0 },
+    uAOStrength: { value: 0.0 },
+    uAORadius: { value: 0.9 },
     uWetLens: { value: 0.0 },
     uFlash: { value: 0.0 },
     uDamage: { value: 0.0 },
@@ -63,6 +69,7 @@ const COMPOSITE_SHADER = {
     uniform float uDofFocus, uDofRange, uDofStrength;
     uniform vec3 uFogColor;
     uniform float uHazeStrength, uWetLens, uFlash, uDamage, uDrunk, uScanline;
+    uniform float uAOStrength, uAORadius;
 
     float linearDepth(float d){
       float n = uCameraNearFar.x, f = uCameraNearFar.y;
@@ -131,6 +138,36 @@ const COMPOSITE_SHADER = {
           b += texture2D(tDiffuse, uv + vec2(-px.x * 1.6, 0.0)).rgb;
           col = mix(col, b / 7.0, clamp(coc, 0.0, 1.0));
         }
+      }
+
+      // ---- ambient occlusion ----
+      // Depth-only, in the same pass: sample a disc whose world size is fixed
+      // (so it shrinks correctly with distance) and darken wherever the
+      // neighbourhood sits in front of this pixel. Contacts between a wall and
+      // the pavement, under parked cars and inside doorways are what sell
+      // procedural boxes as solid objects. Differences beyond the radius are
+      // ignored so silhouettes do not get a halo.
+      if (uAOStrength > 0.001 && depth < 1.0 && lin < 220.0){
+        float rad = clamp(uAORadius / max(lin, 0.5), 0.0015, 0.045);
+        float ang = hash(gl_FragCoord.xy) * 6.2831853;
+        float ca = cos(ang), sa = sin(ang);
+        float occ = 0.0;
+        const int AO_TAPS = 10;
+        for (int i = 0; i < AO_TAPS; i++){
+          float fi = float(i);
+          float a = fi * 2.3999632;                 // golden angle spiral
+          float rr = sqrt((fi + 0.5) / float(AO_TAPS));
+          vec2 o = vec2(cos(a), sin(a)) * rr;
+          o = vec2(o.x * ca - o.y * sa, o.x * sa + o.y * ca) * rad;
+          o.x *= uResolution.y / uResolution.x;     // keep the disc round
+          float sd = linearDepth(texture2D(tDepth, uv + o).x);
+          float diff = lin - sd;                    // >0: the sample is nearer
+          occ += smoothstep(0.03, 0.5, diff) * (1.0 - smoothstep(1.6, 3.2, diff));
+        }
+        occ /= float(AO_TAPS);
+        // Fade out with distance so the far city is not speckled.
+        float fade = 1.0 - smoothstep(120.0, 220.0, lin);
+        col *= 1.0 - clamp(occ, 0.0, 1.0) * uAOStrength * fade;
       }
 
       // ---- chromatic aberration (lens, strongest at the edges) ----
@@ -323,6 +360,7 @@ export class Renderer {
     this.grade.uChroma.value = this.settings.get('chromaticAberration');
     this.grade.uVignette.value = this.settings.get('vignette');
     this.grade.uDofStrength.value = p.dof ? 0.9 : 0.0;
+    this.grade.uAOStrength.value = p.ssao ? 0.55 : 0.0;
     this.camera.far = Math.max(2400, p.drawDistance * 2.6);
     this.camera.updateProjectionMatrix();
     this.resize();
@@ -348,6 +386,9 @@ export class Renderer {
     this.camera.fov = this.settings.get('fov');
     this.camera.updateProjectionMatrix();
     this.grade.uResolution.value.set(w * ratio, h * ratio);
+    // The AO disc is a fixed size in metres; convert it to vertical UV per unit
+    // of view depth, which is what the shader divides by.
+    this.grade.uAORadius.value = AO_WORLD_RADIUS * this.camera.projectionMatrix.elements[5] * 0.5;
     if (this.bloomPass) this.bloomPass.setSize(w * ratio, h * ratio);
   }
 

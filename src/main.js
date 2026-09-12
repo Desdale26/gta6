@@ -5,6 +5,7 @@ import { Input } from './core/input.js';
 import { bus } from './core/events.js';
 import { Renderer } from './engine/renderer.js';
 import { AudioSystem } from './audio/audio.js';
+import { Ambience } from './audio/ambience.js';
 import { Game } from './gameplay/game.js';
 
 const TIPS = [
@@ -146,6 +147,7 @@ async function boot() {
   setProgress(0.04, 'Tuning the radio');
   ctx.audio = new AudioSystem(ctx);
   await ctx.audio.init((frac) => setProgress(0.04 + frac * 0.06, 'Building sounds'));
+  ctx.ambience = new Ambience(ctx);
 
   const game = new Game(ctx);
   await game.boot((frac, label) => setProgress(0.10 + frac * 0.88, label));

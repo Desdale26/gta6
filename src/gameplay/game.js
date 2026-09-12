@@ -187,6 +187,7 @@ export class Game {
     ctx.sky.update(rawDt * 0.35 + dt, ctx.time.hour, ctx.weather);
     ctx.weather.update(dt || rawDt * 0.2, ctx.time.hour);
     ctx.lights.update(rawDt, ctx.sky.palette.night);
+    ctx.ambience?.update(rawDt);
     ctx.audio.update(rawDt);
     ctx.hud.update(rawDt);
 
@@ -369,8 +370,12 @@ export class Game {
     if (p.position.y < -200) bad.push(`player fell out of the world (y=${p.position.y.toFixed(1)})`);
     if (p.health > p.maxHealth + 0.01) bad.push('player health above maximum');
 
+    let trafficAlive = 0, trafficRolled = 0, trafficWrecked = 0;
     for (const v of ctx.traffic.all()) {
       if (v.dead) continue;
+      trafficAlive++;
+      if (v.sim.up.y < 0.2) trafficRolled++;
+      if (v.sim.health < v.sim.maxHealth * 0.5) trafficWrecked++;
       const s = v.sim;
       if (!Number.isFinite(s.position.x + s.position.y + s.position.z)) { bad.push(`vehicle ${v.def.id} has a non-finite position`); break; }
       if (!Number.isFinite(s.velocity.x + s.velocity.y + s.velocity.z)) { bad.push(`vehicle ${v.def.id} has a non-finite velocity`); break; }
@@ -381,6 +386,13 @@ export class Game {
         bad.push(`vehicle ${v.def.id} is buried in the terrain`); break;
       }
     }
+    // Ambient traffic that is mostly upside-down or mostly wrecked means the
+    // drivers or the physics are failing, not that the city is having a bad day.
+    if (trafficAlive >= 6) {
+      if (trafficRolled / trafficAlive > 0.25) bad.push(`${trafficRolled} of ${trafficAlive} traffic cars are on their roof`);
+      if (trafficWrecked / trafficAlive > 0.5) bad.push(`${trafficWrecked} of ${trafficAlive} traffic cars are wrecked`);
+    }
+
     for (const ped of ctx.peds.peds) {
       const b = ped.body.position;
       if (!Number.isFinite(b.x + b.y + b.z)) { bad.push(`ped ${ped.def.id} has a non-finite position`); break; }
@@ -410,6 +422,7 @@ export class Game {
     ctx.particles?.dispose();
     ctx.decals?.dispose();
     ctx.lights?.dispose();
+    ctx.ambience?.dispose();
     ctx.audio?.dispose();
   }
 }
