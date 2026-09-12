@@ -45,12 +45,29 @@ function buildGeometry() {
   };
 
   /** A tapered limb segment with rounded ends. */
+  /**
+   * One limb segment: a tapered shaft with a hemispherical cap at each end.
+   *
+   * The caps matter. A segment that tapers to a point leaves a pinch wherever
+   * two of them meet, and an arm built from pointed spindles reads as a string
+   * of separate sausages with a notch at every joint. Capping each end means
+   * the elbow and the knee are balls that overlap their neighbours, which is
+   * both what a joint looks like and what fills the seam.
+   */
   const limb = (rTop, rMid, rBot, len, seg = RAD) => {
     const h = len / 2;
-    return lathe([
-      [0, -h], [rBot * 0.55, -h * 0.985], [rBot, -h * 0.90],
-      [rMid, 0], [rTop, h * 0.90], [rTop * 0.55, h * 0.985], [0, h],
-    ], seg);
+    const N = 4;
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 0.5;
+      pts.push([rBot * Math.sin(a), -h - rBot * Math.cos(a) * 0.85]);
+    }
+    pts.push([rMid, 0]);
+    for (let i = N; i >= 0; i--) {
+      const a = (i / N) * Math.PI * 0.5;
+      pts.push([rTop * Math.sin(a), h + rTop * Math.cos(a) * 0.85]);
+    }
+    return lathe(pts, seg);
   };
 
   const merge = (list) => mergeGeometries(list.filter(Boolean), false) || list[0];
