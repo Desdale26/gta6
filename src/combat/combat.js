@@ -174,9 +174,50 @@ export class CombatSystem {
       pos: new THREE.Vector3().copy(origin),
       vel: new THREE.Vector3().copy(dir).multiplyScalar(def.muzzleVelocity || 70),
       life: 7, gravity: -1.2, armed: 0.06,
+      homing: def.homing || 0,
+      target: def.homing > 0 ? this._acquireTarget(origin, dir, def, source) : null,
     };
     this.projectiles.push(p);
     return p;
+  }
+
+  /**
+   * Picks the most plausible thing a guided rocket was pointed at: the closest
+   * candidate inside a forward cone, weighted so a distant target dead ahead
+   * beats a near one out at the edge. Vehicles win ties over people, which is
+   * what a thermal seeker would do and what the player expects.
+   */
+  _acquireTarget(origin, dir, def, source) {
+    const ctx = this.ctx;
+    const maxDist = def.range || 300;
+    const minDot = 0.94; // ~20 degrees half-angle
+    let best = null, bestScore = -Infinity;
+    const consider = (ent, x, y, z, bias) => {
+      if (!ent || ent === source || ent.dead || ent.destroyed) return;
+      _v2.set(x - origin.x, y - origin.y, z - origin.z);
+      const d = _v2.length();
+      if (d < 6 || d > maxDist) return;
+      _v2.divideScalar(d);
+      const dot = _v2.dot(dir);
+      if (dot < minDot) return;
+      const score = bias * (dot - minDot) / (1 - minDot) - d / maxDist;
+      if (score > bestScore) { bestScore = score; best = ent; }
+    };
+    if (ctx.traffic) {
+      for (const v of ctx.traffic.all()) consider(v, v.position.x, v.position.y + 0.8, v.position.z, 1.6);
+    }
+    if (ctx.peds) {
+      for (const ped of ctx.peds.peds) consider(ped, ped.position.x, ped.position.y + 1.0, ped.position.z, 1.0);
+    }
+    return best;
+  }
+
+  /** Point of aim for a locked rocket, or null if the target is gone. */
+  _targetPoint(ent, out) {
+    if (!ent || ent.dead || ent.destroyed) return null;
+    const p = ent.position;
+    if (!p) return null;
+    return out.set(p.x, p.y + (ent.isVehicle ? 0.7 : 1.0), p.z);
   }
 
   throwProjectile(source, def, origin, dir, charge = 1) {
@@ -256,6 +297,26 @@ export class CombatSystem {
 
       p.vel.y += p.gravity * dt;
       if (p.kind === 'rocket') {
+        // Guided rockets bend toward their lock before the motor's thrust is
+        // applied, so steering authority falls off as the thing speeds up —
+        // exactly why you fire these early and let them do the work.
+        if (p.homing > 0 && p.armed <= 0) {
+          const aim = this._targetPoint(p.target, _v3);
+          if (!aim) {
+            p.target = null; p.homing = 0;
+          } else {
+            const speed = p.vel.length();
+            _v2.copy(aim).sub(p.pos);
+            const d = _v2.length();
+            if (d > 0.5) {
+              _v2.divideScalar(d);
+              // Turn rate in rad/s, tapered by speed so it cannot loop on itself.
+              const turn = p.homing * 3.4 * Math.min(1, 90 / Math.max(20, speed)) * dt;
+              p.vel.normalize().lerp(_v2, Math.min(1, turn)).normalize().multiplyScalar(speed);
+              p.gravity = 0; // the seeker holds it up
+            }
+          }
+        }
         // Rockets accelerate and trail smoke.
         p.vel.addScaledVector(_v2.copy(p.vel).normalize(), 55 * dt);
         ctx.particles?.spawnSmoke(p.pos.x, p.pos.y, p.pos.z, 0.35, 0x888888, 0.4);
