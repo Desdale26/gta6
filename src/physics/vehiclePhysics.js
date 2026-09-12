@@ -48,6 +48,10 @@ const ZERO_WIND = { x: 0, y: 0, z: 0 };
 
 // Contact-patch speed below which the tyre is treated as stuck rather than slipping.
 const STICK_SPEED = 1.2;
+
+// Metres of vertical separation allowed per substep: 0.012 at 120 Hz is 1.4 m/s,
+// plenty to climb out of a kerb or a ramp and nowhere near enough to fly.
+const MAX_SEPARATION_LIFT = 0.012;
 const RPM_TO_RADS = Math.PI / 30;
 const RADS_TO_RPM = 30 / Math.PI;
 
@@ -1284,8 +1288,16 @@ export class VehicleSim {
       // the street; a partial push still clears in a few milliseconds.
       const push = Math.min(res.depth * 0.55, 0.06);
       this.position.x -= res.nx * push;
-      this.position.y -= res.ny * push;
       this.position.z -= res.nz * push;
+      // Vertical separation is the one direction that turns a deep overlap into
+      // flight. When a car buries itself in a wall at speed the minimum-overlap
+      // axis can flip to vertical, and a full-rate push is 0.06 m every substep
+      // — seven metres per second of free climb, straight up the building. The
+      // horizontal push stays unbounded because that is what actually stops the
+      // car; the vertical one is limited to a lift rather than a launch.
+      const lift = res.ny * push;
+      this.position.y -= Math.abs(lift) > MAX_SEPARATION_LIFT
+        ? Math.sign(lift) * MAX_SEPARATION_LIFT : lift;
       this._syncCollider();
 
       // Contact point ≈ deepest point of the vehicle along the axis, drawn in
@@ -1296,20 +1308,30 @@ export class VehicleSim {
       const vn = _v2.x * res.nx + _v2.y * res.ny + _v2.z * res.nz;
       // Ignore the millimetre-per-second chatter of a car simply resting
       // against something; only real closing speed earns an impulse.
+      let j = 0;
       if (vn > 0.25) {
         const rest = s.restitution ?? 0.14;
-        const j = -(1 + rest) * vn * this.mass * 0.82;
+        j = -(1 + rest) * vn * this.mass * 0.82;
         this.applyImpulseAt(res.nx * j, res.ny * j, res.nz * j, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
-        // tangential friction
-        _v3.set(_v2.x - res.nx * vn, _v2.y - res.ny * vn, _v2.z - res.nz * vn);
-        const tl = _v3.length();
-        if (tl > 0.05) {
-          const fr = Math.min(tl * this.mass * 0.32, Math.abs(j) * (s.friction ?? 0.8));
-          _v3.multiplyScalar(-fr / tl);
-          this.applyImpulseAt(_v3.x, _v3.y, _v3.z, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
-        }
         biggest = Math.max(biggest, vn);
         if (s.breakable && vn > 2.4) this._impacts.push({ type: 'break', collider: s, speed: vn, x: _v1.x, y: _v1.y, z: _v1.z });
+      }
+      // Tangential friction belongs to any contact, not just an incoming hit.
+      // Once a car is touching a wall there is no closing speed left, so the old
+      // code applied none at all — and a car held against a building under power
+      // walks straight up the face (the drive force at the contact patches and
+      // the wall's reaction at hub height are a couple that lifts the nose)
+      // until it goes over the top. Rubbing along a wall now costs what rubbing
+      // along a wall should.
+      _v3.set(_v2.x - res.nx * vn, _v2.y - res.ny * vn, _v2.z - res.nz * vn);
+      const tl = _v3.length();
+      if (tl > 0.02) {
+        // A resting contact still carries load: at minimum whatever the wall has
+        // to hold back this substep, which is the penetration it is resolving.
+        const holding = this.mass * Math.max(res.depth / Math.max(dt, 1e-4), 9.81 * 0.6) * dt;
+        const fr = Math.min(tl * this.mass * 0.32, Math.max(Math.abs(j), holding) * (s.friction ?? 0.8));
+        _v3.multiplyScalar(-fr / tl);
+        this.applyImpulseAt(_v3.x, _v3.y, _v3.z, _v1.x, _v1.y, _v1.z, COLLISION_SPIN);
       }
     }
 
