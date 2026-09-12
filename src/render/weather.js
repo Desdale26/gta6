@@ -87,6 +87,7 @@ export class Weather {
   setWeather(type, instant = false) {
     const t = WEATHER_TYPES[type];
     if (!t) return;
+    const changed = this.type !== type;
     this.type = type;
     this.target = t;
     if (instant) {
@@ -94,14 +95,17 @@ export class Weather {
       this.windSpeed = t.wind; this.storm = t.storm;
       this.wetness = t.rain > 0.2 ? 1 : 0;
     }
-    this.ctx.bus.emit('weather:changed', { type, label: t.label });
+    // Only announce a real change — the roll can land on the weather we already
+    // have, and "Weather: Clear" twice in a row is just noise on screen.
+    if (changed) this.ctx.bus.emit('weather:changed', { type, label: t.label });
   }
 
   randomWeather(rng) {
     const entries = Object.entries(WEATHER_TYPES);
     const r = rng || this.ctx.rng;
-    const pick = r.weighted(entries.map(([k, v]) => ({ k, w: v.weight })), (o) => o.w);
-    this.setWeather(pick.k);
+    const choices = entries.filter(([k]) => k !== this.type);
+    const pool = (choices.length ? choices : entries).map(([k, v]) => ({ k, w: v.weight }));
+    this.setWeather(r.weighted(pool, (o) => o.w).k);
   }
 
   update(dt, hour) {

@@ -368,9 +368,9 @@ export class Vehicle {
     this.ctx.physics.removeDynamic(this);
     this.ctx.scene.remove(this.group);
     this.group.traverse((o) => {
-      if (o.isMesh) {
-        o.geometry?.dispose?.();
-      }
+      // Geometry shared between cars of the same model (wheels) must outlive
+      // any one of them.
+      if (o.isMesh && !o.geometry?.userData?.shared) o.geometry?.dispose?.();
     });
     if (this._engineSound) { this._engineSound.stop(); this._engineSound = null; }
     if (this.blip && this.ctx.hud) this.ctx.hud.removeBlip(this.blip);

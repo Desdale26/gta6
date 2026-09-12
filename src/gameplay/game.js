@@ -338,11 +338,17 @@ export class Game {
       if (!Number.isFinite(s.velocity.x + s.velocity.y + s.velocity.z)) { bad.push(`vehicle ${v.def.id} has a non-finite velocity`); break; }
       if (s.position.y < -300) { bad.push(`vehicle ${v.def.id} fell out of the world`); break; }
       if (s.speed > 200) { bad.push(`vehicle ${v.def.id} is doing ${s.speed.toFixed(0)} m/s`); break; }
+      // A car whose roof is under the ground has fallen through the terrain.
+      if (s.position.y + v.def.height * 0.5 < ctx.physics.groundHeight(s.position.x, s.position.z) - 0.1) {
+        bad.push(`vehicle ${v.def.id} is buried in the terrain`); break;
+      }
     }
     for (const ped of ctx.peds.peds) {
       const b = ped.body.position;
       if (!Number.isFinite(b.x + b.y + b.z)) { bad.push(`ped ${ped.def.id} has a non-finite position`); break; }
       if (b.y < -200) { bad.push(`ped ${ped.def.id} fell out of the world`); break; }
+      if (ped.inVehicle && ped.visible) { bad.push(`ped ${ped.def.id} is visible while riding in a car`); break; }
+      if (b.y < ctx.physics.groundHeight(b.x, b.z) - 0.6) { bad.push(`ped ${ped.def.id} is under the ground`); break; }
     }
     if (ctx.particles.liveCount > ctx.settings.preset.particleBudget * 1.2) {
       bad.push(`particle count ${ctx.particles.liveCount} above budget`);

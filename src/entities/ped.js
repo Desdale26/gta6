@@ -13,6 +13,7 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _pv = new THREE.Vector3();
 
 let _pid = 1;
 
@@ -48,6 +49,14 @@ function buildGeometry() {
     phoneGeo: new THREE.BoxGeometry(0.07, 0.13, 0.012),
   };
   GEO.foot.translate(0, 0, 0.05);
+  // Accessories used to be allocated per ped, so every despawn leaked a handful
+  // of buffers; they are fixed-size, so they belong in the shared table too.
+  GEO.capPeak = new THREE.BoxGeometry(0.17, 0.02, 0.1);
+  GEO.coffee = new THREE.CylinderGeometry(0.035, 0.03, 0.11, 7);
+  GEO.camera = new THREE.BoxGeometry(0.1, 0.07, 0.07);
+  GEO.umbrella = new THREE.CylinderGeometry(0.015, 0.015, 0.7, 5);
+  GEO.skateboard = new THREE.BoxGeometry(0.18, 0.03, 0.72);
+  GEO.surfboard = new THREE.BoxGeometry(0.36, 0.06, 1.9);
   return GEO;
 }
 
@@ -131,6 +140,8 @@ export class Ped {
     this.anger = 0;
     this.alertness = 0;
     this.threat = null;
+    this.inVehicle = null;      // set while riding in a car; the vehicle carries us
+    this.vehicleSeat = 0;
     this.lastBark = -99;
     this.barkText = null;
     this.edge = opts.edge || null;
@@ -196,7 +207,7 @@ export class Ped {
     if (this.hasHat) {
       const cap = mk(g.cap_, accM, 0, 0.16, 0);
       this.neck.add(cap);
-      const peak = mk(new THREE.BoxGeometry(0.17, 0.02, 0.1), accM, 0, 0.15, 0.11);
+      const peak = mk(g.capPeak, accM, 0, 0.15, 0.11);
       this.neck.add(peak);
     }
 
@@ -242,11 +253,11 @@ export class Ped {
       let mesh = null;
       if (p === 'phone') mesh = mk(g.phoneGeo, bodyMat(mats.plasticBlack, 0x20242c), 0, -0.3, 0.05);
       else if (p === 'bag' || p === 'briefcase') mesh = mk(g.bagGeo, accM, 0, -0.34, 0);
-      else if (p === 'coffee') mesh = mk(new THREE.CylinderGeometry(0.035, 0.03, 0.11, 7), bodyMat(mats.cloth, 0xf0ece0), 0, -0.32, 0.03);
-      else if (p === 'camera') mesh = mk(new THREE.BoxGeometry(0.1, 0.07, 0.07), bodyMat(mats.plasticBlack, 0x1a1a1e), 0, -0.3, 0.04);
-      else if (p === 'umbrella') mesh = mk(new THREE.CylinderGeometry(0.015, 0.015, 0.7, 5), bodyMat(mats.cloth, 0x22242a), 0, -0.5, 0);
-      else if (p === 'skateboard') mesh = mk(new THREE.BoxGeometry(0.18, 0.03, 0.72), bodyMat(mats.wood, 0x6b4a2a), 0, -0.36, 0);
-      else if (p === 'surfboard') mesh = mk(new THREE.BoxGeometry(0.36, 0.06, 1.9), bodyMat(mats.cloth, 0xf0e8d8), 0.2, -0.3, 0);
+      else if (p === 'coffee') mesh = mk(g.coffee, bodyMat(mats.cloth, 0xf0ece0), 0, -0.32, 0.03);
+      else if (p === 'camera') mesh = mk(g.camera, bodyMat(mats.plasticBlack, 0x1a1a1e), 0, -0.3, 0.04);
+      else if (p === 'umbrella') mesh = mk(g.umbrella, bodyMat(mats.cloth, 0x22242a), 0, -0.5, 0);
+      else if (p === 'skateboard') mesh = mk(g.skateboard, bodyMat(mats.wood, 0x6b4a2a), 0, -0.36, 0);
+      else if (p === 'surfboard') mesh = mk(g.surfboard, bodyMat(mats.cloth, 0xf0e8d8), 0.2, -0.3, 0);
       if (mesh) { this.arms[1].elbow.add(mesh); this.propMesh = mesh; }
     }
 
@@ -281,6 +292,25 @@ export class Ped {
       return;
     }
     if (this.dead) { this.despawnTimer += dt; return; }
+
+    // Riding in a car: the vehicle carries us, so skip the walking AI entirely.
+    // Without this the occupant kept wandering off on foot while invisible, and
+    // then popped back into view standing in the road wherever it had got to.
+    if (this.inVehicle) {
+      const v = this.inVehicle;
+      if (v.dead) { this.inVehicle = null; }
+      else {
+        v.seatPoint(this.vehicleSeat || 0, _pv);
+        const yaw = Math.atan2(v.sim.forward.x, v.sim.forward.z);
+        this.body.teleport(_pv.x, _pv.y, _pv.z, yaw);
+        this.yaw = yaw;
+        this._syncCollider();
+        this.group.position.copy(this.body.position);
+        this.group.rotation.y = yaw;
+        this.setVisible(false);
+        return;
+      }
+    }
 
     const cam = this.ctx.camera.position;
     const dx = this.body.position.x - cam.x, dz = this.body.position.z - cam.z;

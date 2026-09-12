@@ -293,6 +293,7 @@ export class PoliceSystem {
         ped.copVehicle = v;
         ped.setVisible(false);
         ped.inVehicle = v;
+        ped.vehicleSeat = s;
         v.enter(ped, s);
         this.officers.push(ped);
       }

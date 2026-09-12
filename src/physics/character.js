@@ -76,6 +76,18 @@ export class CharacterController {
     this.submersion = clamp(depth / this.height, 0, 1.4);
     this.inWater = this.submersion > 0.32;
 
+    // ---- terrain depenetration ----
+    // Nothing walkable lives under the heightfield, so being below it means a
+    // collision push or a bad spawn buried us. Step back out before probing,
+    // otherwise the downward ray finds nothing and we fall forever.
+    if (phys.terrain) {
+      const gy = phys.terrain.heightAt(this.position.x, this.position.z);
+      if (this.position.y < gy - 0.05) {
+        this.position.y = gy;
+        if (this.velocity.y < 0) this.velocity.y = 0;
+      }
+    }
+
     // ---- ground probe ----
     const probeStart = this.position.y + this.currentHeight * 0.5;
     const probeLen = this.currentHeight * 0.5 + (this.grounded ? this.stepHeight : 0.12) + Math.max(0, -this.velocity.y * dt);

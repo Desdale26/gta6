@@ -312,7 +312,9 @@ export class Sky {
     this.moon.position.copy(this.moonDir).multiplyScalar(400);
     this.hemi.color.copy(p.amb);
     this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x6b5a46), 0.55);
-    this.hemi.intensity = p.ambI * 0.45 * (0.8 + overcast * 0.6) * (1 - storm * 0.2);
+    // Sky fill is what stops the shaded sides of buildings reading as black
+    // slabs; the sun-facing surfaces barely notice it.
+    this.hemi.intensity = p.ambI * 0.62 * (0.8 + overcast * 0.6) * (1 - storm * 0.2);
 
     const f = this.scene.fog;
     if (f) {
@@ -345,7 +347,7 @@ export class Sky {
       this.envSky.position.set(0, 0, 0);
       this.envRT = this.pmrem.fromScene(this.envScene, 0.02, 1, 400);
       this.scene.environment = this.envRT.texture;
-      this.scene.environmentIntensity = 0.45;
+      this.scene.environmentIntensity = 0.55;
       if (prev) prev.dispose();
     } catch (e) {
       console.warn('[sky] environment probe failed', e);

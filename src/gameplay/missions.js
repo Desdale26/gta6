@@ -11,6 +11,65 @@ import { CRIME } from './police.js';
 
 const _v1 = new THREE.Vector3();
 
+
+// ---------------------------------------------------------------------------
+// Mission coronas
+//
+// A plain translucent cylinder reads as a solid slab of colour dropped in the
+// road. These are meant to look like a column of light, so they fade out with
+// height, glow brighter at the silhouette edges, breathe slowly, and add to the
+// scene rather than tinting it — which also lets the bloom pass catch them.
+// ---------------------------------------------------------------------------
+const MARKER_VERT = `
+varying vec2 vUv;
+varying vec3 vView;
+varying vec3 vNormalW;
+void main() {
+  vUv = uv;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vView = normalize(cameraPosition - world.xyz);
+  vNormalW = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * world;
+}`;
+
+const MARKER_FRAG = `
+uniform vec3 uColor;
+uniform float uOpacity;
+uniform float uTime;
+varying vec2 vUv;
+varying vec3 vView;
+varying vec3 vNormalW;
+void main() {
+  // Solid at the base, gone by the top.
+  float height = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.7);
+  // Brighter where the wall of the cylinder turns away from the camera, which
+  // puts the light at the edges of the silhouette the way a real beam does.
+  float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vView)));
+  rim = 0.35 + 0.65 * pow(clamp(rim, 0.0, 1.0), 1.6);
+  // A slow breath, plus a band travelling up the column.
+  float pulse = 0.86 + 0.14 * sin(uTime * 1.8);
+  float band = 0.12 * smoothstep(0.35, 0.0, abs(fract(vUv.y - uTime * 0.22) - 0.5) - 0.34);
+  float a = uOpacity * height * rim * pulse + band * height;
+  gl_FragColor = vec4(uColor * (1.0 + band * 3.0), a);
+}`;
+
+function markerMaterial(color, opacity) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uOpacity: { value: opacity },
+      uTime: { value: 0 },
+    },
+    vertexShader: MARKER_VERT,
+    fragmentShader: MARKER_FRAG,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+}
+
 export class MissionSystem {
   constructor(ctx) {
     this.ctx = ctx;
@@ -39,14 +98,11 @@ export class MissionSystem {
 
   _buildStartMarkers() {
     const ctx = this.ctx;
-    const geo = new THREE.CylinderGeometry(1.5, 1.5, 6, 14, 1, true);
+    const geo = new THREE.CylinderGeometry(1.5, 1.5, 6, 20, 1, true);
     for (const m of MISSIONS) {
       const color = m.type === 'story' ? 0xffc93c : m.type === 'heist' ? 0x4dff9e
         : m.type === 'race' ? 0x22e3ff : m.type === 'rampage' ? 0xff3b30 : 0xff2d95;
-      const mat = new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.36));
       const y = ctx.physics ? ctx.physics.groundHeight(m.start.x, m.start.z) : 0;
       mesh.position.set(m.start.x, y + 3, m.start.z);
       mesh.visible = false;
@@ -73,14 +129,17 @@ export class MissionSystem {
     // --- marker visibility + pulse ---
     const availableIds = new Set(this.available.map((m) => m.id));
     const t = ctx.time.elapsed;
+    // One clock drives every corona's fade, breath and travelling band.
+    this._markerGroup.traverse((o) => {
+      if (o.material && o.material.uniforms && o.material.uniforms.uTime) o.material.uniforms.uTime.value = t;
+    });
     for (const s of this.startMarkers) {
       const show = !this.active && availableIds.has(s.mission.id);
       if (s.mesh.visible !== show) s.mesh.visible = show;
       if (show) {
         const d = Math.hypot(s.mesh.position.x - player.position.x, s.mesh.position.z - player.position.z);
         s.mesh.visible = d < 220;
-        s.mesh.material.opacity = 0.18 + Math.sin(t * 2.2) * 0.08;
-        s.mesh.rotation.y = t * 0.5;
+        s.mesh.rotation.y = t * 0.35;
       }
     }
 
@@ -482,11 +541,8 @@ export class MissionSystem {
     const ctx = this.ctx;
     const color = kind === 'kill' ? 0xff3b30 : kind === 'pickup' ? 0xffc93c
       : kind === 'checkpoint' ? 0x22e3ff : kind === 'dropoff' ? 0x4dff9e : 0xff2d95;
-    const geo = new THREE.CylinderGeometry(radius * 0.8, radius * 0.8, 8, 18, 1, true);
-    const mat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
+    const geo = new THREE.CylinderGeometry(radius * 0.8, radius * 0.8, 8, 20, 1, true);
+    const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.30));
     const y = ctx.physics.groundHeight(x, z);
     mesh.position.set(x, y + 4, z);
     mesh.renderOrder = 3;

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { clamp, lerp, damp, angleDelta, wrapAngle } from '../core/mathx.js';
 import { Vehicle } from './vehicle.js';
 import { LAYER, MASK_SOLID } from '../physics/world.js';
+import { rideHeightFor } from '../physics/vehiclePhysics.js';
 import { ROAD_TYPE } from '../world/roads.js';
 import { VEHICLES, getVehicle, vehiclesByClass } from '../content/vehicleCatalog.js';
 import { districtAt } from '../content/districtCatalog.js';
@@ -396,7 +397,7 @@ export class TrafficManager {
       const def = getVehicle(id);
       if (!def) continue;
       const yaw = Math.atan2(e.dx * dir, e.dz * dir);
-      const v = new Vehicle(ctx, def, { rng, x: _v1.x, y: y + def.height * 0.55, z: _v1.z, yaw });
+      const v = new Vehicle(ctx, def, { rng, x: _v1.x, y: y + rideHeightFor(def), z: _v1.z, yaw });
       const ai = new VehicleAI(v, graph, rng, DRIVER_MODE.TRAFFIC);
       ai.edge = e; ai.dir = dir; ai.lane = lane; ai.t = t;
       v.aiDriver = ai;
@@ -458,7 +459,7 @@ export class TrafficManager {
       const def = getVehicle(id);
       if (!def) continue;
       const y = ctx.physics.groundHeight(slot.x, slot.z);
-      const v = new Vehicle(ctx, def, { rng, x: slot.x, y: y + def.height * 0.55, z: slot.z, yaw: slot.yaw });
+      const v = new Vehicle(ctx, def, { rng, x: slot.x, y: y + rideHeightFor(def), z: slot.z, yaw: slot.yaw });
       v.aiDriver = new VehicleAI(v, ctx.world.roads, rng, DRIVER_MODE.PARKED);
       v.locked = rng.bool(0.25);
       this.parked.push(v);
@@ -471,7 +472,7 @@ export class TrafficManager {
     const ctx = this.ctx;
     const def = typeof defOrId === 'string' ? getVehicle(defOrId) : defOrId;
     if (!def) return null;
-    const y = ctx.physics.groundHeight(x, z) + def.height * 0.55;
+    const y = ctx.physics.groundHeight(x, z) + rideHeightFor(def);
     const v = new Vehicle(ctx, def, { rng: this.rng, x, y, z, yaw: yaw || 0, ...opts });
     if (opts.ai !== false) {
       v.aiDriver = new VehicleAI(v, ctx.world.roads, this.rng, opts.mode || DRIVER_MODE.PARKED);

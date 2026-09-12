@@ -297,15 +297,26 @@ export class PhysicsWorld {
     if (dy < -0.999) {
       const h = terr.heightAt(ox, oz);
       const t = oy - h;
-      return t >= 0 && t <= maxDist ? t : -1;
+      // Origin already inside the ground: report a hit at once so whatever is
+      // buried gets pushed back out instead of falling forever. (The marching
+      // path below does the same with its `prevD <= 0` early-out.)
+      if (t <= 0) return 0;
+      return t <= maxDist ? t : -1;
     }
     if (Math.abs(dy) < 1e-5 && oy > terr.maxHeight) return -1;
     let prevT = 0;
     let prevD = oy - terr.heightAt(ox, oz);
     if (prevD <= 0) return 0;
     const horiz = Math.hypot(dx, dz);
-    const step = Math.max(1.2, horiz > 0.01 ? 2.2 : 6);
-    for (let t = step; t <= maxDist; t += step) {
+    const coarse = Math.max(1.2, horiz > 0.01 ? 2.2 : 6);
+    // Divide the ray instead of stepping a fixed distance along it. A fixed step
+    // skipped the loop entirely for any ray shorter than one step — which is every
+    // wheel probe — so a car tilted more than a couple of degrees off the vertical
+    // fast path below saw nothing but clean air and fell through the world.
+    const steps = Math.max(2, Math.ceil(maxDist / coarse));
+    const step = maxDist / steps;
+    for (let i = 1; i <= steps; i++) {
+      const t = step * i;
       const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
       const d = py - terr.heightAt(px, pz);
       if (d <= 0) {

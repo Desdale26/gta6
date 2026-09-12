@@ -65,6 +65,13 @@ window.__VC = {
   },
   report: () => (ctx.game ? ctx.game.report() : null),
   validate: () => (ctx.game ? ctx.game.validate() : ['game not booted']),
+  // Scenario tests drive the real input layer rather than poking at game state.
+  hold: (codes) => { for (const c of codes) ctx.input.keys.add(c); },
+  release: (codes) => {
+    if (codes) for (const c of codes) ctx.input.keys.delete(c);
+    else ctx.input.keys.clear();
+  },
+  press: (code) => { ctx.input.keysDownEdge.add(code); ctx.input.keys.add(code); },
 };
 
 function setProgress(frac, label) {

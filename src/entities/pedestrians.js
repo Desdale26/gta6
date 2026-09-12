@@ -51,8 +51,9 @@ export class PedestrianManager {
         this.peds.splice(i, 1);
         continue;
       }
-      // Cull updates for peds behind the camera and far away.
-      p.setVisible(dist2 < 160 * 160);
+      // Cull updates for peds behind the camera and far away. Occupants of a
+      // vehicle stay hidden regardless — they are represented by the car.
+      p.setVisible(!p.inVehicle && dist2 < 160 * 160);
       p.update(dt);
     }
 

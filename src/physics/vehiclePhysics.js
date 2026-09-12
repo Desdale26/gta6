@@ -68,6 +68,45 @@ export class Wheel {
   get maxLength() { return this.restLength + this.travel; }
 }
 
+
+/**
+ * Suspension geometry and rates for a vehicle definition.
+ *
+ * Spring rates are authored per vehicle, but several of them left the car sitting
+ * on its bump stops before it had even moved, and the dampers ranged from barely
+ * damped to badly over-damped. Both wreck the tyre model, so the authored values
+ * are kept only inside sane bounds: at rest a wheel uses between 14% and 42% of
+ * its travel, and the damper stays between 0.34 and 0.85 of critical.
+ */
+export function suspensionFor(def) {
+  const s = def.handling.suspension || {};
+  const radius = def.wheels.radius;
+  const mountY = -def.height * 0.5 + radius * 0.55;
+  const restLength = s.restLength ?? 0.30;
+  const travel = s.travel ?? 0.22;
+  const nWheels = def.body.kind === 'bike' ? 2 : (def.wheels.count === 6 ? 6 : 4);
+  const staticLoad = (def.mass * 9.81) / nWheels;
+
+  let stiffness = s.stiffness ?? (staticLoad / (travel * 0.30));
+  const used = staticLoad / (stiffness * travel);
+  if (used > 0.42) stiffness = staticLoad / (travel * 0.42);
+  else if (used < 0.14) stiffness = staticLoad / (travel * 0.14);
+
+  const critical = 2 * Math.sqrt(stiffness * (def.mass / nWheels));
+  const damping = clamp(s.damping ?? critical * 0.45, critical * 0.34, critical * 0.85);
+
+  // How far the spring compresses under the vehicle's own weight, and therefore
+  // how high the body origin sits above the ground when it is simply parked.
+  const sag = Math.min(staticLoad / stiffness, travel * 0.92);
+  const restingLength = Math.max(0, restLength + travel - sag);
+  const rideHeight = -mountY + restingLength + radius;
+
+  return { radius, mountY, restLength, travel, stiffness, damping, nWheels, staticLoad, sag, rideHeight };
+}
+
+/** Height of a vehicle's body origin above the ground when parked, in metres. */
+export function rideHeightFor(def) { return suspensionFor(def).rideHeight; }
+
 export class VehicleSim {
   /**
    * @param {object} def a VehicleDef from content/vehicleCatalog.js
@@ -151,6 +190,8 @@ export class VehicleSim {
 
     this.wheels = this._buildWheels();
     this.nWheels = this.wheels.length;
+    this.staticWheelLoad = (this.mass * 9.81) / this.nWheels;
+    this.rideHeight = suspensionFor(def).rideHeight;
     this.isBike = def.body.kind === 'bike';
     this.isBoat = def.body.kind === 'boat';
 
@@ -166,17 +207,15 @@ export class VehicleSim {
 
   _buildWheels() {
     const d = this.def;
-    const s = d.handling.suspension || {};
     const halfTrack = d.track * 0.5;
     const frontZ = (d.wheels.frontT - 0.5) * d.length;
     const rearZ = (d.wheels.rearT - 0.5) * d.length;
-    const r = d.wheels.radius;
-    const mountY = -d.height * 0.5 + r * 0.55;
-    const rest = s.restLength ?? 0.30;
-    const travel = s.travel ?? 0.22;
-    const stiff = s.stiffness ?? (this.mass * 26);
-    const damp_ = s.damping ?? (this.mass * 2.1);
-    const common = { radius: r, width: d.wheels.width, restLength: rest, travel, stiffness: stiff, damping: damp_ };
+    const sp = suspensionFor(d);
+    const r = sp.radius, mountY = sp.mountY;
+    const common = {
+      radius: r, width: d.wheels.width, restLength: sp.restLength,
+      travel: sp.travel, stiffness: sp.stiffness, damping: sp.damping,
+    };
 
     if (d.body.kind === 'bike') {
       return [
@@ -378,6 +417,7 @@ export class VehicleSim {
     this._antiRoll();
     const driveTorque = this._drivetrain(dt, totalLoad);
     for (let i = 0; i < this.nWheels; i++) this._tyre(this.wheels[i], dt, driveTorque);
+    if (this.isBike) this._bikeBalance(dt);
 
     // ---- aerodynamics ----
     const v2 = this.speed * this.speed;
@@ -386,7 +426,10 @@ export class VehicleSim {
       _v1.copy(this.velocity).normalize().multiplyScalar(-dragMag);
       this._fx += _v1.x; this._fy += _v1.y; this._fz += _v1.z;
       if (h.downforce) {
-        const df = h.downforce * (v2 / 900);
+        // Authored downforce grows without bound with v², which at top speed pushed
+        // the fastest cars straight through their own suspension and into the road.
+        // Real road cars peak around one to two times their own weight.
+        const df = Math.min(h.downforce * (v2 / 900), this.mass * 9.81 * 1.6);
         this._fx -= this.up.x * df; this._fy -= this.up.y * df; this._fz -= this.up.z * df;
       }
     }
@@ -440,6 +483,36 @@ export class VehicleSim {
     this._syncBasis();
     this._syncCollider();
     this._collide(dt);
+    this._unbury();
+  }
+
+  /**
+   * Last-resort recovery. A hard enough landing can move the body further in one
+   * substep than the wheel rays are long, which used to drop the car through the
+   * terrain and leave it falling forever. If the whole hull ends up under the
+   * ground, lift it back out and kill the downward velocity.
+   */
+  _unbury() {
+    const terr = this.phys.terrain;
+    if (!Number.isFinite(this.position.x + this.position.y + this.position.z)) {
+      this.position.set(0, 8, 0);
+      this.velocity.set(0, 0, 0);
+      this.angularVelocity.set(0, 0, 0);
+      return;
+    }
+    if (!terr) return;
+    const gy = terr.heightAt(this.position.x, this.position.z);
+    const half = this.def.height * 0.5;
+    // `position` is the hull centre, so `+half` is its roof: if even that is
+    // below the ground the car cannot possibly be driving on anything.
+    if (this.position.y + half < gy) {
+      this.position.y = gy + half * 1.2;
+      if (this.velocity.y < 0) this.velocity.y = 0;
+      this.velocity.multiplyScalar(0.4);
+      this.angularVelocity.multiplyScalar(0.3);
+      this._syncBasis();
+      this._syncCollider();
+    }
   }
 
   /** Raycast one wheel and apply its spring force. Returns the vertical load (N). */
@@ -461,12 +534,18 @@ export class VehicleSim {
       wheel.forceLong = 0; wheel.forceLat = 0;
       wheel.onGroundTime = 0;
       wheel.skid *= 0.9;
+      // Track the extended length while airborne. Leaving this stale made the
+      // damper see a huge closing speed on the very first frame back on the
+      // ground, which launched the car again — a pogo stick that never settled.
+      wheel.prevLen = wheel.maxLength;
       return 0;
     }
 
     const len = clamp(hit.dist - wheel.radius, 0, wheel.maxLength);
-    const compression = (wheel.maxLength - len) / Math.max(wheel.travel, 0.01);
-    wheel.compression = clamp(compression, 0, 1.6);
+    // 0 at full droop, 1 when the shaft is fully collapsed. Measuring this over
+    // `travel` instead used to report a bump-stop hit during ordinary cornering,
+    // because the shaft has far more room than one spring travel.
+    wheel.compression = clamp((wheel.maxLength - len) / Math.max(wheel.maxLength, 0.01), 0, 1);
     wheel.contact = true; wheel.grounded = true;
     wheel.onGroundTime += dt;
     wheel.contactPoint.set(hit.px, hit.py, hit.pz);
@@ -476,11 +555,21 @@ export class VehicleSim {
 
     // spring + damper along the wheel's travel axis
     const springDisp = wheel.maxLength - len;
-    const vel = (wheel.prevLen - len) / Math.max(dt, 1e-5);
+    // A damper can only ever move as fast as the travel it has; clamping keeps
+    // one deep frame from turning into an impulse the size of a small rocket.
+    const vel = clamp((wheel.prevLen - len) / Math.max(dt, 1e-5), -9, 9);
     wheel.prevLen = len;
     let force = wheel.stiffness * springDisp + wheel.damping * vel;
-    if (wheel.compression > 1) force += wheel.stiffness * 5 * (wheel.compression - 1); // bump stop
-    force = clamp(force, 0, this.mass * 62);
+    // Bump stop: a much stiffer rubber in the last stretch of shaft travel, damped
+    // so it absorbs a landing instead of bouncing the car back into the air.
+    const bumpZone = wheel.travel * 0.35;
+    if (len < bumpZone) {
+      const into = bumpZone - len;
+      force += wheel.stiffness * 6 * into * (vel > 0 ? 1 : 0.3);
+    }
+    // Cap at roughly 6 g of each wheel's static share, so a hard landing is
+    // punchy but bounded — and so two-wheelers are not held to a car's budget.
+    force = clamp(force, 0, this.staticWheelLoad * 6);
     wheel.load = force;
 
     // Apply along the contact normal, damped by how tilted the surface is.
@@ -493,9 +582,53 @@ export class VehicleSim {
     return force;
   }
 
+  /**
+   * Rider balance for two-wheelers. A motorcycle is an inverted pendulum: with
+   * nothing holding it up it falls over the moment anything disturbs it, which
+   * is exactly what happened before this existed. Steer the roll rate toward an
+   * upright reference that leans into the corner, at the velocity level so the
+   * response does not depend on the bike's roll inertia.
+   */
+  _bikeBalance(dt) {
+    const groundedFrac = this.wheelsOnGround / this.nWheels;
+    // Deliberate stunt tumbling: keep authority low while airborne and inverted
+    // so a backflip still reads, but never give up entirely.
+    const authority = groundedFrac > 0 ? lerp(4.5, 11, groundedFrac)
+      : (this.up.y > 0 ? 2.2 : 0.7);
+
+    // Lean target from the corner the bike is actually turning.
+    const speed = Math.abs(this.forwardSpeed);
+    const yawRate = this.angularVelocity.dot(this.up);
+    const lean = speed > 1.5
+      ? clamp(Math.atan2(yawRate * speed, 9.81), -0.62, 0.62)
+      : 0;
+
+    // Upright reference: world up with the forward component projected out, then
+    // rolled by the lean angle about the bike's own forward axis.
+    _v1.set(0, 1, 0).addScaledVector(this.forward, -this.forward.y);
+    if (_v1.lengthSq() < 1e-6) return;      // pointing straight up or down
+    _v1.normalize();
+    if (lean !== 0) {
+      _q1.setFromAxisAngle(this.forward, -lean);
+      _v1.applyQuaternion(_q1);
+    }
+
+    // Signed roll error about `forward`: positive torque about forward swings
+    // `up` toward `-right`, so that is the direction the sine term measures.
+    const err = Math.atan2(-_v1.dot(this.right), clamp(this.up.dot(_v1), -1, 1));
+    const rollRate = this.angularVelocity.dot(this.forward);
+    const desired = clamp(err * 6, -7, 7);
+    const blend = clamp(authority * dt, 0, 1);
+    this.angularVelocity.addScaledVector(this.forward, (desired - rollRate) * blend);
+  }
+
   /** Anti-roll bars: transfer load across each axle so the car leans less in corners. */
   _antiRoll() {
-    const stiff = (this.def.handling.rollStiffness ?? 0.45) * this.mass * 18;
+    // A two-wheeler has no axle pairs — pairing its front and rear wheels here
+    // would pitch the bike rather than resist roll.
+    if (this.isBike) return;
+    // Scaled against the shaft length now that `compression` spans the whole shaft.
+    const stiff = (this.def.handling.rollStiffness ?? 0.45) * this.mass * 48;
     for (let i = 0; i + 1 < this.nWheels; i += 2) {
       const a = this.wheels[i], b = this.wheels[i + 1];
       const diff = (a.compression - b.compression);
@@ -552,7 +685,7 @@ export class VehicleSim {
     const surf = SURFACE_PROPS[wheel.contactSurface] || SURFACE_PROPS.road;
 
     if (!wheel.contact) {
-      wheel.angularVel += (torque / wheel.inertia) * dt;
+      wheel.angularVel = clamp(wheel.angularVel + (torque / wheel.inertia) * dt, -420, 420);
       wheel.angularVel *= 1 - 0.6 * dt;
       // brakes still bite in the air
       const bt = this.brake * h.brakeTorque * wheel.brakeBias;
@@ -594,7 +727,9 @@ export class VehicleSim {
     const nominal = (this.mass * 9.81) / this.nWheels;
     const loadFactor = load > 0 ? Math.pow(clamp(load / Math.max(nominal, 1), 0.05, 3), -0.16) : 0;
     const mu = gripBase * loadFactor;
-    const maxForce = mu * load;
+    // Real tyres saturate: past a few times static load they stop giving proportionally more.
+    const gripLoad = Math.min(load, nominal * 3.2);
+    const maxForce = mu * gripLoad;
 
     // --- Pacejka curves (normalised) ---
     const B_long = 11, C_long = 1.62, E_long = 0.32;
@@ -631,7 +766,7 @@ export class VehicleSim {
     // --- integrate wheel spin ---
     const reaction = -fLong * wheel.radius;
     let netTorque = torque + reaction - roll * wheel.radius;
-    wheel.angularVel += (netTorque / wheel.inertia) * dt;
+    wheel.angularVel = clamp(wheel.angularVel + (netTorque / wheel.inertia) * dt, -420, 420);
     if (brakeTorque > 0) {
       const dv = (brakeTorque / wheel.inertia) * dt;
       if (Math.abs(wheel.angularVel) <= dv) wheel.angularVel = absVLong < 0.6 ? 0 : wheel.angularVel * 0.1;
@@ -818,6 +953,12 @@ export class VehicleSim {
         && this.angularVelocity.lengthSq() < 0.02) {
       this.velocity.multiplyScalar(0.55);
       this.angularVelocity.multiplyScalar(0.5);
+    }
+    // Safety net: nothing in this game should ever exceed ~500 km/h.
+    const MAX_SPEED = 140;
+    if (this.speed > MAX_SPEED) {
+      this.velocity.multiplyScalar(MAX_SPEED / this.speed);
+      this.speed = MAX_SPEED;
     }
     if (!Number.isFinite(this.position.x + this.position.y + this.position.z)) this._recover();
   }

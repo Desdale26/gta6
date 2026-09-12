@@ -158,7 +158,9 @@ export class StuntSystem {
     const t = trickById.get(id);
     if (!t) return;
     if (replaceLast && this.combo.length && this.combo[this.combo.length - 1].id === 'drift') this.combo.pop();
-    const points = Math.round(t.base + t.per * Math.max(0, magnitude - 1));
+    // Magnitude comes from air time, drop height and rotations, so a single
+    // freak launch could otherwise pay out more than the whole story does.
+    const points = Math.round(t.base + t.per * clamp(magnitude - 1, 0, 8));
     this.combo.push({ id, text: t.text, points });
     this.comboScore += points;
     this.multiplier = 1 + (this.combo.length - 1) * 0.35;

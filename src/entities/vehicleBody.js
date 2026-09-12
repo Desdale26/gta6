@@ -132,6 +132,22 @@ function archGeometry(radius, width, thickness, segments = 9) {
 }
 
 /** Rim + tyre for one wheel. Returns a Group so rims and tyres keep their materials. */
+const _wheelCache = new WeakMap();
+
+/** Per-model wheel prototype, built on first use and reused thereafter. */
+function cachedWheel(def, materials, rng) {
+  let byDef = _wheelCache.get(materials);
+  if (!byDef) { byDef = new Map(); _wheelCache.set(materials, byDef); }
+  let proto = byDef.get(def.id);
+  if (!proto) {
+    proto = buildWheel(def, materials, rng);
+    // Clones share these buffers, so no single car may dispose them.
+    proto.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.userData.shared = true; });
+    byDef.set(def.id, proto);
+  }
+  return proto;
+}
+
 export function buildWheel(def, materials, rng) {
   const r = def.wheels.radius;
   const w = def.wheels.width;
@@ -529,7 +545,10 @@ export function buildVehicleMesh(def, materials, rng, opts = {}) {
 
   // ------- wheels -------
   const wheelMeshes = [];
-  const protoWheel = buildWheel(def, materials, rng);
+  // Wheels are identical for every car of a given model, and cloning shares the
+  // geometry and materials, so build the prototype once per model rather than
+  // once per car streaming in.
+  const protoWheel = cachedWheel(def, materials, rng);
   for (let i = 0; i < wheelPositions.length; i++) {
     const w = protoWheel.clone(true);
     const wp = wheelPositions[i];

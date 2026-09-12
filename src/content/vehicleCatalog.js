@@ -708,12 +708,12 @@ export const VEHICLES = Object.freeze([
     wheels: { radius: 0.36, width: 0.31, rearT: 0.15, rimStyle: 'blade', rimColor: 0xcfd6dd, tireProfile: 0.12 },
     drivetrain: 'awd',
     engine: {
-      kind: 'electric', peakPowerKw: 880, peakTorqueNm: 1500, peakPowerRpm: 9000, peakTorqueRpm: 0,
+      kind: 'electric', peakPowerKw: 620, peakTorqueNm: 1500, peakPowerRpm: 9000, peakTorqueRpm: 0,
       redlineRpm: 16000, idleRpm: 0, gears: [9.2, 4.4], finalDrive: 1.0, reverseRatio: 9.2, turbo: 0, shiftTime: 0.02,
     },
     handling: {
       tireGrip: 1.40, brakeTorque: 23000, handbrakeBias: 0.48, steerMaxDeg: 32, steerSpeed: 4.6,
-      downforce: 3100, dragCd: 0.28, frontalArea: 2.02, rollStiffness: 0.8,
+      downforce: 3100, dragCd: 0.32, frontalArea: 2.16, rollStiffness: 0.8,
       suspension: { travel: 0.09, stiffness: 86000, damping: 7000, restLength: 0.22 }, driftFactor: 0.36,
     },
     paint: { palette: [0xdfe5ea, 0x13161a, 0x1e5fb0, 0x9fe8d0, 0x2b2f36], metallic: 0.86, roughness: 0.12 },
