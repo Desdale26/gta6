@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0614" />
+<title>Vice Coast: Leonida</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🌴</text></svg>" />
+<link rel="stylesheet" href="styles/game.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/webgpu": "./vendor/three/build/three.module.js",
+    "three/tsl": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- ───────────────────────── Loading ───────────────────────── -->
+<div id="loading">
+  <div class="load-inner">
+    <div class="logo">
+      <span class="logo-vice">VICE</span><span class="logo-coast">COAST</span>
+      <div class="logo-sub">L E O N I D A</div>
+    </div>
+    <div class="load-bar"><div class="load-fill" id="loadFill"></div></div>
+    <div class="load-status" id="loadStatus">Waking the city&hellip;</div>
+    <div class="load-tip" id="loadTip"></div>
+  </div>
+  <div class="load-sun"></div>
+  <div class="load-grid"></div>
+</div>
+
+<!-- ───────────────────────── Click to start ───────────────────────── -->
+<div id="startGate" class="hidden">
+  <div class="gate-card">
+    <h1>VICE COAST</h1>
+    <p class="gate-sub">Leonida &mdash; 1,600&nbsp;m of coastline, all yours.</p>
+    <button id="startBtn" class="big-btn">ENTER THE CITY</button>
+    <div class="gate-keys">
+      <div><b>WASD</b> move / drive</div><div><b>Mouse</b> look</div>
+      <div><b>Shift</b> sprint / boost</div><div><b>Space</b> jump / handbrake</div>
+      <div><b>F</b> enter &amp; exit vehicle</div><div><b>E</b> interact &middot; rob</div>
+      <div><b>LMB</b> fire &middot; <b>RMB</b> aim</div><div><b>1&ndash;9</b> weapons &middot; <b>Tab</b> wheel</div>
+      <div><b>R</b> reload &middot; <b>H</b> horn</div><div><b>M</b> map &middot; <b>P</b> phone</div>
+      <div><b>V</b> camera &middot; <b>B</b> look back</div><div><b>Esc</b> pause &middot; <b>F3</b> debug</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── HUD ───────────────────────── -->
+<div id="hud" class="hidden">
+
+  <div class="hud-topleft">
+    <div id="wanted" class="wanted"></div>
+    <div class="cash-row">
+      <div id="cash" class="cash">$0</div>
+      <div id="cashDelta" class="cash-delta"></div>
+    </div>
+    <div id="clock" class="clock">12:00 AM</div>
+    <div id="areaName" class="area-name"></div>
+  </div>
+
+  <div class="hud-topright">
+    <div id="radioBox" class="radio-box hidden">
+      <div class="radio-station" id="radioStation">—</div>
+      <div class="radio-track" id="radioTrack"></div>
+    </div>
+    <div id="fps" class="fps hidden"></div>
+  </div>
+
+  <div id="objectivePanel" class="objective hidden">
+    <div class="obj-title" id="objTitle"></div>
+    <div class="obj-text" id="objText"></div>
+    <div class="obj-meta" id="objMeta"></div>
+  </div>
+
+  <div class="hud-bottomleft">
+    <div class="radar-wrap">
+      <canvas id="minimap" width="320" height="320"></canvas>
+      <svg class="radar-ring" viewBox="0 0 100 100" aria-hidden="true">
+        <defs>
+          <linearGradient id="hpg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#4dff9e"/><stop offset="100%" stop-color="#0fd67a"/>
+          </linearGradient>
+          <linearGradient id="apg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#67d4ff"/><stop offset="100%" stop-color="#2b8fff"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-bg" cx="50" cy="50" r="46"></circle>
+        <circle id="hpArc" class="ring-arc" cx="50" cy="50" r="46" stroke="url(#hpg)"></circle>
+        <circle id="apArc" class="ring-arc ring-arc2" cx="50" cy="50" r="41.5" stroke="url(#apg)"></circle>
+      </svg>
+      <div class="radar-north">N</div>
+    </div>
+  </div>
+
+  <div class="hud-bottomright">
+    <div id="vehiclePanel" class="veh-panel hidden">
+      <div class="veh-name" id="vehName"></div>
+      <div class="speedo">
+        <svg viewBox="0 0 120 70" class="speedo-svg">
+          <path class="sp-bg" d="M10 62 A 50 50 0 0 1 110 62" />
+          <path id="spFill" class="sp-fill" d="M10 62 A 50 50 0 0 1 110 62" />
+          <path id="spRedline" class="sp-red" d="M10 62 A 50 50 0 0 1 110 62" />
+        </svg>
+        <div class="speed-num"><span id="speedVal">0</span><small>MPH</small></div>
+        <div class="gear-box"><span id="gearVal">N</span></div>
+      </div>
+      <div class="veh-bars">
+        <div class="vb"><i style="width:100%" id="vehHp"></i></div>
+        <div class="vb vb-fuel"><i style="width:100%" id="vehFuel"></i></div>
+        <div class="vb vb-nitro"><i style="width:0%" id="vehNitro"></i></div>
+      </div>
+    </div>
+    <div id="weaponPanel" class="weapon-panel">
+      <canvas id="weaponIcon" width="150" height="66"></canvas>
+      <div class="ammo"><span id="ammoMag">—</span><span class="ammo-sep">/</span><span id="ammoRes">—</span></div>
+      <div class="weapon-name" id="weaponName">Fists</div>
+    </div>
+  </div>
+
+  <div id="crosshair" class="crosshair hidden">
+    <span class="ch t"></span><span class="ch b"></span><span class="ch l"></span><span class="ch r"></span>
+    <span class="ch dot"></span>
+  </div>
+  <div id="hitmarker" class="hitmarker"></div>
+
+  <div id="prompt" class="prompt hidden"></div>
+  <div id="notifications" class="notifications"></div>
+  <div id="subtitle" class="subtitle hidden"></div>
+  <div id="comboPanel" class="combo hidden">
+    <div class="combo-score" id="comboScore">0</div>
+    <div class="combo-tricks" id="comboTricks"></div>
+    <div class="combo-bar"><i id="comboBar"></i></div>
+  </div>
+  <div id="bigText" class="big-text hidden"></div>
+  <div id="damageVignette" class="damage-vig"></div>
+  <div id="flashOverlay" class="flash-overlay"></div>
+  <div id="scopeOverlay" class="scope hidden"><div class="scope-ring"></div><div class="scope-cross"></div></div>
+</div>
+
+<!-- ───────────────────────── Overlays ───────────────────────── -->
+<div id="pauseMenu" class="overlay hidden">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <div class="menu-cols">
+      <div class="menu-list" id="menuList"></div>
+      <div class="menu-detail" id="menuDetail"></div>
+    </div>
+    <div class="panel-foot">Esc to resume &middot; ↑↓ navigate &middot; ←→ change &middot; Enter select</div>
+  </div>
+</div>
+
+<div id="mapOverlay" class="overlay hidden">
+  <div class="map-panel">
+    <h2>LEONIDA</h2>
+    <canvas id="bigMap" width="1000" height="1000"></canvas>
+    <div class="map-legend" id="mapLegend"></div>
+    <div class="panel-foot">M or Esc to close &middot; scroll to zoom &middot; drag to pan &middot; click to set a waypoint</div>
+  </div>
+</div>
+
+<div id="shopOverlay" class="overlay hidden">
+  <div class="panel shop-panel">
+    <div class="shop-head"><h2 id="shopName">SHOP</h2><div class="shop-cash" id="shopCash">$0</div></div>
+    <div class="shop-body"><div class="shop-list" id="shopList"></div><div class="shop-detail" id="shopDetail"></div></div>
+    <div class="panel-foot">Enter buy &middot; Esc leave &middot; hold <b>E</b> outside to rob the place instead</div>
+  </div>
+</div>
+
+<div id="wheelOverlay" class="wheel hidden"><canvas id="wheelCanvas" width="640" height="640"></canvas></div>
+
+<div id="phoneOverlay" class="overlay hidden">
+  <div class="phone">
+    <div class="phone-screen">
+      <div class="phone-top"><span id="phoneTime">12:00</span><span class="phone-sig">▂▄▆█ LTE</span></div>
+      <div class="phone-apps" id="phoneApps"></div>
+      <div class="phone-content" id="phoneContent"></div>
+    </div>
+    <div class="phone-home"></div>
+  </div>
+</div>
+
+<div id="deathOverlay" class="overlay death hidden">
+  <div class="death-inner"><h1 id="deathTitle">WASTED</h1><p id="deathSub"></p><div class="death-hint">Respawning&hellip;</div></div>
+</div>
+
+<div id="debugPanel" class="debug hidden"></div>
+<div id="crashOverlay" class="overlay crash hidden">
+  <div class="panel">
+    <h2>The city hiccupped</h2>
+    <pre id="crashText"></pre>
+    <button class="big-btn" onclick="location.reload()">RELOAD</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+<noscript><div class="noscript">Vice Coast needs JavaScript and WebGL2.</div></noscript>
+</body>
+</html>
