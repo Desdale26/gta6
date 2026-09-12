@@ -292,6 +292,46 @@ const SCENARIOS = [
       return bad;
     },
   },
+  {
+    // A thunderstorm once dimmed the scene three separate times over — cloud,
+    // storm and exposure each cutting the same light — and left two in the
+    // afternoon darker than midnight. Nothing else in the suite noticed,
+    // because an unplayably dark frame throws no errors.
+    name: 'lighting-levels',
+    seconds: 2,
+    setup: (c) => { c.__lightProbe = null; },
+    assert: (c) => {
+      const bad = [];
+      const hourWas = c.time.hour, weatherWas = c.weather.type;
+      const measure = (hour, weather) => {
+        c.time.hour = hour;
+        c.weather.setWeather(weather, true);
+        c.sky.update(0.016, hour, c.weather);
+        c.weather.update(0.016, hour);
+        return {
+          key: c.sky.sun.intensity,
+          fill: c.sky.hemi.intensity + c.sky.moon.intensity,
+          exposure: c.renderer.grade.uExposure.value,
+        };
+      };
+      for (const w of ['clear', 'fair', 'overcast', 'drizzle', 'rain', 'storm', 'fog']) {
+        const m = measure(13, w);
+        // Daylight: whatever the sky is doing, you can see the road.
+        const lit = m.key + m.fill * 1.6;
+        if (lit < 1.2) bad.push(`${w} at midday is too dark to play (key ${m.key.toFixed(2)}, fill ${m.fill.toFixed(2)})`);
+        if (m.key > 6 || m.fill > 4) bad.push(`${w} at midday is blown out (key ${m.key.toFixed(2)}, fill ${m.fill.toFixed(2)})`);
+      }
+      for (const w of ['clear', 'rain']) {
+        const m = measure(23, w);
+        // Night is dark, not black: unlit back streets still need a floor.
+        if (m.fill < 0.75) bad.push(`${w} at night has no ambient floor (fill ${m.fill.toFixed(2)})`);
+        if (m.fill > 1.6) bad.push(`${w} at night is washed out (fill ${m.fill.toFixed(2)})`);
+      }
+      c.time.hour = hourWas;
+      c.weather.setWeather(weatherWas, true);
+      return bad;
+    },
+  },
 ];
 
 function startServer() {

@@ -49,7 +49,9 @@ void main() {
   // A slow breath, plus a band travelling up the column.
   float pulse = 0.86 + 0.14 * sin(uTime * 1.8);
   float band = 0.12 * smoothstep(0.35, 0.0, abs(fract(vUv.y - uTime * 0.22) - 0.5) - 0.34);
-  float a = uOpacity * height * rim * pulse + band * height;
+  // Everything, the travelling band included, scales with the opacity — a band
+  // that ignored it kept painting the screen after the column had faded out.
+  float a = (height * rim * pulse + band * height) * uOpacity;
   gl_FragColor = vec4(uColor * (1.0 + band * 3.0), a);
 }`;
 

@@ -149,7 +149,9 @@ export class Weather {
       const night = ctx.sky.palette.night;
       const fogCol = ctx.sky.fogColor;
       ctx.renderer.setGrade({
-        exposure: ctx.sky.exposure * 0.85 * (1 - this.storm * 0.18) * (1 + night * 0.5),
+        // Under a storm the eye adapts up, not down — cutting exposure as well
+        // as the light was the third place the same weather dimmed the scene.
+        exposure: ctx.sky.exposure * 0.85 * (1 + this.storm * 0.04) * (1 + night * 0.5),
         contrast: lerp(1.04, 1.12, this.storm) - this.fog * 0.06,
         saturation: lerp(1.1, 0.72, Math.max(this.storm, this.fog * 0.7)),
         fogColor: fogCol,

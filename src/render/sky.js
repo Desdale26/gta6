@@ -287,13 +287,17 @@ export class Sky {
     this.cloudCover = overcast;
     this.storm = storm;
 
-    // Weather desaturates and dims the palette.
-    const dim = 1 - storm * 0.55 - overcast * 0.2;
+    // Weather desaturates and dims the palette. Cloud cover and storm describe
+    // the same sky, so take the stronger of the two rather than stacking them —
+    // multiplying both left a thunderstorm at two in the afternoon darker than
+    // midnight.
+    const cloudCut = Math.max(overcast * 0.62, storm * 0.78);
+    const dim = 1 - Math.max(storm * 0.5, overcast * 0.3);
     u.uZenith.value.copy(p.zenith).multiplyScalar(dim);
     u.uHorizon.value.copy(p.horizon).multiplyScalar(dim);
     u.uGround.value.copy(p.ground);
     u.uSunColor.value.copy(p.sun);
-    u.uSunIntensity.value = p.sunI * (1 - overcast * 0.55) * (1 - storm * 0.6);
+    u.uSunIntensity.value = p.sunI * (1 - Math.max(overcast * 0.55, storm * 0.7));
     u.uMoonIntensity.value = p.night * (1 - overcast * 0.7);
     u.uNight.value = p.night;
     u.uTime.value = (u.uTime.value + dt) % 100000;
@@ -310,18 +314,25 @@ export class Sky {
 
     // --- scene lights ---
     const sunUp = clamp(this.sunDir.y, -1, 1);
-    const sunStrength = p.sunI * 0.95 * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - overcast * 0.62) * (1 - storm * 0.65);
+    const sunStrength = p.sunI * 0.95 * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
     this.sun.color.copy(p.sun);
     this.sun.intensity = sunStrength;
     this.sun.visible = sunStrength > 0.01;
     this.moon.color.setHex(0xaebeff);
-    this.moon.intensity = p.night * 0.30 * (1 - overcast * 0.8);
+    this.moon.intensity = p.night * 0.55 * (1 - overcast * 0.8);
     this.moon.position.copy(this.moonDir).multiplyScalar(400);
     this.hemi.color.copy(p.amb);
     this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x6b5a46), 0.55);
     // Sky fill is what stops the shaded sides of buildings reading as black
-    // slabs; the sun-facing surfaces barely notice it.
-    this.hemi.intensity = p.ambI * 0.62 * (0.8 + overcast * 0.6) * (1 - storm * 0.2);
+    // slabs; the sun-facing surfaces barely notice it. The night term is a floor
+    // rather than a scale, so a back street with no streetlight on it stays
+    // navigable — the city is dark at night, not pitch black — while leaving
+    // daylight where it was. Emissive windows ignore this, so it lifts only the
+    // surfaces that were genuinely unlit.
+    const nightFloor = p.night * 0.34;
+    // An overcast sky is a huge soft light source, so cloud adds fill as it
+    // takes away sun.
+    this.hemi.intensity = (p.ambI * 0.62 + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
 
     const f = this.scene.fog;
     if (f) {
