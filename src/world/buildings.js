@@ -36,38 +36,42 @@ function merge(list) {
   return list[0];
 }
 
-/** Tinted variant of a library material, cached so the city reuses a small material set. */
-function tinted(base, colorHex) {
-  if (!base) return null;
-  if (colorHex === undefined || colorHex === null) return base;
-  const key = (base.name || base.uuid) + ':' + colorHex;
-  let m = materialCache.get(key);
-  if (m) return m;
-  m = base.clone();
-  m.color.setHex(colorHex);
-  m.name = key;
-  materialCache.set(key, m);
-  return m;
-}
-
-function mat(name, colorHex) {
+/** The shared vertex-coloured material for a library surface. */
+function mat(name) {
   const lib = DEPS.materials;
-  if (!lib) return new THREE.MeshStandardMaterial({ color: colorHex ?? 0x999999, roughness: 0.9 });
-  const base = lib[name] || lib.concrete;
-  return tinted(base, colorHex);
+  if (!lib || !lib.tintable) {
+    let m = materialCache.get(name);
+    if (!m) { m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, vertexColors: true }); materialCache.set(name, m); }
+    return m;
+  }
+  return lib.tintable(name);
 }
 
-function facadeMaterialFor(facade, colorHex) {
+const _tintColor = { r: 1, g: 1, b: 1 };
+/** Write a flat colour into a geometry's vertex colour attribute (sRGB → linear). */
+function paint(geo, colorHex) {
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  const r = srgbToLinear(((colorHex >> 16) & 255) / 255);
+  const g = srgbToLinear(((colorHex >> 8) & 255) / 255);
+  const b = srgbToLinear((colorHex & 255) / 255);
+  for (let i = 0; i < n; i++) { arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+function srgbToLinear(c) { return c < 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+
+function facadeMaterialFor(facade) {
   switch (facade) {
-    case 'glass': return mat('glassFacade', undefined);
-    case 'office': return mat('officeFacade', colorHex);
-    case 'apartment': return mat('apartmentFacade', colorHex);
-    case 'artdeco': return mat('artdeco', colorHex);
-    case 'shopfront': return mat('shopFront', colorHex);
-    case 'brick': return mat('brick', colorHex);
-    case 'stucco': return mat('stucco', colorHex);
-    case 'warehouse': return mat('warehouse', colorHex);
-    default: return mat('concrete', colorHex);
+    case 'glass': return mat('glassFacade');
+    case 'office': return mat('officeFacade');
+    case 'apartment': return mat('apartmentFacade');
+    case 'artdeco': return mat('artdeco');
+    case 'shopfront': return mat('shopFront');
+    case 'brick': return mat('brick');
+    case 'stucco': return mat('stucco');
+    case 'warehouse': return mat('warehouse');
+    default: return mat('concrete');
   }
 }
 
@@ -185,23 +189,25 @@ export function buildBuilding(spec, rng) {
   const group = new THREE.Group();
   group.name = 'building:' + kind;
 
-  const facadeMat = facadeMaterialFor(spec.facade || 'concrete', pal.wall);
+  const facadeMat = facadeMaterialFor(spec.facade || 'concrete');
   const recipe = RECIPES[kind] || RECIPES.office;
   recipe({ w, d, h, spec, pal, rng, parts, colliders, lights, lod, group });
 
   // Assemble one mesh per material bucket.
+  const glassMat = DEPS.materials ? DEPS.materials.tintable('glass') : mat('concrete');
   const buckets = [
-    [parts.facade, facadeMat, true],
-    [parts.concrete, mat('concrete', pal.wall), true],
-    [parts.metal, mat('metalPanel', 0xb0b4ba), true],
-    [parts.roof, mat(kind === 'house' || kind === 'villa' || kind === 'motel' ? 'roofShingle' : 'roofTar', pal.roof), true],
-    [parts.glass, DEPS.materials ? DEPS.materials.glass : mat('concrete', 0x88aacc), false],
-    [parts.accent, mat('stucco', pal.accent), true],
-    [parts.wood, mat('wood', 0xa9814f), true],
+    [parts.facade, facadeMat, spec.facade === 'glass' ? 0xffffff : pal.wall, true],
+    [parts.concrete, mat('concrete'), pal.wall, true],
+    [parts.metal, mat('metalPanel'), 0xb0b4ba, true],
+    [parts.roof, mat(kind === 'house' || kind === 'villa' || kind === 'motel' ? 'roofShingle' : 'roofTar'), pal.roof, true],
+    [parts.glass, glassMat, 0x9fc8d8, false],
+    [parts.accent, mat('stucco'), pal.accent, true],
+    [parts.wood, mat('wood'), 0xa9814f, true],
   ];
-  for (const [list, material, shadow] of buckets) {
+  for (const [list, material, tint, shadow] of buckets) {
     const g = merge(list);
     if (!g || !material) continue;
+    paint(g, tint);
     const m = new THREE.Mesh(g, material);
     m.castShadow = shadow && lod === 0;
     m.receiveShadow = shadow;

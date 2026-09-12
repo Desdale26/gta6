@@ -11,7 +11,7 @@ import { LAYER, SURFACE } from '../physics/world.js';
 import { Terrain, WORLD, SURF } from './terrain.js';
 import { generateRoads, stampRoadsIntoTerrain, buildRoadMeshes, ROAD_TYPE, randomSidewalkPoint } from './roads.js';
 import { initBuildings, buildBuilding, pickBuildingKind } from './buildings.js';
-import { initProps, makeProp, propInstancer } from './props.js';
+import { initProps, makeProp, propInstancer, trafficLightMaterials } from './props.js';
 import { tex } from '../render/proctex.js';
 import * as Districts from '../content/districtCatalog.js';
 import { SHOP_TYPES, getShopType, generateShopName } from '../content/shopCatalog.js';
@@ -83,6 +83,9 @@ export class World {
     p(0.92, 'Welding the ramps');
     this._buildStunts(rng.fork('stunts'));
 
+    p(0.94, 'Welding it all together');
+    await this._mergeStatics();
+
     p(0.96, 'Filling the sea');
     this._buildWater();
 
@@ -99,6 +102,7 @@ export class World {
       lights: this.lights.length,
       colliders: ctx.physics.statics.length,
       genMs: Math.round(performance.now() - t0),
+      merge: this.mergeStats,
     };
     p(1, 'Ready');
     return this;
@@ -397,13 +401,14 @@ export class World {
       if (!n.isIntersection) continue;
       const r = n.radius + 1.4;
       if (n.light) {
-        for (let i = 0; i < Math.min(n.edges.length, 4); i++) {
+        for (let i = 0; i < Math.min(n.edges.length, 2); i++) {
           const e = n.edges[i];
           const dir = e.a === n ? 1 : -1;
           const px = n.x + e.dx * dir * r + e.nx * r * 0.85;
           const pz = n.z + e.dz * dir * r + e.nz * r * 0.85;
           const prop = this._spawnProp('trafficLight', px, pz, Math.atan2(-e.dx * dir, -e.dz * dir), rng, { heads: 1 });
           if (prop) {
+            prop.group.visible = false;
             prop.group.userData.light = n.light;
             prop.group.userData.edge = e;
             if (!n.lightMeshes) n.lightMeshes = [];
@@ -521,6 +526,104 @@ export class World {
     }
   }
 
+  /**
+   * Buildings and props are static, so their meshes are baked into per-material chunk meshes
+   * on a coarse grid. Draw calls drop by roughly an order of magnitude, and frustum culling
+   * still works because each chunk is only ~130 m across.
+   */
+  async _mergeStatics() {
+    const CHUNK = 170;
+    const buckets = new Map();      // "cx,cz|materialUUID" -> { material, geos, cx, cz }
+    const toRemove = [];
+    let considered = 0;
+
+    for (const child of this.group.children) {
+      // Only the groups produced by _placeBuilding / _spawnProp are candidates.
+      if (!child.isGroup || !(child.name.startsWith('building:') || child.name.startsWith('prop:'))) continue;
+      if (child.userData.noMerge) continue;
+      child.updateMatrixWorld(true);
+      let mergeable = true;
+      const collected = [];
+      child.traverse((o) => {
+        if (!o.isMesh) return;
+        // Skinned, instanced or multi-material meshes stay as they are.
+        if (o.isInstancedMesh || Array.isArray(o.material) || !o.geometry || !o.geometry.attributes.position) {
+          mergeable = false;
+          return;
+        }
+        collected.push(o);
+      });
+      if (!mergeable || !collected.length) continue;
+      considered++;
+      const cx = Math.floor(child.position.x / CHUNK);
+      const cz = Math.floor(child.position.z / CHUNK);
+      for (const mesh of collected) {
+        const key = `${cx},${cz}|${mesh.material.uuid}`;
+        let b = buckets.get(key);
+        if (!b) {
+          b = { material: mesh.material, geos: [], cx, cz, cast: mesh.castShadow, receive: mesh.receiveShadow };
+          buckets.set(key, b);
+        }
+        const g = mesh.geometry.clone();
+        g.applyMatrix4(mesh.matrixWorld);
+        // mergeGeometries needs identical attribute sets, so normalise to
+        // position/normal/uv plus colour when the material actually reads it.
+        const wantColor = !!mesh.material.vertexColors;
+        for (const name of Object.keys(g.attributes)) {
+          if (name === 'position' || name === 'normal' || name === 'uv') continue;
+          if (name === 'color' && wantColor) continue;
+          g.deleteAttribute(name);
+        }
+        if (!g.attributes.normal) g.computeVertexNormals();
+        const vcount = g.attributes.position.count;
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(vcount * 2), 2));
+        if (wantColor && !g.attributes.color) {
+          const white = new Float32Array(vcount * 3).fill(1);
+          g.setAttribute('color', new THREE.BufferAttribute(white, 3));
+        }
+        b.geos.push(g);
+        b.cast = b.cast || mesh.castShadow;
+        b.receive = b.receive || mesh.receiveShadow;
+      }
+      toRemove.push(child);
+    }
+
+    for (const child of toRemove) {
+      this.group.remove(child);
+      child.traverse((o) => { if (o.isMesh) o.geometry?.dispose?.(); });
+    }
+
+    let merged = 0, yielded = 0;
+    for (const b of buckets.values()) {
+      if (!b.geos.length) continue;
+      let geo = null;
+      try { geo = b.geos.length === 1 ? b.geos[0] : mergeGeometries(b.geos, false); }
+      catch (e) { geo = null; }
+      if (!geo) {
+        // Fall back to separate meshes rather than losing the geometry.
+        for (const g of b.geos) {
+          const m = new THREE.Mesh(g, b.material);
+          m.castShadow = b.cast; m.receiveShadow = b.receive;
+          m.matrixAutoUpdate = false; m.updateMatrix();
+          this.group.add(m);
+        }
+        continue;
+      }
+      if (b.geos.length > 1) for (const g of b.geos) g.dispose();
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, b.material);
+      mesh.name = `chunk_${b.cx}_${b.cz}`;
+      mesh.castShadow = b.cast;
+      mesh.receiveShadow = b.receive;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      this.group.add(mesh);
+      merged++;
+      if (++yielded % 60 === 0) await yieldFrame();
+    }
+    this.mergeStats = { sources: considered, chunks: merged };
+  }
+
   _buildWater() {
     const size = (WORLD.maxX - WORLD.minX) * 1.4;
     const geo = new THREE.PlaneGeometry(size, size, 64, 64);
@@ -568,15 +671,25 @@ export class World {
     if (this.roads) this.roads.update(dt);
   }
 
-  /** Update traffic-light lens emissives near the camera. */
+  /**
+   * Traffic lights are the one static prop that cannot be merged, because their lenses switch
+   * at runtime. They are cheap because everything beyond ~150 m is simply hidden.
+   */
   updateTrafficLights(camX, camZ) {
     const graph = this.roads;
     if (!graph) return;
+    const VIS2 = 150 * 150;
+    const mats = trafficLightMaterials();
     for (const light of graph.lights) {
       const n = light.node;
       if (!n.lightMeshes) continue;
       const dx = n.x - camX, dz = n.z - camZ;
-      if (dx * dx + dz * dz > 40000) continue;         // 200 m
+      const near = dx * dx + dz * dz < VIS2;
+      if (n._lightsVisible !== near) {
+        n._lightsVisible = near;
+        for (const g of n.lightMeshes) g.visible = near;
+      }
+      if (!near) continue;
       for (const g of n.lightMeshes) {
         const e = g.userData.edge;
         const state = light.stateFor(e);
@@ -584,9 +697,8 @@ export class World {
         const lenses = g.userData.lenses;
         if (!lenses) continue;
         for (const m of lenses) {
-          const on = m.userData.lamp === lit;
-          const want = on ? 4.5 : 0.06;
-          if (m.material.emissiveIntensity !== want) m.material.emissiveIntensity = want;
+          const want = m.userData.lamp === lit ? mats.on[m.userData.lamp] : mats.off[m.userData.lamp];
+          if (m.material !== want) m.material = want;
         }
       }
     }

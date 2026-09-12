@@ -36,18 +36,50 @@ function merge(list) {
   return list[0];
 }
 
+// Props tint by vertex colour rather than by cloning a material, so the whole city's street
+// furniture merges into a handful of draw calls. `mat()` records the requested colour and the
+// mesh builders below paint it into the geometry.
+let _pendingTint = 0xffffff;
+
 function mat(name, colorHex) {
+  _pendingTint = colorHex === undefined ? 0xffffff : colorHex;
   const lib = DEPS.materials;
-  const base = lib ? (lib[name] || lib.concrete) : null;
-  if (!base) return new THREE.MeshStandardMaterial({ color: colorHex ?? 0x888888, roughness: 0.85 });
-  if (colorHex === undefined) return base;
-  const key = (base.name || base.uuid) + ':' + colorHex;
-  let m = matCache.get(key);
-  if (m) return m;
-  m = base.clone();
-  m.color.setHex(colorHex);
-  matCache.set(key, m);
-  return m;
+  if (!lib || !lib.tintable) {
+    let m = matCache.get(name);
+    if (!m) { m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }); matCache.set(name, m); }
+    return m;
+  }
+  return lib.tintable(name);
+}
+
+function srgbToLinear(c) { return c < 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function paint(geo, colorHex) {
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  const r = srgbToLinear(((colorHex >> 16) & 255) / 255);
+  const g = srgbToLinear(((colorHex >> 8) & 255) / 255);
+  const b = srgbToLinear((colorHex & 255) / 255);
+  for (let i = 0; i < n; i++) { arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+/** Six shared traffic-light lens materials: red/amber/green, lit and unlit. */
+let LENS_MATS = null;
+export function trafficLightMaterials() {
+  if (LENS_MATS) return LENS_MATS;
+  const cols = [0xff2020, 0xffc020, 0x30ff50];
+  LENS_MATS = { off: [], on: [] };
+  for (let i = 0; i < 3; i++) {
+    LENS_MATS.off.push(new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 0.06, roughness: 0.4 }));
+    LENS_MATS.on.push(new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 4.5, roughness: 0.4 }));
+  }
+  return LENS_MATS;
+}
+
+/** Mesh whose geometry carries the tint recorded by the most recent mat() call. */
+function tintedMesh(geo, material) {
+  if (material && material.vertexColors) paint(geo, _pendingTint);
+  return new THREE.Mesh(geo, material);
 }
 
 function box(w, h, d, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
@@ -105,7 +137,7 @@ export function makeProp(kind, opts = {}, rng) {
   const add = (geoList, material, shadow = true) => {
     const g = merge(geoList);
     if (!g) return null;
-    const m = new THREE.Mesh(g, material);
+    const m = tintedMesh(g, material);
     m.castShadow = shadow;
     m.receiveShadow = shadow;
     group.add(m);
@@ -126,7 +158,7 @@ export function makeProp(kind, opts = {}, rng) {
         DEPS.materials ? DEPS.materials.streetlightLens : mat('metalPanel', 0xffd9a0));
       lens.castShadow = false;
       group.add(lens);
-      lights.push({ x: arm, y: h - 0.55, z: 0, color: 0xffd9a0, intensity: 3.2, distance: 26, kind: 'street' });
+      lights.push({ x: arm, y: h - 0.55, z: 0, color: 0xffd9a0, intensity: 9.5, distance: 34, kind: 'street' });
       colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: 0.16, hh: h / 2, hd: 0.16, yaw: 0 });
       breakable = { hp: 260, debris: 'metal' };
       break;
@@ -138,17 +170,15 @@ export function makeProp(kind, opts = {}, rng) {
       metal.push(cyl(0.10, 0.14, h, 8));
       metal.push(cyl(0.07, 0.07, 2.4, 6, 1.2, h - 0.3, 0, 0, Math.PI / 2));
       const lensMeshes = [];
+      const lensMats = trafficLightMaterials();
+      const lensGeo = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 8).rotateX(Math.PI / 2);
       for (let i = 0; i < heads; i++) {
         const a = (i / heads) * Math.PI * 2;
         const px = Math.cos(a) * (i === 0 ? 2.2 : 0.35);
         const pz = Math.sin(a) * (i === 0 ? 0 : 0.35);
         metal.push(box(0.36, 1.05, 0.3, px, h - 1.25, pz));
         for (let l = 0; l < 3; l++) {
-          const col = l === 0 ? 0xff2020 : l === 1 ? 0xffc020 : 0x30ff50;
-          const m = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.10, 0.10, 0.06, 8).rotateX(Math.PI / 2),
-            new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: col, emissiveIntensity: 0.15, roughness: 0.4 }),
-          );
+          const m = new THREE.Mesh(lensGeo, lensMats.off[l]);
           m.position.set(px, h - 0.85 - l * 0.3, pz + 0.17);
           m.userData.lamp = l;   // 0 red, 1 amber, 2 green
           m.userData.head = i;
@@ -158,6 +188,7 @@ export function makeProp(kind, opts = {}, rng) {
       }
       add(metal, mat('metalPanel', 0x2f3339));
       group.userData.lenses = lensMeshes;
+      group.userData.noMerge = true;   // lenses are switched at runtime
       colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: 0.18, hh: h / 2, hd: 0.18, yaw: 0 });
       break;
     }
@@ -322,7 +353,7 @@ export function makeProp(kind, opts = {}, rng) {
           ? new THREE.PlaneGeometry(0.62, 0.8).translate(0, 2.3, 0.03)
           : new THREE.PlaneGeometry(1.4, 0.42).translate(0, 2.4, 0.03);
       const col = isStop ? 0xcc2020 : kind === 'signSpeed' ? 0xf0f0f0 : 0x1f6a3a;
-      const m = new THREE.Mesh(face, mat('metalPanel', col));
+      const m = tintedMesh(face, mat('metalPanel', col));
       m.castShadow = false;
       group.add(m);
       colliders.push({ type: 'box', x: 0, y: 1.2, z: 0, hw: 0.09, hh: 1.2, hd: 0.09, yaw: 0 });
@@ -351,7 +382,7 @@ export function makeProp(kind, opts = {}, rng) {
     case 'neonSign': {
       const w = opts.width ?? 2.4, h = opts.height ?? 1.2;
       const col = opts.color ?? 0xff2d95;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0),
+      const m = tintedMesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0),
         DEPS.materials
           ? DEPS.materials.sign(opts.text || 'OPEN', { color: col, neon: true, neonColor: col, transparent: true, intensity: 3 })
           : mat('metalPanel', col));
@@ -407,7 +438,7 @@ export function makeProp(kind, opts = {}, rng) {
       for (let i = 0; i <= Math.ceil(w / 3); i++) metal.push(cyl(0.05, 0.05, h, 6, -w / 2 + i * (w / Math.ceil(w / 3)), 0));
       metal.push(cyl(0.04, 0.04, w, 6, 0, h, 0, 0, Math.PI / 2));
       add(metal, mat('metalPanel', 0x8f959b));
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0),
+      const mesh = tintedMesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0),
         DEPS.materials ? DEPS.materials.fence : mat('metalPanel', 0x999999));
       mesh.castShadow = false;
       // Tile the chainlink texture at a fixed real-world size.
@@ -607,7 +638,7 @@ export function makeProp(kind, opts = {}, rng) {
       const r = opts.radius ?? 3.2;
       add([cyl(r, r, 0.7, 16), cyl(r * 0.28, r * 0.36, 1.6, 10, 0, 0.7),
         cyl(r * 0.55, r * 0.1, 0.25, 12, 0, 2.3)], mat('marble', 0xc8c2b4));
-      const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.25, 16).rotateX(-Math.PI / 2).translate(0, 0.6, 0),
+      const water = tintedMesh(new THREE.CircleGeometry(r - 0.25, 16).rotateX(-Math.PI / 2).translate(0, 0.6, 0),
         DEPS.materials ? DEPS.materials.glass : mat('marble', 0x4488aa));
       water.castShadow = false;
       group.add(water);
@@ -699,7 +730,7 @@ export function makeProp(kind, opts = {}, rng) {
       const g = kind === 'manhole'
         ? new THREE.CircleGeometry(0.42, 12).rotateX(-Math.PI / 2).translate(0, 0.02, 0)
         : new THREE.PlaneGeometry(0.9, 0.5).rotateX(-Math.PI / 2).translate(0, 0.02, 0);
-      const m = new THREE.Mesh(g, mat('metalPanel', 0x4a4e52));
+      const m = tintedMesh(g, mat('metalPanel', 0x4a4e52));
       m.castShadow = false;
       m.receiveShadow = true;
       group.add(m);
@@ -708,7 +739,7 @@ export function makeProp(kind, opts = {}, rng) {
     case 'flagpole': {
       const h = opts.height ?? 8;
       add([cyl(0.06, 0.09, h, 6), box(0.5, 0.1, 0.5, 0, 0)], mat('metalPanel', 0xd8dce0));
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.0).translate(0.85, h - 0.8, 0),
+      const flag = tintedMesh(new THREE.PlaneGeometry(1.6, 1.0).translate(0.85, h - 0.8, 0),
         mat('tarp', opts.color ?? 0xd03a2a));
       flag.castShadow = false;
       group.add(flag);
@@ -717,7 +748,7 @@ export function makeProp(kind, opts = {}, rng) {
     }
     case 'clock': {
       add([cyl(0.09, 0.12, 3.4, 8)], mat('metalPanel', 0x2a2e33));
-      const face = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.14, 14).rotateX(Math.PI / 2).translate(0, 3.6, 0),
+      const face = tintedMesh(new THREE.CylinderGeometry(0.45, 0.45, 0.14, 14).rotateX(Math.PI / 2).translate(0, 3.6, 0),
         mat('marble', 0xf0ece0));
       group.add(face);
       lights.push({ x: 0, y: 3.6, z: 0, color: 0xfff0d0, intensity: 0.8, distance: 6, kind: 'window' });

@@ -67,7 +67,7 @@ const SKY_FRAG = /* glsl */`
 
     // --- Mie halo + sun disc ---
     float disc = smoothstep(0.99955, 0.99985, sunDot);
-    sky += uSunColor * disc * 42.0 * uSunIntensity;
+    sky += uSunColor * disc * 14.0 * uSunIntensity;
     sky += uSunColor * pow(sunDot, 220.0) * 2.2 * uMie * uSunIntensity;
 
     // --- moon + stars ---
@@ -108,17 +108,17 @@ const SKY_FRAG = /* glsl */`
 
 /** Keyframed sky/lighting palette across a 24 h day. */
 const DAY_KEYS = [
-  { h: 0.0, zenith: 0x04060f, horizon: 0x0a0c1c, ground: 0x05050a, sun: 0x223055, amb: 0x0d1226, fog: 0x0b0f1e, sunI: 0.05, ambI: 0.16, night: 1.0, exposure: 1.55 },
-  { h: 4.6, zenith: 0x0a1128, horizon: 0x241a35, ground: 0x0a0810, sun: 0x4b3a58, amb: 0x1a1830, fog: 0x1b1830, sunI: 0.10, ambI: 0.22, night: 0.92, exposure: 1.5 },
-  { h: 6.1, zenith: 0x2a3f78, horizon: 0xd86a44, ground: 0x2a1e22, sun: 0xff9a52, amb: 0x50496b, fog: 0x9a6a62, sunI: 0.85, ambI: 0.46, night: 0.35, exposure: 1.22 },
+  { h: 0.0, zenith: 0x060a1a, horizon: 0x121631, ground: 0x08080f, sun: 0x223055, amb: 0x38415f, fog: 0x121730, sunI: 0.05, ambI: 0.55, night: 1.0, exposure: 1.5 },
+  { h: 4.6, zenith: 0x0c1430, horizon: 0x2a2040, ground: 0x0c0a14, sun: 0x4b3a58, amb: 0x343553, fog: 0x1f1c36, sunI: 0.10, ambI: 0.46, night: 0.92, exposure: 1.46 },
+  { h: 6.1, zenith: 0x2a3f78, horizon: 0xd86a44, ground: 0x2a1e22, sun: 0xff9a52, amb: 0x8e7466, fog: 0x9a6a62, sunI: 1.15, ambI: 0.52, night: 0.35, exposure: 1.16 },
   { h: 7.4, zenith: 0x4d7cc4, horizon: 0xf0b183, ground: 0x4a4038, sun: 0xffd3a0, amb: 0x7d90b0, fog: 0xc9b5a8, sunI: 1.75, ambI: 0.72, night: 0.05, exposure: 1.06 },
   { h: 10.0, zenith: 0x3f7ed6, horizon: 0xa8ccf0, ground: 0x60625e, sun: 0xfff3dc, amb: 0x9fb8d8, fog: 0xbdd3ea, sunI: 2.85, ambI: 0.95, night: 0.0, exposure: 0.94 },
   { h: 13.0, zenith: 0x2f76e0, horizon: 0xb3d6f7, ground: 0x6a6c66, sun: 0xfffaf0, amb: 0xa8c2e2, fog: 0xc6dcf0, sunI: 3.15, ambI: 1.0, night: 0.0, exposure: 0.9 },
   { h: 16.5, zenith: 0x3a78cf, horizon: 0xd7c193, ground: 0x6a6156, sun: 0xffe7bb, amb: 0x9db2cc, fog: 0xd0cbb5, sunI: 2.45, ambI: 0.88, night: 0.0, exposure: 0.98 },
-  { h: 18.6, zenith: 0x2a4f92, horizon: 0xff8a4c, ground: 0x4a3228, sun: 0xff9d4f, amb: 0x6d5f7a, fog: 0xd08a63, sunI: 1.35, ambI: 0.6, night: 0.08, exposure: 1.12 },
-  { h: 19.8, zenith: 0x1b2a5c, horizon: 0xd2497c, ground: 0x261a26, sun: 0xff6a7a, amb: 0x3f3a60, fog: 0x7a4a60, sunI: 0.45, ambI: 0.38, night: 0.45, exposure: 1.32 },
-  { h: 21.2, zenith: 0x080d22, horizon: 0x2e1c3c, ground: 0x0a080f, sun: 0x2e2a48, amb: 0x181a34, fog: 0x1d1730, sunI: 0.08, ambI: 0.2, night: 0.95, exposure: 1.5 },
-  { h: 24.0, zenith: 0x04060f, horizon: 0x0a0c1c, ground: 0x05050a, sun: 0x223055, amb: 0x0d1226, fog: 0x0b0f1e, sunI: 0.05, ambI: 0.16, night: 1.0, exposure: 1.55 },
+  { h: 18.6, zenith: 0x2a4f92, horizon: 0xff8a4c, ground: 0x4a3228, sun: 0xff9d4f, amb: 0xb08464, fog: 0xd08a63, sunI: 1.75, ambI: 0.66, night: 0.08, exposure: 1.06 },
+  { h: 19.8, zenith: 0x1b2a5c, horizon: 0xd2497c, ground: 0x261a26, sun: 0xff6a7a, amb: 0x8a5f66, fog: 0x7a4a60, sunI: 0.75, ambI: 0.5, night: 0.45, exposure: 1.24 },
+  { h: 21.2, zenith: 0x0a1028, horizon: 0x35213f, ground: 0x0c0a12, sun: 0x2e2a48, amb: 0x3a3d5e, fog: 0x231a36, sunI: 0.08, ambI: 0.56, night: 0.95, exposure: 1.46 },
+  { h: 24.0, zenith: 0x060a1a, horizon: 0x121631, ground: 0x08080f, sun: 0x223055, amb: 0x38415f, fog: 0x121730, sunI: 0.05, ambI: 0.55, night: 1.0, exposure: 1.5 },
 ];
 
 function sampleKeys(hour) {
@@ -217,7 +217,7 @@ export class Sky {
     this.scene.fog = new THREE.FogExp2(0xbdd3ea, 0.0012);
 
     // --- environment probe ---
-    this.pmrem = new THREE.PMREMGenerator(ctx.renderer);
+    this.pmrem = new THREE.PMREMGenerator(ctx.gl || ctx.renderer.renderer);
     this.pmrem.compileEquirectangularShader();
     this.envScene = new THREE.Scene();
     this.envSky = new THREE.Mesh(geo, this.material);
@@ -245,13 +245,20 @@ export class Sky {
     this._setShadowExtent(preset.cascades >= 4 ? 190 : preset.cascades >= 3 ? 150 : 110);
   }
 
-  /** Sun direction for a given hour, with a seasonal tilt so noon isn't straight overhead. */
+  /**
+   * Sun direction for a given hour. The daylight arc is stretched across 06:00–20:00 so the
+   * sky palette keyframes (golden hour at 18:30, dusk at 19:45) actually line up with where
+   * the sun is, and the remaining ten hours run below the horizon.
+   */
   sunDirectionAt(hour) {
-    const a = ((hour - 6) / 24) * TAU;                     // sunrise at ~6
+    const day = hour >= 6 && hour <= 20;
+    const t = day ? (hour - 6) / 14 : (hour > 20 ? (hour - 20) / 10 : (hour + 4) / 10);
+    const a = day ? t * Math.PI : Math.PI + t * Math.PI;
     const decl = 0.31;
-    const y = Math.sin(a) * Math.cos(this.latitude - decl);
+    const tilt = Math.cos(this.latitude - decl);
+    const y = Math.sin(a) * tilt;
     const x = Math.cos(a);
-    const z = Math.sin(a) * Math.sin(this.latitude - decl) * 0.7 + 0.18;
+    const z = Math.sin(a) * Math.sin(this.latitude - decl) * 0.7 + 0.2;
     return new THREE.Vector3(x, y, z).normalize();
   }
 
@@ -296,16 +303,16 @@ export class Sky {
 
     // --- scene lights ---
     const sunUp = clamp(this.sunDir.y, -1, 1);
-    const sunStrength = p.sunI * clamp(sunUp * 3.2 + 0.12, 0, 1) * (1 - overcast * 0.7) * (1 - storm * 0.7);
+    const sunStrength = p.sunI * 0.95 * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - overcast * 0.62) * (1 - storm * 0.65);
     this.sun.color.copy(p.sun);
     this.sun.intensity = sunStrength;
     this.sun.visible = sunStrength > 0.01;
     this.moon.color.setHex(0xaebeff);
-    this.moon.intensity = p.night * 0.28 * (1 - overcast * 0.8);
+    this.moon.intensity = p.night * 0.30 * (1 - overcast * 0.8);
     this.moon.position.copy(this.moonDir).multiplyScalar(400);
     this.hemi.color.copy(p.amb);
-    this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x4a4a42), 0.5);
-    this.hemi.intensity = p.ambI * (0.72 + overcast * 0.5) * (1 - storm * 0.2);
+    this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x6b5a46), 0.55);
+    this.hemi.intensity = p.ambI * 0.45 * (0.8 + overcast * 0.6) * (1 - storm * 0.2);
 
     const f = this.scene.fog;
     if (f) {
@@ -336,9 +343,9 @@ export class Sky {
       const prev = this.envRT;
       this.envSky.scale.setScalar(100);
       this.envSky.position.set(0, 0, 0);
-      this.envRT = this.pmrem.fromScene(this.envScene, 0.08, 1, 400);
+      this.envRT = this.pmrem.fromScene(this.envScene, 0.02, 1, 400);
       this.scene.environment = this.envRT.texture;
-      this.scene.environmentIntensity = 0.85;
+      this.scene.environmentIntensity = 0.45;
       if (prev) prev.dispose();
     } catch (e) {
       console.warn('[sky] environment probe failed', e);

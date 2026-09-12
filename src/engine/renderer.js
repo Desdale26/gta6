@@ -11,6 +11,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { clamp, RollingAverage } from '../core/mathx.js';
 
 const COMPOSITE_SHADER = {
@@ -142,8 +143,8 @@ const COMPOSITE_SHADER = {
 
       // ---- aerial perspective haze ----
       if (uHazeStrength > 0.001 && depth < 1.0){
-        float h = 1.0 - exp(-lin * uHazeStrength * 0.0016);
-        col = mix(col, uFogColor, clamp(h, 0.0, 0.85));
+        float h = 1.0 - exp(-lin * uHazeStrength * 0.0011);
+        col = mix(col, uFogColor, clamp(h, 0.0, 0.72));
       }
 
       // ---- exposure + tonemap ----
@@ -244,14 +245,13 @@ export class Renderer {
 
   get domElement() { return this.renderer.domElement; }
 
-  _buildTargets() {
+  _makeTarget() {
     const dt = new THREE.DepthTexture(1, 1);
     dt.type = THREE.UnsignedIntType;
     dt.format = THREE.DepthFormat;
     dt.minFilter = THREE.NearestFilter;
     dt.magFilter = THREE.NearestFilter;
-    this.depthTexture = dt;
-    this.hdrTarget = new THREE.WebGLRenderTarget(1, 1, {
+    return new THREE.WebGLRenderTarget(1, 1, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
@@ -263,15 +263,38 @@ export class Renderer {
     });
   }
 
+  _buildTargets() {
+    // EffectComposer ping-pongs between two targets and the scene lands in a different one
+    // on alternate frames, so each target needs its OWN depth texture. The composite pass is
+    // then pointed at whichever depth belongs to the frame it is reading.
+    this.hdrTarget = this._makeTarget();
+    this.hdrTarget2 = this._makeTarget();
+    this.depthTexture = this.hdrTarget.depthTexture;
+  }
+
   _buildComposer() {
     const p = this.settings.preset;
     this.composer = new EffectComposer(this.renderer, this.hdrTarget);
     this.composer.renderToScreen = true;
+    // Replace the composer's cloned second buffer with one that owns its depth.
+    if (this.composer.renderTarget2) this.composer.renderTarget2.dispose();
+    this.composer.renderTarget2 = this.hdrTarget2;
+    this.composer.readBuffer = this.composer.renderTarget2;
+    this.composer.writeBuffer = this.composer.renderTarget1;
 
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
 
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.62, 0.82);
+    // Immediately after the scene is drawn, bind the matching depth texture.
+    const self = this;
+    const bindDepth = new Pass();
+    bindDepth.needsSwap = false;
+    bindDepth.render = function (renderer, writeBuffer, readBuffer) {
+      if (readBuffer && readBuffer.depthTexture) self.compositePass.uniforms.tDepth.value = readBuffer.depthTexture;
+    };
+    this.composer.addPass(bindDepth);
+
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.52, 0.92);
     this.bloomPass.enabled = !!p.bloom;
     this.composer.addPass(this.bloomPass);
 
@@ -280,6 +303,7 @@ export class Renderer {
     this.compositePass.material.depthWrite = false;
     this.compositePass.uniforms.tDepth.value = this.depthTexture;
     this.composer.addPass(this.compositePass);
+    // bindDepth was inserted before the composite existed; give it the reference now.
 
     this.smaaPass = new SMAAPass();
     this.smaaPass.enabled = true;
@@ -293,7 +317,7 @@ export class Renderer {
   applyQuality() {
     const p = this.settings.preset;
     this.bloomPass.enabled = !!p.bloom;
-    this.bloomPass.strength = p.bloom ? 0.5 : 0;
+    this.bloomPass.strength = p.bloom ? 0.34 : 0;
     this.renderer.shadowMap.enabled = !!p.shadows;
     this.grade.uGrain.value = this.settings.get('filmGrain');
     this.grade.uChroma.value = this.settings.get('chromaticAberration');
@@ -317,9 +341,9 @@ export class Renderer {
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
     this.composer.setSize(w, h);
-    this.hdrTarget.setSize(Math.ceil(w * ratio), Math.ceil(h * ratio));
-    this.depthTexture.image.width = Math.ceil(w * ratio);
-    this.depthTexture.image.height = Math.ceil(h * ratio);
+    const tw = Math.ceil(w * ratio), th = Math.ceil(h * ratio);
+    this.hdrTarget.setSize(tw, th);
+    this.hdrTarget2.setSize(tw, th);
     this.camera.aspect = w / h;
     this.camera.fov = this.settings.get('fov');
     this.camera.updateProjectionMatrix();
@@ -404,6 +428,7 @@ export class Renderer {
     this.canvas.removeEventListener('webglcontextlost', this._onLost);
     this.composer.dispose?.();
     this.hdrTarget.dispose();
+    this.hdrTarget2.dispose();
     this.renderer.dispose();
   }
 }

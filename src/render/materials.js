@@ -19,11 +19,13 @@ function cfg(map, repeat, aniso) {
 export class MaterialLibrary {
   constructor(ctx) {
     this.ctx = ctx;
-    this.aniso = Math.min(ctx.renderer.capabilities.getMaxAnisotropy(), ctx.settings.preset.anisotropy || 4);
+    const caps = ctx.gl ? ctx.gl.capabilities : (ctx.renderer?.renderer?.capabilities || null);
+    this.aniso = Math.min(caps ? caps.getMaxAnisotropy() : 4, ctx.settings.preset.anisotropy || 4);
     this.map = new Map();
     this.wetness = 0;
     this.nightFactor = 0;
     this._carPaints = new Map();
+    this._tintables = new Map();
     this._emissiveMats = [];
     this._wetMats = [];
     this.ready = false;
@@ -105,12 +107,12 @@ export class MaterialLibrary {
       emissive: 0x0a1420, emissiveIntensity: 0,
       emissiveMap: cfg(T('glassFacadeLit', { size: 512 }) || glassTex, 1, A),
     });
-    this._emissiveMats.push({ m: this.glassFacade, night: 1.35, day: 0 });
+    this._emissiveMats.push({ m: this.glassFacade, night: 0.55, day: 0 });
 
     this.officeFacade = this._facade('officeFacade');
     this.apartmentFacade = this._facade('apartmentFacade');
     this.artdeco = this._facade('artdeco');
-    this.shopFront = this._facade('shopFront', 2.0);
+    this.shopFront = this._facade('shopFront', 0.95);
 
     this.glass = new THREE.MeshPhysicalMaterial({
       name: 'glass', color: 0x9fc8d8, roughness: 0.03, metalness: 0,
@@ -171,7 +173,7 @@ export class MaterialLibrary {
     this.neon = this._emissive('neon', 0xff2d95, 2.6);
     this.neonCyan = this._emissive('neonCyan', 0x22e3ff, 2.6);
     this.streetlightLens = this._emissive('lampLens', 0xffd9a0, 0);
-    this._emissiveMats.push({ m: this.streetlightLens, night: 4.5, day: 0 });
+    this._emissiveMats.push({ m: this.streetlightLens, night: 2.6, day: 0 });
     this.fence = new THREE.MeshStandardMaterial({
       name: 'fence', map: cfg(T('chainlink', { size: 256 }), 1, A),
       alphaTest: 0.5, transparent: false, side: THREE.DoubleSide,
@@ -209,7 +211,7 @@ export class MaterialLibrary {
     return m;
   }
 
-  _facade(name, emissiveNight = 1.0) {
+  _facade(name, emissiveNight = 0.5) {
     const A = this.aniso;
     const set = (() => { try { return texSet(name, { size: 512 }); } catch (e) { return {}; } })();
     const lit = (() => { try { return tex(name + 'Lit', { size: 512 }); } catch (e) { return null; } })();
@@ -277,6 +279,31 @@ export class MaterialLibrary {
   }
 
   registerEmissive(m, night, day = 0) { this._emissiveMats.push({ m, night, day }); return m; }
+
+  /**
+   * A vertex-coloured variant of a library material. Static world geometry bakes its tint
+   * into vertex colours instead of cloning a material per colour, which is what lets the
+   * whole city merge down to a few hundred draw calls.
+   */
+  tintable(name) {
+    const key = 'tintable:' + name;
+    let m = this._tintables.get(key);
+    if (m) return m;
+    const base = this[name] || this.concrete;
+    m = base.clone();
+    m.name = key;
+    m.vertexColors = true;
+    m.color.setHex(0xffffff);
+    this._tintables.set(key, m);
+    // Keep the clone in step with night-time and wet-weather driving.
+    for (const e of this._emissiveMats) {
+      if (e.m === base) { this._emissiveMats.push({ m, night: e.night, day: e.day }); break; }
+    }
+    for (const w of this._wetMats) {
+      if (w.m === base) { this._wetMats.push({ m, dryRough: w.dryRough, wetRough: w.wetRough, dryEnv: w.dryEnv, wetEnv: w.wetEnv }); break; }
+    }
+    return m;
+  }
 
   /** Drive night-time emissives and wet-surface response. */
   update(nightFactor, wetness) {

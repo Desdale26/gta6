@@ -177,21 +177,21 @@ const GEN = {
   asphalt(size, o) {
     const seed = o.seed ?? 1;
     return new Field(size).fill((u, v, x, y) => {
-      const aggregate = tileWorley(u * 46, v * 46, 46, seed);
-      const grain = tileFbm(u * 22, v * 22, { octaves: 4, period: 22, seed: seed + 3 });
-      const patch = tileFbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 9 });
+      const aggregate = tileWorley(u * 120, v * 120, 120, seed);
+      const grain = tileFbm(u * 48, v * 48, { octaves: 4, period: 48, seed: seed + 3 });
+      const patch = tileFbm(u * 6, v * 6, { octaves: 3, period: 6, seed: seed + 9 });
       // tyre-polished lanes running along V
       const lane = Math.abs(Math.sin(u * Math.PI * 2)) ;
       const polish = Math.pow(1 - Math.min(1, Math.abs(u - 0.5) * 3.2), 2) * 0.4;
       // tar seams
       const seam = tileFbm(u * 5 + 3.1, v * 5, { octaves: 2, period: 5, seed: seed + 21 });
-      const isSeam = seam > 0.62 && seam < 0.665 ? 1 : 0;
-      let base = 48 + grain * 34 + aggregate * 26 + patch * 16;
-      base -= polish * 12;
-      if (isSeam) base = 30 + grain * 12;
-      const cracks = tileWorley(u * 9, v * 9, 9, seed + 77);
-      const crack = cracks < 0.045 ? 1 : 0;
-      if (crack) base *= 0.55;
+      const isSeam = seam > 0.632 && seam < 0.648 ? 1 : 0;
+      let base = 46 + grain * 22 + aggregate * 30 + patch * 9;
+      base -= polish * 8;
+      if (isSeam) base = 34 + grain * 10;
+      const cracks = tileWorley(u * 34, v * 34, 34, seed + 77);
+      const crack = cracks < 0.018 ? 1 : 0;
+      if (crack) base *= 0.74;
       const c = clamp255(base);
       const h = (grain * 0.4 + aggregate * 0.55 + (isSeam ? -0.4 : 0) - crack * 0.6) * 0.5;
       const rough = 0.95 - polish * 0.28 - aggregate * 0.05;
@@ -970,13 +970,17 @@ function facadeCanvas(size, opts, style) {
       const ww = cw * (1 - pad * 2), wh = ch * (1 - pad * 2 - style.sill);
       const h = hash2i(c, r, seed);
       if (lit) {
-        // Emissive pass: only some windows are lit, warm and varied.
+        // Emissive pass: only some windows are on, warm, varied, and brightest in the middle
+        // so they read as rooms rather than solid slabs of light.
         const on = h > (style.litChance ?? 0.55);
         if (!on) continue;
         const warm = hash2i(c, r, seed + 9);
-        g.fillStyle = `rgb(${clamp255(200 + warm * 55)},${clamp255(150 + warm * 70)},${clamp255(80 + warm * 90)})`;
-        g.globalAlpha = 0.55 + warm * 0.45;
+        const col = `rgb(${clamp255(190 + warm * 60)},${clamp255(138 + warm * 72)},${clamp255(72 + warm * 86)})`;
+        g.fillStyle = col;
+        g.globalAlpha = (0.18 + warm * 0.26) * (style.litScale ?? 1);
         g.fillRect(wx, wy, ww, wh);
+        g.globalAlpha = (0.34 + warm * 0.42) * (style.litScale ?? 1);
+        g.fillRect(wx + ww * 0.16, wy + wh * 0.12, ww * 0.68, wh * 0.62);
         g.globalAlpha = 1;
         continue;
       }
@@ -1023,19 +1027,19 @@ function facadeCanvas(size, opts, style) {
 }
 
 const FACADES = {
-  glassFacade: { cols: 8, rows: 10, pad: 0.045, sill: 0, mullion: true, bands: false, ac: false, litChance: 0.62,
-    wall: 0x2b3a46, frame: 'rgba(30,40,50,0.9)',
-    glass: (k, h) => `rgb(${clamp255(32 * k + h * 20)},${clamp255(64 * k + h * 26)},${clamp255(88 * k + h * 30)})` },
-  officeFacade: { cols: 6, rows: 8, pad: 0.10, sill: 0.06, mullion: true, bands: true, ac: false, litChance: 0.55,
-    wall: 0x8d8b84, frame: 'rgba(48,48,52,0.85)', sillColor: 'rgba(120,118,112,0.9)',
-    glass: (k, h) => `rgb(${clamp255(38 * k + h * 16)},${clamp255(52 * k + h * 18)},${clamp255(64 * k + h * 22)})` },
-  apartmentFacade: { cols: 5, rows: 7, pad: 0.14, sill: 0.12, mullion: false, bands: true, ac: true, litChance: 0.45,
+  glassFacade: { cols: 8, rows: 10, pad: 0.045, sill: 0, mullion: true, bands: false, ac: false, litChance: 0.70, litScale: 0.9,
+    wall: 0x6d7d88, frame: 'rgba(84,96,108,0.9)',
+    glass: (k, h) => `rgb(${clamp255(62 * k + h * 34)},${clamp255(104 * k + h * 40)},${clamp255(134 * k + h * 44)})` },
+  officeFacade: { cols: 6, rows: 8, pad: 0.10, sill: 0.06, mullion: true, bands: true, ac: false, litChance: 0.66, litScale: 0.85,
+    wall: 0xb4b1a8, frame: 'rgba(78,78,84,0.85)', sillColor: 'rgba(168,165,158,0.9)',
+    glass: (k, h) => `rgb(${clamp255(58 * k + h * 26)},${clamp255(76 * k + h * 28)},${clamp255(94 * k + h * 32)})` },
+  apartmentFacade: { cols: 5, rows: 7, pad: 0.14, sill: 0.12, mullion: false, bands: true, ac: true, litChance: 0.58, litScale: 0.8,
     wall: 0xc9b89b, frame: 'rgba(70,64,56,0.85)', sillColor: 'rgba(190,180,162,0.95)',
-    glass: (k, h) => `rgb(${clamp255(44 * k + h * 20)},${clamp255(48 * k + h * 20)},${clamp255(54 * k + h * 22)})` },
-  artdeco: { cols: 4, rows: 6, pad: 0.16, sill: 0.10, mullion: true, bands: true, ac: false, litChance: 0.5,
+    glass: (k, h) => `rgb(${clamp255(64 * k + h * 26)},${clamp255(70 * k + h * 26)},${clamp255(80 * k + h * 28)})` },
+  artdeco: { cols: 4, rows: 6, pad: 0.16, sill: 0.10, mullion: true, bands: true, ac: false, litChance: 0.6, litScale: 0.9,
     wall: 0xf0dfc4, frame: 'rgba(180,120,80,0.9)', sillColor: 'rgba(226,206,178,0.95)',
     glass: (k, h) => `rgb(${clamp255(48 * k + h * 16)},${clamp255(56 * k + h * 18)},${clamp255(70 * k + h * 20)})` },
-  shopFront: { cols: 3, rows: 2, pad: 0.08, sill: 0.05, mullion: true, bands: false, ac: false, litChance: 0.85,
+  shopFront: { cols: 3, rows: 2, pad: 0.08, sill: 0.05, mullion: true, bands: false, ac: false, litChance: 0.4, litScale: 1.0,
     wall: 0xb0a898, frame: 'rgba(40,40,44,0.9)', sillColor: 'rgba(150,144,132,0.9)',
     glass: (k, h) => `rgb(${clamp255(26 * k + h * 30)},${clamp255(32 * k + h * 34)},${clamp255(40 * k + h * 38)})` },
 };
