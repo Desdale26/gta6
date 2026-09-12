@@ -436,6 +436,7 @@ export class VehicleSim {
     this._antiRoll();
     const driveTorque = this._drivetrain(dt, totalLoad);
     for (let i = 0; i < this.nWheels; i++) this._tyre(this.wheels[i], dt, driveTorque);
+    this._chassisGround(dt);
     if (this.isBike) this._bikeBalance(dt);
 
     // ---- aerodynamics ----
@@ -608,6 +609,49 @@ export class VehicleSim {
       wheel.worldPos.x - this.up.x * len, wheel.worldPos.y - this.up.y * len, wheel.worldPos.z - this.up.z * len,
     );
     return force;
+  }
+
+  /**
+   * The hull resting on the ground.
+   *
+   * Wheel rays are cast along -up, so the moment a car is on its side or its
+   * roof they point at the sky and it has no contact with the terrain at all —
+   * the terrain is a heightfield, not a collider, so nothing else caught it
+   * either. An overturned car would sink, get snapped back out by the recovery
+   * check, and sink again, jittering in place forever while reporting a speed
+   * it did not have. This gives the hull itself something to rest on.
+   */
+  _chassisGround(dt) {
+    const terr = this.phys.terrain;
+    if (!terr) return;
+    const c = this.collider;
+    const hw = c.hw, hh = c.hh, hd = c.hd;
+    const k = this.mass * 110, damp_ = this.mass * 14;
+    const maxF = this.mass * 26;
+    let touched = 0;
+    for (let i = 0; i < 8; i++) {
+      const lx = (i & 1) ? hw : -hw;
+      const ly = (i & 2) ? hh : -hh;
+      const lz = (i & 4) ? hd : -hd;
+      this.localToWorld(lx, ly, lz, _v3);
+      const pen = terr.heightAt(_v3.x, _v3.z) - _v3.y;
+      if (pen <= 0) continue;
+      touched++;
+      this.pointVelocity(_v3.x, _v3.y, _v3.z, _v4);
+      // Spring out of the ground, damped by how fast this corner is descending.
+      let f = k * Math.min(pen, 0.5) - damp_ * Math.min(_v4.y, 0);
+      f = clamp(f, 0, maxF);
+      this.applyForceAt(0, f, 0, _v3.x, _v3.y, _v3.z);
+      // Scrub: sheet metal on tarmac has plenty of friction, so an overturned
+      // car slides to a stop instead of gliding away.
+      const tvx = _v4.x, tvz = _v4.z;
+      const tl = Math.hypot(tvx, tvz);
+      if (tl > 0.05) {
+        const fr = Math.min(tl * this.mass * 1.6, f * 0.9);
+        this.applyForceAt(-tvx / tl * fr, 0, -tvz / tl * fr, _v3.x, _v3.y, _v3.z);
+      }
+    }
+    this.chassisContacts = touched;
   }
 
   /**
