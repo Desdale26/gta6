@@ -627,8 +627,23 @@ export class VehicleSim {
     const c = this.collider;
     const hw = c.hw, hh = c.hh, hd = c.hd;
     const k = this.mass * 110, damp_ = this.mass * 14;
-    const maxF = this.mass * 26;
+
+    // Count the buried corners first. The spring is the part that can add
+    // energy, so its total is budgeted across however many corners are in the
+    // ground — capping each corner on its own let eight of them add up to two
+    // hundred g and fire the car into the sky. Holding a car up takes 1 g, so
+    // three is plenty to lift one out. The damper is left alone: it only ever
+    // opposes a corner that is still moving down, so it can absorb a heavy
+    // landing without ever pushing the car anywhere.
     let touched = 0;
+    for (let i = 0; i < 8; i++) {
+      this.localToWorld((i & 1) ? hw : -hw, (i & 2) ? hh : -hh, (i & 4) ? hd : -hd, _v3);
+      if (terr.heightAt(_v3.x, _v3.z) > _v3.y) touched++;
+    }
+    if (!touched) { this.chassisContacts = 0; return; }
+    const springMax = (this.mass * 9.81 * 3) / touched;
+    const damperMax = this.mass * 55;
+
     for (let i = 0; i < 8; i++) {
       const lx = (i & 1) ? hw : -hw;
       const ly = (i & 2) ? hh : -hh;
@@ -636,11 +651,11 @@ export class VehicleSim {
       this.localToWorld(lx, ly, lz, _v3);
       const pen = terr.heightAt(_v3.x, _v3.z) - _v3.y;
       if (pen <= 0) continue;
-      touched++;
       this.pointVelocity(_v3.x, _v3.y, _v3.z, _v4);
-      // Spring out of the ground, damped by how fast this corner is descending.
-      let f = k * Math.min(pen, 0.5) - damp_ * Math.min(_v4.y, 0);
-      f = clamp(f, 0, maxF);
+      // Spring out of the ground, plus damping against a corner still falling.
+      const spring = Math.min(k * Math.min(pen, 0.5), springMax);
+      const damper = Math.min(damp_ * Math.max(0, -_v4.y), damperMax);
+      const f = spring + damper;
       this.applyForceAt(0, f, 0, _v3.x, _v3.y, _v3.z);
       // Scrub: sheet metal on tarmac has plenty of friction, so an overturned
       // car slides to a stop instead of gliding away.
