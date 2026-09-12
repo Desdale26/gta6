@@ -26,6 +26,13 @@ import { HUD } from '../ui/hud.js';
 import { Menus } from '../ui/menus.js';
 import { Dialogs } from '../ui/dialogs.js';
 import { saveGame, loadGame, applySave, clearSave, hasSave } from '../core/save.js';
+import { validateMissions } from '../content/missionCatalog.js';
+import { validateWeapons } from '../content/weaponCatalog.js';
+import { validateVehicles } from '../content/vehicleCatalog.js';
+import { validateShops } from '../content/shopCatalog.js';
+import { validateStunts } from '../content/stuntCatalog.js';
+import { validateStations } from '../content/radioCatalog.js';
+import { validateDistricts } from '../content/districtCatalog.js';
 
 const MINUTES_PER_SECOND = 0.5;     // one in-game day ≈ 48 real minutes
 
@@ -359,10 +366,38 @@ export class Game {
     };
   }
 
+  /**
+   * The content catalogues check themselves. Running them once, on the first
+   * validate call, means a smoke run fails on a broken mission graph or an
+   * out-of-band weapon instead of only on something the physics notices.
+   */
+  _validateContent() {
+    const bad = [];
+    const run = (name, fn) => {
+      try {
+        for (const p of fn()) bad.push(`${name}: ${p}`);
+      } catch (e) {
+        bad.push(`${name}: threw ${e && e.message ? e.message : e}`);
+      }
+    };
+    run('missions', validateMissions);
+    run('weapons', validateWeapons);
+    run('vehicles', validateVehicles);
+    run('shops', validateShops);
+    run('stunts', validateStunts);
+    run('radio', validateStations);
+    run('districts', validateDistricts);
+    return bad;
+  }
+
   /** Consistency checks the smoke test runs every couple of seconds. */
   validate() {
     const ctx = this.ctx;
     const bad = [];
+    if (!this._contentChecked) {
+      this._contentChecked = true;
+      bad.push(...this._validateContent());
+    }
     const finite = (v, name) => { if (!Number.isFinite(v)) bad.push(`${name} is not finite (${v})`); };
     const p = ctx.player;
     finite(p.position.x, 'player.x'); finite(p.position.y, 'player.y'); finite(p.position.z, 'player.z');

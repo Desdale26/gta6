@@ -9,6 +9,20 @@ import { clamp, lerp, sign, damp } from '../core/mathx.js';
 import { BoxCollider, LAYER, MASK_SOLID, SURFACE, SURFACE_PROPS, obbVsObb } from './world.js';
 
 const AIR_DENSITY = 1.225;
+
+// Tyre and brake thermodynamics. Numbers are road-car-ish rather than racing:
+// a street tyre works best somewhere around 70 C and starts giving up past 110,
+// and cast-iron discs begin to fade around 380 C.
+const AMBIENT_TYRE_C = 22;
+const TYRE_PEAK_C = 72;
+const TYRE_MAX_C = 125;
+const TYRE_HEAT_PER_WATT = 2.6e-4;   // C per joule of slip work, per kg of tyre
+const TYRE_COOL_RATE = 0.085;        // 1/s toward ambient, scaled by airflow
+const TYRE_WEAR_PER_JOULE = 3.1e-9;
+const BRAKE_FADE_C = 380;
+const BRAKE_MAX_C = 620;
+const BRAKE_HEAT_PER_JOULE = 7.0e-5;
+const BRAKE_COOL_RATE = 0.09;
 const RPM_TO_RADS = Math.PI / 30;
 const RADS_TO_RPM = 30 / Math.PI;
 
@@ -64,8 +78,35 @@ export class Wheel {
     this.grounded = false;
     this.burnout = 0;
     this.flat = false;             // blown tyre
+
+    // Thermal and wear state. A cold tyre is greasy, a hot one is sticky right
+    // up to the point where it goes off, and every metre of sliding takes a
+    // little rubber with it and never gives it back.
+    this.temp = AMBIENT_TYRE_C;    // degrees C of the contact patch
+    this.wear = 0;                 // 0 = new, 1 = canvas
+    this.brakeTemp = AMBIENT_TYRE_C;
   }
   get maxLength() { return this.restLength + this.travel; }
+
+  /**
+   * Grip multiplier from temperature. Peaks in a working window and falls off
+   * either side: cold rubber will not key into the surface, overheated rubber
+   * goes greasy. The curve is deliberately gentle so a normal drive never feels
+   * like it is fighting the car, but a long drift or a hard chase does.
+   */
+  get tempGrip() {
+    const t = this.temp;
+    if (t < TYRE_PEAK_C) return lerp(0.86, 1.0, clamp((t - AMBIENT_TYRE_C) / (TYRE_PEAK_C - AMBIENT_TYRE_C), 0, 1));
+    return lerp(1.0, 0.72, clamp((t - TYRE_PEAK_C) / (TYRE_MAX_C - TYRE_PEAK_C), 0, 1));
+  }
+
+  /** Grip multiplier from wear. A shot tyre keeps about three quarters of it. */
+  get wearGrip() { return 1 - 0.26 * this.wear; }
+
+  /** Brake fade: pads lose bite as the disc heats past its working range. */
+  get brakeFade() {
+    return 1 - 0.42 * clamp((this.brakeTemp - BRAKE_FADE_C) / (BRAKE_MAX_C - BRAKE_FADE_C), 0, 1);
+  }
 }
 
 
@@ -836,7 +877,8 @@ export class VehicleSim {
     wheel.slipAngle = slipAngle;
 
     // --- friction limit ---
-    const gripBase = (h.tireGrip || 1.0) * surf.grip * (wheel.flat ? 0.45 : 1);
+    const gripBase = (h.tireGrip || 1.0) * surf.grip * (wheel.flat ? 0.45 : 1)
+      * wheel.tempGrip * wheel.wearGrip;
     const load = wheel.load;
     // Load sensitivity: tyres lose relative grip as they are loaded up.
     const nominal = (this.mass * 9.81) / this.nWheels;
@@ -869,7 +911,7 @@ export class VehicleSim {
     let fLat = fLatN * maxForce;
 
     // --- braking ---
-    let brakeTorque = this.brake * h.brakeTorque * wheel.brakeBias;
+    let brakeTorque = this.brake * h.brakeTorque * wheel.brakeBias * wheel.brakeFade;
     if (this.abs && brakeTorque > 0 && absVLong > 2.2) {
       // Release when the wheel is about to lock.
       const lockRatio = Math.abs(wheelV) / Math.max(absVLong, 0.1);
@@ -912,6 +954,48 @@ export class VehicleSim {
     wheel.skid = damp(wheel.skid, target, 12, dt);
     wheel.burnout = wheel.driven && this.throttle > 0.6 && Math.abs(slipRatio) > 0.5 && absVLong < 9
       ? clamp(Math.abs(slipRatio) * 0.5, 0, 1) : wheel.burnout * 0.9;
+
+    this._thermal(wheel, dt, slipSpeed, brakeTorque, absVLong);
+  }
+
+  /**
+   * Tyre and brake thermodynamics for one wheel.
+   *
+   * Heat into the tyre is the actual friction power at the contact patch —
+   * force times sliding speed — so a car held in a drift cooks its rears while
+   * the fronts stay cool, and a straight-line cruise heats nothing. Cooling is
+   * convective, so it scales with road speed. Wear is the same slip energy,
+   * integrated and never recovered, which is why a car you have hammered all
+   * night is genuinely slower than one off the lot.
+   */
+  _thermal(wheel, dt, slipSpeed, brakeTorque, absVLong) {
+    const airflow = 1 + this.speed * 0.16;
+
+    // --- tyre ---
+    const frictionPower = Math.hypot(wheel.forceLong, wheel.forceLat) * slipSpeed;
+    const tyreMass = Math.max(4, wheel.radius * wheel.width * 260);
+    wheel.temp += (frictionPower * TYRE_HEAT_PER_WATT / tyreMass) * dt * 1000;
+    wheel.temp += Math.max(0, wheel.brakeTemp - wheel.temp) * 0.03 * dt;   // soak from the disc
+    wheel.temp -= (wheel.temp - AMBIENT_TYRE_C) * TYRE_COOL_RATE * airflow * dt;
+    wheel.temp = clamp(wheel.temp, AMBIENT_TYRE_C - 6, 220);
+
+    // Wear accelerates once the rubber is past its window — that is exactly when
+    // a tyre starts shedding rather than flexing.
+    const hotFactor = wheel.temp > TYRE_PEAK_C
+      ? 1 + 2.2 * clamp((wheel.temp - TYRE_PEAK_C) / (TYRE_MAX_C - TYRE_PEAK_C), 0, 1.4) : 1;
+    wheel.wear = clamp(wheel.wear + frictionPower * dt * TYRE_WEAR_PER_JOULE * hotFactor, 0, 1);
+    // A tyre run to the canvas eventually lets go.
+    if (wheel.wear >= 1 && !wheel.flat && wheel.temp > TYRE_MAX_C && Math.random() < dt * 0.35) {
+      wheel.flat = true;
+      this.lastTyreBlowout = wheel;
+    }
+
+    // --- brakes ---
+    const brakePower = brakeTorque * Math.abs(wheel.angularVel);
+    wheel.brakeTemp += brakePower * BRAKE_HEAT_PER_JOULE * dt;
+    wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * airflow * dt;
+    wheel.brakeTemp = clamp(wheel.brakeTemp, AMBIENT_TYRE_C - 6, 900);
+    if (absVLong < 0.1 && this.brake < 0.02) wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * 0.02 * dt;
   }
 
   /** Buoyancy, drag and engine drowning. */

@@ -4,7 +4,7 @@
 // needs, watches for completion, enforces fail conditions, and pays out.
 import * as THREE from 'three';
 import { clamp, formatMoney, formatTime } from '../core/mathx.js';
-import { MISSIONS, getMission, availableMissions } from '../content/missionCatalog.js';
+import { ACTS, MISSIONS, getMission, availableMissions } from '../content/missionCatalog.js';
 import { getVehicle, randomVehicleId } from '../content/vehicleCatalog.js';
 import { DRIVER_MODE, VehicleAI } from '../entities/traffic.js';
 import { CRIME } from './police.js';
@@ -198,7 +198,7 @@ export class MissionSystem {
     }
 
     ctx.bus.emit('mission:started', { mission: m });
-    ctx.notify?.big(m.name, m.giver);
+    ctx.notify?.big(m.name, m.act ? `${ACTS[m.act]} \u00b7 ${m.giver}` : m.giver);
     ctx.dialogs?.play(m.briefing);
     this._beginObjective();
     return true;
@@ -210,7 +210,7 @@ export class MissionSystem {
     const o = this.objective;
     if (!o) return;
     const ctx = this.ctx;
-    this.objectiveState = { time: 0, count: 0, need: o.count || 1, checkpoint: 0, targets: [], collected: 0 };
+    this.objectiveState = { time: 0, count: 0, need: o.count || 1, checkpoint: 0, lap: 1, targets: [], collected: 0 };
     this._clearMarkers();
 
     switch (o.kind) {
@@ -243,6 +243,10 @@ export class MissionSystem {
         break;
       default: break;
     }
+    // Mid-mission dialogue: each objective can carry its own lines, so the story
+    // keeps talking while you drive instead of front-loading everything into the
+    // briefing and then going silent for eight minutes.
+    if (o.say && o.say.length) ctx.dialogs?.play(o.say);
     ctx.bus.emit('mission:objective', { mission: this.active, objective: o, index: this.objectiveIndex });
   }
 
@@ -368,6 +372,7 @@ export class MissionSystem {
     ctx.notify?.big('MISSION PASSED', formatMoney(m.reward));
     ctx.audio?.play('missionPass', { ui: true, volume: 0.7 });
     ctx.bus.emit('mission:completed', { mission: m, reward: m.reward });
+    if (m.debrief && m.debrief.length) ctx.dialogs?.play(m.debrief);
     this._cleanup();
     ctx.game?.save();
   }
@@ -534,10 +539,18 @@ export class MissionSystem {
     if (!cps || !cps.length) return true;
     const p = ctx.player.position;
     const cp = cps[st.checkpoint];
+    const laps = o.laps || 1;
     if (Math.hypot(cp[0] - p.x, cp[1] - p.z) < 11) {
       st.checkpoint++;
       ctx.audio?.play('checkpoint', { ui: true, volume: 0.6 });
-      if (st.checkpoint >= cps.length) return true;
+      if (st.checkpoint >= cps.length) {
+        // A multi-lap course wraps back to the first gate instead of ending, so
+        // "three laps of the port" is three laps of the port.
+        st.lap = (st.lap || 1) + 1;
+        if (st.lap > laps) return true;
+        st.checkpoint = 0;
+        ctx.notify?.toast?.('Lap', `${st.lap} of ${laps}`, 'good');
+      }
       this._clearMarkers();
       const next = cps[st.checkpoint];
       this._addMarker(next[0], next[1], 9, 'checkpoint');
@@ -608,7 +621,10 @@ export class MissionSystem {
     if (this.active.fail.timeLimit) meta = `${Math.max(0, Math.ceil(this.timer))}s`;
     else if (o && (o.kind === 'kill' || o.kind === 'killAll')) meta = `${st.count}/${st.need}`;
     else if (o && o.kind === 'collect') meta = `${st.collected}/${st.need}`;
-    else if (o && o.kind === 'race') meta = `CP ${st.checkpoint + 1}/${o.checkpoints.length}`;
+    else if (o && o.kind === 'race') {
+      meta = `CP ${st.checkpoint + 1}/${o.checkpoints.length}`;
+      if ((o.laps || 1) > 1) meta = `Lap ${st.lap || 1}/${o.laps} \u00b7 ${meta}`;
+    }
     else if (o && (o.kind === 'survive' || o.kind === 'wait')) meta = `${Math.max(0, Math.ceil((o.seconds || 0) - st.time))}s`;
     return { name: this.active.name, text: o ? o.text : '', meta, markers: this.markers };
   }

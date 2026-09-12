@@ -4,10 +4,15 @@
 // what he's worth: Mona Castellanos (fixer), Tito Barrow (chop shop), Detective Ruiz (a
 // problem), and the Marlin brothers (a bigger problem).
 
-export const MISSIONS = Object.freeze([
+import { ACTS, CAMPAIGN_MISSIONS } from './campaign.js';
+
+export { ACTS };
+
+// Act I. Everything after it lives in campaign.js and is appended below.
+const ACT_I = Object.freeze([
   // ───────────────────────────── story ─────────────────────────────
   {
-    id: 's01-fresh-off-the-bus', name: 'Fresh Off the Bus', giver: 'Mona Castellanos', type: 'story',
+    id: 's01-fresh-off-the-bus', name: 'Fresh Off the Bus', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 1, requires: [], reward: 1200, rewardRep: 10,
     blurb: 'Mona needs a car moved. No questions, no scratches.',
     briefing: [
@@ -23,9 +28,14 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, onVehicleDestroyed: true },
     music: 'neon-drive',
+    debrief: [
+      'TITO: You are the bus man.',
+      'REY: Rey.',
+      'TITO: You are the bus man until you bring me a second car. Mona pays you at the corner. Do not count it in front of me.',
+    ],
   },
   {
-    id: 's02-tito-cut', name: "Tito's Cut", giver: 'Tito Barrow', type: 'story',
+    id: 's02-tito-cut', name: "Tito's Cut", giver: 'Tito Barrow', type: 'story', act: 1,
     tier: 1, requires: ['s01-fresh-off-the-bus'], reward: 2000, rewardRep: 14,
     blurb: 'Three cars, one night, one very impatient man.',
     briefing: [
@@ -42,9 +52,13 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, timeLimit: 420 },
     music: 'kult-fm',
+    debrief: [
+      'TITO: Both of them, no scratches, inside the shift.',
+      'TITO: Come back tomorrow. Not because I like you. Because the man who did this before you is in the county lock-up and I have a list.',
+    ],
   },
   {
-    id: 's03-corner-office', name: 'Corner Office', giver: 'Mona Castellanos', type: 'story',
+    id: 's03-corner-office', name: 'Corner Office', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 2, requires: ['s02-tito-cut'], reward: 3500, rewardRep: 18,
     blurb: 'A convenience store owner stopped paying. Mona wants that corrected.',
     briefing: [
@@ -60,9 +74,13 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true },
     wantedOnEnd: 0, music: 'radio-calor',
+    debrief: [
+      'MONA: He called me eleven minutes after you left. He was very polite.',
+      'MONA: That is what this is, Rey. Not the till. The eleven minutes.',
+    ],
   },
   {
-    id: 's04-the-marlin-problem', name: 'The Marlin Problem', giver: 'Tito Barrow', type: 'story',
+    id: 's04-the-marlin-problem', name: 'The Marlin Problem', giver: 'Tito Barrow', type: 'story', act: 1,
     tier: 2, requires: ['s03-corner-office'], reward: 5200, rewardRep: 22,
     blurb: 'The Marlin brothers took a shipment that was not theirs.',
     briefing: [
@@ -79,9 +97,14 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true },
     music: 'iron-lung',
+    debrief: [
+      'TITO: Two crates. Exactly two. You did not open them.',
+      'REY: Did you want me to?',
+      'TITO: I wanted to find out. Everybody I hire opens the crate eventually. You get a week.',
+    ],
   },
   {
-    id: 's05-detective-ruiz', name: 'Detective Ruiz', giver: 'Mona Castellanos', type: 'story',
+    id: 's05-detective-ruiz', name: 'Detective Ruiz', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 3, requires: ['s04-the-marlin-problem'], reward: 7000, rewardRep: 26,
     blurb: 'Someone has been photographing the Foundry. Find out who paid for the film.',
     briefing: [
@@ -98,9 +121,15 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, onVehicleDestroyed: true },
     wantedOnStart: 2, music: 'the-signal',
+    debrief: [
+      'MONA: Photographs of my front door, my car, and a man I have never met.',
+      'MONA: Detective Julian Ruiz has been building this for a year on his own time.',
+      'REY: Then he is not going to stop for a missing folder.',
+      'MONA: No. But now he knows somebody took it, and men like that cannot leave that alone. We have given him something to chase.',
+    ],
   },
   {
-    id: 's06-night-shipment', name: 'Night Shipment', giver: 'Tito Barrow', type: 'story',
+    id: 's06-night-shipment', name: 'Night Shipment', giver: 'Tito Barrow', type: 'story', act: 1,
     tier: 3, requires: ['s05-detective-ruiz'], reward: 9000, rewardRep: 30,
     blurb: 'A truck is crossing the causeway at midnight. It should not reach the other side.',
     briefing: [
@@ -117,9 +146,14 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, timeLimit: 300 },
     wantedOnStart: 3, music: 'iron-lung',
+    debrief: [
+      'TITO: Twelve-oh-four.',
+      'REY: There was traffic.',
+      'TITO: On a causeway. At midnight. I am going to stop asking you questions, Rey, I think it is better for both of us.',
+    ],
   },
   {
-    id: 's07-the-jeweller', name: 'The Jeweller', giver: 'Mona Castellanos', type: 'heist',
+    id: 's07-the-jeweller', name: 'The Jeweller', giver: 'Mona Castellanos', type: 'heist', act: 1,
     tier: 4, requires: ['s06-night-shipment'], reward: 18000, rewardRep: 40,
     blurb: 'Ocean Mile jewellers. Four minutes inside, no longer.',
     briefing: [
@@ -136,9 +170,15 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, timeLimit: 420 },
     wantedOnStart: 0, music: 'neon-drive',
+    debrief: [
+      'MONA: Three minutes fifty. Nobody hurt. Nobody even shouted.',
+      'MONA: Do you know how rare that is? Every man I have ever sent into a jewellers has come out of it louder than he went in.',
+      'REY: It was four minutes.',
+      'MONA: It was three fifty. I was counting. I am always counting.',
+    ],
   },
   {
-    id: 's08-ruiz-returns', name: 'Ruiz Returns', giver: 'Mona Castellanos', type: 'story',
+    id: 's08-ruiz-returns', name: 'Ruiz Returns', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 4, requires: ['s07-the-jeweller'], reward: 12000, rewardRep: 34,
     blurb: 'Ruiz has a warrant, a car and a very short list of names. You are on it.',
     briefing: [
@@ -154,9 +194,14 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true },
     wantedOnStart: 4, music: 'iron-lung',
+    debrief: [
+      'MONA: He put eleven men on a causeway to have a conversation with you.',
+      'REY: It was not a conversation.',
+      'MONA: It was. You just did not like the grammar.',
+    ],
   },
   {
-    id: 's09-marina-favour', name: 'A Favour at the Marina', giver: 'Tito Barrow', type: 'story',
+    id: 's09-marina-favour', name: 'A Favour at the Marina', giver: 'Tito Barrow', type: 'story', act: 1,
     tier: 5, requires: ['s08-ruiz-returns'], reward: 15000, rewardRep: 38,
     blurb: "The Marlins' uncle keeps a boat. Tito would like it to be somewhere else.",
     briefing: [
@@ -172,9 +217,13 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, onVehicleDestroyed: true },
     wantedOnStart: 2, music: 'blue-horizon',
+    debrief: [
+      'TITO: The boat is south, the uncle is furious, and the marina has a berth nineteen with nothing in it.',
+      'TITO: You know what that berth is now? That is a message written in water.',
+    ],
   },
   {
-    id: 's10-hostile-takeover', name: 'Hostile Takeover', giver: 'Mona Castellanos', type: 'story',
+    id: 's10-hostile-takeover', name: 'Hostile Takeover', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 5, requires: ['s09-marina-favour'], reward: 22000, rewardRep: 46,
     blurb: 'The Marlins are meeting in Little Habana. End the meeting.',
     briefing: [
@@ -190,9 +239,15 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true },
     wantedOnStart: 3, music: 'iron-lung',
+    debrief: [
+      'MONA: All three. In one room. In one evening.',
+      'MONA: There is no Marlin family in Leonida as of tonight. There is just a marina, an uncle, and a very long silence.',
+      'REY: And us.',
+      'MONA: And us. Which is going to become the interesting part rather sooner than you think.',
+    ],
   },
   {
-    id: 's11-the-vault', name: 'The Vault', giver: 'Mona Castellanos', type: 'heist',
+    id: 's11-the-vault', name: 'The Vault', giver: 'Mona Castellanos', type: 'heist', act: 1,
     tier: 6, requires: ['s10-hostile-takeover'], reward: 60000, rewardRep: 70,
     blurb: 'Meridian Financial. The big one. Nothing about this is clever — it is just loud.',
     briefing: [
@@ -209,9 +264,15 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true },
     wantedOnStart: 0, music: 'pulse-fm',
+    debrief: [
+      'MONA: Sixty seconds on the drill. It behaved.',
+      'MONA: Every unit in the county came, exactly on schedule, to a building we had already left.',
+      'TITO: We are going to be famous.',
+      'MONA: We are going to be a case number, Tito. Try to enjoy the difference.',
+    ],
   },
   {
-    id: 's12-last-bus-out', name: 'Last Bus Out', giver: 'Mona Castellanos', type: 'story',
+    id: 's12-last-bus-out', name: 'Last Bus Out', giver: 'Mona Castellanos', type: 'story', act: 1,
     tier: 7, requires: ['s11-the-vault'], reward: 75000, rewardRep: 90,
     blurb: 'Ruiz found the Foundry. Mona has a plane. There is one seat.',
     briefing: [
@@ -228,6 +289,13 @@ export const MISSIONS = Object.freeze([
     ],
     fail: { onDeath: true, timeLimit: 660 },
     wantedOnStart: 4, music: 'iron-lung',
+    debrief: [
+      'TITO: You came back for me.',
+      'REY: The plane was eleven minutes away.',
+      'TITO: I know how far the plane was. I watched it go.',
+      'REY: Tito —',
+      'TITO: I am not upset with you, son. Sit down. We have a chop shop, a hole in the roof and no Mona. That is a Tuesday. We have had worse Tuesdays.',
+    ],
   },
 
   // ───────────────────────────── side work ─────────────────────────────
@@ -290,7 +358,7 @@ export const MISSIONS = Object.freeze([
     briefing: ['RACER: Tight, dark, and full of forklifts. Have fun.'],
     start: { x: 620, z: -1000, marker: 'R', radius: 6 },
     objectives: [
-      { kind: 'race', text: 'Three laps of the port', inVehicle: true, marker: 'checkpoint',
+      { kind: 'race', text: 'Three laps of the port', inVehicle: true, marker: 'checkpoint', laps: 3,
         checkpoints: [[700, -1040], [740, -940], [620, -900], [540, -980], [620, -1000]] },
     ],
     fail: { onDeath: true, timeLimit: 300 },
@@ -442,7 +510,7 @@ export const MISSIONS = Object.freeze([
     fail: { onDeath: true },
   },
   {
-    id: 'x-heist-supermarket', name: 'Grand Vista Job', giver: 'Mona Castellanos', type: 'heist',
+    id: 'x-heist-supermarket', name: 'Grand Vista Job', giver: 'Mona Castellanos', type: 'heist', act: 1,
     tier: 3, requires: ['s03-corner-office'], reward: 6800, rewardRep: 16,
     blurb: 'Mall supermarket, end of day, five tills full of the weekend.',
     briefing: [
@@ -456,6 +524,10 @@ export const MISSIONS = Object.freeze([
       { kind: 'escape', text: 'Get out of Grand Vista', seconds: 100 },
     ],
     fail: { onDeath: true, timeLimit: 330 },
+    debrief: [
+      'MONA: Five tills and the weekend safe, and the guard never left his chair.',
+      'MONA: He told the police there were four of you and one of them was enormous. People do that. It makes the story better for them.',
+    ],
   },
   {
     id: 'x-photo-skyline', name: 'Postcard Perfect', giver: 'Photographer', type: 'side',
@@ -498,6 +570,9 @@ export const MISSIONS = Object.freeze([
   },
 ]);
 
+/** Act I, then Acts II-VI and the second wave of side work. */
+export const MISSIONS = Object.freeze([...ACT_I, ...CAMPAIGN_MISSIONS]);
+
 const byId = new Map(MISSIONS.map((m) => [m.id, m]));
 export function getMission(id) { return byId.get(id); }
 
@@ -510,6 +585,95 @@ export function availableMissions(completedSet, stats = {}) {
     if (m.minRep && (stats.rep || 0) < m.minRep) return false;
     return true;
   });
+}
+
+/**
+ * Rough play-time model, in seconds, for one mission.
+ *
+ * Each objective kind has a base cost, travel between consecutive waypoints is
+ * charged at a realistic city average (a little under 50 km/h once junctions,
+ * traffic and the odd wrong turn are included), and dialogue is charged at the
+ * rate the subtitle system actually plays it. It is an estimate, not a promise,
+ * but it is built from the same numbers the game runs on rather than a guess.
+ */
+const OBJECTIVE_SECONDS = {
+  goto: 18, deliver: 22, steal: 34, rob: 40, kill: 30, killAll: 55, destroy: 40,
+  collect: 55, survive: 0, wait: 0, escape: 0, losewanted: 0, race: 0,
+  chase: 60, protect: 0, photo: 20, stunt: 45,
+};
+const CITY_SPEED = 13.5; // metres per second, door to door
+
+export function estimateMissionSeconds(m) {
+  let t = 0;
+  for (const l of m.briefing) t += Math.max(2.4, l.length * 0.052);
+  for (const l of m.debrief || []) t += Math.max(2.4, l.length * 0.052);
+  let px = m.start.x, pz = m.start.z;
+  for (const o of m.objectives) {
+    for (const l of o.say || []) t += Math.max(2.4, l.length * 0.052);
+    t += OBJECTIVE_SECONDS[o.kind] ?? 25;
+    // A firefight is per-body, not a flat fee.
+    if (o.kind === 'kill' || o.kind === 'killAll') t += (o.count || 1) * 7;
+    // Pickups scatter across a 700 m radius once there are more than five of
+    // them (see missions.js _spawnPickups), which turns a collect into a
+    // city-wide hunt rather than a walk around a courtyard.
+    if (o.kind === 'collect') {
+      const n = o.count || 1;
+      t += n > 5 ? n * ((700 * 0.9) / CITY_SPEED) : n * 9;
+    }
+    if (o.kind === 'survive' || o.kind === 'wait' || o.kind === 'escape') t += o.seconds || 60;
+    if (o.kind === 'losewanted') t += (o.seconds || 120) * 0.55;
+    if (o.kind === 'race' && o.checkpoints) {
+      const cps = o.checkpoints;
+      let lapLen = 0;
+      for (let i = 1; i < cps.length; i++) {
+        lapLen += Math.hypot(cps[i][0] - cps[i - 1][0], cps[i][1] - cps[i - 1][1]);
+      }
+      const laps = o.laps || 1;
+      // Extra laps also pay the cost of coming back round to the first gate.
+      if (laps > 1) lapLen += Math.hypot(cps[0][0] - cps[cps.length - 1][0], cps[0][1] - cps[cps.length - 1][1]);
+      t += (lapLen * laps) / 26;
+      px = cps[cps.length - 1][0];
+      pz = cps[cps.length - 1][1];
+      continue;
+    }
+    if (o.x !== undefined) {
+      t += Math.hypot(o.x - px, o.z - pz) / CITY_SPEED;
+      px = o.x; pz = o.z;
+    }
+  }
+  return t;
+}
+
+/**
+ * Estimated hours to see all of it once, including getting to each mission
+ * marker and a realistic allowance for missions you fail and replay.
+ */
+export function estimateCampaignHours(opts = {}) {
+  const retryFactor = opts.retryFactor ?? 1.35;
+  let t = 0, px = 0, pz = 0;
+  for (const m of MISSIONS) {
+    t += Math.hypot(m.start.x - px, m.start.z - pz) / CITY_SPEED;
+    t += estimateMissionSeconds(m) * retryFactor;
+    px = m.start.x; pz = m.start.z;
+  }
+  return t / 3600;
+}
+
+/** Per-act completion, for the phone and the pause screen. */
+export function storyProgress(completedSet) {
+  const done = completedSet instanceof Set ? completedSet : new Set(completedSet || []);
+  const out = [];
+  for (const key of Object.keys(ACTS)) {
+    const act = Number(key);
+    const all = MISSIONS.filter((m) => m.act === act);
+    if (!all.length) continue;
+    out.push({
+      act, name: ACTS[act], total: all.length,
+      done: all.filter((m) => done.has(m.id)).length,
+      unlocked: all.some((m) => m.requires.every((r) => done.has(r)) || done.has(m.id)),
+    });
+  }
+  return out;
 }
 
 const OBJECTIVE_KINDS = new Set(['goto', 'kill', 'killAll', 'steal', 'deliver', 'survive', 'race',
@@ -539,8 +703,27 @@ export function validateMissions() {
       if (['survive', 'wait', 'escape', 'losewanted'].includes(o.kind) && !o.seconds) {
         problems.push(`${m.id}/${o.kind}: needs seconds`);
       }
-      if (o.kind === 'race' && (!o.checkpoints || o.checkpoints.length < 2)) {
-        problems.push(`${m.id}/race: needs at least 2 checkpoints`);
+      if (o.kind === 'race') {
+        if (!o.checkpoints || o.checkpoints.length < 2) {
+          problems.push(`${m.id}/race: needs at least 2 checkpoints`);
+        } else {
+          const laps = o.laps ?? 1;
+          if (!Number.isInteger(laps) || laps < 1) problems.push(`${m.id}/race: laps must be an integer >= 1`);
+          if (laps > 1) {
+            // A lap has to close, or the second one starts by teleporting you
+            // back across the city.
+            const a = o.checkpoints[0], b = o.checkpoints[o.checkpoints.length - 1];
+            const gap = Math.hypot(a[0] - b[0], a[1] - b[1]);
+            if (gap > 200) problems.push(`${m.id}/race: ${laps} laps but the circuit does not close (${Math.round(gap)}m gap)`);
+          }
+          // The objective text promises a lap count; the data has to keep it.
+          const claim = /(\bone\b|\btwo\b|\bthree\b|\bfour\b|\bfive\b|\d+)\s+laps?\b/i.exec(o.text || '');
+          if (claim) {
+            const words = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+            const want = words[claim[1].toLowerCase()] ?? Number(claim[1]);
+            if (want && want !== laps) problems.push(`${m.id}/race: text says ${want} lap(s), data says ${laps}`);
+          }
+        }
       }
       if (['kill', 'killAll', 'collect', 'destroy'].includes(o.kind) && !o.count) {
         problems.push(`${m.id}/${o.kind}: needs count`);
@@ -570,8 +753,62 @@ export function validateMissions() {
   if (visited !== MISSIONS.length) problems.push(`mission graph has a cycle (${visited}/${MISSIONS.length} reachable)`);
 
   const story = MISSIONS.filter((m) => m.type === 'story' || m.type === 'heist');
-  if (story.length < 10) problems.push(`only ${story.length} story/heist missions`);
-  if (MISSIONS.length < 24) problems.push(`only ${MISSIONS.length} missions`);
+  if (story.length < 60) problems.push(`only ${story.length} story/heist missions`);
+  if (MISSIONS.length < 110) problems.push(`only ${MISSIONS.length} missions`);
+  // The campaign is supposed to be a twenty hour game. This is modelled from the
+  // same distances and timings the interpreter runs on, so it moves when the
+  // content moves rather than being a number somebody once typed in a readme.
+  const hours = estimateCampaignHours();
+  if (hours < 20) problems.push(`campaign models to ${hours.toFixed(1)}h of missions, contract is 20h`);
+
+  // --- story contract ---------------------------------------------------
+  // Every story beat is spoken, not just labelled. A mission that opens with a
+  // single line and pays out in silence reads as filler however good the
+  // objectives are, so the shape of the dialogue is part of the data contract.
+  const lineOk = (l) => {
+    if (typeof l !== 'string' || l.trim().length < 4) return false;
+    const i = l.indexOf(':');
+    return i > 0 && i < 24 && l.slice(i + 1).trim().length > 0;
+  };
+  for (const m of story) {
+    if (!ACTS[m.act]) { problems.push(`${m.id}: story mission has no act`); continue; }
+    if (m.briefing.length < 2) problems.push(`${m.id}: briefing is too short to be a scene`);
+    if (!m.debrief || m.debrief.length < 1) problems.push(`${m.id}: no debrief`);
+    for (const l of [...m.briefing, ...(m.debrief || [])]) {
+      if (!lineOk(l)) problems.push(`${m.id}: dialogue line is not "SPEAKER: text" (${String(l).slice(0, 30)})`);
+    }
+    for (const o of m.objectives) {
+      for (const l of o.say || []) {
+        if (!lineOk(l)) problems.push(`${m.id}/${o.kind}: objective line is not "SPEAKER: text"`);
+      }
+    }
+    // The story only ever moves forward: nothing may depend on a later act.
+    for (const r of m.requires) {
+      const dep = byId.get(r);
+      if (dep && dep.act && dep.act > m.act) problems.push(`${m.id}: requires ${r} from a later act`);
+    }
+  }
+  // Acts must chain, so finishing act N unlocks act N+1 and nothing is orphaned.
+  const actIds = new Set(story.map((m) => m.act));
+  for (const a of actIds) {
+    if (a === 1) continue;
+    const entry = story.filter((m) => m.act === a && m.requires.some((r) => (byId.get(r) || {}).act === a - 1));
+    if (!entry.length) problems.push(`act ${a} has no mission that follows on from act ${a - 1}`);
+  }
+  // Every mission has to be reachable from a cold start.
+  const done = new Set();
+  for (let pass = 0; pass < MISSIONS.length + 1; pass++) {
+    let grew = false;
+    for (const m of MISSIONS) {
+      if (done.has(m.id)) continue;
+      if (m.requires.every((r) => done.has(r))) { done.add(m.id); grew = true; }
+    }
+    if (!grew) break;
+  }
+  if (done.size !== MISSIONS.length) {
+    const stuck = MISSIONS.filter((m) => !done.has(m.id)).map((m) => m.id);
+    problems.push(`${stuck.length} mission(s) unreachable from a new save: ${stuck.slice(0, 5).join(', ')}`);
+  }
   // rewards should broadly rise with tier
   const byTier = new Map();
   for (const m of MISSIONS) {

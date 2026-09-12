@@ -3,6 +3,7 @@ import { clamp, formatMoney, formatTime } from '../core/mathx.js';
 import { QUALITY_PRESETS } from '../core/settings.js';
 import { getWeapon, WEAPON_SLOTS } from '../content/weaponCatalog.js';
 import { STATIONS } from '../content/radioCatalog.js';
+import { getMission, storyProgress } from '../content/missionCatalog.js';
 import { WORLD } from '../world/terrain.js';
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -660,12 +661,32 @@ export class Menus {
     }
     let html = '';
     if (this.phoneApp === 'missions') {
-      const avail = ctx.missions.available.slice(0, 12);
-      html = '<h4>Available</h4>' + (avail.length
-        ? avail.map((m) => `<div class="row"><span>${esc(m.name)}</span><b>${esc(formatMoney(m.reward))}</b></div>`).join('')
+      // The story first, because six acts of it is the spine of the game, then
+      // whatever freelance work is currently on the board.
+      const acts = storyProgress(ctx.missions.completed);
+      html = '<h4>Story</h4>' + acts.map((a) => {
+        const label = a.unlocked || a.done ? esc(a.name) : 'Locked';
+        const bar = a.total ? Math.round((a.done / a.total) * 100) : 0;
+        return `<div class="row"><span>${label}</span><b>${a.done}/${a.total}${bar === 100 ? ' \u2713' : ''}</b></div>`;
+      }).join('');
+
+      const avail = ctx.missions.available;
+      const story = avail.filter((m) => m.act);
+      const jobs = avail.filter((m) => !m.act);
+      const row = (m) => `<div class="row"><span>${esc(m.name)}<br><small>${esc(m.giver)}</small></span>`
+        + `<b>${esc(formatMoney(m.reward))}</b></div>`;
+      html += '<h4>Next in the story</h4>' + (story.length
+        ? story.slice(0, 4).map(row).join('')
+        : '<div class="row">Nothing waiting</div>');
+      html += '<h4>Freelance</h4>' + (jobs.length
+        ? jobs.slice(0, 10).map(row).join('')
         : '<div class="row">Nothing right now</div>');
-      html += '<h4>Completed</h4>' + ([...ctx.missions.completed].slice(-8).map((id) =>
-        `<div class="row"><span>${esc(id)}</span></div>`).join('') || '<div class="row">None yet</div>');
+
+      const recent = [...ctx.missions.completed].slice(-6).reverse();
+      html += '<h4>Recently finished</h4>' + (recent.map((id) => {
+        const m = getMission(id);
+        return `<div class="row"><span>${esc(m ? m.name : id)}</span></div>`;
+      }).join('') || '<div class="row">None yet</div>');
     } else if (this.phoneApp === 'radio') {
       html = '<h4>Stations</h4>' + STATIONS.map((s) => {
         const on = ctx.radio && ctx.radio.stationId === s.id;
