@@ -155,6 +155,9 @@ export class PhysicsWorld {
     this.dynHash = new SpatialHash(16);
     this.terrain = null;                // { heightAt(x,z), normalAt(x,z,out), surfaceAt(x,z), waterLevel }
     this.waterLevel = 0;
+    // Wind in m/s, world space. The weather system writes it every frame; every
+    // aerodynamic body in the world reads it from here.
+    this.wind = new THREE.Vector3();
     this._hit = new RayHit();
     this._hit2 = new RayHit();
     this.stats = { statics: 0, dynamics: 0, rayTests: 0 };

@@ -28,6 +28,10 @@ export class HUD {
       hpArc: document.getElementById('hpArc'),
       apArc: document.getElementById('apArc'),
       vehPanel: document.getElementById('vehiclePanel'),
+      vehTyres: document.getElementById('vehTyres'),
+      tyreCanvas: document.getElementById('tyreCanvas'),
+      tyreTemp: document.getElementById('tyreTemp'),
+      brakeTemp: document.getElementById('brakeTemp'),
       vehName: document.getElementById('vehName'),
       spFill: document.getElementById('spFill'),
       spRedline: document.getElementById('spRedline'),
@@ -224,6 +228,64 @@ export class HUD {
     this.el.vehHp.style.width = `${clamp(sim.health / sim.maxHealth, 0, 1) * 100}%`;
     this.el.vehFuel.style.width = `${clamp(sim.fuel, 0, 1) * 100}%`;
     this.el.vehNitro.style.width = `${clamp(v.nitro ?? 0, 0, 1) * 100}%`;
+    this._updateTyres(sim);
+  }
+
+  /**
+   * Four corners, drawn where they sit on the car: fill is tyre temperature,
+   * the inner bar is the brake disc, and the tread is eaten away as the tyre
+   * wears. The whole block fades in only once the car is warm or worn enough
+   * for any of it to matter, so a gentle drive never sees it.
+   */
+  _updateTyres(sim) {
+    const c = this.el.tyreCanvas;
+    if (!c || !sim.wheels || sim.wheels.length < 2) return;
+    let peakT = 0, peakB = 0, peakW = 0;
+    for (const w of sim.wheels) {
+      if (w.temp > peakT) peakT = w.temp;
+      if (w.brakeTemp > peakB) peakB = w.brakeTemp;
+      if (w.wear > peakW) peakW = w.wear;
+    }
+    const interesting = peakT > 78 || peakB > 180 || peakW > 0.12;
+    if (interesting !== this._tyresOn) {
+      this._tyresOn = interesting;
+      this.el.vehTyres.classList.toggle('on', interesting);
+    }
+    if (!interesting) return;
+    // Redrawing four rounded rectangles ten times a second is plenty.
+    const now = this.ctx.time ? this.ctx.time.elapsed : 0;
+    if (now - (this._tyreDrawn || 0) < 0.1) return;
+    this._tyreDrawn = now;
+
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
+    const cols = 2;
+    const rows = Math.ceil(sim.wheels.length / 2);
+    const cw = c.width / cols, ch = c.height / rows;
+    for (let i = 0; i < sim.wheels.length; i++) {
+      const w = sim.wheels[i];
+      const col = i % 2, row = Math.floor(i / 2);
+      const x = col * cw + cw * 0.28, y = row * ch + ch * 0.18;
+      const bw = cw * 0.44, bh = ch * 0.64;
+      // Blue when cold, green in the window, amber then red when it goes off.
+      const t = clamp((w.temp - 22) / 110, 0, 1);
+      const hue = t < 0.45 ? 205 - t * 220 : 100 - (t - 0.45) * 160;
+      g.fillStyle = `hsl(${Math.max(0, hue)}, 85%, ${38 + t * 14}%)`;
+      g.fillRect(x, y + bh * w.wear * 0.55, bw, bh * (1 - w.wear * 0.55));
+      g.fillStyle = 'rgba(255,255,255,.16)';
+      g.fillRect(x, y, bw, bh * w.wear * 0.55);
+      // Brake disc as a thin inner bar.
+      const b = clamp((w.brakeTemp - 22) / 540, 0, 1);
+      g.fillStyle = `hsl(${Math.round(40 - b * 40)}, 95%, ${28 + b * 40}%)`;
+      g.fillRect(x + bw * 0.3, y + bh * 0.22, bw * 0.4, bh * 0.56 * b);
+      g.strokeStyle = 'rgba(0,0,0,.55)';
+      g.lineWidth = 1;
+      g.strokeRect(x + 0.5, y + 0.5, bw, bh);
+    }
+    const tTxt = `${Math.round(peakT)}\u00b0 TYRE`;
+    if (tTxt !== this._tyreTxt) { this._tyreTxt = tTxt; this.el.tyreTemp.textContent = tTxt; }
+    const bTxt = `${Math.round(peakB)}\u00b0 BRAKE`;
+    if (bTxt !== this._brakeTxt) { this._brakeTxt = bTxt; this.el.brakeTemp.textContent = bTxt; }
   }
 
   _updateWeapon(player) {

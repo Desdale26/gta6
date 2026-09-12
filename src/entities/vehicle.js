@@ -170,8 +170,21 @@ export class Vehicle {
       m.rotation.x = m.position.x > 0 ? -w.spin : w.spin;
       if (lod) m.rotation.x = 0;
     }
-    // steer the front wheels' rack angle
-    for (const w of sim.wheels) if (w.steered) w.steerAngle = sim.steerAngle;
+    // Wheel steer angles belong to the simulation — it sets them every substep,
+    // with Ackermann geometry. Writing the flat rack angle back over them here
+    // was both a frame stale and geometrically wrong.
+
+    // A tyre that lets go announces itself. The sim flags the wheel; the world
+    // gets the bang, the smoke and, if the player is in the car, a warning.
+    if (sim.lastTyreBlowout) {
+      const w = sim.lastTyreBlowout;
+      sim.lastTyreBlowout = null;
+      const ctx = this.ctx;
+      ctx.audio?.playAt('tyreBlowout', w.worldPos, { volume: 0.85, maxDistance: 80 });
+      ctx.particles?.spawnSmoke(w.worldPos.x, w.worldPos.y, w.worldPos.z, 0.8, 0x24242a, 1.1);
+      if (this.driver && this.driver.isPlayer) ctx.hud?.toast('Blowout', 'A tyre has gone', 'bad');
+      ctx.bus.emit('vehicle:tyreBlown', { vehicle: this });
+    }
 
     // Crumple the bodywork once per impact. The sim clears `lastImpactSpeed` at
     // the top of its own step, so this fires on the frame of the hit and not

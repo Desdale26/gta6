@@ -16,13 +16,38 @@ const AIR_DENSITY = 1.225;
 const AMBIENT_TYRE_C = 22;
 const TYRE_PEAK_C = 72;
 const TYRE_MAX_C = 125;
-const TYRE_HEAT_PER_WATT = 2.6e-4;   // C per joule of slip work, per kg of tyre
-const TYRE_COOL_RATE = 0.085;        // 1/s toward ambient, scaled by airflow
-const TYRE_WEAR_PER_JOULE = 3.1e-9;
-const BRAKE_FADE_C = 380;
-const BRAKE_MAX_C = 620;
-const BRAKE_HEAT_PER_JOULE = 7.0e-5;
-const BRAKE_COOL_RATE = 0.09;
+const RUBBER_SPECIFIC_HEAT = 1900;   // J per kg per K
+const TYRE_HEAT_FRACTION = 0.5;      // sliding: the rest goes into the road and the air
+const TYRE_HYSTERESIS_FRACTION = 0.9; // rolling losses are almost all internal
+// Cooling has a linear convective term that grows with road speed and a
+// superlinear one standing in for conduction into the carcass and the rim. The
+// second term is what stops a tyre held in a drift from climbing forever: the
+// hotter the tread gets, the harder the rest of the tyre pulls heat out of it.
+const TYRE_COOL_BASE = 0.004;
+const TYRE_COOL_PER_MS = 0.0004;
+const TYRE_COOL_QUAD = 8.9e-4;
+// Abrasive wear only starts once the patch is genuinely scrubbing; below that a
+// tyre flexes rather than sheds, which is why a car can cruise for years and a
+// drift session destroys a set in minutes.
+const TYRE_SCRUB_THRESHOLD = 1.5;    // m/s of sliding before rubber comes off
+const TYRE_WEAR_K = 4.2e-9;
+// Organic road pads start losing bite around 300 C; a sintered track pad would
+// not, but nothing in Leonida is fitted with those.
+const BRAKE_FADE_C = 310;
+const BRAKE_MAX_C = 560;
+// A ventilated disc sheds heat far more slowly than rubber does: minutes, not
+// seconds, which is the whole reason fade is a thing you have to drive around.
+const BRAKE_COOL_RATE = 0.016;
+// The tread is light next to the disc, so a degree gained by the tyre costs the
+// disc rather less than a degree.
+const BRAKE_TO_TYRE_CAPACITY = 0.55;
+// Peak braking force on a road tyre sits around 12-16% longitudinal slip.
+const ABS_TARGET_SLIP = 0.14;
+
+const ZERO_WIND = { x: 0, y: 0, z: 0 };
+
+// Contact-patch speed below which the tyre is treated as stuck rather than slipping.
+const STICK_SPEED = 1.2;
 const RPM_TO_RADS = Math.PI / 30;
 const RADS_TO_RPM = 30 / Math.PI;
 
@@ -85,6 +110,7 @@ export class Wheel {
     this.temp = AMBIENT_TYRE_C;    // degrees C of the contact patch
     this.wear = 0;                 // 0 = new, 1 = canvas
     this.brakeTemp = AMBIENT_TYRE_C;
+    this.absRelease = 0;           // 0..1, how much pressure the ABS is dumping
   }
   get maxLength() { return this.restLength + this.travel; }
 
@@ -220,6 +246,22 @@ export class VehicleSim {
     this.submersion = 0;
     this.inWater = false;
 
+    this.lastTyreBlowout = null;
+
+    // Aerodynamic reference areas, taken from the body the car actually has
+    // rather than one number per vehicle. A bus is not a sports car with a
+    // bigger nose: it is a wall, and the side and plan areas are what a
+    // crosswind and a slide push against.
+    const bodyFrontal = def.width * def.height * 0.84;
+    this.aeroArea = {
+      frontal: def.handling.frontalArea || bodyFrontal,
+      side: def.length * def.height * 0.80,
+      plan: def.length * def.width * 0.88,
+    };
+    // Brake discs scale with the car. Cast iron is 460 J per kg per K, and
+    // roughly nine tenths of the pad work ends up in the disc.
+    this.brakeHeatPerJoule = 0.9 / (Math.max(3.5, def.mass / 220) * 460);
+
     // ---- steering ----
     this.steerAngle = 0;
     this.maxSteer = (h.steerMaxDeg || 34) * Math.PI / 180;
@@ -231,6 +273,13 @@ export class VehicleSim {
 
     this.wheels = this._buildWheels();
     this.nWheels = this.wheels.length;
+    // Steering geometry, taken from where the wheels actually ended up.
+    this.halfTrack = Math.max(0.2, def.track * 0.5);
+    {
+      let minZ = Infinity, maxZ = -Infinity;
+      for (const w of this.wheels) { if (w.lz < minZ) minZ = w.lz; if (w.lz > maxZ) maxZ = w.lz; }
+      this.wheelbase = Math.max(0.6, maxZ - minZ);
+    }
     this.staticWheelLoad = (this.mass * 9.81) / this.nWheels;
     this.rideHeight = suspensionFor(def).rideHeight;
     // Height of the roll centre above the contact patch. Real saloons sit
@@ -398,7 +447,14 @@ export class VehicleSim {
       if (this.shiftTimer <= 0) { this.gear += this.shiftDir; this.shiftDir = 0; this.clutch = 1; }
       return;
     }
-    this.clutch = this.speed < 1.2 && this.gear !== 0 ? clamp(this.speed / 1.2, 0.12, 1) : 1;
+    // Below a walking pace the converter (or a driver's left foot) is slipping.
+    // With the throttle shut it is slipping almost completely: a closed-throttle
+    // torque converter at stall passes very little, which is why an idling car
+    // creeps rather than pushing. Leaving it at 12% here meant a parked car sat
+    // fighting its own tyres forever and never cooled down.
+    this.clutch = this.speed < 1.2 && this.gear !== 0
+      ? clamp(this.speed / 1.2, 0.12, 1) * (this.throttle < 0.02 ? 0.22 : 1)
+      : 1;
 
     const wantReverse = this.reverseHeld > 0.4 && this.forwardSpeed < 1.4;
     if (wantReverse && this.gear >= 0) { this.gear = -1; return; }
@@ -464,6 +520,7 @@ export class VehicleSim {
       const help = clamp(-drift * this.assist * 0.9, -this.maxSteer * 0.5, this.maxSteer * 0.5);
       this.steerAngle = clamp(this.steerAngle + help * dt * 6, -this.maxSteer, this.maxSteer);
     }
+    this._applySteerGeometry();
 
     // ---- gravity ----
     this._fy += this.mass * this.phys.gravity;
@@ -481,19 +538,7 @@ export class VehicleSim {
     if (this.isBike) this._bikeBalance(dt);
 
     // ---- aerodynamics ----
-    const v2 = this.speed * this.speed;
-    if (this.speed > 0.2) {
-      const dragMag = 0.5 * AIR_DENSITY * (h.dragCd || 0.34) * (h.frontalArea || 2.2) * v2;
-      _v1.copy(this.velocity).normalize().multiplyScalar(-dragMag);
-      this._fx += _v1.x; this._fy += _v1.y; this._fz += _v1.z;
-      if (h.downforce) {
-        // Authored downforce grows without bound with v², which at top speed pushed
-        // the fastest cars straight through their own suspension and into the road.
-        // Real road cars peak around one to two times their own weight.
-        const df = Math.min(h.downforce * (v2 / 900), this.mass * 9.81 * 1.6);
-        this._fx -= this.up.x * df; this._fy -= this.up.y * df; this._fz -= this.up.z * df;
-      }
-    }
+    this._aero(dt);
 
     // ---- water ----
     this._water(dt);
@@ -829,8 +874,41 @@ export class VehicleSim {
       if (worst > 0.22) throttle *= clamp(1 - (worst - 0.22) * 2.4, 0.18, 1);
     }
     const torque = this.engineTorque(this.engineRpm, throttle) * this.engineHealth;
-    const wheelTorque = torque * ratio * this.clutch;
+    // Gearbox, differential and driveshafts are not free. Around 12% of crank
+    // torque never reaches the road on a typical car, a little less on a direct
+    // -drive electric one.
+    const eff = this.def.handling.drivelineEfficiency ?? (e.kind === 'electric' ? 0.94 : 0.88);
+    const wheelTorque = torque * ratio * this.clutch * eff;
     return drivenCount ? wheelTorque / drivenCount : 0;
+  }
+
+  /**
+   * Hands the rack angle to the wheels that are actually steered, with real
+   * Ackermann geometry: both front wheels turn about the same centre, so the
+   * inner one has to turn further than the outer one.
+   *
+   * This used to be done by the render layer, which meant the tyre model read a
+   * value that was a frame stale — and, in a bare simulation with nothing drawing
+   * it, never set at all, so the car could not turn.
+   */
+  _applySteerGeometry() {
+    const d = Math.abs(this.steerAngle);
+    if (d < 1e-4) {
+      for (const w of this.wheels) if (w.steered) w.steerAngle = this.steerAngle;
+      return;
+    }
+    const s = sign(this.steerAngle);
+    // Turn radius to the centre of the rear axle, from the bicycle model.
+    const R = this.wheelbase / Math.tan(d);
+    for (const w of this.wheels) {
+      if (!w.steered) continue;
+      // A wheel on the inside of the turn sits closer to the centre.
+      const inner = (w.lx * s) < 0;
+      const arm = R + (inner ? -this.halfTrack : this.halfTrack);
+      w.steerAngle = arm > 0.05
+        ? s * Math.atan(this.wheelbase / arm)
+        : this.steerAngle;
+    }
   }
 
   /** Longitudinal + lateral tyre forces for one wheel. */
@@ -902,6 +980,28 @@ export class VehicleSim {
       fLongN = -sign(vLong) * Math.min(1, hb * 1.1);
     }
 
+    // --- standstill ---
+    // The slip definitions are singular at zero speed: dividing by a clamped
+    // denominator keeps them finite but the curve still fights itself, and a
+    // parked car ends up buzzing between plus and minus several kilonewtons
+    // forever, which kept its tyres warm and its suspension awake. Below a
+    // walking pace, blend the curve into a plain linear damper. A damper cannot
+    // pump energy in, so the chatter dies and the car simply sits there.
+    const patchSpeed = Math.hypot(vLong, vLat);
+    const stick = clamp(1 - patchSpeed / STICK_SPEED, 0, 1);
+    if (stick > 0) {
+      const latStick = clamp(-vLat / STICK_SPEED, -1, 1);
+      fLatN = lerp(fLatN, latStick, stick);
+    }
+    // Longitudinally the test is slip, not road speed: a wheel spinning up under
+    // power has left the stuck regime immediately even from a standstill, while
+    // one idling in gear against a stationary car has not. Keying off slip means
+    // a launch still uses the full curve and a parked car stops buzzing.
+    const longStick = clamp(1 - Math.max(patchSpeed, Math.abs(wheelV - vLong)) / STICK_SPEED, 0, 1);
+    if (longStick > 0) {
+      fLongN = lerp(fLongN, clamp(-vLong / STICK_SPEED, -1, 1), longStick);
+    }
+
     // --- friction circle ---
     const drift = h.driftFactor ?? 0.25;
     let combined = Math.hypot(fLongN, fLatN * (1 - drift * 0.25));
@@ -912,13 +1012,34 @@ export class VehicleSim {
 
     // --- braking ---
     let brakeTorque = this.brake * h.brakeTorque * wheel.brakeBias * wheel.brakeFade;
-    if (this.abs && brakeTorque > 0 && absVLong > 2.2) {
-      // Release when the wheel is about to lock.
-      const lockRatio = Math.abs(wheelV) / Math.max(absVLong, 0.1);
-      if (lockRatio < 0.72) brakeTorque *= clamp(lockRatio / 0.72, 0.25, 1);
+    if (brakeTorque > 0 && absVLong > 2.2 && this.abs) {
+      // Real ABS is a closed loop that holds the wheel just past peak, around
+      // 12-16% slip, not a threshold that dumps pressure once the wheel has
+      // already stopped. The old open-loop release let wheels settle at 78%
+      // slip — locked in everything but name, which meant the tyre did all the
+      // work, the pads did none, and the car took longer to stop than it should.
+      const braking = clamp(-slipRatio, 0, 1.2);
+      wheel.absRelease = clamp(wheel.absRelease + (braking - ABS_TARGET_SLIP) * 16 * dt, 0, 0.94);
+      brakeTorque *= 1 - wheel.absRelease;
+    } else if (brakeTorque <= 0 || absVLong <= 2.2) {
+      wheel.absRelease = Math.max(0, wheel.absRelease - 4 * dt);
     }
-    // rolling resistance
-    const roll = surf.roll * load * sign(wheelV || vLong);
+    // Rolling resistance. A tyre's coefficient is not constant: hysteresis in
+    // the carcass rises with the square of speed, which is part of why the last
+    // twenty km/h of a top-speed run costs so much more than the first. The
+    // usual empirical fit is Crr(v) = Crr0 + 4e-8 v^2 with v in km/h, which on
+    // a road tyre is about 11% more drag at 250 km/h and nothing at all in town.
+    const kmh = absVLong * 3.6;
+    const rollCoef = surf.roll * (1 + kmh * kmh * 1.8e-6)
+      * (wheel.flat ? 4.5 : 1)
+      // Cold rubber is stiffer and rolls easier; a hot tyre drags.
+      * lerp(0.92, 1.12, clamp((wheel.temp - AMBIENT_TYRE_C) / (TYRE_PEAK_C - AMBIENT_TYRE_C), 0, 1.4));
+    // A hard sign() at zero is the other half of the standstill chatter: the
+    // resistance flips direction every substep and drives the wheel back and
+    // forth. Softening it over a fraction of a metre per second costs nothing
+    // anywhere else.
+    const rollRef = Math.abs(wheelV) > 0.02 ? wheelV : vLong;
+    const roll = rollCoef * load * (rollRef / Math.sqrt(rollRef * rollRef + 0.12));
 
     // --- integrate wheel spin ---
     const reaction = -fLong * wheel.radius;
@@ -955,7 +1076,29 @@ export class VehicleSim {
     wheel.burnout = wheel.driven && this.throttle > 0.6 && Math.abs(slipRatio) > 0.5 && absVLong < 9
       ? clamp(Math.abs(slipRatio) * 0.5, 0, 1) : wheel.burnout * 0.9;
 
-    this._thermal(wheel, dt, slipSpeed, brakeTorque, absVLong);
+    this._thermal(wheel, dt, slipSpeed, brakeTorque, absVLong, roll);
+  }
+
+  /**
+   * Blows the tyre nearest a world point, if a wheel is close enough to it.
+   *
+   * Used by gunfire and by kerb strikes: a flat tyre keeps about half its grip,
+   * rolls four and a half times as hard, and drags the car toward that corner,
+   * which is exactly the handful it should be.
+   */
+  blowTyreNear(x, y, z, radius = 0.9) {
+    let best = null, bestD = radius * radius;
+    for (const w of this.wheels) {
+      if (w.flat) continue;
+      const dx = w.worldPos.x - x, dy = w.worldPos.y - y, dz = w.worldPos.z - z;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = w; }
+    }
+    if (!best) return null;
+    best.flat = true;
+    best.wear = Math.max(best.wear, 0.85);
+    this.lastTyreBlowout = best;
+    return best;
   }
 
   /**
@@ -968,22 +1111,39 @@ export class VehicleSim {
    * integrated and never recovered, which is why a car you have hammered all
    * night is genuinely slower than one off the lot.
    */
-  _thermal(wheel, dt, slipSpeed, brakeTorque, absVLong) {
+  _thermal(wheel, dt, slipSpeed, brakeTorque, absVLong, rollForce) {
     const airflow = 1 + this.speed * 0.16;
 
     // --- tyre ---
-    const frictionPower = Math.hypot(wheel.forceLong, wheel.forceLat) * slipSpeed;
-    const tyreMass = Math.max(4, wheel.radius * wheel.width * 260);
-    wheel.temp += (frictionPower * TYRE_HEAT_PER_WATT / tyreMass) * dt * 1000;
-    wheel.temp += Math.max(0, wheel.brakeTemp - wheel.temp) * 0.03 * dt;   // soak from the disc
-    wheel.temp -= (wheel.temp - AMBIENT_TYRE_C) * TYRE_COOL_RATE * airflow * dt;
+    // Only the tread heats on this timescale, not the whole carcass, so the mass
+    // that matters is a couple of kilograms rather than the twenty the tyre
+    // weighs. Two things put heat in: sliding at the contact patch, and simple
+    // hysteresis — the rubber flexing as it rolls, which is why a tyre that has
+    // never slid still runs forty degrees over ambient on a motorway.
+    const force = Math.hypot(wheel.forceLong, wheel.forceLat);
+    const frictionPower = force * slipSpeed;
+    const hysteresisPower = Math.abs(rollForce) * absVLong;
+    const treadMass = Math.max(1.1, wheel.radius * wheel.width * 260 * 0.10);
+    const heatIn = frictionPower * TYRE_HEAT_FRACTION + hysteresisPower * TYRE_HYSTERESIS_FRACTION;
+    wheel.temp += (heatIn * dt) / (treadMass * RUBBER_SPECIFIC_HEAT);
+    // Heat soaks out of the disc into the tyre after a stop — and it is heat the
+    // disc then no longer has. Exchanging it both ways keeps the two from
+    // inventing energy between them, which is what made a parked car's tyres
+    // climb past the temperature they reached while it was being driven.
+    const soak = Math.max(0, wheel.brakeTemp - wheel.temp) * 0.03 * dt;
+    wheel.temp += soak;
+    wheel.brakeTemp -= soak * BRAKE_TO_TYRE_CAPACITY;
+    const over = wheel.temp - AMBIENT_TYRE_C;
+    wheel.temp -= (over * (TYRE_COOL_BASE + TYRE_COOL_PER_MS * this.speed)
+      + TYRE_COOL_QUAD * over * Math.abs(over)) * dt;
     wheel.temp = clamp(wheel.temp, AMBIENT_TYRE_C - 6, 220);
 
     // Wear accelerates once the rubber is past its window — that is exactly when
     // a tyre starts shedding rather than flexing.
     const hotFactor = wheel.temp > TYRE_PEAK_C
       ? 1 + 2.2 * clamp((wheel.temp - TYRE_PEAK_C) / (TYRE_MAX_C - TYRE_PEAK_C), 0, 1.4) : 1;
-    wheel.wear = clamp(wheel.wear + frictionPower * dt * TYRE_WEAR_PER_JOULE * hotFactor, 0, 1);
+    const scrub = Math.max(0, slipSpeed - TYRE_SCRUB_THRESHOLD);
+    wheel.wear = clamp(wheel.wear + force * scrub * scrub * dt * TYRE_WEAR_K * hotFactor, 0, 1);
     // A tyre run to the canvas eventually lets go.
     if (wheel.wear >= 1 && !wheel.flat && wheel.temp > TYRE_MAX_C && Math.random() < dt * 0.35) {
       wheel.flat = true;
@@ -992,10 +1152,80 @@ export class VehicleSim {
 
     // --- brakes ---
     const brakePower = brakeTorque * Math.abs(wheel.angularVel);
-    wheel.brakeTemp += brakePower * BRAKE_HEAT_PER_JOULE * dt;
-    wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * airflow * dt;
+    wheel.brakeTemp += brakePower * this.brakeHeatPerJoule * dt;
+    wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * (1 + this.speed * 0.09) * dt;
     wheel.brakeTemp = clamp(wheel.brakeTemp, AMBIENT_TYRE_C - 6, 900);
     if (absVLong < 0.1 && this.brake < 0.02) wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * 0.02 * dt;
+  }
+
+  /**
+   * Aerodynamics, including the air that is already moving.
+   *
+   * Drag is computed against airspeed rather than ground speed, so a crosswind
+   * or a headwind is felt, and the presented area grows with sideslip: a car
+   * travelling sideways is showing the air its whole flank, which is a far
+   * bigger brake than its nose. That extra drag is what ends a slide in the
+   * real world, and its centre of pressure sits ahead of the centre of mass,
+   * which is also why a sideways car wants to keep going round.
+   */
+  _aero(dt) {
+    const h = this.def.handling;
+
+    // Airspeed = ground velocity minus the wind the world is blowing.
+    // Wind the world is blowing, in m/s, world space. The weather system keeps it
+    // on the physics world; with no weather running the air is simply still.
+    const w = this.phys.wind || ZERO_WIND;
+    _v4.set(this.velocity.x - w.x, this.velocity.y, this.velocity.z - w.z);
+    const airSpeed = _v4.length();
+    if (airSpeed < 0.2) return;
+    _v4.divideScalar(airSpeed);                     // unit airflow direction
+    const q = 0.5 * AIR_DENSITY * airSpeed * airSpeed;
+
+    // Sideslip between where the body points and where the air comes from.
+    const along = Math.abs(_v4.dot(this.forward));
+    const across = Math.abs(_v4.dot(this.right));
+    const vert = Math.abs(_v4.dot(this.up));
+    const a = this.aeroArea;
+    const frontal = a.frontal, side = a.side, plan = a.plan;
+    // Effective area is the body's own areas projected onto the airflow.
+    const area = frontal * along + side * across + plan * vert;
+    const cd = (h.dragCd || 0.34) * (1 + 0.55 * across);
+
+    const dragMag = q * cd * area;
+    this._fx -= _v4.x * dragMag;
+    this._fy -= _v4.y * dragMag;
+    this._fz -= _v4.z * dragMag;
+
+    // Side force acts ahead of the centre of mass — the classic reason a van in
+    // a crosswind, or a car already sideways, gets turned further.
+    if (across > 0.02) {
+      const sideMag = q * side * across * 0.5;
+      const dir = _v4.dot(this.right) > 0 ? 1 : -1;
+      const cop = this.def.length * (h.aeroCentre ?? 0.10);
+      this.applyForceAt(
+        this.right.x * sideMag * dir, 0, this.right.z * sideMag * dir,
+        this.position.x + this.forward.x * cop,
+        this.position.y,
+        this.position.z + this.forward.z * cop,
+      );
+    }
+
+    if (h.downforce) {
+      // Authored downforce grows without bound with v², which at top speed pushed
+      // the fastest cars straight through their own suspension and into the road.
+      // Real road cars peak around one to two times their own weight.
+      const df = Math.min(h.downforce * ((airSpeed * airSpeed) / 900), this.mass * 9.81 * 1.6);
+      this._fx -= this.up.x * df; this._fy -= this.up.y * df; this._fz -= this.up.z * df;
+
+      // Downforce is not free. A wing that pushes a car into the road drags it
+      // backwards too, at a lift-to-drag ratio of roughly five for road
+      // aerodynamics. Without this the aero package is pure profit and the
+      // fastest cars run away to speeds no amount of power could reach.
+      const induced = df / (h.aeroEfficiency ?? 5);
+      this._fx -= _v4.x * induced;
+      this._fy -= _v4.y * induced;
+      this._fz -= _v4.z * induced;
+    }
   }
 
   /** Buoyancy, drag and engine drowning. */
@@ -1168,6 +1398,11 @@ export class VehicleSim {
         && this.angularVelocity.lengthSq() < 0.02) {
       this.velocity.multiplyScalar(0.55);
       this.angularVelocity.multiplyScalar(0.5);
+      // A parked car's wheels are parked too. Damping the body's velocity away
+      // every substep while the wheels kept turning handed the tyre model a
+      // permanent slip to chew on: full grip force and the heat that goes with
+      // it, on a car standing still with the engine off.
+      for (const w of this.wheels) w.angularVel *= 0.5;
     }
     // Safety net: nothing in this game should ever exceed ~500 km/h.
     const MAX_SPEED = 140;

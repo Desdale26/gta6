@@ -416,6 +416,18 @@ export class Game {
       if (!Number.isFinite(s.velocity.x + s.velocity.y + s.velocity.z)) { bad.push(`vehicle ${v.def.id} has a non-finite velocity`); break; }
       if (s.position.y < -300) { bad.push(`vehicle ${v.def.id} fell out of the world`); break; }
       if (s.speed > 200) { bad.push(`vehicle ${v.def.id} is doing ${s.speed.toFixed(0)} m/s`); break; }
+      // Thermal state has to stay physical: a tyre or a disc that runs away is
+      // a sign the tyre model is feeding on its own numerical noise.
+      let thermalBad = null;
+      for (const w of s.wheels) {
+        if (!Number.isFinite(w.temp) || !Number.isFinite(w.brakeTemp) || !Number.isFinite(w.wear)) {
+          thermalBad = 'non-finite tyre state'; break;
+        }
+        if (w.temp > 230 || w.temp < 10) { thermalBad = `tyre at ${w.temp.toFixed(0)}C`; break; }
+        if (w.brakeTemp > 950) { thermalBad = `brake disc at ${w.brakeTemp.toFixed(0)}C`; break; }
+        if (w.wear < 0 || w.wear > 1) { thermalBad = `tyre wear ${w.wear.toFixed(2)}`; break; }
+      }
+      if (thermalBad) { bad.push(`vehicle ${v.def.id}: ${thermalBad}`); break; }
       // A car whose roof is under the ground has fallen through the terrain.
       if (s.position.y + v.def.height * 0.5 < ctx.physics.groundHeight(s.position.x, s.position.z) - 0.1) {
         bad.push(`vehicle ${v.def.id} is buried in the terrain`); break;

@@ -18,6 +18,8 @@ export const WEATHER_TYPES = {
 };
 
 const RAIN_COUNT = 3200;
+// A full storm blows about 25 m/s (90 km/h) at the surface.
+const MAX_WIND_MS = 25;
 
 export class Weather {
   constructor(ctx) {
@@ -29,6 +31,11 @@ export class Weather {
     this.fog = 0.02;
     this.windSpeed = 0.3;
     this.windDir = 0.6;
+    this.gust = 1;
+    this._t = 0;
+    // Wind in m/s, world space, mean plus gust. Physics reads this, not the
+    // normalised windSpeed the visuals use.
+    this.windVector = new THREE.Vector3();
     this.storm = 0;
     this.wetness = 0;
     this.changeTimer = 120;
@@ -120,6 +127,15 @@ export class Weather {
     this.windSpeed = damp(this.windSpeed, this.target.wind, 0.2, dt);
     this.storm = damp(this.storm, this.target.storm, 0.2, dt);
     this.windDir += dt * 0.02;
+
+    // Gusts: the mean wind is the weather, the gust is the minute. Both go into
+    // the physics world so cars, props and particles all feel the same air.
+    this.gust = damp(this.gust ?? 0, 0.65 + 0.35 * Math.sin(this._t * 0.37) * Math.sin(this._t * 0.11 + 1.7),
+      0.5, dt);
+    this._t = (this._t || 0) + dt;
+    const speed = this.windSpeed * MAX_WIND_MS * this.gust;
+    this.windVector.set(Math.cos(this.windDir) * speed, 0, Math.sin(this.windDir) * speed);
+    if (ctx.physics) ctx.physics.wind.copy(this.windVector);
 
     // Roads stay wet for a while after the rain stops.
     const wetTarget = this.rain > 0.12 ? 1 : 0;

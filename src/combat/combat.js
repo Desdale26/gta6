@@ -130,6 +130,15 @@ export class CombatSystem {
       ent.damage(damage * 0.55, hit.x, hit.y, hit.z, source);
       ctx.audio?.playAt('impactMetal', hit, { volume: 0.5 });
       ctx.decals?.addBulletHole(hit, 0.1);
+      // A round that lands on a wheel blows the tyre rather than denting a
+      // panel — the car keeps going, badly, which is far more interesting than
+      // a slightly lower health bar.
+      const blown = ent.sim?.blowTyreNear?.(hit.x, hit.y, hit.z, 0.55);
+      if (blown) {
+        ctx.audio?.playAt('tyreBlowout', hit, { volume: 0.8, maxDistance: 70 });
+        ctx.particles?.spawnSmoke(hit.x, hit.y, hit.z, 0.7, 0x2a2a2e, 0.9);
+        ctx.bus.emit('vehicle:tyreBlown', { vehicle: ent, source });
+      }
       // Hitting an occupied car hurts whoever is in it.
       if (ent.driver && Math.random() < 0.35) {
         const killed = ent.driver.damage ? ent.driver.damage(damage * 0.4, { source }) : false;

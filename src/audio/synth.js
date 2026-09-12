@@ -394,6 +394,20 @@ const RECIPES = {
     return normalize(out, 0.9);
   },
   carCrashLight: (sr, r) => impact(sr, { len: 0.7, freqs: [190, 420, 880, 1600], noiseAmt: 0.6, decay: 0.14, bright: 5200 }, r),
+  // A tyre letting go: the bang of the carcass splitting, then the air leaving.
+  tyreBlowout: (sr, r) => {
+    const n = Math.floor(sr * 1.4);
+    const out = new Float32Array(n);
+    add(out, impact(sr, { len: 0.5, freqs: [70, 150, 340], noiseAmt: 0.9, decay: 0.07, bright: 2600 }, r), 1, 0);
+    // The hiss: filtered noise fading over a second.
+    const hiss = new Float32Array(Math.floor(sr * 1.1));
+    for (let i = 0; i < hiss.length; i++) {
+      hiss[i] = (r() * 2 - 1) * Math.exp(-i / (sr * 0.34));
+    }
+    bandpass(hiss, sr, 2400, 0.9);
+    add(out, hiss, 0.55, Math.floor(sr * 0.04));
+    return normalize(out, 0.75);
+  },
   carCrashHeavy: (sr, r) => {
     const n = Math.floor(sr * 1.5);
     const out = new Float32Array(n);
