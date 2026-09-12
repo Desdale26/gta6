@@ -101,7 +101,7 @@ Some details worth knowing:
 
 ```bash
 npm run smoke              # boots the game headless and runs 600 frames
-node tools/scenarios.mjs   # 15 gameplay scenarios: driving, shooting, robbing, stunts, weather…
+node tools/scenarios.mjs   # 16 gameplay scenarios: driving, shooting, robbing, stunts, weather, lighting…
 node tools/shots.mjs       # writes screenshots to shots/
 node tools/diag.mjs        # one-shot diagnostic dump
 ```
