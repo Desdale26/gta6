@@ -218,7 +218,9 @@ const GEN = {
 
   concrete(size, o) {
     const seed = o.seed ?? 2;
-    const tint = hexRgb(o.color ?? 0xa8a8a4);
+    // Weathered concrete is around 0.40 in sRGB, not 0.66. The old default sat
+    // bright enough that a plaza at midday came out as a sheet of paper.
+    const tint = hexRgb(o.color ?? 0x78786f);
     return new Field(size).fill((u, v) => {
       const grain = tileFbm(u * 30, v * 30, { octaves: 5, period: 30, seed });
       const blotch = tileFbm(u * 4, v * 4, { octaves: 3, period: 4, seed: seed + 11 });
@@ -226,7 +228,7 @@ const GEN = {
       // form-board lines every 1/4
       const board = Math.abs((v * 4) % 1 - 0.5) > 0.487 ? 1 : 0;
       const stain = Math.pow(Math.max(0, streak - 0.5) * 2, 1.7) * (1 - v) * 0.55;
-      let k = 0.72 + grain * 0.22 + blotch * 0.2 - stain * 0.34 - board * 0.10;
+      let k = 0.66 + grain * 0.26 + blotch * 0.26 - stain * 0.38 - board * 0.12;
       const chip = tileWorley(u * 18, v * 18, 18, seed + 5) < 0.05 ? 0.18 : 0;
       k -= chip;
       return [
@@ -239,7 +241,7 @@ const GEN = {
 
   sidewalk(size, o) {
     const seed = o.seed ?? 12;
-    const f = GEN.concrete(size, { ...o, seed, color: o.color ?? 0xb4b2ac });
+    const f = GEN.concrete(size, { ...o, seed, color: o.color ?? 0x7d7b74 });
     // paving slab joints
     const cells = 3;
     for (let y = 0; y < size; y++) {
@@ -258,13 +260,13 @@ const GEN = {
     return f;
   },
 
-  kerb(size, o) { return GEN.concrete(size, { ...o, color: 0xc0bdb4 }); },
+  kerb(size, o) { return GEN.concrete(size, { ...o, color: 0x8c8a82 }); },
 
   brick(size, o) {
     const seed = o.seed ?? 3;
     const rows = 12, bw = 1 / 6, bh = 1 / rows;
-    const base = hexRgb(o.color ?? 0x9c4b35);
-    const mortar = hexRgb(o.color2 ?? 0xb9b2a6);
+    const base = hexRgb(o.color ?? 0x7e3b2a);
+    const mortar = hexRgb(o.color2 ?? 0x8f8a80);
     return new Field(size).fill((u, v) => {
       const row = Math.floor(v / bh);
       const offset = (row % 2) * bw * 0.5;
@@ -376,7 +378,7 @@ const GEN = {
 
   sand(size, o) {
     const seed = o.seed ?? 9;
-    const tint = hexRgb(o.color ?? 0xd9c495);
+    const tint = hexRgb(o.color ?? 0xa08e6b);
     return new Field(size).fill((u, v) => {
       const grain = tileFbm(u * 90, v * 90, { octaves: 3, period: 90, seed });
       const ripple = Math.sin((u * 9 + tileFbm(u * 4, v * 4, { octaves: 2, period: 4, seed: seed + 5 }) * 5) * Math.PI * 2) * 0.5 + 0.5;
@@ -424,7 +426,7 @@ const GEN = {
       const grain = tileFbm(u * 70, v * 70, { octaves: 3, period: 70, seed: seed + 1 });
       const id = hash2i(Math.floor(u * 30), Math.floor(v * 30), seed);
       const k = 0.55 + stones * 0.9 + grain * 0.2 + id * 0.24;
-      const c = clamp255(132 * k);
+      const c = clamp255(84 * k);
       return [c, clamp255(c * 0.98), clamp255(c * 0.94), stones * 0.75, 0.9];
     });
   },
@@ -454,7 +456,7 @@ const GEN = {
 
   woodPlank(size, o) {
     const seed = o.seed ?? 16;
-    const tint = hexRgb(o.color ?? 0xa9814f);
+    const tint = hexRgb(o.color ?? 0x80613b);
     const planks = 6;
     return new Field(size).fill((u, v) => {
       const row = Math.floor(v * planks);
@@ -828,10 +830,15 @@ const GEN = {
 
   groundDetail(size, o) {
     const seed = o.seed ?? 41;
+    // This multiplies the terrain's per-district tint, and at a mean of 180 it
+    // was washing every surface in the city out to near-white. Real ground --
+    // dirt, worn concrete, packed sand -- sits near 0.45 in sRGB, and it is not
+    // uniform: there are patches, and there is grit.
     return new Field(size).fill((u, v) => {
-      const n = tileFbm(u * 40, v * 40, { octaves: 4, period: 40, seed });
-      const c = clamp255(180 + n * 70);
-      return [c, c, c, n * 0.3, 0.9];
+      const grit = tileFbm(u * 64, v * 64, { octaves: 4, period: 64, seed });
+      const patch = tileFbm(u * 5, v * 5, { octaves: 3, period: 5, seed: seed + 17 });
+      const c = clamp255(78 + grit * 46 + patch * 34);
+      return [c, c * 0.99, c * 0.96, grit * 0.42 + patch * 0.18, 0.92 - grit * 0.05];
     });
   },
 
