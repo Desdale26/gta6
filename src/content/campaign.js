@@ -535,9 +535,9 @@ const ACT_III = [
     ],
     start: { x: -160, z: -430, marker: '$', radius: 6 },
     objectives: [
-      at('Get into the Palmview show home', -186, -458, 12),
-      till('Open the safe under the stairs', -186, -458, 13),
-      find('Take the visitor book and the ledgers', 4, { radius: 12, x: -186, z: -458 }),
+      at('Get into the Palmview show home', -136, -459, 12),
+      till('Open the safe under the stairs', -136, -459, 13),
+      find('Take the visitor book and the ledgers', 4, { radius: 12, x: -136, z: -459 }),
       drive('Get it to Yaz', 160, -860, 14),
     ],
     fail: { onDeath: true },
@@ -688,7 +688,7 @@ const ACT_III = [
         'BRANT: They are in the garden. Oh God, they are in the garden.',
         'REY: Head down. Straight line to the car. Do not look at anything.',
       ]),
-      drive('Drive her to Leonida International', -420, -1090, 22, [
+      drive('Drive her to Leonida International', -517, -1086, 22, [
         'BRANT: I chaired eleven rezonings. Eleven. Every one of them was a street where somebody lived.',
         'BRANT: I told myself it was inevitable. It is a very comfortable word, inevitable.',
       ]),
@@ -1259,7 +1259,7 @@ const ACT_V = [
       'MONA: I left him alive on a runway, which at the time was the premium option.',
       'MONA: Come and get me, Rey. I have been reading about you from a long way away and I would like to see whether the newspapers are exaggerating.',
     ],
-    start: { x: -420, z: -1090, marker: 'M', radius: 6 },
+    start: { x: -517, z: -1086, marker: 'M', radius: 6 },
     objectives: [
       at('Meet Mona at arrivals', -446, -1116, 12, [
         'MONA: You are heavier. That is not an insult, it means you eat now.',
@@ -1363,7 +1363,7 @@ const ACT_V = [
     start: { x: 560, z: 470, marker: '$', radius: 6 },
     objectives: [
       at('The harbourmaster at Port Esperanza', 620, -1010, 14),
-      at('The customs shed at the airport', -420, -1090, 14, [
+      at('The customs shed at the airport', -517, -1086, 14, [
         'REY: Mona Castellanos says hello.',
         'REY: You have gone a very strange colour.',
       ]),
@@ -1829,7 +1829,7 @@ const ACT_VI = [
       'TITO: We did not let her. We were not invited.',
       'REY: Then let us be extremely rude.',
     ],
-    start: { x: -420, z: -1090, marker: '$', radius: 6 },
+    start: { x: -517, z: -1086, marker: '$', radius: 6 },
     objectives: [
       at('Get airside at the cargo facility', -466, -1126, 12, [
         'YAZ: Perimeter gate three. The reader still takes the card I cloned in Act One and I have never been prouder of anything.',
@@ -1837,7 +1837,7 @@ const ACT_VI = [
       sweep('Clear the bonded warehouse', -466, -1126, 9, 45),
       till('Break the bonded cage', -466, -1126, 14),
       find('Load the pallets', 8, { radius: 22, x: -466, z: -1126 }),
-      drive('Get it off the airfield', -300, -1040, 20, [
+      drive('Get it off the airfield', -135, -1038, 20, [
         'MONA: Rey. Rey, whatever you think this is —',
         'REY: I think it is Thursday, Mona. Same as last time.',
       ]),
@@ -1956,7 +1956,7 @@ const ACT_VI = [
         'AMARO: Nobody is running. We are all simply going to South Glades at four in the morning for reasons.',
       ]),
       find('Load the money and the lease', 8, { radius: 20, x: 578, z: 494 }),
-      drive('Get Yaz to the airfield', -420, -1090, 20, [
+      drive('Get Yaz to the airfield', -517, -1086, 20, [
         'YAZ: Rey. Two years ago you stole an amplifier for me.',
         'REY: I remember.',
         'YAZ: That was the best day of my life. I want you to know that the rest of it has been the second best day of my life, repeatedly, in a trailer.',
@@ -2063,9 +2063,9 @@ const SIDE_WORK = [
     start: { x: 820, z: -320, marker: '$', radius: 6 },
     objectives: [
       at('Pick up on Ocean Mile', 844, -294, 9),
-      drive('Terminal two', -420, -1090, 20),
+      drive('Terminal two', -517, -1086, 20),
       at('Pick up in Meridian', 230, 200, 9),
-      drive('Terminal two again', -420, -1090, 20, [
+      drive('Terminal two again', -517, -1086, 20, [
         'FARE: If I miss this I lose the account. If I lose the account I lose the house.',
       ]),
     ],
@@ -2111,7 +2111,7 @@ const SIDE_WORK = [
     briefing: ['RACER: It is flat, it is wet and it is full of things that do not move out of the way.'],
     start: { x: -120, z: 660, marker: 'R', radius: 6 },
     objectives: [
-      lap2('Two laps of the Glades', 2, [[-40, 740], [80, 800], [-60, 880], [-200, 820], [-120, 660]]),
+      lap2('Two laps of the Glades', 2, [[-132, 743], [80, 800], [-129, 879], [-200, 820], [-120, 660]]),
     ],
     fail: { onDeath: true, timeLimit: 280 },
     debrief: ['RACER: You hit a heron. It is fine. It was a draw.'],
@@ -2163,7 +2163,7 @@ const SIDE_WORK = [
     start: { x: 820, z: -320, marker: 'R', radius: 6 },
     objectives: [
       lap('One lap of Leonida', [[960, 60], [560, 470], [-120, 660], [-940, 60], [-720, -560],
-        [-420, -1090], [160, -860], [620, -1010], [880, -680], [820, -320]]),
+        [-517, -1086], [160, -860], [620, -1010], [880, -680], [820, -320]]),
     ],
     fail: { onDeath: true, onVehicleDestroyed: true, timeLimit: 900 },
     debrief: ['RACER: Winner of the Leonida Grand. There is no trophy. There has never been a trophy.'],
@@ -2292,7 +2292,7 @@ const SIDE_WORK = [
     briefing: ['ORTEGA: White estate car, four hours head start, and a mother in South Glades he visits every Sunday.'],
     start: { x: -120, z: 660, marker: '!', radius: 6 },
     objectives: [
-      tail('Catch the skip', -60, 560, 16),
+      tail('Catch the skip', 67, 631, 16),
       wreck('Stop the car', 1),
     ],
     fail: { onDeath: true, onTargetEscaped: true, timeLimit: 240 },

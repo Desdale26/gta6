@@ -284,7 +284,7 @@ const ACT_I = Object.freeze([
     objectives: [
       { kind: 'goto', text: 'Get to the Foundry', x: 170, z: -845, radius: 14, marker: 'goto' },
       { kind: 'protect', text: 'Keep Tito alive', seconds: 120, marker: 'kill' },
-      { kind: 'deliver', text: 'Drive Tito to the airport', x: -420, z: -1090, radius: 24, inVehicle: true, marker: 'dropoff' },
+      { kind: 'deliver', text: 'Drive Tito to the airport', x: -517, z: -1086, radius: 24, inVehicle: true, marker: 'dropoff' },
       { kind: 'losewanted', text: 'Lose the last of them', seconds: 120 },
     ],
     fail: { onDeath: true, timeLimit: 660 },
@@ -368,7 +368,7 @@ const ACT_I = Object.freeze([
     tier: 4, requires: ['x-race-hills'], reward: 6000, rewardRep: 15,
     blurb: 'Straight line. Top speed. That is the whole event.',
     briefing: ['RACER: Nobody lands here after dark. Probably.'],
-    start: { x: -420, z: -1090, marker: 'R', radius: 6 },
+    start: { x: -517, z: -1086, marker: 'R', radius: 6 },
     objectives: [
       { kind: 'race', text: 'Win the drag', inVehicle: true, marker: 'checkpoint',
         checkpoints: [[-300, -1140], [-120, -1180], [80, -1200]] },
