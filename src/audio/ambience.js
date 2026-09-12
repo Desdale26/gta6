@@ -33,6 +33,12 @@ export class Ambience {
 
   update(dt) {
     if (!this.enabled || !this._ensureBeds()) return;
+    // Nothing here changes fast, and every level change schedules a Web Audio
+    // automation event, so run it a few times a second rather than every frame.
+    this._tick = (this._tick || 0) + dt;
+    if (this._tick < 0.16) return;
+    dt = this._tick;
+    this._tick = 0;
     const ctx = this.ctx;
     const hour = ctx.time.hour;
     const weather = ctx.weather;
