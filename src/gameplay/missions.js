@@ -102,7 +102,8 @@ export class MissionSystem {
     for (const m of MISSIONS) {
       const color = m.type === 'story' ? 0xffc93c : m.type === 'heist' ? 0x4dff9e
         : m.type === 'race' ? 0x22e3ff : m.type === 'rampage' ? 0xff3b30 : 0xff2d95;
-      const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.36));
+      const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.3));
+      mesh.userData.baseOpacity = 0.3;
       const y = ctx.physics ? ctx.physics.groundHeight(m.start.x, m.start.z) : 0;
       mesh.position.set(m.start.x, y + 3, m.start.z);
       mesh.visible = false;
@@ -130,8 +131,16 @@ export class MissionSystem {
     const availableIds = new Set(this.available.map((m) => m.id));
     const t = ctx.time.elapsed;
     // One clock drives every corona's fade, breath and travelling band.
+    const cam = ctx.camera.position;
     this._markerGroup.traverse((o) => {
-      if (o.material && o.material.uniforms && o.material.uniforms.uTime) o.material.uniforms.uTime.value = t;
+      const u = o.material && o.material.uniforms;
+      if (!u || !u.uTime) return;
+      u.uTime.value = t;
+      // Fade the column out as you walk into it — standing inside a corona
+      // otherwise paints the whole screen its colour.
+      const d = Math.hypot(o.position.x - cam.x, o.position.z - cam.z);
+      const near = clamp((d - 2.5) / 7, 0, 1);
+      u.uOpacity.value = (o.userData.baseOpacity ?? 0.3) * near;
     });
     for (const s of this.startMarkers) {
       const show = !this.active && availableIds.has(s.mission.id);
@@ -542,7 +551,8 @@ export class MissionSystem {
     const color = kind === 'kill' ? 0xff3b30 : kind === 'pickup' ? 0xffc93c
       : kind === 'checkpoint' ? 0x22e3ff : kind === 'dropoff' ? 0x4dff9e : 0xff2d95;
     const geo = new THREE.CylinderGeometry(radius * 0.8, radius * 0.8, 8, 20, 1, true);
-    const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.30));
+    const mesh = new THREE.Mesh(geo, markerMaterial(color, 0.26));
+    mesh.userData.baseOpacity = 0.26;
     const y = ctx.physics.groundHeight(x, z);
     mesh.position.set(x, y + 4, z);
     mesh.renderOrder = 3;

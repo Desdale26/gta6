@@ -151,6 +151,15 @@ const COMPOSITE_SHADER = {
         float rad = clamp(uAORadius / max(lin, 0.5), 0.0015, 0.045);
         float ang = hash(gl_FragCoord.xy) * 6.2831853;
         float ca = cos(ang), sa = sin(ang);
+        vec2 texel = 1.0 / uResolution;
+        // Fit a plane to the surface under this pixel. Without it a road seen at
+        // a grazing angle occludes itself, because its neighbours are genuinely
+        // metres further away — the darkening looked like dirt on the asphalt.
+        float slopeX = linearDepth(texture2D(tDepth, uv + vec2(texel.x, 0.0)).x) - lin;
+        float slopeY = linearDepth(texture2D(tDepth, uv + vec2(0.0, texel.y)).x) - lin;
+        float lim = 0.02 * lin;                     // ignore slopes across an edge
+        slopeX = clamp(slopeX, -lim, lim);
+        slopeY = clamp(slopeY, -lim, lim);
         float occ = 0.0;
         const int AO_TAPS = 10;
         for (int i = 0; i < AO_TAPS; i++){
@@ -161,8 +170,10 @@ const COMPOSITE_SHADER = {
           o = vec2(o.x * ca - o.y * sa, o.x * sa + o.y * ca) * rad;
           o.x *= uResolution.y / uResolution.x;     // keep the disc round
           float sd = linearDepth(texture2D(tDepth, uv + o).x);
-          float diff = lin - sd;                    // >0: the sample is nearer
-          occ += smoothstep(0.03, 0.5, diff) * (1.0 - smoothstep(1.6, 3.2, diff));
+          // Depth this tap would have if the surface simply carried on flat.
+          float flat_ = lin + slopeX * (o.x / texel.x) + slopeY * (o.y / texel.y);
+          float diff = flat_ - sd;                  // >0: the sample stands proud
+          occ += smoothstep(0.05, 0.55, diff) * (1.0 - smoothstep(1.6, 3.2, diff));
         }
         occ /= float(AO_TAPS);
         // Fade out with distance so the far city is not speckled.
