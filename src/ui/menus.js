@@ -162,6 +162,9 @@ export class Menus {
         { id: 'h1', label: 'Graphics', header: true },
         { id: 'quality', label: 'Quality preset', value: QUALITY_PRESETS[s.get('quality')].label, cycle: q, get: () => s.get('quality') },
         { id: 'autoQuality', label: 'Adaptive quality', value: s.get('autoQuality') ? 'On' : 'Off', toggle: true },
+        { id: 'renderScale', label: 'Render scale', value: pct(s.get('renderScale') / 2), range: [0.5, 2, 0.05] },
+        { id: 'pixelBudget', label: 'Resolution limit', value: budgetLabel(s.get('pixelBudget')),
+          cycle: PIXEL_BUDGETS.map((b) => b.value), get: () => s.get('pixelBudget') },
         { id: 'fov', label: 'Field of view', value: `${Math.round(s.get('fov'))}°`, range: [60, 105, 1] },
         { id: 'filmGrain', label: 'Film grain', value: pct(s.get('filmGrain')), range: [0, 1, 0.05] },
         { id: 'chromaticAberration', label: 'Chromatic aberration', value: pct(s.get('chromaticAberration')), range: [0, 1, 0.05] },
@@ -219,6 +222,8 @@ export class Menus {
       restart: 'Start over from the bus station. This cannot be undone.',
       abandon: 'Give up the current mission. You can retry it from its marker.',
       quality: 'Presets from Potato to Ultra. Adaptive resolution keeps the frame rate steady on top of this.',
+      renderScale: 'Multiplies the rendered resolution. Above 100% the frame is drawn larger than the window and downsampled, which is the cleanest image the game can produce.',
+      pixelBudget: 'The largest frame the GPU will be asked to draw, whatever the render scale and display density work out to.',
       autoQuality: 'Holds your target frame rate by scaling the render resolution, and dropping a quality level if that is not enough. Turn it off to keep the level you picked.',
       drivingAssist: 'How much the car helps you catch a slide. Zero is raw.',
       fov: 'Wider feels faster. The camera widens further with speed either way.',
@@ -687,3 +692,17 @@ export class Menus {
 }
 
 function pct(v) { return `${Math.round(v * 100)}%`; }
+
+// Resolution ceilings offered in the options, by total pixels per frame.
+const PIXEL_BUDGETS = [
+  { value: 1280 * 720, label: '720p' },
+  { value: 1920 * 1080, label: '1080p' },
+  { value: 2560 * 1440, label: '1440p' },
+  { value: 3840 * 2160, label: '4K' },
+  { value: 5120 * 2880, label: '5K' },
+  { value: 7680 * 4320, label: '8K' },
+];
+function budgetLabel(v) {
+  const hit = PIXEL_BUDGETS.find((b) => b.value === v);
+  return hit ? hit.label : `${(v / 1e6).toFixed(1)} MP`;
+}

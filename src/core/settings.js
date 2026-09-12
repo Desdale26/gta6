@@ -37,6 +37,10 @@ export const QUALITY_PRESETS = {
 const DEFAULTS = {
   quality: 'high',
   autoQuality: true,
+  // Render scale multiplies the preset's resolution; pixelBudget is the ceiling
+  // on the frame the GPU is actually asked to draw. One 4K frame by default.
+  renderScale: 1.0,
+  pixelBudget: 3840 * 2160,
   masterVolume: 0.8,
   sfxVolume: 1.0,
   musicVolume: 0.55,

@@ -383,8 +383,18 @@ export class Renderer {
     const p = this.settings.preset;
     const w = Math.max(320, window.innerWidth || 1280);
     const h = Math.max(240, window.innerHeight || 720);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const ratio = clamp(p.pixelRatio * this._resolutionScale * dpr, 0.35, 2);
+    // Resolution is budgeted in pixels rather than clamped as a ratio. A ratio
+    // cap of 2 quietly denied a full 4K frame on a high-density display, and a
+    // pixel budget is the honest limit anyway — it is what the GPU actually
+    // pays. The default budget is one 4K frame; the render scale lets you sit
+    // below it on a slower machine or push past it for a downsampled image.
+    const dpr = window.devicePixelRatio || 1;
+    const userScale = clamp(this.settings.get('renderScale') ?? 1, 0.5, 2);
+    let ratio = Math.max(0.35, p.pixelRatio * this._resolutionScale * userScale * dpr);
+    const budget = this.settings.get('pixelBudget') || (3840 * 2160);
+    const wanted = w * h * ratio * ratio;
+    if (wanted > budget) ratio = Math.sqrt(budget / Math.max(1, w * h));
+    this.renderScaleUsed = ratio;
     this.width = w; this.height = h;
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
