@@ -107,6 +107,69 @@ function facadeBox(w, h, d, x = 0, y = 0, z = 0, bayW = BAY_W, floorH = FLOOR_H)
   return g;
 }
 
+
+/**
+ * Geometric relief for a plain box facade.
+ *
+ * A painted texture cannot fix a flat silhouette: every edge of a bare box
+ * catches the light identically, so a street of them reads as coloured slabs
+ * however much detail is drawn on. A base course, floor bands, corner
+ * pilasters and a cornice give a building real horizontal and vertical
+ * structure, and that structure is most of what makes a city look built rather
+ * than blocked out. Costs about a dozen boxes, all of which merge into the
+ * chunk its building already belongs to, so it adds triangles and no draw
+ * calls.
+ */
+function facadeRelief(w, h, d, parts, rng, lod = 0, opts = {}) {
+  const x = opts.x ?? 0, y = opts.y ?? 0, z = opts.z ?? 0;
+  const out = opts.relief ?? Math.min(0.22, 0.006 * Math.max(w, d) + 0.10);
+  const floors = Math.max(1, Math.round(h / FLOOR_H));
+  const bucket = opts.bucket ?? parts.concrete;
+
+  // Base course: shops and lobbies sit in a plinth that is proud of the wall.
+  const plinth = Math.min(FLOOR_H * 1.1, h * 0.45);
+  bucket.push(box(w + out * 2.2, plinth, d + out * 2.2, x, y, z));
+
+  // Cornice and parapet, so the roofline is not a bare cut edge.
+  bucket.push(box(w + out * 3.0, 0.5, d + out * 3.0, x, y + h - 0.5, z));
+  bucket.push(box(w - 0.4, 0.85, d - 0.4, x, y + h, z));
+
+  if (lod === 2 || floors < 3) return;
+
+  // A band every few storeys. Tall towers get them further apart so they do
+  // not turn into stripes.
+  const every = opts.bandEvery ?? (floors > 26 ? 5 : floors > 12 ? 4 : floors > 6 ? 3 : 2);
+  for (let f = every; f < floors; f += every) {
+    const by = y + f * FLOOR_H;
+    if (by > y + h - 1.6) break;
+    bucket.push(box(w + out * 1.7, 0.26, d + out * 1.7, x, by, z));
+  }
+
+  if (lod !== 0) return;
+
+  // Corner pilasters running the height of the shaft.
+  const pil = Math.min(0.85, Math.max(0.32, Math.max(w, d) * 0.035));
+  const shaft = h - plinth - 0.6;
+  if (shaft > 2) {
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        bucket.push(box(pil, shaft, pil,
+          x + sx * (w / 2 - pil * 0.25), y + plinth, z + sz * (d / 2 - pil * 0.25)));
+      }
+    }
+  }
+
+  // Mullion fins up the two longer faces. Capped, because a wide building
+  // would otherwise contribute more geometry than the rest of its block.
+  const fins = Math.min(opts.maxFins ?? 4, Math.max(0, Math.floor(w / (BAY_W * 2)) - 1));
+  for (let i = 1; i <= fins; i++) {
+    const fx = x - w / 2 + (w * i) / (fins + 1);
+    for (const sz of [-1, 1]) {
+      bucket.push(box(0.26, shaft, 0.18, fx, y + plinth, z + sz * (d / 2 + 0.05)));
+    }
+  }
+}
+
 function cyl(r1, r2, h, seg, x = 0, y = 0, z = 0) {
   const g = new THREE.CylinderGeometry(r1, r2, h, seg);
   g.translate(x, y + h / 2, z);
@@ -249,6 +312,7 @@ const RECIPES = {
       }
       if (y >= h) break;
     }
+    facadeRelief(w, h, d, parts, rng, lod, { maxFins: 5 });
     if (lod === 0) {
       roofClutter(cw, cd, h, rng, parts);
       // crown + mast with an aircraft warning light
@@ -262,6 +326,7 @@ const RECIPES = {
 
   office({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
     parts.facade.push(facadeBox(w, h, d));
+    facadeRelief(w, h, d, parts, rng, lod);
     if (lod === 0) {
       roofClutter(w, d, h, rng, parts);
       // ground-floor canopy and lobby glazing
@@ -274,6 +339,7 @@ const RECIPES = {
 
   apartment({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
     parts.facade.push(facadeBox(w, h, d));
+    facadeRelief(w, h, d, parts, rng, lod, { bandEvery: 2, maxFins: 4 });
     const floors = Math.max(2, Math.round(h / FLOOR_H));
     if (lod === 0) {
       // balconies on the long faces
@@ -337,6 +403,7 @@ const RECIPES = {
 
   warehouse({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
     parts.facade.push(facadeBox(w, h, d, 0, 0, 0, 6, 5));
+    facadeRelief(w, h, d, parts, rng, lod, { bandEvery: 99, maxFins: 0 });
     colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: w / 2, hh: h / 2, hd: d / 2, yaw: 0 });
     if (lod === 2) return;
     // roller doors
@@ -411,6 +478,7 @@ const RECIPES = {
   },
 
   artdeco({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
+    facadeRelief(w, h, d, parts, rng, lod, { bandEvery: 3, maxFins: 6 });
     const tiers = 3;
     let y = 0, cw = w, cd = d;
     for (let i = 0; i < tiers; i++) {
@@ -435,6 +503,7 @@ const RECIPES = {
 
   hotel({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
     parts.facade.push(facadeBox(w, h, d));
+    facadeRelief(w, h, d, parts, rng, lod, { bandEvery: 2 });
     colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: w / 2, hh: h / 2, hd: d / 2, yaw: 0 });
     if (lod === 2) return;
     // porte-cochère
@@ -449,6 +518,7 @@ const RECIPES = {
 
   mall({ w, d, h, pal, rng, parts, colliders, lights, lod }) {
     parts.facade.push(facadeBox(w, h, d, 0, 0, 0, 6, 5));
+    facadeRelief(w, h, d, parts, rng, lod, { bandEvery: 1, maxFins: 0 });
     colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: w / 2, hh: h / 2, hd: d / 2, yaw: 0 });
     if (lod === 2) return;
     // entrance canopies on the long faces

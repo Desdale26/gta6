@@ -6,6 +6,8 @@ import { MASK_CAMERA } from '../physics/world.js';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
 
 export const CAM_MODE = { FOLLOW: 'follow', AIM: 'aim', FIRST: 'first', CINEMATIC: 'cinematic', FREE: 'free' };
@@ -144,24 +146,37 @@ export class CameraRig {
     this.lookAt.copy(_v3);
   }
 
+  /**
+   * The gun fires along `player.aimDirection`. Building the camera's rotation
+   * from an Euler instead — which is what this used to do — points it down the
+   * camera's local -Z, which is the opposite of that vector in yaw and upside
+   * down in pitch, so aiming looked behind you and the crosshair never agreed
+   * with the bullet. Both aimed views now come from the same vector the weapon
+   * does, so what is under the crosshair is what gets hit.
+   */
   _aim(dt, player) {
     const target = this._targetPoint(player, _v1);
     const scoped = player.weapons.def.scope;
     this.yaw = damp(this.yaw, player.yaw, 26, dt);
     this.pitch = damp(this.pitch, player.pitch, 26, dt);
-    const side = 0.55;
     const dist = scoped ? 0.05 : 1.9;
-    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
-    _v2.set(
-      target.x - Math.sin(this.yaw) * cp * dist + Math.cos(this.yaw) * side,
-      target.y + 0.42 - sp * dist,
-      target.z - Math.cos(this.yaw) * cp * dist - Math.sin(this.yaw) * side,
-    );
+    const side = scoped ? 0 : 0.55;
+
+    const dir = _v4.copy(player.aimDirection).normalize();
+    // Horizontal right of the aim, for the over-the-shoulder offset.
+    _v5.set(dir.z, 0, -dir.x);
+    if (_v5.lengthSq() < 1e-6) _v5.set(1, 0, 0); else _v5.normalize();
+
+    _v2.copy(target).addScaledVector(dir, -dist).addScaledVector(_v5, side);
+    _v2.y += 0.42;
     this._collide(target, _v2);
     this.camera.position.copy(_v2);
     this.smoothPos.copy(_v2);
-    _e.set(this.pitch, this.yaw, 0, 'YXZ');
-    this.camera.quaternion.setFromEuler(_e);
+
+    _v3.copy(_v2).add(dir);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(_v3);
+    this.lookAt.copy(_v3);
     this.distance = dist;
   }
 
@@ -174,8 +189,11 @@ export class CameraRig {
     }
     this.yaw = player.yaw;
     this.pitch = player.pitch;
-    _e.set(this.pitch, this.yaw, 0, 'YXZ');
-    this.camera.quaternion.setFromEuler(_e);
+    // Same rule as the aim camera: look along what the weapon is pointing at.
+    _v3.copy(this.camera.position).add(player.aimDirection);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(_v3);
+    this.lookAt.copy(_v3);
     this.smoothPos.copy(this.camera.position);
     this.distance = 0;
     player.setVisible(false);

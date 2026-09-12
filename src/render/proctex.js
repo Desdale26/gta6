@@ -935,6 +935,24 @@ function facadeCanvas(size, opts, style) {
   const { canvas, g } = makeCanvas(size, size);
   const seed = opts.seed ?? 1;
   const lit = !!opts.lit;
+
+  // Height and roughness alongside the colour. Without these a facade is pure
+  // flat albedo: the windows are painted on, they catch the light exactly like
+  // the wall does, and the whole building reads as a coloured slab no matter
+  // how much detail is drawn into the texture. Recessed glass, proud sills and
+  // frames, and glass that is smooth where the wall is rough are what make a
+  // facade look built.
+  const H = lit ? null : new Float32Array(size * size).fill(0.55);
+  const R = lit ? null : new Float32Array(size * size).fill(0.90);
+  const paint = (arr, val, x0, y0, w0, h0) => {
+    if (!arr) return;
+    const xs = Math.max(0, Math.round(x0)), xe = Math.min(size, Math.round(x0 + w0));
+    const ys = Math.max(0, Math.round(y0)), ye = Math.min(size, Math.round(y0 + h0));
+    for (let yy = ys; yy < ye; yy++) {
+      const o = yy * size;
+      for (let xx = xs; xx < xe; xx++) arr[o + xx] = val;
+    }
+  };
   const cols = style.cols, rows = style.rows;
   const wallCol = opts.color !== undefined ? opts.color : style.wall;
   const [wr, wg, wb] = hexRgb(wallCol);
@@ -984,10 +1002,26 @@ function facadeCanvas(size, opts, style) {
         g.globalAlpha = 1;
         continue;
       }
-      // glass
+      // glass — recessed into the wall, and smooth where the wall is rough
       const tintK = 0.7 + h * 0.5;
       g.fillStyle = style.glass(tintK, h);
       g.fillRect(wx, wy, ww, wh);
+      paint(H, 0.24, wx, wy, ww, wh);
+      paint(R, 0.08, wx, wy, ww, wh);
+
+      // Reveal shadow: the head and one jamb of a real opening are always in
+      // shadow, and that shading is most of what tells you it is a hole.
+      const revealH = Math.max(1, wh * 0.16), revealW = Math.max(1, ww * 0.12);
+      const head = g.createLinearGradient(0, wy, 0, wy + revealH);
+      head.addColorStop(0, 'rgba(0,0,0,0.55)');
+      head.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = head;
+      g.fillRect(wx, wy, ww, revealH);
+      const jamb = g.createLinearGradient(wx, 0, wx + revealW, 0);
+      jamb.addColorStop(0, 'rgba(0,0,0,0.40)');
+      jamb.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = jamb;
+      g.fillRect(wx, wy, revealW, wh);
       // reflection highlight
       g.fillStyle = `rgba(255,255,255,${0.05 + h * 0.12})`;
       g.beginPath();
@@ -997,33 +1031,58 @@ function facadeCanvas(size, opts, style) {
       g.lineTo(wx + ww, wy + wh * 0.3);
       g.closePath();
       g.fill();
-      // frame
+      // frame — stands proud of the glass
       g.strokeStyle = style.frame;
-      g.lineWidth = Math.max(1, size / 260);
+      const fw = Math.max(1, size / 260);
+      g.lineWidth = fw;
       g.strokeRect(wx, wy, ww, wh);
+      paint(H, 0.64, wx - fw, wy - fw, ww + fw * 2, fw * 2);
+      paint(H, 0.64, wx - fw, wy + wh - fw, ww + fw * 2, fw * 2);
+      paint(H, 0.64, wx - fw, wy - fw, fw * 2, wh + fw * 2);
+      paint(H, 0.64, wx + ww - fw, wy - fw, fw * 2, wh + fw * 2);
+      paint(R, 0.55, wx - fw, wy - fw, ww + fw * 2, wh + fw * 2);
+      paint(H, 0.24, wx + fw, wy + fw, ww - fw * 2, wh - fw * 2);
+      paint(R, 0.08, wx + fw, wy + fw, ww - fw * 2, wh - fw * 2);
       if (style.mullion) {
         g.beginPath();
         g.moveTo(wx + ww * 0.5, wy); g.lineTo(wx + ww * 0.5, wy + wh);
         g.moveTo(wx, wy + wh * 0.5); g.lineTo(wx + ww, wy + wh * 0.5);
         g.stroke();
       }
-      // sill / balcony
+      // sill / balcony — proud of the wall, and the dirt that runs off it is
+      // what stops a facade looking freshly extruded.
       if (style.sill > 0) {
+        const sx = x + cw * pad * 0.5, sw = ww + cw * pad, sh = ch * style.sill * 0.55;
         g.fillStyle = style.sillColor;
-        g.fillRect(x + cw * pad * 0.5, wy + wh, ww + cw * pad, ch * style.sill * 0.55);
+        g.fillRect(sx, wy + wh, sw, sh);
+        paint(H, 0.80, sx, wy + wh, sw, sh);
+        paint(R, 0.92, sx, wy + wh, sw, sh);
+        const runoff = g.createLinearGradient(0, wy + wh + sh, 0, wy + wh + sh + ch * 0.30);
+        runoff.addColorStop(0, `rgba(28,26,24,${0.20 + h * 0.14})`);
+        runoff.addColorStop(1, 'rgba(28,26,24,0)');
+        g.fillStyle = runoff;
+        g.fillRect(sx + sw * 0.1, wy + wh + sh, sw * 0.8, ch * 0.30);
       }
       if (style.ac && hash2i(c, r, seed + 3) > 0.78) {
         g.fillStyle = '#8e9296';
         g.fillRect(wx + ww * 0.55, wy + wh * 0.62, ww * 0.36, wh * 0.3);
+        paint(H, 0.95, wx + ww * 0.55, wy + wh * 0.62, ww * 0.36, wh * 0.3);
+        paint(R, 0.70, wx + ww * 0.55, wy + wh * 0.62, ww * 0.36, wh * 0.3);
       }
     }
   }
-  // floor separator lines
+  // floor separator lines — a real spandrel band, not just a dark line
   if (style.bands) {
-    g.fillStyle = `rgba(0,0,0,0.16)`;
-    for (let r = 0; r <= rows; r++) g.fillRect(0, r * ch - 1, size, 2);
+    const bh = Math.max(2, ch * 0.05);
+    for (let r = 0; r <= rows; r++) {
+      const by = r * ch - bh * 0.5;
+      g.fillStyle = 'rgba(0,0,0,0.16)';
+      g.fillRect(0, by, size, bh);
+      paint(H, 0.72, 0, by, size, bh);
+      paint(R, 0.92, 0, by, size, bh);
+    }
   }
-  return canvas;
+  return { canvas, field: H ? { height: H, rough: R } : null };
 }
 
 const FACADES = {
@@ -1205,9 +1264,13 @@ export function tex(name, opts = {}) {
   let t = null;
 
   if (FACADES[name]) {
-    t = canvasToTexture(facadeCanvas(size, opts, FACADES[name]), true, opts.anisotropy);
+    const built = facadeCanvas(size, opts, FACADES[name]);
+    // Stash the relief so texSet can turn it into normal and roughness maps
+    // without drawing the whole facade a second time.
+    if (built.field) cache.set('f:' + keyFor(name, opts), built.field);
+    t = canvasToTexture(built.canvas, true, opts.anisotropy);
   } else if (name.endsWith('Lit') && FACADES[name.slice(0, -3)]) {
-    t = canvasToTexture(facadeCanvas(size, { ...opts, lit: true }, FACADES[name.slice(0, -3)]), true, opts.anisotropy);
+    t = canvasToTexture(facadeCanvas(size, { ...opts, lit: true }, FACADES[name.slice(0, -3)]).canvas, true, opts.anisotropy);
   } else if (name === 'roadLineWhite' || name === 'roadLineYellow' || name === 'crosswalk') {
     t = canvasToTexture(roadLineCanvas(size, opts), true, opts.anisotropy);
   } else if (name === 'neon') {
@@ -1246,6 +1309,8 @@ export function texSet(name, opts = {}) {
 
   const isFacade = !!FACADES[name];
   if (NORMAL_ROUGH.has(name) || isFacade) {
+    // `tex` above has already run for this key, so a facade's relief is waiting
+    // in the cache; everything else builds its field from GEN.
     let f = cache.get('f:' + keyFor(name, opts));
     if (!f && GEN[name]) { f = GEN[name](size, opts); cache.set('f:' + keyFor(name, opts), f); }
     if (f) {

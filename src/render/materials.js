@@ -213,19 +213,23 @@ export class MaterialLibrary {
 
   _facade(name, emissiveNight = 0.5) {
     const A = this.aniso;
-    const set = (() => { try { return texSet(name, { size: 512 }); } catch (e) { return {}; } })();
+    // Facades now carry real relief, so ask for a strong normal: the window
+    // reveals and sills are shallow in world terms and need the help.
+    const set = (() => { try { return texSet(name, { size: 512, normalStrength: 3.4 }); } catch (e) { return {}; } })();
     const lit = (() => { try { return tex(name + 'Lit', { size: 512 }); } catch (e) { return null; } })();
     const m = new THREE.MeshStandardMaterial({
       name,
       map: cfg(set.map, 1, A),
       normalMap: cfg(set.normalMap, 1, A),
       roughnessMap: cfg(set.roughnessMap, 1, A),
-      roughness: 0.72, metalness: 0.08, envMapIntensity: 0.75,
+      // Roughness is now a map: glass comes out near-mirror and the wall
+      // stays matte, so the environment only shows up where it should.
+      roughness: 0.95, metalness: 0.10, envMapIntensity: 1.25,
       emissive: 0xffffff, emissiveIntensity: 0,
       emissiveMap: lit ? cfg(lit, 1, A) : null,
     });
     if (lit) this._emissiveMats.push({ m, night: emissiveNight, day: 0 });
-    this._wetMats.push({ m, dryRough: 0.72, wetRough: 0.34, dryEnv: 0.75, wetEnv: 1.5 });
+    this._wetMats.push({ m, dryRough: 0.95, wetRough: 0.45, dryEnv: 1.25, wetEnv: 2.1 });
     return m;
   }
 
