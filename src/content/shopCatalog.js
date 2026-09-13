@@ -3,6 +3,8 @@
 // Robbery economics are tiered on purpose: a corner store is pocket money and one star,
 // a bank vault is a proper job with a long timer, guards and four stars.
 
+import { getWeapon } from './weaponCatalog.js';
+
 export const SHOP_TYPES = Object.freeze([
   {
     type: 'convenience', label: 'Convenience Store',
@@ -166,6 +168,7 @@ export const SHOP_TYPES = Object.freeze([
     ],
     robbery: { possible: true, tillCash: [250, 1200], safeCash: [0, 0], grabTime: 4.5, safeTime: 0,
                alarmChance: 0.5, clerkArmed: 0.22, guards: 0, wanted: 1, panicRadius: 24, payoutMultiplier: 1 },
+    driveIn: true,   // you pull up to the pump; the services here need the car
     hours: [0, 24], interiorStyle: 'openair', shelves: 5, tills: 1, restockHours: 6,
   },
   {
@@ -240,6 +243,7 @@ export const SHOP_TYPES = Object.freeze([
     ],
     robbery: { possible: true, tillCash: [400, 2000], safeCash: [1500, 4800], grabTime: 5, safeTime: 13,
                alarmChance: 0.5, clerkArmed: 0.35, guards: 0, wanted: 2, panicRadius: 24, payoutMultiplier: 1.1 },
+    driveIn: true,   // you drive into the garage; every service here needs the car
     hours: [8, 20], interiorStyle: 'large', shelves: 6, tills: 1, restockHours: 12,
   },
   {
@@ -259,6 +263,13 @@ export const SHOP_TYPES = Object.freeze([
 ]);
 
 const byType = new Map(SHOP_TYPES.map((s) => [s.type, s]));
+// Items that can only be applied to the car the player arrived in. A shop that
+// sells one of these has to be somewhere you can arrive by car -- see driveIn.
+// Without that pairing every one of them answered "Drive one in first" forever,
+// because shops could only be entered on foot and on foot there is no vehicle.
+export const VEHICLE_SERVICE_IDS = Object.freeze(['refuel', 'repair-light', 'repair-full',
+  'respray', 'tune-engine', 'tune-brakes', 'tune-grip', 'tune-nitro']);
+
 export function getShopType(type) { return byType.get(type); }
 
 export const SHOP_NAME_PARTS = Object.freeze({
@@ -299,6 +310,12 @@ export function validateShops(list = SHOP_TYPES) {
         problems.push(`${s.type}/${it.id}: bad kind ${it.kind}`);
       }
       if (it.kind === 'weapon' && !it.weaponId) problems.push(`${s.type}/${it.id}: weapon without weaponId`);
+      if (it.kind === 'weapon' && it.weaponId && !getWeapon(it.weaponId)) {
+        problems.push(`${s.type}/${it.id}: sells unknown weapon ${it.weaponId}`);
+      }
+      if (VEHICLE_SERVICE_IDS.includes(it.id) && !s.driveIn) {
+        problems.push(`${s.type}/${it.id} needs the player's car, but ${s.type} is not driveIn`);
+      }
     }
     const r = s.robbery;
     if (r.tillCash[0] > r.tillCash[1]) problems.push(`${s.type}: tillCash reversed`);

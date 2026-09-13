@@ -429,6 +429,58 @@ if (booted) {
     }
   }
 
+  // --- 4e. the ground you see is the ground you stand on -------------------
+  // The visible terrain is a mesh baked from the height field; the physics
+  // reads the height field directly. Nothing kept them in step, so a pad
+  // flattened under a building after the mesh was built left the two
+  // disagreeing by the whole fall of the hill. Raycast the drawn ground and
+  // compare, which is the only way to ask the question of the mesh itself.
+  const ground = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const T = ctx.THREE;
+    const terrain = ctx.scene.getObjectByName('terrain');
+    if (!terrain) return { error: 'no terrain mesh in the scene' };
+    const ray = new T.Raycaster();
+    ray.far = 400;
+    const down = new T.Vector3(0, -1, 0);
+    const from = new T.Vector3();
+    let hits = 0, worst = 0, worstAt = null, over = 0;
+    const sum = { d: 0 };
+    for (let i = 0; i < 16; i++) {
+      for (let j = 0; j < 16; j++) {
+        const x = -1400 + (i / 15) * 2500;
+        const z = -1400 + (j / 15) * 2800;
+        if (ctx.physics.terrain.isWater(x, z)) continue;
+        const gh = ctx.physics.groundHeight(x, z);
+        if (!Number.isFinite(gh)) continue;
+        from.set(x, gh + 150, z);
+        ray.set(from, down);
+        const hit = ray.intersectObject(terrain, true)[0];
+        if (!hit) continue;
+        hits++;
+        const d = Math.abs(hit.point.y - gh);
+        sum.d += d;
+        if (d > 0.6) over++;
+        if (d > worst) { worst = d; worstAt = [Math.round(x), Math.round(z)]; }
+      }
+    }
+    return { hits, worst, over, mean: hits ? sum.d / hits : 0, worstAt };
+  });
+  note('');
+  if (ground.error) {
+    problems.push(ground.error);
+    note(`ground: ${ground.error}`);
+  } else {
+    note(`ground: ${ground.hits} land samples, mean gap ${ground.mean.toFixed(3)} m,`
+      + ` worst ${ground.worst.toFixed(2)} m${ground.worstAt ? ` at ${ground.worstAt[0]},${ground.worstAt[1]}` : ''},`
+      + ` ${ground.over} over 0.6 m`);
+    if (ground.hits < 100) problems.push(`only ${ground.hits} of the ground samples hit the drawn terrain at all`);
+    if (ground.worst > 0.6) {
+      problems.push(`the drawn ground and the ground you collide with differ by ${ground.worst.toFixed(2)} m`
+        + ` at ${ground.worstAt[0]},${ground.worstAt[1]} (${ground.over} samples over 0.6 m)`);
+    }
+  }
+
   // --- 5. nothing the engine itself considers broken ------------------------
   const bad = await page.evaluate(() => window.__VC.validate());
   if (bad && bad.length) for (const b of bad) problems.push('[validate] ' + b);

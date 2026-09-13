@@ -70,8 +70,6 @@ export class World {
     await yieldFrame();
 
     p(0.30, 'Paving');
-    const terrainMesh = this.terrain.buildMesh(ctx.materials, 200, 5);
-    this.group.add(terrainMesh);
     const roadMeshes = buildRoadMeshes(this.roads, this.terrain, ctx.materials, ctx.physics);
     this.group.add(roadMeshes);
     await yieldFrame();
@@ -87,6 +85,16 @@ export class World {
 
     p(0.92, 'Welding the ramps');
     this._buildStunts(rng.fork('stunts'));
+
+    // The ground mesh is built LAST, because every building and car park flattens
+    // the pad it stands on after this point. Built at paving time instead, the
+    // drawn ground kept the original slope while the collision ground was flat,
+    // so the two disagreed by however much the hill fell away under each
+    // building -- you could see a kerb your car drove straight through.
+    p(0.93, 'Laying the ground');
+    const terrainMesh = this.terrain.buildMesh(ctx.materials, 200, 5);
+    this.group.add(terrainMesh);
+    await yieldFrame();
 
     p(0.94, 'Welding it all together');
     await this._mergeStatics();

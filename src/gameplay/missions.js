@@ -9,6 +9,11 @@ import { getVehicle, randomVehicleId } from '../content/vehicleCatalog.js';
 import { DRIVER_MODE, VehicleAI } from '../entities/traffic.js';
 import { CRIME } from './police.js';
 
+// Objective kinds whose completion is counted off `objectiveState.targets`.
+// 'kill' is deliberately absent: an open rampage counts any kill and keeps
+// `targets` empty on purpose.
+const TARGET_KINDS = new Set(['killAll', 'destroy', 'chase', 'protect']);
+
 const _v1 = new THREE.Vector3();
 
 
@@ -231,6 +236,9 @@ export class MissionSystem {
       case 'chase':
         this._spawnChaseTarget(o);
         break;
+      case 'destroy':
+        this._spawnDestroyTargets(o);
+        break;
       case 'collect':
         this._spawnPickups(o);
         break;
@@ -246,6 +254,15 @@ export class MissionSystem {
     // Mid-mission dialogue: each objective can carry its own lines, so the story
     // keeps talking while you drive instead of front-loading everything into the
     // briefing and then going silent for eight minutes.
+    // An objective whose completion is counted off `targets` can never finish if
+    // nothing was put in there. That is exactly how 'destroy' went thirteen
+    // missions without a spawner: nothing threw, nothing warned, the objective
+    // simply never completed and the mission timed out or the player gave up.
+    if (TARGET_KINDS.has(o.kind) && !this.objectiveState.targets.length) {
+      const msg = `objective "${o.kind}" in ${this.active.id} spawned no targets, so it can never complete`;
+      console.error('[missions]', msg);
+      ctx.game?.errors.push(msg);
+    }
     if (o.say && o.say.length) ctx.dialogs?.play(o.say);
     ctx.bus.emit('mission:objective', { mission: this.active, objective: o, index: this.objectiveIndex });
   }
@@ -472,6 +489,52 @@ export class MissionSystem {
     this._addMarker(spot.x, spot.z, 4, 'kill', v);
   }
 
+  /**
+   * Vehicles for a 'destroy' objective. Without this there was no case for
+   * 'destroy' at all: nothing was ever spawned, nothing was ever pushed into
+   * `targets`, and _onVehicleDestroyed only counts vehicles that are in there.
+   * Thirteen objectives across the campaign could therefore never be completed.
+   */
+  _spawnDestroyTargets(o) {
+    const ctx = this.ctx;
+    const st = this.objectiveState;
+    const n = Math.max(1, o.count || 1);
+    const cx = o.x ?? ctx.player.position.x;
+    const cz = o.z ?? ctx.player.position.z;
+    const radius = o.radius || 55;
+    const wantBoat = o.targetClass === 'boat';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + this.rng.range(-0.5, 0.5);
+      const r = this.rng.range(radius * 0.45, radius);
+      let x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      let id = o.targetVehicle;
+      if (wantBoat) {
+        if (!ctx.physics.terrain.isWater(x, z)) continue;
+        if (!id) id = randomVehicleId(this.rng, { classes: ['boat'] });
+      } else {
+        const spot = ctx.world.safeRoadPoint(x, z);
+        x = spot.x; z = spot.z;
+        if (!id) id = randomVehicleId(this.rng, { classes: o.targetClass ? [o.targetClass] : undefined });
+      }
+      if (!id || !getVehicle(id)) id = randomVehicleId(this.rng, {});
+      const yaw = wantBoat ? this.rng.range(0, Math.PI * 2) : ctx.world.safeRoadPoint(x, z).yaw;
+      const v = ctx.traffic.spawnAt(id, x, z, yaw, { ai: false });
+      if (!v) continue;
+      // They run: every one of these objectives is written as a chase or an
+      // ambush ("Stop the vans", "Break the convoy up"), not a car park.
+      const ai = new VehicleAI(v, ctx.world.roads, this.rng, DRIVER_MODE.FLEE);
+      ai.chaseTarget = ctx.player;
+      ai.aggression = 0.9;
+      if (!wantBoat) ai.attachToNearestEdge(x, z);
+      v.aiDriver = ai;
+      v.missionVehicle = true;
+      st.targets.push(v);
+      this.spawned.vehicles.push(v);
+      this._addMarker(x, z, 4, 'kill', v);
+    }
+    st.need = st.targets.length || 1;
+  }
+
   _spawnProtectee(o) {
     const ctx = this.ctx;
     const st = this.objectiveState;
@@ -619,7 +682,7 @@ export class MissionSystem {
     const st = this.objectiveState;
     let meta = '';
     if (this.active.fail.timeLimit) meta = `${Math.max(0, Math.ceil(this.timer))}s`;
-    else if (o && (o.kind === 'kill' || o.kind === 'killAll')) meta = `${st.count}/${st.need}`;
+    else if (o && (o.kind === 'kill' || o.kind === 'killAll' || o.kind === 'destroy')) meta = `${st.count}/${st.need}`;
     else if (o && o.kind === 'collect') meta = `${st.collected}/${st.need}`;
     else if (o && o.kind === 'race') {
       meta = `CP ${st.checkpoint + 1}/${o.checkpoints.length}`;

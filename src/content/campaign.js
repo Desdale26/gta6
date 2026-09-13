@@ -39,7 +39,11 @@ const drop = (text, x, z, radius = 12, say = null) => ({ kind: 'deliver', text, 
 const lift = (text, x, z, radius = 26, say = null) => ({ kind: 'steal', text, x, z, radius, marker: 'pickup', say });
 const hit = (text, count, extra = {}) => ({ kind: 'kill', text, count, marker: 'kill', ...extra });
 const sweep = (text, x, z, count, radius = 45, say = null) => ({ kind: 'killAll', text, x, z, radius, count, marker: 'kill', say });
-const wreck = (text, count, say = null) => ({ kind: 'destroy', text, count, marker: 'kill', say });
+// `extra` carries targetClass / targetVehicle when the text promises a
+// particular kind of thing to wreck, so the spawner puts boats in the water
+// rather than saloons on the quay.
+const wreck = (text, count, say = null, extra = {}) => ({ kind: 'destroy', text, count, marker: 'kill', say, ...extra });
+const wreckBoats = (text, count, say = null) => wreck(text, count, say, { targetClass: 'boat' });
 const find = (text, count, extra = {}) => ({ kind: 'collect', text, count, radius: 6, marker: 'pickup', ...extra });
 const hold = (text, seconds, x, z, radius = 40, say = null) => ({ kind: 'survive', text, seconds, x, z, radius, marker: 'kill', say });
 const bolt = (text, seconds, say = null) => ({ kind: 'escape', text, seconds, say });
@@ -247,7 +251,7 @@ const ACT_II = [
     start: { x: 880, z: -680, marker: '!', radius: 6 },
     objectives: [
       at('Get down to the marina', 906, -708, 14),
-      wreck('Put four boats on the bottom', 4, [
+      wreckBoats('Put four boats on the bottom', 4, [
         'ELENA: The blue hulls. The white ones belong to dentists.',
       ]),
       bolt('Be somewhere else when the coastguard arrives', 100),

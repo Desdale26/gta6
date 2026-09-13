@@ -38,10 +38,14 @@ export class Radio {
   next() { this._cycle(1); }
   prev() { this._cycle(-1); }
   _cycle(dir) {
-    const i = STATIONS.findIndex((s) => s.id === this.stationId);
     const n = STATIONS.length;
-    if (i < 0) { this.setStationById(STATIONS[0].id); return; }
-    const next = (i + dir + n + 1) % (n + 1);   // one extra slot for "off"
+    // Slot n is "off". Which slot we are on has to come from `playing`, not from
+    // `stationId`: stop() leaves stationId pointing at the last station, so
+    // cycling off the end found that station again, computed "off" again, and
+    // the radio could never be switched back on.
+    const found = STATIONS.findIndex((s) => s.id === this.stationId);
+    const cur = this.playing && found >= 0 ? found : n;
+    const next = (cur + dir + n + 1) % (n + 1);
     if (next === n) this.stop();
     else this.setStationById(STATIONS[next].id);
   }

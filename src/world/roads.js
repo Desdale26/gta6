@@ -54,7 +54,11 @@ export class RoadEdge {
     const dx = b.x - a.x, dz = b.z - a.z;
     this.length = Math.hypot(dx, dz) || 1e-4;
     this.dx = dx / this.length; this.dz = dz / this.length;
-    this.nx = -this.dz; this.nz = this.dx;           // left normal
+    // (-dz, dx) is the RIGHT of travel, not the left: facing (dx, dz), the
+    // driver's right is (-dz, dx), because a three.js camera looks down its own
+    // -Z. Labelled the other way round, the lane offsets below were negated to
+    // compensate and the whole city ended up driving on the left.
+    this.nx = -this.dz; this.nz = this.dx;           // right-hand normal
     this.angle = Math.atan2(this.dx, this.dz);
     this.oneWay = false;
     this.bridge = false;
@@ -64,15 +68,15 @@ export class RoadEdge {
   /** World position of a lane centre. dir: +1 = a→b, -1 = b→a. t in [0,1] along a→b. */
   lanePoint(dir, laneIndex, t, out) {
     const off = (laneIndex + 0.5) * this.laneWidth * (dir > 0 ? 1 : -1);
-    // Right-hand traffic: travelling a→b puts you on the -normal side.
-    const px = lerp(this.a.x, this.b.x, t) - this.nx * off;
-    const pz = lerp(this.a.z, this.b.z, t) - this.nz * off;
+    // Right-hand traffic: travelling a→b puts you on the +normal side.
+    const px = lerp(this.a.x, this.b.x, t) + this.nx * off;
+    const pz = lerp(this.a.z, this.b.z, t) + this.nz * off;
     out.set(px, 0, pz);
     return out;
   }
   laneOffsetVec(dir, laneIndex) {
     const off = (laneIndex + 0.5) * this.laneWidth * (dir > 0 ? 1 : -1);
-    return { x: -this.nx * off, z: -this.nz * off };
+    return { x: this.nx * off, z: this.nz * off };
   }
   pointAt(t, out) { out.set(lerp(this.a.x, this.b.x, t), 0, lerp(this.a.z, this.b.z, t)); return out; }
   /** Closest parameter t on this edge to a world point. */

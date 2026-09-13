@@ -21,12 +21,22 @@ export class ShopSystem {
     this.restockTimer = 0;
   }
 
-  /** Find the shop whose door the player is standing in. */
+  /**
+   * The shop whose door the player is standing in -- or, at a filling station or
+   * a garage, the one they have pulled up to. Refuelling, repairs, tuning and a
+   * respray all act on `player.vehicle`, and shops could only ever be entered on
+   * foot, where that is null: every one of those nine items answered "Drive one
+   * in first" and could never be bought. Drive-in shops are marked in the
+   * catalogue, and validateShops now insists the two stay paired.
+   */
   _nearestShop() {
     const world = this.ctx.world;
+    if (!world) return null;
     const p = this.ctx.player.position;
-    if (!world || this.ctx.player.inVehicle) return null;
-    return world.nearestShop(p.x, p.z, 3.4);
+    if (!this.ctx.player.inVehicle) return world.nearestShop(p.x, p.z, 3.4);
+    // A car needs more room to count as "at the pump" than a pair of feet.
+    const shop = world.nearestShop(p.x, p.z, 8);
+    return shop && shop.typeDef && shop.typeDef.driveIn ? shop : null;
   }
 
   update(dt) {

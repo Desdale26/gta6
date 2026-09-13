@@ -21,6 +21,7 @@ import { STUNT_SPOTS, TRICKS, validateStunts } from '../src/content/stuntCatalog
 import { STATIONS, validateStations } from '../src/content/radioCatalog.js';
 import { MISSIONS, validateMissions } from '../src/content/missionCatalog.js';
 import { DISTRICTS, validateDistricts } from '../src/content/districtCatalog.js';
+import { RoadEdge } from '../src/world/roads.js';
 
 const copy = (x) => structuredClone(x);
 /** A weapon that actually fires bullets, so the damage-model rules apply to it. */
@@ -79,6 +80,13 @@ const SUITES = [
       ['a gun shop selling a weapon with no weapon id', (s) => {
         for (const t of s) { const it = t.inventory.find((i) => i.kind === 'weapon'); if (it) { delete it.weaponId; return; } }
         s[0].inventory.push({ id: 'ghost', kind: 'weapon', price: 10 });
+      }],
+      ['a car service in a shop you cannot drive into', (s) => {
+        for (const t of s) if (t.driveIn) { delete t.driveIn; return; }
+        s[0].inventory.push({ id: 'refuel', kind: 'service', price: 90 });
+      }],
+      ['a shop selling a weapon that does not exist', (s) => {
+        for (const t of s) { const it = t.inventory.find((i) => i.kind === 'weapon'); if (it) { it.weaponId = 'plasma-rifle'; return; } }
       }],
       ['a safe that cannot be cracked', (s) => {
         for (const t of s) if (t.robbery.safeCash[1] > 0) { t.robbery.safeTime = 0; return; }
@@ -187,11 +195,38 @@ for (const suite of SUITES) {
   if (after.length) failures.push(`${suite.name}: the live catalogue now reports ${after.length} problem(s) — a copy leaked`);
 }
 
+// --- which side of the road does traffic drive on? -------------------------
+// Not a catalogue, but the same kind of question and just as cheap to ask: a
+// sign error here put every car in the city on the left-hand side, with the
+// code's own comment claiming right-hand traffic.
 console.log('');
-console.log(`${caught}/${run} wrecked catalogues were caught by their own validator`);
+console.log('roads  (roads.js)');
+{
+  const node = (x, z) => ({ x, z, edges: [] });
+  const out = { set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
+  const bearings = [['due north', 0, 100], ['due east', 100, 0], ['due south', 0, -100],
+    ['due west', -100, 0], ['north-east', 70, 70], ['south-west', -70, -70]];
+  for (const [name, bx, bz] of bearings) {
+    const a = node(0, 0), b = node(bx, bz);
+    const e = new RoadEdge(a, b, 'street', null);
+    e.lanePoint(1, 0, 0.5, out);
+    const ox = out.x - bx / 2, oz = out.z - bz / 2;
+    // Facing (dx, dz), the driver's right is (-dz, dx).
+    const side = ox * -e.dz + oz * e.dx;
+    const ok = side > 0.5;
+    console.log(`  ${ok ? 'ok     ' : 'WRONG  '}heading ${name.padEnd(11)} lane centre `
+      + `${Math.abs(side).toFixed(2)} m to the ${side > 0 ? 'right' : 'left'}`);
+    if (!ok) failures.push(`roads: heading ${name}, traffic is put on the LEFT of the road`);
+    run++;
+    if (ok) caught++;
+  }
+}
+
+console.log('');
+console.log(`${caught}/${run} checks passed`);
 if (failures.length) {
   console.log('\nFAIL');
   for (const f of failures) console.log('  ! ' + f);
   process.exit(1);
 }
-console.log('every content validator objects when the data is wrong');
+console.log('every content validator objects when the data is wrong, and traffic keeps right');

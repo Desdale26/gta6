@@ -407,10 +407,16 @@ export class HUD {
     if (!text && ctx.player && ctx.player.inVehicle) {
       if (ctx.player.vehicle.sim.flipTimer > 0.6) text = '<b>K</b> flip the car back over';
     }
-    if (text !== this._promptText) {
+    // The bar has to be part of what decides whether to rewrite the prompt. The
+    // text does not change when you start holding E, so rewriting only on a text
+    // change meant the markup written while hold was still 0 -- with no bar in
+    // it -- stayed put, and a robbery ran to completion with no feedback at all.
+    const wantBar = hold > 0;
+    if (text !== this._promptText || wantBar !== this._promptBar) {
       this._promptText = text;
+      this._promptBar = wantBar;
       if (text) {
-        this.el.prompt.innerHTML = text + (hold > 0 ? '<div class="hold-bar"><i></i></div>' : '');
+        this.el.prompt.innerHTML = text + (wantBar ? '<div class="hold-bar"><i></i></div>' : '');
         this.el.prompt.classList.remove('hidden');
       } else {
         this.el.prompt.classList.add('hidden');
