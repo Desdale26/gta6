@@ -138,6 +138,12 @@ export class CharacterController {
     this.distanceWalked += hSpeed * dt;
     this._updateState(hSpeed, speed);
     if (!Number.isFinite(this.position.x + this.position.y + this.position.z)) {
+      // Counted, not just healed. Healing silently is what made every
+      // "non-finite position" check in the suite unreachable: the body put
+      // itself back together inside its own step and the validator, which runs
+      // after it, could never see anything wrong.
+      this.nonFiniteFixes = (this.nonFiniteFixes || 0) + 1;
+      if (this.nonFiniteFixes === 1) console.error('[character] non-finite position, recovering');
       this.position.set(0, 6, 0); this.velocity.set(0, 0, 0);
     }
   }

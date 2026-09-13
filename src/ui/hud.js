@@ -264,7 +264,13 @@ export class HUD {
     const cw = c.width / cols, ch = c.height / rows;
     for (let i = 0; i < sim.wheels.length; i++) {
       const w = sim.wheels[i];
-      const col = i % 2, row = Math.floor(i / 2);
+      // The sim builds wheels as [-x front, +x front, -x rear, +x rear], and a
+      // vehicle's local +X is the driver's LEFT, so the even indices are the
+      // right-hand pair. This is a plan view with the nose up the canvas -- the
+      // rows already say front and rear -- so the car's right belongs on the
+      // canvas right. `i % 2` put it on the left and mirrored the whole car:
+      // a dragging left caliper lit the right of the panel.
+      const col = 1 - (i % 2), row = Math.floor(i / 2);
       const x = col * cw + cw * 0.28, y = row * ch + ch * 0.18;
       const bw = cw * 0.44, bh = ch * 0.64;
       // Blue when cold, green in the window, amber then red when it goes off.

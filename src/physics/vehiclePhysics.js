@@ -230,6 +230,11 @@ export class VehicleSim {
 
     // ---- controls ----
     this.throttle = 0; this.brake = 0; this.steerInput = 0; this.handbrake = 0;
+    // Every safety clamp below is silent by design, which is exactly why the
+    // sanity checks in Game.validate() could never fire: they all tested for
+    // states the clamps had already made impossible. A clamp biting IS the
+    // fault, so each one is counted and validate() reports the count.
+    this.clamped = { speed: 0, tyreTemp: 0, brakeTemp: 0, wear: 0, nonFinite: 0 };
     this.clutch = 1; this.boost = 0; this.airPitch = 0; this.airRoll = 0; this.airYaw = 0;
     this.reverseHeld = 0;
 
@@ -1162,6 +1167,7 @@ export class VehicleSim {
     const over = wheel.temp - AMBIENT_TYRE_C;
     wheel.temp -= (over * (TYRE_COOL_BASE + TYRE_COOL_PER_MS * this.speed)
       + TYRE_COOL_QUAD * over * Math.abs(over)) * dt;
+    if (wheel.temp > 220) this.clamped.tyreTemp++;
     wheel.temp = clamp(wheel.temp, AMBIENT_TYRE_C - 6, 220);
 
     // Wear accelerates once the rubber is past its window — that is exactly when
@@ -1169,7 +1175,10 @@ export class VehicleSim {
     const hotFactor = wheel.temp > TYRE_PEAK_C
       ? 1 + 2.2 * clamp((wheel.temp - TYRE_PEAK_C) / (TYRE_MAX_C - TYRE_PEAK_C), 0, 1.4) : 1;
     const scrub = Math.max(0, slipSpeed - TYRE_SCRUB_THRESHOLD);
-    wheel.wear = clamp(wheel.wear + force * scrub * scrub * dt * TYRE_WEAR_K * hotFactor, 0, 1);
+    // A tyre reaching 1.0 is worn out, which is normal; going NEGATIVE is not.
+    const nextWear = wheel.wear + force * scrub * scrub * dt * TYRE_WEAR_K * hotFactor;
+    if (nextWear < 0) this.clamped.wear++;
+    wheel.wear = clamp(nextWear, 0, 1);
     // A tyre run to the canvas eventually lets go.
     if (wheel.wear >= 1 && !wheel.flat && wheel.temp > TYRE_MAX_C && Math.random() < dt * 0.35) {
       wheel.flat = true;
@@ -1180,6 +1189,7 @@ export class VehicleSim {
     const brakePower = brakeTorque * Math.abs(wheel.angularVel);
     wheel.brakeTemp += brakePower * this.brakeHeatPerJoule * dt;
     wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * (1 + this.speed * 0.09) * dt;
+    if (wheel.brakeTemp > 900) this.clamped.brakeTemp++;
     wheel.brakeTemp = clamp(wheel.brakeTemp, AMBIENT_TYRE_C - 6, 900);
     if (absVLong < 0.1 && this.brake < 0.02) wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * 0.02 * dt;
   }
@@ -1477,10 +1487,14 @@ export class VehicleSim {
     // Safety net: nothing in this game should ever exceed ~500 km/h.
     const MAX_SPEED = 140;
     if (this.speed > MAX_SPEED) {
+      this.clamped.speed++;
       this.velocity.multiplyScalar(MAX_SPEED / this.speed);
       this.speed = MAX_SPEED;
     }
-    if (!Number.isFinite(this.position.x + this.position.y + this.position.z)) this._recover();
+    if (!Number.isFinite(this.position.x + this.position.y + this.position.z)) {
+      this.clamped.nonFinite++;
+      this._recover();
+    }
   }
 
   _recover() {

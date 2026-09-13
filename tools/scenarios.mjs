@@ -292,7 +292,11 @@ const SCENARIOS = [
     },
     assert: (c) => {
       const bad = [];
-      if (c.combat.projectiles.length > 160) bad.push('projectile pool overflowed');
+      // The pool refuses to spawn at 160, so asking whether it went PAST 160
+      // could never be true. What is reachable, and what the check was reaching
+      // for, is a pool that fills up and then never drains.
+      if (c.combat.projectiles.length >= 160) bad.push('the projectile pool is pinned full — it is not draining');
+      else if (c.combat.projectiles.length > 60) bad.push(`${c.combat.projectiles.length} projectiles still live well after the blasts`);
       for (const v of c.traffic.all()) {
         if (!Number.isFinite(v.sim.position.x + v.sim.position.y + v.sim.position.z)) { bad.push('a vehicle went non-finite after an explosion'); break; }
       }
@@ -544,18 +548,36 @@ const SCENARIOS = [
           exposure: c.renderer.grade.uExposure.value,
         };
       };
+      // Exposure is a straight multiplier on the final composite, so it is the
+      // third place the same weather can dim the scene -- and it was gathered
+      // here and thrown away, checked by nothing. The brightness that reaches
+      // the player is the light TIMES the exposure, and that is what is
+      // compared: against an absolute floor, and against a clear sky, so a
+      // change that dims one of the three paths cannot hide behind the others.
+      const bright = (m) => (m.key + m.fill * 1.6) * m.exposure;
+      const clearDay = bright(measure(13, 'clear'));
+      if (!(clearDay > 0.9)) bad.push(`a clear midday composites at ${clearDay.toFixed(2)}, too dark to play`);
       for (const w of ['clear', 'fair', 'overcast', 'drizzle', 'rain', 'storm', 'fog']) {
         const m = measure(13, w);
         // Daylight: whatever the sky is doing, you can see the road.
         const lit = m.key + m.fill * 1.6;
         if (lit < 1.2) bad.push(`${w} at midday is too dark to play (key ${m.key.toFixed(2)}, fill ${m.fill.toFixed(2)})`);
         if (m.key > 6 || m.fill > 4) bad.push(`${w} at midday is blown out (key ${m.key.toFixed(2)}, fill ${m.fill.toFixed(2)})`);
+        if (!(m.exposure > 0.2 && m.exposure < 4)) bad.push(`${w} at midday sets exposure to ${m.exposure.toFixed(2)}`);
+        const rel = bright(m) / clearDay;
+        if (rel < 0.35) bad.push(`${w} at midday composites ${rel.toFixed(2)}x a clear sky — the weather is dimming it three times over`);
+        if (rel > 1.6) bad.push(`${w} at midday composites ${rel.toFixed(2)}x a clear sky`);
       }
       for (const w of ['clear', 'rain']) {
         const m = measure(23, w);
         // Night is dark, not black: unlit back streets still need a floor.
         if (m.fill < 0.75) bad.push(`${w} at night has no ambient floor (fill ${m.fill.toFixed(2)})`);
         if (m.fill > 1.6) bad.push(`${w} at night is washed out (fill ${m.fill.toFixed(2)})`);
+        if (!(m.exposure > 0.2 && m.exposure < 5)) bad.push(`${w} at night sets exposure to ${m.exposure.toFixed(2)}`);
+        // Night must be darker than midday, but not by so much that nothing reads.
+        const rel = bright(m) / clearDay;
+        if (rel > 0.8) bad.push(`${w} at night composites ${rel.toFixed(2)}x midday — it is not night`);
+        if (rel < 0.02) bad.push(`${w} at night composites ${rel.toFixed(3)}x midday — it is black`);
       }
       c.time.hour = hourWas;
       c.weather.setWeather(weatherWas, true);

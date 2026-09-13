@@ -465,6 +465,13 @@ export class Game {
     const finite = (v, name) => { if (!Number.isFinite(v)) bad.push(`${name} is not finite (${v})`); };
     const p = ctx.player;
     finite(p.position.x, 'player.x'); finite(p.position.y, 'player.y'); finite(p.position.z, 'player.z');
+    // The character controller puts a non-finite position back together inside
+    // its own step, so the checks above can never see one. It counts them now,
+    // and the count is the thing worth reporting.
+    if (p.body && p.body.nonFiniteFixes) {
+      bad.push(`the player's position went non-finite ${p.body.nonFiniteFixes} time(s)`);
+      p.body.nonFiniteFixes = 0;
+    }
     finite(p.health, 'player.health');
     if (p.position.y < -200) bad.push(`player fell out of the world (y=${p.position.y.toFixed(1)})`);
     if (p.health > p.maxHealth + 0.01) bad.push('player health above maximum');
@@ -479,17 +486,32 @@ export class Game {
       if (!Number.isFinite(s.position.x + s.position.y + s.position.z)) { bad.push(`vehicle ${v.def.id} has a non-finite position`); break; }
       if (!Number.isFinite(s.velocity.x + s.velocity.y + s.velocity.z)) { bad.push(`vehicle ${v.def.id} has a non-finite velocity`); break; }
       if (s.position.y < -300) { bad.push(`vehicle ${v.def.id} fell out of the world`); break; }
-      if (s.speed > 200) { bad.push(`vehicle ${v.def.id} is doing ${s.speed.toFixed(0)} m/s`); break; }
+      // 114 m/s is the fastest thing in the catalogue, and the sim clamps at
+      // 140, so the old `> 200` could never be true. This sits between the two
+      // where it can actually fire.
+      if (s.speed > 125) { bad.push(`vehicle ${v.def.id} is doing ${s.speed.toFixed(0)} m/s`); break; }
+      // The sim's safety clamps are silent by design, which made every range
+      // check below unreachable: it asked about states the clamps had already
+      // made impossible. A clamp having to bite IS the fault, so the sim counts
+      // them and this reads the count.
+      const cl = s.clamped;
+      if (cl) {
+        const hit = cl.nonFinite ? `went non-finite ${cl.nonFinite} time(s)`
+          : cl.speed ? `hit the 140 m/s ceiling ${cl.speed} time(s)`
+          : cl.tyreTemp ? `ran a tyre past 220 C ${cl.tyreTemp} time(s)`
+          : cl.brakeTemp ? `ran a brake disc past 900 C ${cl.brakeTemp} time(s)`
+          : cl.wear ? `computed negative tyre wear ${cl.wear} time(s)` : null;
+        if (hit) { bad.push(`vehicle ${v.def.id} ${hit}`); break; }
+      }
       // Thermal state has to stay physical: a tyre or a disc that runs away is
       // a sign the tyre model is feeding on its own numerical noise.
+      // clamp(NaN, lo, hi) returns NaN, so these three DO survive the clamps and
+      // are worth asking. The numeric bands that used to sit here did not.
       let thermalBad = null;
       for (const w of s.wheels) {
         if (!Number.isFinite(w.temp) || !Number.isFinite(w.brakeTemp) || !Number.isFinite(w.wear)) {
           thermalBad = 'non-finite tyre state'; break;
         }
-        if (w.temp > 230 || w.temp < 10) { thermalBad = `tyre at ${w.temp.toFixed(0)}C`; break; }
-        if (w.brakeTemp > 950) { thermalBad = `brake disc at ${w.brakeTemp.toFixed(0)}C`; break; }
-        if (w.wear < 0 || w.wear > 1) { thermalBad = `tyre wear ${w.wear.toFixed(2)}`; break; }
       }
       if (thermalBad) { bad.push(`vehicle ${v.def.id}: ${thermalBad}`); break; }
       // A car whose roof is under the ground has fallen through the terrain.
@@ -513,12 +535,28 @@ export class Game {
     for (const ped of ctx.peds.peds) {
       const b = ped.body.position;
       if (!Number.isFinite(b.x + b.y + b.z)) { bad.push(`ped ${ped.def.id} has a non-finite position`); break; }
+      if (ped.body.nonFiniteFixes) {
+        bad.push(`ped ${ped.def.id} went non-finite ${ped.body.nonFiniteFixes} time(s)`);
+        ped.body.nonFiniteFixes = 0;
+        break;
+      }
       if (b.y < -200) { bad.push(`ped ${ped.def.id} fell out of the world`); break; }
       if (ped.inVehicle && ped.visible) { bad.push(`ped ${ped.def.id} is visible while riding in a car`); break; }
       if (b.y < ctx.physics.groundHeight(b.x, b.z) - 0.6) { bad.push(`ped ${ped.def.id} is under the ground`); break; }
     }
-    if (ctx.particles.liveCount > ctx.settings.preset.particleBudget * 1.2) {
-      bad.push(`particle count ${ctx.particles.liveCount} above budget`);
+    // The two pools together ARE the ceiling, so the old test against the
+    // settings budget could never be true. Counting past the buffers would be a
+    // real bookkeeping fault, and a pool pinned full for a minute means effects
+    // are being cut short every frame rather than merely during a big bang.
+    const pcap = ctx.particles.capacity;
+    if (pcap && ctx.particles.liveCount > pcap) {
+      bad.push(`particle count ${ctx.particles.liveCount} is past the pool's own ${pcap}`);
+    }
+    if (pcap && ctx.particles.liveCount >= pcap) this._particleFullFor = (this._particleFullFor || 0) + 1;
+    else this._particleFullFor = 0;
+    if (this._particleFullFor > 30) {
+      bad.push(`the particle pool has been full for ${this._particleFullFor} checks running — effects are being truncated`);
+      this._particleFullFor = 0;
     }
     if (this.errors.length) {
       for (const e of this.errors.splice(0, 4)) bad.push('runtime error: ' + e);

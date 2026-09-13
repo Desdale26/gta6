@@ -204,10 +204,17 @@ export class Weather {
         continue;
       }
       this.rainPos[o] = nx; this.rainPos[o + 1] = ny; this.rainPos[o + 2] = nz;
+      // The tail of the streak is where the drop was a moment ago, so it has to
+      // be the drop's own velocity run backwards -- all three components over
+      // the same slice of time. A fixed drop for the vertical and a fixed
+      // -wind*0.03 for the horizontal put the tail BELOW the drop and on the
+      // downwind side, so in a storm the rain curtain slanted one way at about
+      // 18 degrees while every individual streak slanted the other at 11.
       const streak = 0.5 + this.rain * 0.9;
-      this.rainPos[o + 3] = nx - wx * 0.03;
-      this.rainPos[o + 4] = ny - streak;
-      this.rainPos[o + 5] = nz - wz * 0.03;
+      const back = streak / Math.max(1e-3, Math.abs(vy));
+      this.rainPos[o + 3] = nx - wx * back;
+      this.rainPos[o + 4] = ny - vy * back;
+      this.rainPos[o + 5] = nz - wz * back;
     }
     const geo = this.rainMesh.geometry;
     geo.setDrawRange(0, count * 2);

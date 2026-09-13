@@ -165,6 +165,12 @@ export class ParticleSystem {
     this.soft = new Buffer(Math.floor(budget * 0.68), this.alphaMat, ctx.scene);
     this.glow = new Buffer(Math.floor(budget * 0.32), this.addMat, ctx.scene);
     this.liveCount = 0;
+    // The two pools together are the ceiling, so asking whether liveCount has
+    // gone past the settings budget can never be true -- which is what the
+    // check in Game.validate() was doing. The reachable questions are whether
+    // the bookkeeping has run past the buffers, and whether the pool has been
+    // pinned full long enough that effects are visibly being cut short.
+    this.capacity = this.soft.cap + this.glow.cap;
     this._c = new THREE.Color();
     this.budgetGuard = 0;
   }
