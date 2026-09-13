@@ -96,8 +96,12 @@ function transform(src, file) {
       let exportStmt = line;
       if (/^export\s*\{/.test(line) && !line.includes('}')) {
         while (i + 1 < lines.length && !exportStmt.includes('}')) exportStmt += '\n' + lines[++i];
-        // The `from '...'` can sit on the closing line or the next one.
-        if (!/\}\s*(?:;|$)/.test(exportStmt.trimEnd()) && i + 1 < lines.length
+        // The `from '...'` can sit on the closing line or the next one. The
+        // test is whether the statement gathered so far already HAS a from
+        // clause -- the earlier condition asked the opposite, so a re-export
+        // written with `from` on its own line lost its dependency entirely and
+        // the target module was never bundled.
+        if (!/from\s+['"]/.test(exportStmt) && i + 1 < lines.length
             && /^\s*from\s+['"]/.test(lines[i + 1])) exportStmt += '\n' + lines[++i];
       }
       const listed = exportStmt.replace(/\n/g, ' ').match(/^export\s*\{([^}]*)\}\s*(?:from\s+['"]([^'"]+)['"])?\s*;?\s*$/);
@@ -143,10 +147,25 @@ function transform(src, file) {
       const decl = line.match(/^export\s+(const|let|var|function\*?|class|async\s+function\*?)\s+([A-Za-z_$][\w$]*)/);
       if (decl) {
         named.set(decl[2], decl[2]);
-        // `export const a = 1, b = 2;` also declares b.
+        // `export const a = 1, b = 2;` also declares b -- but only at the top
+        // level of the declaration. Scanning the raw text found the `dz` in
+        // `export const distSq2D = (ax, az, bx, bz) => { const dx = ..., dz =`
+        // and exported it, producing a namespace getter for a name that is not
+        // in module scope and throws the moment anyone spreads the namespace.
         if (decl[1] === 'const' || decl[1] === 'let' || decl[1] === 'var') {
           const after = line.slice(line.indexOf(decl[2]) + decl[2].length);
-          for (const extra of after.matchAll(/,\s*([A-Za-z_$][\w$]*)\s*=/g)) named.set(extra[1], extra[1]);
+          let depth = 0, str = null;
+          for (let k = 0; k < after.length; k++) {
+            const c = after[k];
+            if (str) { if (c === '\\') k++; else if (c === str) str = null; continue; }
+            if (c === '"' || c === "'" || c === '`') { str = c; continue; }
+            if (c === '(' || c === '[' || c === '{') depth++;
+            else if (c === ')' || c === ']' || c === '}') depth--;
+            else if (c === ',' && depth === 0) {
+              const m = /^\s*([A-Za-z_$][\w$]*)\s*(?==|,|;|$)/.exec(after.slice(k + 1));
+              if (m) named.set(m[1], m[1]);
+            }
+          }
         }
         out.push(line.replace(/^export\s+/, ''));
         continue;
@@ -255,19 +274,34 @@ const leftovers = [...outHtml.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
 
 // The stylesheet is the one asset whose absence is invisible at runtime: no
 // console error, no failed request once inlined, just a game whose UI never
-// hides. Prove it actually landed.
-const cssLanded = outHtml.includes('.hidden{display:none !important}');
+// hides. Prove it landed -- structurally, not by matching one rule's exact
+// spelling, so that reformatting game.css cannot fail the build with an error
+// message stating the opposite of the truth.
+const styleBody = /<style>\n([\s\S]*?)\n<\/style>/.exec(outHtml);
+const cssLanded = !!styleBody && styleBody[1].length >= css.length * 0.99;
+
+const fatal = [];
+if (leftovers.length) fatal.push(`still references files on disk: ${[...new Set(leftovers)].join(', ')}`);
+if (!cssLanded) {
+  fatal.push(styleBody
+    ? `stylesheet is truncated: ${styleBody[1].length} of ${css.length} bytes`
+    : 'no <style> block in the output — the stylesheet was not inlined');
+}
+// A cycle is not cosmetic here. The dev build gets real live bindings from the
+// browser; this transform captures named imports when the module body runs, so
+// a cycle hands one side a permanently undefined binding.
+if (cycles.length) fatal.push(`${cycles.length} import cycle(s): ${cycles.slice(0, 3).join(' ;; ')}`);
+
+// Nothing is written unless every check passed: a rejected build used to
+// overwrite the last known-good bundle and then exit 1, leaving only the
+// artifact the tool had just refused.
+if (fatal.length) {
+  for (const f of fatal) console.error('ERROR: ' + f);
+  console.error(`${relative(ROOT, OUT)} left untouched`);
+  process.exit(1);
+}
 
 writeFileSync(OUT, outHtml);
 const kb = (statSync(OUT).size / 1024).toFixed(0);
 console.log(`bundled ${modules.size} modules into ${relative(ROOT, OUT)} (${kb} KB)`);
-if (cycles.length) { console.log(`WARNING: ${cycles.length} import cycle(s):`); cycles.slice(0, 5).forEach((c) => console.log('  ' + c)); }
-
-const fatal = [];
-if (leftovers.length) fatal.push(`still references files on disk: ${[...new Set(leftovers)].join(', ')}`);
-if (!cssLanded) fatal.push('stylesheet did not make it into the bundle');
-if (fatal.length) {
-  for (const f of fatal) console.error('ERROR: ' + f);
-  process.exit(1);
-}
-console.log('stylesheet inlined, no external references');
+console.log(`stylesheet inlined (${styleBody[1].length} bytes), no external references, no import cycles`);
