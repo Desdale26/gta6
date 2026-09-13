@@ -575,6 +575,15 @@ export class Minimap {
 
     g.translate(cx, cy);
     g.rotate(yaw);
+    // Everything below is placed at (dx, -dz), which is a MIRROR of the plan
+    // view rather than the plan view itself: looking down at the ground with
+    // world +Z up the page puts world +X on the LEFT, because a three.js camera
+    // looks down its own -Z. A mirror composed with the heading rotation does
+    // not even keep ahead pointing up -- measured on a real canvas, a point
+    // 100 m ahead at yaw 1.0 landed 38 px right and 17 px BELOW centre, and a
+    // point 100 m to the player's right landed above and to the left. With the
+    // flip, ahead lands at 0,-42 and right at +42,0 at every heading.
+    g.scale(-1, 1);
     const s = this.scale * (W / 320);
 
     // --- water ---

@@ -55,7 +55,9 @@ export class Vehicle {
     this.headlightAuto = true;
     this.sirenOn = false;
     this.sirenTime = 0;
-    this.indicator = 0;             // -1 left, 1 right, 0 off
+    // The sign follows the steering: +1 is a turn toward local +X, which is
+    // the driver's left, and the lamp lit is the one on that side.
+    this.indicator = 0;             // -1 right, 1 left, 0 off
     this.hornTime = 0;
     this.alarmTime = 0;
     this.radioStation = null;
@@ -217,8 +219,10 @@ export class Vehicle {
     if (this.indicator !== 0) {
       const on = Math.floor(ctx.time.elapsed * 2.2) % 2 === 0;
       for (let i = 0; i < this.lights.indicator.length; i++) {
-        const left = i % 2 === 0;
-        const active = on && ((this.indicator < 0 && left) || (this.indicator > 0 && !left));
+        // vehicleBody builds these in the order [-x, +x], and local +X is the
+        // driver's left, so the even one is the lamp on the driver's right.
+        const onTheRight = i % 2 === 0;
+        const active = on && ((this.indicator < 0 && onTheRight) || (this.indicator > 0 && !onTheRight));
         this.lights.indicator[i].material.emissiveIntensity = active ? 3 : 0;
       }
     } else if (this.lights.indicator.length && this.lights.indicator[0].material.emissiveIntensity !== 0) {

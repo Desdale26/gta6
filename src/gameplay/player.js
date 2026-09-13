@@ -373,7 +373,14 @@ export class Player {
     if (this.isDriving && !captured) {
       const throttle = input.throttle;
       const brake = input.brakeAxis;
-      const steer = input.moveX;
+      // `steerInput` is positive toward the car's LOCAL +X, and with forward at
+      // local +Z that axis is the driver's left: a three.js camera looks down its
+      // own -Z, so local +X projects to the left of the screen. Mouse look already
+      // allows for this (`yaw = -mouse.dx` in input.js) and the steering did not,
+      // so holding D nosed the car toward the left of the screen. Measured in the
+      // browser against the camera's own world matrix: holding D moved the car
+      // -0.55 along screen-right, i.e. more than half its travel to the left.
+      const steer = -input.moveX;
       const handbrake = input.down('handbrake') ? 1 : 0;
       // Holding "back" at a stop selects reverse. Once it is selected the back
       // axis has to become the throttle: input.throttle is max(0, moveY), so

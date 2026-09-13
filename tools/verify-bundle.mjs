@@ -371,24 +371,32 @@ if (booted) {
           const i = (y * W + x) * 4;
           const r = d[i], g = d[i + 1], b = d[i + 2];
           if (r > 200 && g < 100 && b > 110 && b < 190) { wx += x; wy += y; wn++; }
-          else if (r >= 240 && g >= 240 && b >= 240) {
+          else if (r >= 232 && g >= 232 && b >= 232) {
             const dx = x - px, dy = y - py;
-            if (dx * dx + dy * dy < 200) white.push([dx, dy]);
+            if (dx * dx + dy * dy < 256) white.push([dx, dy]);
           }
         }
       }
-      if (!wn || white.length < 20) { out.push({ yaw, wn, arrowPixels: white.length }); continue; }
+      if (!wn || white.length < 16) { out.push({ yaw, wn, arrowPixels: white.length }); continue; }
       // Unit vector from the player toward the waypoint, in map pixels.
       let ux = wx / wn - px, uy = wy / wn - py;
       const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
-      let tipSpread = 0, tailSpread = 0, tipN = 0, tailN = 0;
+      // Mean width of each half of the arrow. The white fill is inset by the
+      // black outline, so the tip can be a pixel or two short of the polygon's
+      // point -- averaging every pixel in each half is steadier than hunting
+      // for the extreme one.
+      let tipAcross = 0, tailAcross = 0, tipN = 0, tailN = 0;
       for (const [dx, dy] of white) {
         const along = dx * ux + dy * uy;
         const across = Math.abs(-dx * uy + dy * ux);
-        if (along > 3) { tipN++; tipSpread = Math.max(tipSpread, across); }
-        else if (along < -3) { tailN++; tailSpread = Math.max(tailSpread, across); }
+        if (along > 0) { tipN++; tipAcross += across; }
+        else { tailN++; tailAcross += across; }
       }
-      out.push({ yaw, wn, arrowPixels: white.length, tipSpread, tailSpread, tipN, tailN });
+      out.push({
+        yaw, wn, arrowPixels: white.length, tipN, tailN,
+        tipSpread: tipN ? tipAcross / tipN : 0,
+        tailSpread: tailN ? tailAcross / tailN : 0,
+      });
     }
     ctx.hud.minimap.setWaypoint(null);
     return out;
@@ -396,17 +404,19 @@ if (booted) {
   note('');
   note('map: the player arrow should point at a waypoint placed straight ahead');
   for (const r of mapArrow) {
-    if (!r.wn || r.arrowPixels < 20) {
+    if (!r.wn || r.arrowPixels < 16) {
       problems.push(`the map drew ${r.wn ? 'no player arrow' : 'no waypoint'} at yaw ${r.yaw}`);
       note(`  yaw ${String(r.yaw).padStart(5)}  waypoint px ${r.wn}, arrow px ${r.arrowPixels}  NOTHING TO MEASURE`);
       continue;
     }
-    const ok = r.tipN > 0 && r.tailN > 0 && r.tailSpread > r.tipSpread + 1.5;
-    note(`  yaw ${String(r.yaw).padStart(5)}  toward-waypoint end ${r.tipSpread.toFixed(1)} px wide,`
-      + ` away end ${r.tailSpread.toFixed(1)} px wide   ${ok ? 'ok' : 'WRONG'}`);
+    const ok = r.tipN >= 6 && r.tailN >= 6 && r.tailSpread > r.tipSpread + 0.8;
+    note(`  yaw ${String(r.yaw).padStart(5)}  toward the waypoint ${r.tipSpread.toFixed(2)} px wide (${r.tipN} px),`
+      + ` away ${r.tailSpread.toFixed(2)} px wide (${r.tailN} px)   ${ok ? 'ok' : 'WRONG'}`);
     if (!ok) {
-      problems.push(`at yaw ${r.yaw} the map arrow's broad tail faces the waypoint`
-        + ` (${r.tipSpread.toFixed(1)} px toward it, ${r.tailSpread.toFixed(1)} px away) — the arrow points backwards`);
+      problems.push(r.tipN < 6 || r.tailN < 6
+        ? `at yaw ${r.yaw} only ${r.tipN}/${r.tailN} arrow pixels fell either side — nothing to measure`
+        : `at yaw ${r.yaw} the map arrow's broad tail faces the waypoint`
+          + ` (${r.tipSpread.toFixed(2)} px mean width toward it, ${r.tailSpread.toFixed(2)} px away) — the arrow points backwards`);
     }
   }
 

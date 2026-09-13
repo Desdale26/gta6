@@ -464,7 +464,12 @@ export class Menus {
         : (ctx.player.bodyYaw ?? ctx.player.yaw);
       g.save();
       g.translate(px, py);
-      g.rotate(-yaw);
+      // The map is north-up: _worldToMap sends world +Z DOWN the canvas, so a
+      // player at yaw 0 -- facing +Z -- is heading down the page. The arrow
+      // below is drawn pointing up, hence the half turn. Without it the arrow
+      // pointed exactly opposite to the way the player was travelling: measured
+      // on a real canvas, the tip sat at cos -1.000 to the heading at every yaw.
+      g.rotate(Math.PI - yaw);
       g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(0, -9); g.lineTo(6, 8); g.lineTo(0, 4); g.lineTo(-6, 8); g.closePath();
       g.fill(); g.stroke();

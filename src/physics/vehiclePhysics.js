@@ -1270,9 +1270,11 @@ export class VehicleSim {
       const thrust = this.throttle * this.def.engine.peakPowerKw * 26 * sub;
       this._fx += this.forward.x * thrust;
       this._fz += this.forward.z * thrust;
-      // Positive steerInput is "right" everywhere else in the game, and a
-      // positive yaw torque turns the hull toward its own `right`. Negating it
-      // made D turn a boat left, the opposite of every car in the catalogue.
+      // A positive steerInput turns toward local +X for every car in the
+      // catalogue, so the hull has to do the same; negating this made a boat
+      // turn opposite to a car under the same input. Local +X is the driver's
+      // LEFT (see docs/ARCHITECTURE.md), which is why player.js sends the
+      // negated key axis. Inside the sim the sign only has to be consistent.
       const steerTorque = this.steerInput * this.speed * this.mass * 0.9;
       this._ty += steerTorque;
     } else if (sub > 0.55) {
