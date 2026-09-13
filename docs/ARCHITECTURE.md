@@ -71,6 +71,19 @@ export class Thing {
   positive pitch aims **down** while every other part of the engine — the camera,
   the character rig, the mouse mapping — treats a positive pitch as looking **up**.
   That is the bug that made aiming point behind the player.
+- **A vehicle's local +X is the driver's LEFT.** It follows from the two rules
+  above: forward is local +Z, so local +X projects to the left of the screen.
+  `sim.right`, `lateralSpeed`, `steerInput` and the Ackermann geometry are all
+  written against local +X and are consistent with each other — a positive
+  `steerInput` turns toward local +X — so nothing inside the sim needs to care.
+  Anything that maps a *player-facing* left/right onto it does: `player.js`
+  sends `-input.moveX` as the steering, and `input.js` takes `yaw = -mouse.dx`.
+- **The radar is a plan view, not a mirror of one.** Drawing the world at
+  `(dx, -dz)` with +X across the canvas reflects it, and a reflection composed
+  with the heading rotation stops even pointing "ahead" up the screen. The
+  minimap corrects it with a single `g.scale(-1, 1)`; the big map, which is
+  north-up and unrotated, sends world +Z *down* the canvas and needs no flip —
+  which is also why the player arrow on it turns by `PI - yaw`, not `-yaw`.
 - **Screen-right is not `cross(up, forward)`.** A three.js camera looks down its
   own local **−Z**, so its screen-right axis is local **+X**, which for yaw `y`
   works out to `(-cos y, 0, sin y)` — the *negative* of `cross(up, forward)`.
