@@ -182,7 +182,7 @@ name). Physics numbers must be internally consistent: `topSpeed ≈ sqrt(2*peakP
 ## `content/weaponCatalog.js`
 
 ```js
-export const WEAPONS = [ WeaponDef, ... ];  // >= 26
+export const WEAPONS = [ WeaponDef, ... ];  // >= 26 (currently 80)
 export function getWeapon(id)
 export function weaponsBySlot(slot)
 export const WEAPON_SLOTS = ['fists','melee','pistol','smg','shotgun','rifle','sniper','heavy','thrown','special'];
@@ -330,19 +330,36 @@ gasstation, diner, barber, tattoo, casino, autoshop, supermarket.
 
 ## `content/missionCatalog.js`
 
+Act I lives here; Acts II to VI, the interludes and the second wave of side work
+live in `content/campaign.js` and are concatenated on.
+
 ```js
-export const MISSIONS = [ MissionDef, ... ];      // >= 24, of which >= 10 story
+export const MISSIONS = [ MissionDef, ... ];      // >= 110, of which >= 60 story/heist
+export const ACTS = { 1: 'Act I — Coming Ashore', ... };
 export function getMission(id)
 export function availableMissions(completedSet, stats)
+export function storyProgress(completedSet)       // per-act done/total/unlocked
+export function estimateMissionSeconds(m)         // play-time model, in seconds
+export function estimateCampaignHours(opts)       // whole campaign, in hours (>= 20)
+export function validateMissions()                // [] when the data is sound
 ```
+
+`estimateCampaignHours` is built from the same distances and timings the
+interpreter runs on — per-objective cost, travel between waypoints at a realistic
+city average, dialogue at the rate the subtitle system plays it, and an allowance
+for missions you fail and replay. `validateMissions` fails below twenty hours, so
+the campaign's advertised length moves when the content moves.
 
 ```ts
 MissionDef = {
   id, name, giver: string, type: 'story'|'side'|'race'|'rampage'|'heist'|'delivery'|'taxi'|
         'stunt'|'assassination'|'chase'|'collect'|'survival'|'escort',
   tier: number, requires: string[],  // mission ids
+  act?: 1..6,                        // story and heist missions only
   reward: number, rewardRep: number,
-  blurb: string, briefing: string[],  // lines of dialogue shown at start
+  blurb: string,
+  briefing: string[],                // 'SPEAKER: line', played on start
+  debrief: string[],                 // 'SPEAKER: line', played on the payout
   start: { x:number, z:number, marker:string, radius:number },
   vehicleHint?: string,               // vehicle id spawned for the mission
   objectives: ObjectiveDef[],
@@ -359,6 +376,8 @@ ObjectiveDef = {
   count?: number, seconds?: number,
   targetPed?: string, targetVehicle?: string, shopId?: string,
   checkpoints?: [[x,z], ...],     // for races
+  laps?: number,                  // races: the circuit must close when > 1
+  say?: string[],                 // 'SPEAKER: line', played when this objective begins
   inVehicle?: boolean, weapon?: string,
   marker?: 'goto'|'kill'|'pickup'|'dropoff'|'checkpoint',
 }
@@ -438,6 +457,22 @@ export function clearTexCache()
 export const TEX_NAMES = [...]                // every supported `name`
 ```
 
+**Albedo is a contract, not a taste call.** Ground surfaces cover most of the
+screen, and one that is half a stop too bright reads as white plastic however
+good the lighting is. Each generator is written as `base + noise * range`, and
+the noise helpers return 0..1, so the mean is `base + range/2` — getting that
+wrong by a factor of two is the difference between a city and a pastel wash.
+`node tools/albedo.mjs` runs the generators in plain Node and checks each mean
+against measured real-world sRGB reflectance:
+
+| surface | band | | surface | band |
+|---|---|---|---|---|
+| asphalt | 0.16–0.32 | | grass | 0.22–0.40 |
+| concrete | 0.34–0.50 | | sand | 0.42–0.60 |
+| sidewalk | 0.34–0.50 | | dirt | 0.28–0.44 |
+| kerb | 0.40–0.58 | | gravel | 0.24–0.44 |
+| groundDetail | 0.36–0.52 | | brick | 0.18–0.40 |
+
 `opts` always accepts `{ size=512, repeat=1, color, color2, seed=0, roughness, anisotropy=8,
 srgb=true }`. Textures must be seamless/tileable, use `THREE.RepeatWrapping`, set
 `colorSpace = THREE.SRGBColorSpace` for albedo only, and be generated with an
@@ -490,6 +525,37 @@ export class MusicPlayer {
 Real-time scheduled synthesis only (OscillatorNode/BiquadFilter/GainNode). It must never
 allocate more than ~64 live nodes, must clean up finished nodes, and must survive
 `audioCtx.state === 'suspended'`.
+
+### `physics/vehiclePhysics.js`
+
+Raycast suspension at a fixed 120 Hz, a simplified Pacejka tyre, a real engine,
+gearbox and differential, and a body that deforms. Three things are worth knowing
+before touching it:
+
+**The simulation owns the wheel steer angles.** `_applySteerGeometry()` hands the
+rack angle to the steered wheels every substep with Ackermann geometry, so the
+inner wheel turns further than the outer one. Nothing outside this file may write
+`wheel.steerAngle` — the render layer used to, a frame late and without the
+geometry, which meant a bare `VehicleSim` with nothing drawing it could not turn
+at all.
+
+**Tyres and brakes have state that persists.** Each `Wheel` carries `temp`
+(tread, °C), `brakeTemp` (disc, °C), `wear` (0 = new, 1 = canvas) and
+`absRelease`. Heat comes from friction at the contact patch and from hysteresis
+as the carcass rolls; grip peaks in a working window (`tempGrip`) and falls off
+either side; wear only accrues once the patch is genuinely scrubbing, and never
+comes back (`wearGrip`). Brakes fade from about 310 °C (`brakeFade`). Read them
+for HUD or gameplay; do not reset them outside a repair.
+
+**Below a walking pace the tyre is a damper, not a curve.** The slip definitions
+are singular at zero speed, so `STICK_SPEED` blends the Pacejka result into a
+linear damper that cannot pump energy in. Parked wheels also stop turning with
+the car. Without both, a parked car sits buzzing at several kilonewtons forever.
+
+Aerodynamics work against airspeed, so `phys.wind` (written by the weather system,
+in m/s, world space) is felt by every vehicle. Reference areas come from each
+body's own box, sideslip raises drag and applies a side force ahead of the centre
+of mass, and downforce carries induced drag at a road-car lift-to-drag of five.
 
 ### `world/buildings.js`
 
