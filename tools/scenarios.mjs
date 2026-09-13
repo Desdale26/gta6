@@ -357,6 +357,18 @@ const SCENARIOS = [
         }
         if (++checked >= 4) break;
       }
+
+      // And the shots they fire have to be visible. npcFire built its origin in
+      // the same module scratch vector the tracer's far end was written into,
+      // so from and to arrived as the same object and every NPC tracer was a
+      // point: enemy fire came out of nowhere with nothing drawn between them
+      // and the player.
+      const tr = c.combat.tracers || [];
+      if (!tr.length) bad.push('nobody fired a visible shot in eighteen seconds of a four-star chase');
+      else {
+        const longest = Math.max(...tr.map((t) => Math.hypot(t.x1 - t.x0, t.y1 - t.y0, t.z1 - t.z0)));
+        if (!(longest > 0.5)) bad.push(`every tracer on screen is ${longest.toFixed(3)} m long — they are drawing as points`);
+      }
       return bad;
     },
     teardown: (c) => {

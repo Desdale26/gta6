@@ -762,16 +762,31 @@ export class Ped {
   _poseFromRagdoll() {
     const r = this.ragdoll;
     if (!r) return;
-    r.center(_v1);
-    this.group.position.copy(_v1);
-    this.group.position.y -= this.height * 0.42;
     // Align the torso with the hips→chest axis.
     r.get('hips', _v1); r.get('chest', _v2);
     _v3.copy(_v2).sub(_v1);
     const yaw = Math.atan2(_v3.x, _v3.z);
+    // Polar angle from +Y: 0 for a body still standing, PI/2 for one flat on
+    // the ground. That IS the rotation the root needs about its own X once the
+    // group has been yawed to put the horizontal part on local +Z -- taking
+    // another quarter turn off it inverted the two, so a ped shot standing up
+    // snapped flat and a corpse on the pavement stood bolt upright. Measured:
+    // hips->chest = +Y used to render the body axis as (0, 0, -1).
     const pitch = Math.atan2(Math.hypot(_v3.x, _v3.z), _v3.y);
+    // The root pivots at the model's feet, so how far the body's middle sits
+    // from it swings round with the pitch: straight up when standing, out
+    // along the ground when flat. Getting this from the pitch as well puts the
+    // drawn body exactly on the ragdoll instead of 0.76 m away from it.
+    r.center(_v2);
+    const lift = this.height * 0.42;
+    const sp = Math.sin(pitch), cp = Math.cos(pitch);
+    this.group.position.set(
+      _v2.x - lift * Math.sin(yaw) * sp,
+      _v2.y - lift * cp,
+      _v2.z - lift * Math.cos(yaw) * sp,
+    );
     this.group.rotation.set(0, yaw, 0);
-    this.root.rotation.x = pitch - Math.PI / 2;
+    this.root.rotation.x = pitch;
     // Splay limbs so it reads as a body and not a mannequin.
     for (let i = 0; i < this.legs.length; i++) {
       this.legs[i].hip.rotation.x = 0.6 + i * 0.3;

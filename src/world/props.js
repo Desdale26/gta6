@@ -90,8 +90,16 @@ function box(w, h, d, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
 }
 function cyl(r1, r2, h, seg, x = 0, y = 0, z = 0, rx = 0, rz = 0) {
   const g = new THREE.CylinderGeometry(r1, r2, h, seg);
+  // `y` is the BASE of an upright cylinder, which is what the half-height is
+  // for. Lay the geometry over and there is no base under it any more, and that
+  // same half-height becomes a pure vertical lift of half the cylinder's
+  // LENGTH -- which is how every horizontal mast arm and fence rail in the city
+  // came to float above the thing it was meant to join. A 2.4 m traffic-light
+  // arm hung 1.2 m over its pole; a 6 m chain-link top rail sat 3 m above the
+  // posts. For a laid-over cylinder `y` is simply its centre.
+  const upright = !rx && !rz;
   if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz);
-  g.translate(x, y + h / 2, z);
+  g.translate(x, upright ? y + h / 2 : y, z);
   return g;
 }
 function plane(w, h, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {

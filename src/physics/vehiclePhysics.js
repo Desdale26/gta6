@@ -1226,7 +1226,14 @@ export class VehicleSim {
     // a crosswind, or a car already sideways, gets turned further.
     if (across > 0.02) {
       const sideMag = q * side * across * 0.5;
-      const dir = _v4.dot(this.right) > 0 ? 1 : -1;
+      // _v4 is the direction the car is travelling THROUGH the air, so the air
+      // resists along -_v4: the side force opposes the slide, exactly as the
+      // drag above does. Taken the other way it pushed the slide along and,
+      // acting ahead of the centre of mass, weathervaned a sliding car straight
+      // -- the opposite of what the comment above promises. Measured on a bus
+      // sliding 8 m/s sideways at 25 m/s: +59 N along the slide and a +2069 N·m
+      // torque turning the nose into it.
+      const dir = _v4.dot(this.right) > 0 ? -1 : 1;
       const cop = this.def.length * (h.aeroCentre ?? 0.10);
       this.applyForceAt(
         this.right.x * sideMag * dir, 0, this.right.z * sideMag * dir,
@@ -1276,9 +1283,23 @@ export class VehicleSim {
     this._fy += buoy;
     // heavy drag
     const dragK = sub * (this.isBoat ? 220 : 900);
-    this._fx -= this.velocity.x * dragK;
     this._fy -= this.velocity.y * dragK * 1.6;
-    this._fz -= this.velocity.z * dragK * (this.isBoat ? 0.12 : 1);
+    if (this.isBoat) {
+      // A hull slips along its length and resists across it, so those two
+      // factors belong on the HULL's axes. Put on world X and Z instead, a
+      // boat's top speed depended on where it happened to be pointing on the
+      // compass: measured, 41.0 km/h due north and 36.3 km/h due east, an 11%
+      // swing from nothing but the heading.
+      const along = this.velocity.x * this.forward.x + this.velocity.z * this.forward.z;
+      const across = this.velocity.x * this.right.x + this.velocity.z * this.right.z;
+      const fa = -along * dragK * 0.12;
+      const fs = -across * dragK;
+      this._fx += this.forward.x * fa + this.right.x * fs;
+      this._fz += this.forward.z * fa + this.right.z * fs;
+    } else {
+      this._fx -= this.velocity.x * dragK;
+      this._fz -= this.velocity.z * dragK;
+    }
     this.angularVelocity.multiplyScalar(Math.max(0, 1 - sub * 3 * dt));
     if (this.isBoat) {
       // Boats get thrust from the prop when it is wet.

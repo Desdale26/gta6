@@ -265,6 +265,61 @@ console.log('wheels  (vehicle.js syncMesh vs vehiclePhysics)');
   }
 }
 
+// --- does the air resist a slide, and does a hull care about the compass? ---
+{
+  console.log('');
+  console.log('physics  (vehiclePhysics)');
+  const flat = {
+    heightAt: () => 0, normalAt: (x, z, o) => { o.x = 0; o.y = 1; o.z = 0; return o; },
+    surfaceAt: () => SURFACE.ROAD, isWater: () => false, waterLevel: -50, maxHeight: 1,
+  };
+  const sea = {
+    heightAt: () => -6, normalAt: (x, z, o) => { o.x = 0; o.y = 1; o.z = 0; return o; },
+    surfaceAt: () => SURFACE.WATER, isWater: () => true, waterLevel: 0, maxHeight: 1,
+  };
+  const dt = 1 / 120;
+
+  // A sliding body has to be pushed back against the slide, not along it.
+  {
+    const def = VEHICLES.find((v) => v.id === 'civicworks-districtliner');
+    const phys = new PhysicsWorld(); phys.setTerrain(flat);
+    const sim = new VehicleSim(def, phys, {});
+    sim.position.set(0, sim.rideHeight, 0);
+    sim.velocity.set(8, 0, 25);                 // 25 m/s forward, 8 m/s sideways
+    sim._fx = sim._fy = sim._fz = 0;
+    sim._tx = sim._ty = sim._tz = 0;
+    sim._aero(dt);
+    const lateral = sim._fx * sim.right.x + sim._fz * sim.right.z;
+    const slide = sim.velocity.x * sim.right.x + sim.velocity.z * sim.right.z;
+    const ok = lateral * slide < 0;
+    console.log(`  ${ok ? 'ok     ' : 'WRONG  '}aero on a sliding bus: ${lateral.toFixed(0)} N `
+      + `${ok ? 'against' : 'along'} an ${slide.toFixed(0)} m/s slide`);
+    if (!ok) failures.push('physics: the aerodynamic side force pushes a sliding car further sideways');
+    run++; if (ok) caught++;
+  }
+
+  // A boat's top speed must not depend on which way it is pointing.
+  {
+    const def = VEHICLES.find((v) => v.body.kind === 'boat');
+    const speeds = [];
+    for (const deg of [0, 90, 225]) {
+      const phys = new PhysicsWorld(); phys.setTerrain(sea);
+      const sim = new VehicleSim(def, phys, {});
+      sim.position.set(0, 0.2, 0);
+      sim.quaternion.setFromEuler(new THREE.Euler(0, deg * Math.PI / 180, 0, 'YXZ'));
+      for (let i = 0; i < 120 * 30; i++) { sim.throttle = 1; sim.brake = 0; sim.steerInput = 0; sim.update(dt); }
+      speeds.push(sim.speed);
+    }
+    const lo = Math.min(...speeds), hi = Math.max(...speeds);
+    const spread = hi > 0 ? (hi - lo) / hi : 0;
+    const ok = spread < 0.02;
+    console.log(`  ${ok ? 'ok     ' : 'WRONG  '}boat top speed across headings: `
+      + `${(lo * 3.6).toFixed(1)}-${(hi * 3.6).toFixed(1)} km/h (${(spread * 100).toFixed(0)}% spread)`);
+    if (!ok) failures.push(`physics: a boat's top speed swings ${(spread * 100).toFixed(0)}% with its compass heading`);
+    run++; if (ok) caught++;
+  }
+}
+
 console.log('');
 console.log(`${caught}/${run} checks passed`);
 if (failures.length) {

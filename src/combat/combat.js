@@ -12,6 +12,11 @@ import { applySpread } from './weapons.js';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+// The tracer's far end gets its own scratch. Writing it into _v1 aliased the
+// caller's `origin` whenever the caller had built that in _v1 too -- which
+// npcFire does -- so `from` and `to` arrived at _tracer as the same object and
+// every shot an NPC fired drew a tracer of zero length.
+const _tracerEnd = new THREE.Vector3();
 const _scratch = [];
 
 const MAX_PROJECTILES = 160;
@@ -70,7 +75,7 @@ export class CombatSystem {
     for (let pass = 0; pass < 3; pass++) {
       const hit = phys.raycast(ox, oy, oz, dir.x, dir.y, dir.z, remaining, MASK_BULLET, { ignore: source });
       if (!hit.hit) {
-        if (opts.tracer) this._tracer(origin, _v1.set(ox + dir.x * remaining, oy + dir.y * remaining, oz + dir.z * remaining));
+        if (opts.tracer) this._tracer(origin, _tracerEnd.set(ox + dir.x * remaining, oy + dir.y * remaining, oz + dir.z * remaining));
         return null;
       }
       travelled += hit.dist;
@@ -80,7 +85,7 @@ export class CombatSystem {
       const damage = this._damageAtRange(def, travelled);
       this._applyHit(source, def, lastHit, dir, damage, opts);
 
-      if (opts.tracer && pass === 0) this._tracer(origin, _v1.set(hit.px, hit.py, hit.pz));
+      if (opts.tracer && pass === 0) this._tracer(origin, _tracerEnd.set(hit.px, hit.py, hit.pz));
 
       // Penetration: keep going through thin cover and bodies.
       const canPass = penetration > 0.05

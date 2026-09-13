@@ -383,7 +383,14 @@ export class World {
         const facing = e.angle + (side > 0 ? Math.PI / 2 : -Math.PI / 2);
 
         if (rng.bool(pr.streetlights * 0.8)) {
-          this._spawnProp('streetlight', x, z, facing + Math.PI, rng, { y: this.terrain.heightAt(x, z) + 0.16 });
+          // The lamp's arm is built along the model's local +X, and `facing` points
+          // its local +Z across the carriageway -- which is what makes benches face
+          // the street. A quarter turn back off that is what swings the ARM over the
+          // road. Measured: with `facing + PI` the arm ran exactly along the kerb
+          // (dot 0.00 with the across-road direction) and the lamp head sat 4.83 m
+          // from the centreline, outside a 3.4 m carriageway, lighting the pavement
+          // and leaving the road dark. With this it lands 2.83 m out, over the road.
+          this._spawnProp('streetlight', x, z, facing - Math.PI / 2, rng, { y: this.terrain.heightAt(x, z) + 0.16 });
           count++;
         } else if (rng.bool(pr.palms * 0.55)) {
           this._spawnProp('palm', x, z, rng.range(0, 6.28), rng, { height: rng.range(6, 13) });
@@ -429,8 +436,15 @@ export class World {
         for (let i = 0; i < Math.min(n.edges.length, 2); i++) {
           const e = n.edges[i];
           const dir = e.a === n ? 1 : -1;
-          const px = n.x + e.dx * dir * r + e.nx * r * 0.85;
-          const pz = n.z + e.dz * dir * r + e.nz * r * 0.85;
+          // The signal's mast arm runs along the model's local +X, which the yaw
+          // below sends along `dir * normal`. Standing the pole on the +normal
+          // side regardless meant that for one of the two directions the arm
+          // reached away from the junction into the buildings -- measured, the
+          // head ended up 9.34 m from the centreline instead of 4.94 m. Putting
+          // the pole on the side the arm reaches from turns it back inward.
+          const poleSide = -dir;
+          const px = n.x + e.dx * dir * r + e.nx * r * 0.85 * poleSide;
+          const pz = n.z + e.dz * dir * r + e.nz * r * 0.85 * poleSide;
           const prop = this._spawnProp('trafficLight', px, pz, Math.atan2(-e.dx * dir, -e.dz * dir), rng, { heads: 1 });
           if (prop) {
             prop.group.visible = false;
