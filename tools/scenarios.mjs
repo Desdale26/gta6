@@ -314,6 +314,32 @@ const SCENARIOS = [
       for (const u of c.police.units) {
         if (!Number.isFinite(u.sim.position.x)) { bad.push('a police vehicle went non-finite'); break; }
       }
+
+      // An officer shooting at you has to be holding something. This used to be
+      // mimed: `armed` was an id handed to the combat system and nothing was
+      // ever put in their hand. The barrel runs down the arm, so it also has to
+      // point roughly where they are facing rather than into the sky.
+      const T = c.THREE;
+      const fighting = c.police.officers.filter((o) => !o.dead && o.armed && o.state === 'combat' && o.visible !== false);
+      if (!fighting.length) bad.push('no officer ever drew a weapon at four stars');
+      let checked = 0;
+      for (const o of fighting) {
+        const gun = o.weaponModel;
+        if (!gun) { bad.push(`officer with ${o.armed} is in a firefight holding nothing`); break; }
+        if (!gun.visible) { bad.push(`officer's ${o.armed} is built but not drawn`); break; }
+        o.group.updateMatrixWorld(true);
+        const breech = new T.Vector3().setFromMatrixPosition(gun.matrixWorld);
+        const muzzle = new T.Vector3(0, 0, 0.4).applyMatrix4(gun.matrixWorld);
+        const barrel = muzzle.sub(breech).normalize();
+        const facing = new T.Vector3(Math.sin(o.yaw), 0, Math.cos(o.yaw));
+        const cos = barrel.dot(facing);
+        if (!(cos > 0.75)) {
+          const off = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI).toFixed(0);
+          bad.push(`an officer's weapon points ${off} degrees away from the way they are facing`);
+          break;
+        }
+        if (++checked >= 4) break;
+      }
       return bad;
     },
     teardown: (c) => c.police.clear(),

@@ -9,6 +9,8 @@ import { clamp, lerp, damp, angleDamp, wrapAngle, angleDelta, TAU } from '../cor
 import { CharacterController, Ragdoll, MOVE_STATE } from '../physics/character.js';
 import { BoxCollider, LAYER, SURFACE, MASK_SOLID } from '../physics/world.js';
 import { getPed, PED_ARCHETYPES, FIRST_NAMES, LAST_NAMES } from '../content/pedCatalog.js';
+import { buildWeaponModel } from '../combat/weapons.js';
+import { getWeapon } from '../content/weaponCatalog.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -330,6 +332,11 @@ export class Ped {
       elbow.add(hand);
       this.arms.push({ shoulder, elbow, hand, side });
     }
+
+    // Built the first time they actually draw it — `armed` is assigned after
+    // construction for police, and most armed pedestrians never draw at all.
+    this.weaponModel = null;
+    this._weaponModelId = undefined;
 
     // legs
     this.legs = [];
@@ -706,13 +713,18 @@ export class Ped {
 
     // --- arms ---
     const combat = this.state === PED_STATE.COMBAT && this.armed;
+    const gun = combat ? this._ensureWeaponModel() : this.weaponModel;
+    if (gun && gun.visible !== !!combat) gun.visible = !!combat;
     const fleeing = this.state === PED_STATE.FLEE || this.state === PED_STATE.PANIC;
     for (let i = 0; i < this.arms.length; i++) {
       const arm = this.arms[i];
       const sw = i === 0 ? swingB : swing;
       let shX, shZ, elX;
       if (combat) {
-        shX = -1.45; shZ = arm.side * 0.16; elX = -0.28;
+        // Shoulder plus elbow comes to -PI/2 so the barrel -- which runs down
+        // the arm -- points level at whatever they are shooting at, rather than
+        // ten degrees over its head.
+        shX = -(Math.PI / 2) + 0.28; shZ = arm.side * 0.16; elX = -0.28;
       } else if (fleeing) {
         shX = -2.2 + Math.sin(ph * 1.4 + i) * 0.35; shZ = arm.side * 0.5; elX = -0.7;
       } else if (this.prop === 'phone' && i === 1) {
@@ -818,6 +830,32 @@ export class Ped {
     if (this.visible === v) return;
     this.visible = v;
     this.group.visible = v;
+  }
+
+  /**
+   * The weapon an armed ped is holding, built the first time they draw it.
+   * Armed pedestrians used to shoot at you holding nothing at all: `armed` was
+   * only ever an id handed to the combat system, and nothing put anything in
+   * their hand. It mounts the same way the player's does -- an arm in this rig
+   * points down its own local -Y, and weapon models are built along +Z, so the
+   * quarter turn about X is what lays the barrel along the arm.
+   */
+  _ensureWeaponModel() {
+    if (this._weaponModelId === this.armed) return this.weaponModel;
+    if (this.weaponModel) { this.arms[1].hand.remove(this.weaponModel); this.weaponModel = null; }
+    this._weaponModelId = this.armed;
+    const wdef = this.armed ? getWeapon(this.armed) : null;
+    if (!wdef || (wdef.model && wdef.model.kind === 'fists')) return null;
+    try {
+      const built = buildWeaponModel(wdef, this.ctx.materials);
+      built.group.position.set(0, -0.04, 0);
+      built.group.rotation.set(Math.PI / 2, 0, 0);
+      this.arms[1].hand.add(built.group);
+      this.weaponModel = built.group;
+    } catch (err) {
+      console.warn('[ped] could not build weapon model', this.armed, err);
+    }
+    return this.weaponModel;
   }
 
   dispose() {
