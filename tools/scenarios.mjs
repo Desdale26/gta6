@@ -306,7 +306,23 @@ const SCENARIOS = [
   {
     name: 'wanted',
     seconds: 18,
-    setup: (c) => { c.police.setStars(4); },
+    setup: (c) => {
+      c.police.setStars(4);
+      // Also put an armed hostile on foot right next to the player. Whether a
+      // patrol car happens to pull up and disgorge its officers inside the
+      // scenario's eighteen seconds is a tuning question; whether someone in a
+      // firefight is holding the weapon they are firing is not, and this makes
+      // the second one deterministic.
+      const p = c.player.position;
+      const ped = c.peds.spawn('gang-viper', p.x + 6, p.z + 6, 0, {});
+      if (ped) {
+        ped.armed = 'pistol-9';
+        ped.threat = c.player;
+        ped.stats = { ...ped.stats, bravery: 0.95, aggression: 0.9 };
+        ped._setState('combat');
+        c.__gunman = ped;
+      }
+    },
     assert: (c) => {
       const bad = [];
       if (c.police.stars < 1) bad.push('wanted level vanished immediately');
@@ -315,18 +331,19 @@ const SCENARIOS = [
         if (!Number.isFinite(u.sim.position.x)) { bad.push('a police vehicle went non-finite'); break; }
       }
 
-      // An officer shooting at you has to be holding something. This used to be
+      // Anyone shooting at you has to be holding something. This used to be
       // mimed: `armed` was an id handed to the combat system and nothing was
       // ever put in their hand. The barrel runs down the arm, so it also has to
       // point roughly where they are facing rather than into the sky.
       const T = c.THREE;
-      const fighting = c.police.officers.filter((o) => !o.dead && o.armed && o.state === 'combat' && o.visible !== false);
-      if (!fighting.length) bad.push('no officer ever drew a weapon at four stars');
+      const all = [...c.police.officers, ...c.peds.peds];
+      const fighting = all.filter((o) => !o.dead && o.armed && o.state === 'combat' && o.visible !== false);
+      if (!fighting.length) bad.push('nobody armed ever entered combat, so there was nothing to check');
       let checked = 0;
       for (const o of fighting) {
         const gun = o.weaponModel;
-        if (!gun) { bad.push(`officer with ${o.armed} is in a firefight holding nothing`); break; }
-        if (!gun.visible) { bad.push(`officer's ${o.armed} is built but not drawn`); break; }
+        if (!gun) { bad.push(`a ped with ${o.armed} is in a firefight holding nothing`); break; }
+        if (!gun.visible) { bad.push(`a ped's ${o.armed} is built but not drawn`); break; }
         o.group.updateMatrixWorld(true);
         const breech = new T.Vector3().setFromMatrixPosition(gun.matrixWorld);
         const muzzle = new T.Vector3(0, 0, 0.4).applyMatrix4(gun.matrixWorld);
@@ -335,14 +352,17 @@ const SCENARIOS = [
         const cos = barrel.dot(facing);
         if (!(cos > 0.75)) {
           const off = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI).toFixed(0);
-          bad.push(`an officer's weapon points ${off} degrees away from the way they are facing`);
+          bad.push(`an armed ped's weapon points ${off} degrees away from the way they are facing`);
           break;
         }
         if (++checked >= 4) break;
       }
       return bad;
     },
-    teardown: (c) => c.police.clear(),
+    teardown: (c) => {
+      c.police.clear();
+      if (c.__gunman) { c.__gunman.dispose?.(); c.__gunman = null; }
+    },
   },
   {
     name: 'rob',

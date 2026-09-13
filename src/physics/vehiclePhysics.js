@@ -178,6 +178,21 @@ export function suspensionFor(def) {
 /** Height of a vehicle's body origin above the ground when parked, in metres. */
 export function rideHeightFor(def) { return suspensionFor(def).rideHeight; }
 
+/**
+ * Where a wheel's mesh belongs, in the body's local frame.
+ *
+ * The sim puts the wheel centre one suspension length below its mount: `len` is
+ * the ray distance from the mount less the tyre radius, so centre = ly - len
+ * and the tyre touches the ground exactly. The renderer used to compute its own
+ * version of this and got it one whole rest length too high, so every car in
+ * the city floated -- 0.26 m on a coupe, 0.62 m on a bus. It lives here, beside
+ * the numbers it depends on, so the renderer and tools/verify-guards.mjs are
+ * asking the same function rather than agreeing with each other by hand.
+ */
+export function wheelMeshLocalY(wheel) {
+  return wheel.ly - (wheel.contact ? wheel.suspensionLength : wheel.maxLength);
+}
+
 export class VehicleSim {
   /**
    * @param {object} def a VehicleDef from content/vehicleCatalog.js

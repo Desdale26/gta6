@@ -22,6 +22,9 @@ import { STATIONS, validateStations } from '../src/content/radioCatalog.js';
 import { MISSIONS, validateMissions } from '../src/content/missionCatalog.js';
 import { DISTRICTS, validateDistricts } from '../src/content/districtCatalog.js';
 import { RoadEdge } from '../src/world/roads.js';
+import * as THREE from 'three';
+import { PhysicsWorld, SURFACE } from '../src/physics/world.js';
+import { VehicleSim, wheelMeshLocalY } from '../src/physics/vehiclePhysics.js';
 
 const copy = (x) => structuredClone(x);
 /** A weapon that actually fires bullets, so the damage-model rules apply to it. */
@@ -222,6 +225,46 @@ console.log('roads  (roads.js)');
   }
 }
 
+// --- do the wheels the player sees touch the ground? -----------------------
+// The sim and the renderer place the wheel independently, and for a long time
+// they disagreed by a whole suspension rest length: every car in the city was
+// drawn floating, by a quarter of a metre on a coupe and two thirds on a bus.
+console.log('');
+console.log('wheels  (vehicle.js syncMesh vs vehiclePhysics)');
+{
+  const flat = {
+    heightAt: () => 0,
+    normalAt: (x, z, o) => { o.x = 0; o.y = 1; o.z = 0; return o; },
+    surfaceAt: () => SURFACE.ROAD, isWater: () => false, waterLevel: -50, maxHeight: 1,
+  };
+  const dt = 1 / 120;
+  const _wheelPoint = new THREE.Vector3();
+  for (const id of ['pennant-meridian', 'tanuki-shinobi-gtx', 'ironvale-roadliner-900', 'civicworks-districtliner']) {
+    const def = VEHICLES.find((v) => v.id === id);
+    if (!def) continue;
+    const phys = new PhysicsWorld(); phys.setTerrain(flat);
+    const sim = new VehicleSim(def, phys, {});
+    sim.position.set(0, sim.rideHeight + 0.4, 0);
+    for (let i = 0; i < 120 * 4; i++) { sim.throttle = 0; sim.brake = 1; sim.steerInput = 0; sim.update(dt); }
+    let worst = 0;
+    for (const w of sim.wheels) {
+      // Exactly what vehicle.js syncMesh writes into the wheel mesh, carried
+      // through the body's own transform: a settled car sits with a little
+      // rake, and comparing a local y against the ground would read that rake
+      // as an error. Correctly placed, this comes out under a millimetre.
+      sim.localToWorld(w.lx, wheelMeshLocalY(w), w.lz, _wheelPoint);
+      const bottom = _wheelPoint.y - sim.up.y * w.radius;
+      if (Math.abs(bottom) > Math.abs(worst)) worst = bottom;
+    }
+    const ok = Math.abs(worst) < 0.02;
+    console.log(`  ${ok ? 'ok     ' : 'WRONG  '}${id.padEnd(26)} drawn tyre bottom `
+      + `${worst >= 0 ? '+' : ''}${worst.toFixed(3)} m from the ground`);
+    if (!ok) failures.push(`wheels: ${id} is drawn ${worst.toFixed(2)} m off the ground`);
+    run++;
+    if (ok) caught++;
+  }
+}
+
 console.log('');
 console.log(`${caught}/${run} checks passed`);
 if (failures.length) {
@@ -229,4 +272,4 @@ if (failures.length) {
   for (const f of failures) console.log('  ! ' + f);
   process.exit(1);
 }
-console.log('every content validator objects when the data is wrong, and traffic keeps right');
+console.log('every content validator objects when the data is wrong, traffic keeps right, and the wheels touch the ground');

@@ -1,7 +1,7 @@
 // vehicle.js — a drivable vehicle: simulation + mesh + lights + audio + effects.
 import * as THREE from 'three';
 import { clamp, lerp, damp, formatMoney } from '../core/mathx.js';
-import { VehicleSim } from '../physics/vehiclePhysics.js';
+import { VehicleSim, wheelMeshLocalY } from '../physics/vehiclePhysics.js';
 import { buildVehicleMesh, applyDeformation } from './vehicleBody.js';
 import { LAYER, SURFACE, SURFACE_PROPS } from '../physics/world.js';
 
@@ -165,8 +165,11 @@ export class Vehicle {
     for (let i = 0; i < this.wheelMeshes.length && i < sim.nWheels; i++) {
       const w = sim.wheels[i];
       const m = this.wheelMeshes[i];
-      const drop = w.contact ? w.suspensionLength : w.maxLength;
-      m.position.y = w.ly + (w.maxLength - drop) - (w.maxLength - w.restLength);
+      // wheelMeshLocalY lives in the sim, next to the numbers it depends on, so
+      // this and tools/verify-guards.mjs ask the same function rather than each
+      // keeping its own copy of the arithmetic. The copy that used to live here
+      // was one whole suspension rest length too high and every car floated.
+      m.position.y = wheelMeshLocalY(w);
       m.rotation.order = 'YXZ';
       m.rotation.y = (w.steered ? w.steerAngle : 0) + (m.position.x > 0 ? Math.PI : 0);
       m.rotation.x = m.position.x > 0 ? -w.spin : w.spin;
