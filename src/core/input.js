@@ -51,7 +51,7 @@ export class Input {
     // raw movement without capture once a request has actually been refused.
     this.pointerLockAvailable = true;
     this.gamepadIndex = null;
-    this.gp = { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, buttons: [], prevButtons: [] };
+    this.gp = { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, prevRt: 0, buttons: [], prevButtons: [] };
     this.enabled = true;
     this.uiCaptured = false;   // true while a DOM UI panel wants the keyboard
     this.lastInputDevice = 'keyboard';
@@ -188,6 +188,10 @@ export class Input {
   get brakeAxis() { return Math.max(0, -this.moveY) || this.gp.lt; }
   get aiming() { return this.mouse.right || this.gp.lt > 0.5; }
   get firing() { return this.mouse.left || this.gp.rt > 0.5; }
+  /** Rising edge of the fire control, for one-shot-per-press weapons. */
+  get firingEdge() { return this.mouse.leftEdge || (this.gp.rt > 0.5 && this.gp.prevRt <= 0.5); }
+  /** True while the player is actively looking around, on either device. */
+  get looking() { return Math.abs(this.mouse.dx) > 0.5 || Math.abs(this.gp.rx) > 0.12; }
   get sprinting() { return this.down('sprint') || (this.gp.buttons[10] ?? false); }
 
   /** Mouse/stick look delta in radians for this frame. */
@@ -218,6 +222,10 @@ export class Input {
     this.gp.prevButtons = this.gp.buttons.slice();
     this.gp.buttons = pad.buttons.map((b) => b.pressed);
     this.gp.lt = pad.buttons[6]?.value || 0;
+    // The trigger is an axis, not a button, so it needs its own edge — without
+    // one a gamepad could hold `firing` down forever and never once satisfy the
+    // per-shot test, which is why no semi-automatic weapon would fire on a pad.
+    this.gp.prevRt = this.gp.rt;
     this.gp.rt = pad.buttons[7]?.value || 0;
     if (this.gp.buttons.some(Boolean) || Math.abs(this.gp.lx) > 0.3) this.lastInputDevice = 'gamepad';
   }

@@ -174,6 +174,23 @@ const SCENARIOS = [
       const lookUp = sample(0.5);
       const lookLevel = sample(0);
 
+      // The gun the player can SEE has to point where the bullets go. The barrel
+      // runs from the model group's origin to its muzzle point, both read off
+      // the live world matrices after the arm pose has settled.
+      const barrel = (aimingOn) => {
+        c.input.mouse.right = aimingOn;
+        window.__VC.simulate(0.8);
+        p.group.updateMatrixWorld(true);
+        if (!p.weapons.model) return null;
+        const breech = new T.Vector3().setFromMatrixPosition(p.weapons.modelGroup.matrixWorld);
+        const muzzle = p.weapons.muzzleWorld(new T.Vector3());
+        const dir = muzzle.clone().sub(breech);
+        if (dir.length() < 1e-4) return null;
+        return { cos: dir.normalize().dot(p.aimDirection), len: muzzle.distanceTo(breech) };
+      };
+      const barrelAimed = barrel(true);
+      const barrelHip = barrel(false);
+
       // Straight ahead is sometimes a wall, so try a few distances before
       // giving up — a target that could not be parked is a harness problem,
       // not an aiming one, and should not read as either.
@@ -189,6 +206,8 @@ const SCENARIOS = [
         lookDown,
         lookUp,
         lookLevel,
+        barrelAimed,
+        barrelHip,
         hits: 0,
         range,
         health0: target ? target.sim.health : 0,
@@ -230,7 +249,17 @@ const SCENARIOS = [
         bad.push(`looking down did not lower the camera (forward.y ${a.lookLevel.cam.toFixed(3)} -> ${a.lookDown.cam.toFixed(3)})`);
       }
 
-      // 4. And the car standing in front of the player is the one that gets shot.
+      // 4. The gun in the player's hands points where the bullets go. A model
+      //    angled off the aim is the difference between a game that looks like
+      //    it is shooting at the thing and one that plainly is not.
+      for (const [name, b] of [['aiming down sights', a.barrelAimed], ['from the hip', a.barrelHip]]) {
+        if (!b) { bad.push(`no weapon model to measure ${name}`); continue; }
+        if (!(b.cos > 0.5)) {
+          bad.push(`${name}, the visible barrel points ${deg(b.cos)} degrees away from where the gun shoots`);
+        }
+      }
+
+      // 5. And the car standing in front of the player is the one that gets shot.
       if (!a.hasTarget) bad.push('could not park a target in front of the player');
       else {
         const v = c.__aimTarget;

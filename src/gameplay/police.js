@@ -3,7 +3,7 @@
 // Heat rises with what you do and where you do it, decays when nobody can see you, and
 // drives escalating waves: patrol cars, then interceptors, then roadblocks and a helicopter.
 import * as THREE from 'three';
-import { clamp, lerp, damp } from '../core/mathx.js';
+import { clamp, lerp, damp, angleDamp } from '../core/mathx.js';
 import { VehicleAI, DRIVER_MODE } from '../entities/traffic.js';
 import { LAYER, MASK_SOLID } from '../physics/world.js';
 import { getVehicle, VEHICLES } from '../content/vehicleCatalog.js';
@@ -437,7 +437,9 @@ export class PoliceSystem {
       h.vel.y = damp(h.vel.y, (wantY - h.position.y) * 0.8, 1.5, dt);
       h.position.addScaledVector(h.vel, dt);
       const heading = Math.atan2(h.vel.x, h.vel.z);
-      h.group.rotation.y = damp(h.group.rotation.y, heading, 3, dt);
+      // A heading, so angleDamp: damp across the +/-PI seam sends the helicopter
+      // spinning on its axis instead of turning a few degrees.
+      h.group.rotation.y = angleDamp(h.group.rotation.y, heading, 3, dt);
       h.group.rotation.z = clamp(-h.vel.x * 0.01, -0.35, 0.35);
       h.rotor.rotation.y += dt * 42;
       h.tailRotor.rotation.x += dt * 60;

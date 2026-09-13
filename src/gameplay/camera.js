@@ -1,6 +1,6 @@
 // camera.js — third-person follow rig with collision, aim modes, cinematic and photo cameras.
 import * as THREE from 'three';
-import { clamp, lerp, damp, angleDelta, smoothstep } from '../core/mathx.js';
+import { clamp, lerp, damp, angleDamp, angleDelta, smoothstep } from '../core/mathx.js';
 import { MASK_CAMERA } from '../physics/world.js';
 
 const _v1 = new THREE.Vector3();
@@ -36,6 +36,7 @@ export class CameraRig {
     this.speedFov = 0;
     this.recoilKick = new THREE.Vector2();
     this._prevTargetPos = new THREE.Vector3();
+    this._hidPlayer = false;
     this.enabled = true;
   }
 
@@ -78,6 +79,19 @@ export class CameraRig {
       default: this._follow(dt, player); break;
     }
 
+    // The body is hidden exactly when the camera is inside it, decided from the
+    // camera that actually ran rather than from the mode the player selected.
+    // Aiming from first person runs the AIM camera while `this.mode` is still
+    // FIRST, and the old restore test asked about `this.mode`: the result was an
+    // over-the-shoulder view of an invisible character. A scoped weapon puts the
+    // camera 5 cm from the eye, which is inside the head, so that hides it too.
+    const inside = effectiveMode === CAM_MODE.FIRST
+      || (effectiveMode === CAM_MODE.AIM && !!player.weapons.def.scope);
+    if (this._hidPlayer !== inside) {
+      player.setVisible(!inside);
+      this._hidPlayer = inside;
+    }
+
     this._applyShake(dt);
     this._applyFov(dt, player);
   }
@@ -111,18 +125,24 @@ export class CameraRig {
       const carYaw = Math.atan2(v.sim.forward.x, v.sim.forward.z);
       const blend = clamp(v.sim.speed / 14, 0, 1) * (v.sim.forwardSpeed < -0.5 ? 0 : 1);
       const auto = carYaw + angleDelta(carYaw, travelYaw) * 0.45 * blend;
-      // Mouse input takes over; otherwise it eases back behind the car.
-      const manual = Math.abs(this.ctx.input.mouse.dx) > 0.5;
+      // Looking around takes over; otherwise it eases back behind the car. This
+      // has to count the gamepad's right stick as well: reading mouse.dx alone
+      // meant the auto-follow fought the stick every frame a pad player turned
+      // the camera.
+      const manual = this.ctx.input.looking;
       if (manual) this.yawFree = player.yaw;
       desiredYaw = manual ? player.yaw : auto;
-      player.yaw = damp(player.yaw, desiredYaw, manual ? 20 : 2.4, dt);
+      player.yaw = angleDamp(player.yaw, desiredYaw, manual ? 20 : 2.4, dt);
       desiredYaw = player.yaw;
       if (this.lookBehind) desiredYaw += Math.PI;
       dist += clamp(v.sim.speed * 0.08, 0, 3.2);
       pitch = clamp(player.pitch * 0.55 - 0.1 - clamp(v.sim.speed * 0.004, 0, 0.1), -1.1, 0.7);
     }
 
-    this.yaw = damp(this.yaw, desiredYaw, v ? 9 : 16, dt);
+    // angleDamp, not damp: yaw wraps at +/-PI and a plain exponential lerp takes
+    // the long way round that seam. Measured: a 3 degree turn past it swung the
+    // camera 342 degrees, which is the whole screen spinning as you turn.
+    this.yaw = angleDamp(this.yaw, desiredYaw, v ? 9 : 16, dt);
     this.pitch = damp(this.pitch, pitch, 12, dt);
     this.targetDistance = dist;
     this.distance = damp(this.distance, this.targetDistance, 7, dt);
@@ -157,14 +177,19 @@ export class CameraRig {
   _aim(dt, player) {
     const target = this._targetPoint(player, _v1);
     const scoped = player.weapons.def.scope;
-    this.yaw = damp(this.yaw, player.yaw, 26, dt);
+    this.yaw = angleDamp(this.yaw, player.yaw, 26, dt);
     this.pitch = damp(this.pitch, player.pitch, 26, dt);
     const dist = scoped ? 0.05 : 1.9;
     const side = scoped ? 0 : 0.55;
 
     const dir = _v4.copy(player.aimDirection).normalize();
-    // Horizontal right of the aim, for the over-the-shoulder offset.
-    _v5.set(dir.z, 0, -dir.x);
+    // Screen-right of the aim, so the camera sits over the player's RIGHT
+    // shoulder as the genre expects. For a flattened direction (sin y, 0, cos y)
+    // the camera's own local +X is (-cos y, 0, sin y), i.e. (-dir.z, 0, dir.x) --
+    // the NEGATIVE of cross(up, dir). It was written the other way round, which
+    // put the camera over the left shoulder and the player on the right of the
+    // screen, contradicting the comment that sat here.
+    _v5.set(-dir.z, 0, dir.x);
     if (_v5.lengthSq() < 1e-6) _v5.set(1, 0, 0); else _v5.normalize();
 
     _v2.copy(target).addScaledVector(dir, -dist).addScaledVector(_v5, side);
@@ -196,8 +221,7 @@ export class CameraRig {
     this.lookAt.copy(_v3);
     this.smoothPos.copy(this.camera.position);
     this.distance = 0;
-    player.setVisible(false);
-    this._hidPlayer = true;
+    // Visibility is decided once, in update(), from the camera that actually ran.
   }
 
   _cinematic(dt, player) {
@@ -292,11 +316,6 @@ export class CameraRig {
       const g = this.ctx.renderer.grade;
       const focus = v ? clamp(14 + v.sim.speed * 0.8, 12, 60) : (player.weapons.aiming ? 40 : 14);
       g.uDofFocus.value = damp(g.uDofFocus.value, focus, 4, dt);
-    }
-    // In first person we hide the body; restore it when we leave.
-    if (this._hidPlayer && this.mode !== CAM_MODE.FIRST && !player.weapons.aiming) {
-      player.setVisible(true);
-      this._hidPlayer = false;
     }
   }
 }

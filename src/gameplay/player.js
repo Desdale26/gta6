@@ -1,6 +1,6 @@
 // player.js — the character you control, on foot and behind the wheel.
 import * as THREE from 'three';
-import { clamp, lerp, damp, angleDelta, TAU } from '../core/mathx.js';
+import { clamp, lerp, damp, angleDamp, angleDelta, TAU } from '../core/mathx.js';
 import { CharacterController, MOVE_STATE } from '../physics/character.js';
 import { BoxCollider, LAYER, SURFACE, SURFACE_PROPS, MASK_SOLID } from '../physics/world.js';
 import { WeaponSystem } from '../combat/weapons.js';
@@ -259,7 +259,10 @@ export class Player {
 
     // Face the direction of travel, or the aim when aiming.
     if (aiming || this.weapons.meleeSwing > 0) {
-      this.bodyYaw = damp(this.bodyYaw ?? this.yaw, this.yaw, 18, dt);
+      // angleDamp for the same reason the walking branch below uses angleDelta:
+      // yaw wraps at +/-PI, and a plain damp across that seam spins the model
+      // (and the radar, which reads bodyYaw) most of the way round.
+      this.bodyYaw = angleDamp(this.bodyYaw ?? this.yaw, this.yaw, 18, dt);
     } else if (mag > 0.05) {
       const moveYaw = Math.atan2(_v1.x, _v1.z);
       this.bodyYaw = (this.bodyYaw ?? moveYaw) + angleDelta(this.bodyYaw ?? moveYaw, moveYaw) * Math.min(1, dt * 12);
@@ -298,7 +301,11 @@ export class Player {
     // ---- firing ----
     if (!captured) {
       if (input.firing) {
-        if (this.weapons.def.auto || input.mouse.leftEdge || this.weapons.isMelee) {
+        // `firingEdge` covers the mouse button and the gamepad trigger alike.
+        // Testing mouse.leftEdge alone meant a semi-automatic weapon could never
+        // be fired with a pad: `firing` was true the whole time the trigger was
+        // held, and the per-shot edge it was checked against never arrived.
+        if (this.weapons.def.auto || input.firingEdge || this.weapons.isMelee) {
           const st = this._weaponState();
           st.muzzle = this.weapons.model ? this.weapons.muzzleWorld(_v2) : st.origin;
           this.weapons.tryFire(st);
@@ -392,7 +399,10 @@ export class Player {
       // Airborne stunt control.
       if (v.sim.wheelsOnGround === 0) {
         v.sim.airPitch = -input.moveY;
-        v.sim.airRoll = input.moveX;
+        // Negated for the same reason the steering is: a positive airRoll rolls
+        // the car toward its local +X, which is the driver's left. Measured on
+        // the real sim -- holding D banked the roof 0.99 toward screen-LEFT.
+        v.sim.airRoll = -input.moveX;
         v.sim.airYaw = input.down('lookBehind') ? 1 : 0;
       } else {
         v.sim.airPitch = v.sim.airRoll = v.sim.airYaw = 0;

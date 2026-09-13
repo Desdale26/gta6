@@ -575,7 +575,11 @@ export class Menus {
     const order = this.ctx.player.weapons.order;
     const id = order[this.wheelIndex];
     if (id) this.ctx.player.weapons.select(id);
-    this.ctx.game.setTimeScale(1);
+    // Back to whatever the clock was before the wheel slowed it, not flatly to
+    // 1: a player with slow motion toggled on had it silently cancelled, and
+    // then had to press T twice to get it back because game.slowmo still said
+    // it was on.
+    this.ctx.game.setTimeScale(this.ctx.game.slowmo ? 0.35 : 1);
     this.open = null;
     this.el.wheel.classList.add('hidden');
     this.ctx.input.uiCaptured = false;

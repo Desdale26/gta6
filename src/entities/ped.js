@@ -5,7 +5,7 @@
 // sine-driven joint angles that respond to actual walk speed.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { clamp, lerp, damp, wrapAngle, angleDelta, TAU } from '../core/mathx.js';
+import { clamp, lerp, damp, angleDamp, wrapAngle, angleDelta, TAU } from '../core/mathx.js';
 import { CharacterController, Ragdoll, MOVE_STATE } from '../physics/character.js';
 import { BoxCollider, LAYER, SURFACE, MASK_SOLID } from '../physics/world.js';
 import { getPed, PED_ARCHETYPES, FIRST_NAMES, LAST_NAMES } from '../content/pedCatalog.js';
@@ -606,7 +606,9 @@ export class Ped {
       this.wishDir.set(0, 0, 0);
     }
     body.update(dt, this.wishDir, this.speed, false);
-    if (this.state !== PED_STATE.COMBAT) this.lookYaw = damp(this.lookYaw, this.yaw, 6, dt);
+    // A heading, so angleDamp -- plain damp across the +/-PI seam makes a
+    // pedestrian's head whip round a full turn as they walk past it.
+    if (this.state !== PED_STATE.COMBAT) this.lookYaw = angleDamp(this.lookYaw, this.yaw, 6, dt);
   }
 
   _avoid(dir, dt) {
