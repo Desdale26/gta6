@@ -127,7 +127,9 @@ function facadeRelief(w, h, d, parts, rng, lod = 0, opts = {}) {
   const bucket = opts.bucket ?? parts.concrete;
 
   // Base course: shops and lobbies sit in a plinth that is proud of the wall.
-  const plinth = Math.min(FLOOR_H * 1.1, h * 0.45);
+  // A house wants a skirting, not a two-storey podium, so the height is an
+  // option rather than a fraction of whatever the building happens to be.
+  const plinth = opts.plinth ?? Math.min(FLOOR_H * 1.1, h * 0.45);
   bucket.push(box(w + out * 2.2, plinth, d + out * 2.2, x, y, z));
 
   // Cornice and parapet, so the roofline is not a bare cut edge.
@@ -427,6 +429,7 @@ const RECIPES = {
     const wallH = Math.min(h, 6.2);
     parts.facade.push(facadeBox(w, wallH, d, 0, 0, 0, 3.2, 3.0));
     colliders.push({ type: 'box', x: 0, y: wallH / 2, z: 0, hw: w / 2, hh: wallH / 2, hd: d / 2, yaw: 0 });
+    facadeRelief(w, wallH, d, parts, rng, lod, { plinth: 0.42, bandEvery: 99, maxFins: 0, relief: 0.09 });
     if (lod === 2) return;
     parts.roof.push(pitchedRoof(w + 0.9, d + 0.9, Math.max(1.6, h - wallH + 1.2), 0, wallH, 0));
     if (lod === 0) {
@@ -446,6 +449,7 @@ const RECIPES = {
     parts.facade.push(facadeBox(w, wallH * 0.62, d, 0, 0, 0, 4.0, 3.4));
     parts.facade.push(facadeBox(w * 0.72, wallH * 0.42, d * 0.72, 0, wallH * 0.62, 0, 4.0, 3.4));
     colliders.push({ type: 'box', x: 0, y: wallH / 2, z: 0, hw: w / 2, hh: wallH / 2, hd: d / 2, yaw: 0 });
+    facadeRelief(w, wallH * 0.62, d, parts, rng, lod, { plinth: 0.5, bandEvery: 99, maxFins: 0, relief: 0.11 });
     if (lod === 2) return;
     // flat roof terrace + pergola
     parts.concrete.push(box(w + 0.6, 0.3, d + 0.6, 0, wallH * 0.62 - 0.15));
@@ -469,6 +473,7 @@ const RECIPES = {
       }
     }
     colliders.push({ type: 'box', x: 0, y: (floors * 3.2) / 2, z: 0, hw: w / 2, hh: (floors * 3.2) / 2, hd: d / 2, yaw: 0 });
+    facadeRelief(w, floors * 3.2, d, parts, rng, lod, { plinth: 0.38, bandEvery: 1, maxFins: 0, relief: 0.10 });
     if (lod === 0) {
       // big roadside sign
       parts.metal.push(box(0.3, 6.5, 0.3, -w / 2 - 1.5, 0, d / 2 - 1));
