@@ -13,8 +13,23 @@ export function buildStuntSpot(THREE, spot, materials, rng, mergeGeometries) {
   const accents = [];
   const p = spot.params || {};
 
-  const mainMat = tintClone(materials?.concrete, spot.color ?? 0xb4b0a8)
-    || new THREE.MeshStandardMaterial({ color: spot.color ?? 0xb4b0a8, roughness: 0.85 });
+  // The catalogue's colour is the spot's identity — "the gold one", "the pink
+  // one" — but it is a UI colour, and painting a whole structure in it puts a
+  // 0.78-albedo saturated surface in a city whose concrete is 0.44. A twelve
+  // metre loop in arcade gold reads as a plastic dome dropped in the street.
+  // Real stunt structures are painted plywood, galvanised steel or concrete:
+  // mid-tone, with the bright colour kept for the markings. Hue survives,
+  // lightness and saturation come down to something a paint tin could hold.
+  const paintFor = (hex) => {
+    const c = new THREE.Color(hex);
+    const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl);
+    c.setHSL(hsl.h, Math.min(hsl.s, 0.42), Math.min(hsl.l, 0.40));
+    return c.getHex();
+  };
+  const paint = paintFor(spot.color ?? 0xb4b0a8);
+  const mainMat = tintClone(materials?.concrete, paint)
+    || new THREE.MeshStandardMaterial({ color: paint, roughness: 0.85 });
   const accentMat = new THREE.MeshStandardMaterial({
     color: 0x101018, emissive: spot.accent ?? 0x22e3ff, emissiveIntensity: 1.6, roughness: 0.4,
   });
