@@ -314,7 +314,10 @@ export class Ped {
     this.arms = [];
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Group();
-      shoulder.position.set(side * 0.19, 1.36 * s, 0);
+      // Just inside the deltoid, so the top of the arm sits in the shoulder
+      // rather than beside it. At 0.19 the arms hung a centimetre clear of the
+      // body and read as bolted on.
+      shoulder.position.set(side * 0.172, 1.355 * s, 0);
       root.add(shoulder);
       const upper = mk(g.upperArm, topM, 0, -0.15, 0);
       shoulder.add(upper);
@@ -714,7 +717,9 @@ export class Ped {
         shX = -1.1; shZ = arm.side * 0.2; elX = -1.2;
       } else {
         shX = sw * (running ? 0.92 : 0.58);
-        shZ = arm.side * (0.10 + stride * 0.04);
+        // Arms rest against the ribs when still and swing wider as the stride
+        // opens up; a constant splay made a standing ped look inflated.
+        shZ = arm.side * (0.035 + stride * 0.10);
         // The elbow closes on the forward swing and opens behind, and it stays
         // more bent at a run — the detail that reads as momentum.
         elX = -(Math.max(0, sw) * (running ? 1.15 : 0.55) + (running ? 0.55 : 0.14));
