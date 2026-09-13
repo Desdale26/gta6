@@ -132,9 +132,16 @@ function facadeRelief(w, h, d, parts, rng, lod = 0, opts = {}) {
   const plinth = opts.plinth ?? Math.min(FLOOR_H * 1.1, h * 0.45);
   bucket.push(box(w + out * 2.2, plinth, d + out * 2.2, x, y, z));
 
-  // Cornice and parapet, so the roofline is not a bare cut edge.
-  bucket.push(box(w + out * 3.0, 0.5, d + out * 3.0, x, y + h - 0.5, z));
-  bucket.push(box(w - 0.4, 0.85, d - 0.4, x, y + h, z));
+  // Cornice and parapet, so the roofline is not a bare cut edge. A building with
+  // a pitched roof has neither: it has eaves, and a parapet box under a pitch
+  // pokes straight out through the tiles.
+  if (opts.crown !== false) {
+    bucket.push(box(w + out * 3.0, 0.5, d + out * 3.0, x, y + h - 0.5, z));
+    bucket.push(box(w - 0.4, 0.85, d - 0.4, x, y + h, z));
+  } else {
+    // Eaves: a thin overhanging band right at the wall head.
+    bucket.push(box(w + out * 4.0, 0.22, d + out * 4.0, x, y + h - 0.22, z));
+  }
 
   if (lod === 2 || floors < 3) return;
 
@@ -374,6 +381,11 @@ const RECIPES = {
     parts.facade.push(facadeBox(w, upper, d, 0, shopH));
     parts.concrete.push(box(w, shopH, d, 0, 0));
     colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: w / 2, hh: h / 2, hd: d / 2, yaw: 0 });
+    facadeRelief(w, h, d, parts, rng, lod, { plinth: 0.4, bandEvery: 99, maxFins: 0, relief: 0.11 });
+    // String course where the shop stops and the flat above starts. It is the
+    // single line that makes a two-storey terrace read as a street rather than
+    // a row of blocks.
+    parts.concrete.push(box(w + 0.34, 0.3, d + 0.34, 0, shopH - 0.15));
     if (lod === 2) return;
 
     // shopfront glazing
@@ -429,7 +441,7 @@ const RECIPES = {
     const wallH = Math.min(h, 6.2);
     parts.facade.push(facadeBox(w, wallH, d, 0, 0, 0, 3.2, 3.0));
     colliders.push({ type: 'box', x: 0, y: wallH / 2, z: 0, hw: w / 2, hh: wallH / 2, hd: d / 2, yaw: 0 });
-    facadeRelief(w, wallH, d, parts, rng, lod, { plinth: 0.42, bandEvery: 99, maxFins: 0, relief: 0.09 });
+    facadeRelief(w, wallH, d, parts, rng, lod, { plinth: 0.42, bandEvery: 99, maxFins: 0, relief: 0.09, crown: false });
     if (lod === 2) return;
     parts.roof.push(pitchedRoof(w + 0.9, d + 0.9, Math.max(1.6, h - wallH + 1.2), 0, wallH, 0));
     if (lod === 0) {
