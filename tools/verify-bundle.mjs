@@ -305,21 +305,23 @@ if (booted) {
       right.y = 0; right.normalize();
       const dx = side ? right.x * 120 * side : Math.sin(yaw) * 120;
       const dz = side ? right.z * 120 * side : Math.cos(yaw) * 120;
-      mm.setWaypoint(p.position.x + dx, p.position.z + dz);
+      // A blip in a colour nothing else on the radar uses. The waypoint's own
+      // pink is shared with every side-job marker, and averaging those in
+      // dragged the centroid off the mark.
+      const blip = mm.addBlip({ x: p.position.x + dx, z: p.position.z + dz, color: '#00ff00', size: 6 });
       mm.draw();
+      mm.removeBlip(blip);
       const W = mm.canvas.width, H = mm.canvas.height;
       const d = mm.g.getImageData(0, 0, W, H).data;
-      // The waypoint blip is #ff2d95.
       let sx = 0, sy = 0, n = 0;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
-          if (d[i] > 200 && d[i + 1] < 100 && d[i + 2] > 110 && d[i + 2] < 190) { sx += x; sy += y; n++; }
+          if (d[i] < 60 && d[i + 1] > 220 && d[i + 2] < 60) { sx += x; sy += y; n++; }
         }
       }
       out.push(n ? { yaw, side, x: sx / n - W / 2, y: sy / n - H / 2, n } : { yaw, side, n: 0 });
     }
-    mm.setWaypoint(null);
     return out;
   });
   note('');
@@ -332,13 +334,18 @@ if (booted) {
       continue;
     }
     // Canvas y grows downward, so "above centre" is a negative y.
-    const ok = r.side === 0
-      ? (r.y < -20 && Math.abs(r.x) < 18)
-      : (r.x * r.side > 20 && Math.abs(r.y) < 18);
-    note(`  yaw ${String(r.yaw).padStart(5)} ${what.padEnd(17)} blip at ${r.x.toFixed(0).padStart(4)},${r.y.toFixed(0).padStart(4)} px   ${ok ? 'ok' : 'WRONG'}`);
+    // 120 m at 0.42 px/m puts it 50 px out; the angle is what is under test, so
+    // 12 degrees of slack covers blip rounding without admitting a wrong axis.
+    const want = r.side === 0 ? { x: 0, y: -1 } : { x: r.side, y: 0 };
+    const len = Math.hypot(r.x, r.y) || 1;
+    const cos = (r.x * want.x + r.y * want.y) / len;
+    const off = Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+    const ok = len > 35 && len < 66 && off < 12;
+    note(`  yaw ${String(r.yaw).padStart(5)} ${what.padEnd(17)} blip at ${r.x.toFixed(0).padStart(4)},${r.y.toFixed(0).padStart(4)} px`
+      + ` (${len.toFixed(0)} px out, ${off.toFixed(0)} deg off)   ${ok ? 'ok' : 'WRONG'}`);
     if (!ok) {
-      problems.push(`at yaw ${r.yaw} a waypoint ${what} lands at ${r.x.toFixed(0)},${r.y.toFixed(0)} px on the radar`
-        + (r.side === 0 ? ' — it should be straight above centre' : ` — it should be well to the ${r.side > 0 ? 'right' : 'left'} of centre`));
+      problems.push(`at yaw ${r.yaw} a blip ${what} lands ${off.toFixed(0)} degrees off where it belongs on the radar`
+        + ` (${r.x.toFixed(0)},${r.y.toFixed(0)} px, ${len.toFixed(0)} px from centre, expected about 50)`);
     }
   }
 
@@ -357,29 +364,28 @@ if (booted) {
     const out = [];
     for (const yaw of [0.6, -2.0]) {
       p.yaw = yaw; p.bodyYaw = yaw;
-      ctx.hud.minimap.setWaypoint(p.position.x + Math.sin(yaw) * 320, p.position.z + Math.cos(yaw) * 320);
       mn._drawMap();
       const c = mn.el.bigMap;
       const W = c.width, H = c.height;
       const d = c.getContext('2d').getImageData(0, 0, W, H).data;
       const [px, py] = mn._worldToMap(p.position.x, p.position.z);
 
-      let wx = 0, wy = 0, wn = 0;
       const white = [];
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
-          const r = d[i], g = d[i + 1], b = d[i + 2];
-          if (r > 200 && g < 100 && b > 110 && b < 190) { wx += x; wy += y; wn++; }
-          else if (r >= 232 && g >= 232 && b >= 232) {
+          if (d[i] >= 232 && d[i + 1] >= 232 && d[i + 2] >= 232) {
             const dx = x - px, dy = y - py;
             if (dx * dx + dy * dy < 256) white.push([dx, dy]);
           }
         }
       }
-      if (!wn || white.length < 16) { out.push({ yaw, wn, arrowPixels: white.length }); continue; }
-      // Unit vector from the player toward the waypoint, in map pixels.
-      let ux = wx / wn - px, uy = wy / wn - py;
+      // Where "straight ahead" lands on the map, asked of the map's own
+      // projection. Hunting for a pink waypoint in the pixels does not work:
+      // every side job is drawn in the same pink and skews the centroid.
+      const [ax, ay] = mn._worldToMap(p.position.x + Math.sin(yaw) * 300, p.position.z + Math.cos(yaw) * 300);
+      if (white.length < 16) { out.push({ yaw, arrowPixels: white.length }); continue; }
+      let ux = ax - px, uy = ay - py;
       const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
       // Mean width of each half of the arrow. The white fill is inset by the
       // black outline, so the tip can be a pixel or two short of the polygon's
@@ -393,30 +399,33 @@ if (booted) {
         else { tailN++; tailAcross += across; }
       }
       out.push({
-        yaw, wn, arrowPixels: white.length, tipN, tailN,
+        yaw, arrowPixels: white.length, tipN, tailN,
         tipSpread: tipN ? tipAcross / tipN : 0,
         tailSpread: tailN ? tailAcross / tailN : 0,
       });
     }
-    ctx.hud.minimap.setWaypoint(null);
     return out;
   });
   note('');
-  note('map: the player arrow should point at a waypoint placed straight ahead');
+  note('map: the player arrow should point the way the player is heading');
   for (const r of mapArrow) {
-    if (!r.wn || r.arrowPixels < 16) {
-      problems.push(`the map drew ${r.wn ? 'no player arrow' : 'no waypoint'} at yaw ${r.yaw}`);
-      note(`  yaw ${String(r.yaw).padStart(5)}  waypoint px ${r.wn}, arrow px ${r.arrowPixels}  NOTHING TO MEASURE`);
+    if (r.arrowPixels < 16) {
+      problems.push(`the map drew no player arrow at yaw ${r.yaw} (${r.arrowPixels} px found)`);
+      note(`  yaw ${String(r.yaw).padStart(5)}  arrow px ${r.arrowPixels}  NOTHING TO MEASURE`);
       continue;
     }
-    const ok = r.tipN >= 6 && r.tailN >= 6 && r.tailSpread > r.tipSpread + 0.8;
-    note(`  yaw ${String(r.yaw).padStart(5)}  toward the waypoint ${r.tipSpread.toFixed(2)} px wide (${r.tipN} px),`
-      + ` away ${r.tailSpread.toFixed(2)} px wide (${r.tailN} px)   ${ok ? 'ok' : 'WRONG'}`);
+    // Validated offline against the real canvas: with the arrow pointing the
+    // right way the behind half is 0.58 to 0.80 px wider and always holds more
+    // pixels; pointing backwards it is 0.61 to 0.93 px NARROWER and holds
+    // fewer. Both signs are asked for, and the margin sits between the two.
+    const ok = r.tipN >= 5 && r.tailN >= 5 && r.tailSpread > r.tipSpread + 0.25 && r.tailN > r.tipN;
+    note(`  yaw ${String(r.yaw).padStart(5)}  ahead half ${r.tipSpread.toFixed(2)} px wide (${r.tipN} px),`
+      + ` behind half ${r.tailSpread.toFixed(2)} px wide (${r.tailN} px)   ${ok ? 'ok' : 'WRONG'}`);
     if (!ok) {
       problems.push(r.tipN < 6 || r.tailN < 6
         ? `at yaw ${r.yaw} only ${r.tipN}/${r.tailN} arrow pixels fell either side — nothing to measure`
-        : `at yaw ${r.yaw} the map arrow's broad tail faces the waypoint`
-          + ` (${r.tipSpread.toFixed(2)} px mean width toward it, ${r.tailSpread.toFixed(2)} px away) — the arrow points backwards`);
+        : `at yaw ${r.yaw} the map arrow's broad tail faces the way the player is going`
+          + ` (${r.tipSpread.toFixed(2)} px mean width ahead, ${r.tailSpread.toFixed(2)} px behind) — the arrow points backwards`);
     }
   }
 
