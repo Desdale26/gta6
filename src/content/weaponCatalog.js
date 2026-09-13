@@ -1471,7 +1471,14 @@ const DPS_BANDS = {
  * Self-check for the catalog. Returns an array of human-readable problem
  * strings; an empty array means the data satisfies the contract.
  */
-export function validateWeapons() {
+/**
+ * @param {object[]} [list] the catalogue to check; defaults to the real one.
+ *   Passing a copy is how tools/verify-guards.mjs proves this function still
+ *   objects when the data is wrong.
+ */
+export function validateWeapons(list = WEAPONS) {
+  const WEAPONS = list;
+  const BY_ID = new Map(list.map((w) => [w.id, w]));
   const problems = [];
   const seenId = new Set();
   const seenSlotOrder = new Set();

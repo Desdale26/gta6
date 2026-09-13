@@ -380,7 +380,8 @@ export class Game {
     // Deliberately far below what the generator produces (thousands of
     // buildings, tens of thousands of colliders). These are "is it there",
     // not "is it the right size".
-    const FLOOR = { buildings: 200, shops: 12, roadNodes: 60, roadEdges: 60, blocks: 20, colliders: 500, lights: 50 };
+    const FLOOR = { buildings: 200, shops: 12, roadNodes: 60, roadEdges: 60, blocks: 20,
+      colliders: 500, lights: 50, parkedSlots: 100 };
     for (const [key, min] of Object.entries(FLOOR)) {
       const got = st[key];
       if (!Number.isFinite(got)) bad.push(`world.stats.${key} is missing`);
@@ -408,17 +409,21 @@ export class Game {
    */
   _validatePopulation() {
     const ctx = this.ctx;
-    if (!this._popPeak) this._popPeak = { traffic: 0, peds: 0, reported: false };
+    if (!this._popPeak) this._popPeak = { traffic: 0, peds: 0, parked: 0, reported: false };
     const peak = this._popPeak;
     peak.traffic = Math.max(peak.traffic, ctx.traffic ? ctx.traffic.count : 0);
     peak.peds = Math.max(peak.peds, ctx.peds ? ctx.peds.count : 0);
+    // Parked cars stream in and out around the player exactly like traffic
+    // does, capped at a fraction of the traffic budget, so the instantaneous
+    // count says more about where the player is standing than about the city.
+    peak.parked = Math.max(peak.parked, ctx.traffic ? ctx.traffic.parked.length : 0);
     // Give the streamers time to fill in; the budgets are 22 cars and 24 peds
     // even on the cheapest preset, so these floors clear by a wide margin.
     if (peak.reported || ctx.time.elapsed < 15) return [];
     const bad = [];
     if (peak.traffic < 4) bad.push(`no traffic: ${peak.traffic} car(s) at peak after ${ctx.time.elapsed.toFixed(0)}s`);
     if (peak.peds < 5) bad.push(`no pedestrians: ${peak.peds} at peak after ${ctx.time.elapsed.toFixed(0)}s`);
-    if (ctx.traffic && ctx.traffic.parked.length < 10) bad.push(`only ${ctx.traffic.parked.length} parked cars in the whole city`);
+    if (peak.parked < 4) bad.push(`nothing ever parks: ${peak.parked} parked car(s) at peak`);
     if (bad.length) peak.reported = true;
     return bad;
   }

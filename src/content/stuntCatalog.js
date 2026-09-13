@@ -173,7 +173,9 @@ const spotById = new Map(STUNT_SPOTS.map((s) => [s.id, s]));
 export function getSpot(id) { return spotById.get(id); }
 export function getTrick(id) { return TRICKS.find((t) => t.id === id); }
 
-export function validateStunts() {
+/** @param {object[]} [spots] @param {object[]} [tricks] default to the real catalogues. */
+export function validateStunts(spots = STUNT_SPOTS, tricks = TRICKS) {
+  const STUNT_SPOTS = spots, TRICKS = tricks;
   const problems = [];
   const kinds = new Set(['ramp', 'megaramp', 'loop', 'halfpipe', 'quarterpipe', 'gap', 'corkscrew',
     'spiral', 'skatepark', 'wallride', 'seesaw', 'jumppad', 'hoop', 'bowl', 'pipe']);

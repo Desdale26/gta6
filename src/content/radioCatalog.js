@@ -449,7 +449,9 @@ export function getStation(id) { return stationById.get(id); }
 
 const SCALES = ['minor', 'major', 'dorian', 'phrygian', 'mixolydian', 'harmonicMinor', 'pentatonic', 'blues'];
 
-export function validateStations() {
+/** @param {object[]} [list] the catalogue to check; defaults to the real one. */
+export function validateStations(list = STATIONS) {
+  const STATIONS = list;
   const problems = [];
   const seen = new Set();
   for (const s of STATIONS) {

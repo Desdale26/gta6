@@ -2182,7 +2182,15 @@ const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
  * Run every consistency assertion over the catalogue.
  * Returns an array of human-readable problem strings — empty when the data is clean.
  */
-export function validateVehicles() {
+/**
+ * @param {object[]} [list] the catalogue to check; defaults to the real one.
+ *   Passing a copy is how tools/verify-guards.mjs proves this function still
+ *   objects when the data is wrong.
+ */
+export function validateVehicles(list = VEHICLES) {
+  const VEHICLES = list;
+  const BY_ID = new Map(list.map((v) => [v.id, v]));
+  const vehiclesByClass = (cls) => list.filter((v) => v.cls === cls);
   const problems = [];
   const P = (msg) => problems.push(msg);
   const seen = new Set();

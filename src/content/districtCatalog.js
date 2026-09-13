@@ -371,7 +371,9 @@ export function districtStrength(x, z, d) {
   return Math.max(0, 1 - Math.sqrt(dx * dx + dz * dz) / d.radius);
 }
 
-export function validateDistricts() {
+/** @param {object[]} [list] the catalogue to check; defaults to the real one. */
+export function validateDistricts(list = DISTRICTS) {
+  const DISTRICTS = list;
   const problems = [];
   const seen = new Set();
   for (const d of DISTRICTS) {

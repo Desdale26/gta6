@@ -679,7 +679,14 @@ export function storyProgress(completedSet) {
 const OBJECTIVE_KINDS = new Set(['goto', 'kill', 'killAll', 'steal', 'deliver', 'survive', 'race',
   'destroy', 'rob', 'escape', 'protect', 'collect', 'wait', 'photo', 'chase', 'stunt', 'losewanted']);
 
-export function validateMissions() {
+/**
+ * @param {object[]} [list] the catalogue to check; defaults to the real one.
+ *   Passing a copy is how tools/verify-guards.mjs proves this function still
+ *   objects when the data is wrong.
+ */
+export function validateMissions(list = MISSIONS) {
+  const MISSIONS = list;
+  const byId = new Map(list.map((m) => [m.id, m]));
   const problems = [];
   const ids = new Set();
   for (const m of MISSIONS) {

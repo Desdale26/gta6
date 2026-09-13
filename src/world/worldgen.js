@@ -104,6 +104,7 @@ export class World {
       roadNodes: this.roads.nodes.length,
       roadEdges: this.roads.edges.length,
       blocks: this.roads.blocks.length,
+      parkedSlots: this.parkedSlots.length,
       lights: this.lights.length,
       colliders: ctx.physics.statics.length,
       genMs: Math.round(performance.now() - t0),

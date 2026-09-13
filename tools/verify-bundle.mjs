@@ -226,7 +226,7 @@ if (booted) {
     const realStats = ctx.world.stats;
     const noFailures = { buildings: 0, props: 0, stuntSpots: 0, first: null };
     ctx.world.stats = { buildings: 0, shops: 0, roadNodes: 0, roadEdges: 0, blocks: 0,
-      colliders: 0, lights: 0, failures: noFailures };
+      colliders: 0, lights: 0, parkedSlots: 0, failures: noFailures };
     out.emptyCity = g._validateWorld().length;
     ctx.world.stats = { ...realStats, failures: { buildings: 3, props: 1, stuntSpots: 0, first: 'building tower: boom' } };
     out.droppedObjects = g._validateWorld().length;
@@ -243,7 +243,7 @@ if (booted) {
     g._popPeak = null;
     out.deadStreets = g._validatePopulation().length;
     ctx.traffic = realTraffic; ctx.peds = realPeds;
-    g._popPeak = { traffic: 40, peds: 40, reported: false };
+    g._popPeak = { traffic: 40, peds: 40, parked: 20, reported: false };
     out.livePopulation = g._validatePopulation().length;
     ctx.time.elapsed = realElapsed;
     g._popPeak = realPeak;

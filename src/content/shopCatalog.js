@@ -284,7 +284,9 @@ export function generateShopName(rng, type) {
   return `${rng.pick(p.core)} ${rng.pick(p.suffix)}`;
 }
 
-export function validateShops() {
+/** @param {object[]} [list] the catalogue to check; defaults to the real one. */
+export function validateShops(list = SHOP_TYPES) {
+  const SHOP_TYPES = list;
   const problems = [];
   const seen = new Set();
   for (const s of SHOP_TYPES) {

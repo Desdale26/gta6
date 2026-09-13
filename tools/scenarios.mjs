@@ -353,18 +353,29 @@ function startServer() {
 const results = [];
 let errors = [];
 
-async function main() {
-  const server = await startServer();
-  const browser = await chromium.launch({
+// The renderer is SwiftShader on a throttled container, and it does sometimes
+// die partway through a long run. That used to take the whole report with it:
+// all sixteen scenarios ran, the final page.evaluate threw "target closed", and
+// the process exited 2 having printed nothing but the scenario names. So the
+// session is rebuildable, each verdict prints the moment it lands, and a dead
+// page is recorded as a failure rather than swallowing the results.
+let browser = null, page = null, alive = false;
+
+async function openSession() {
+  browser = await chromium.launch({
     args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage', '--mute-audio'],
   });
-  const page = await browser.newPage({ viewport: { width: 800, height: 450 } });
+  page = await browser.newPage({ viewport: { width: 800, height: 450 } });
+  alive = true;
   page.on('console', (m) => {
     const t = m.text();
     if (m.type() !== 'error' || IGNORE.some((r) => r.test(t))) return;
     errors.push('[console] ' + t.slice(0, 400));
   });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + (e.stack || e.message).slice(0, 600)));
+  page.on('crash', () => { alive = false; errors.push('[crash] the renderer process died'); });
+  page.on('close', () => { alive = false; });
+  browser.on('disconnected', () => { alive = false; });
 
   await page.goto(`http://localhost:${PORT}/index.html?smoke=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(() => window.__VC && window.__VC.ready, { timeout: 240000 });
@@ -376,11 +387,42 @@ async function main() {
     c.__anyCar = m.VEHICLES.find((v) => v.cls === 'sedan')?.id || m.VEHICLES[0].id;
     c.__fastCar = m.VEHICLES.find((v) => v.cls === 'super' || v.cls === 'sports')?.id || c.__anyCar;
   });
+}
+
+async function closeSession() {
+  try { await browser?.close(); } catch { /* already gone */ }
+  browser = null; page = null; alive = false;
+}
+
+function line(r) {
+  const issues = r.bad.length + r.errors.length;
+  process.stdout.write(`${issues ? 'FAIL' : 'ok  '}  ${r.name.padEnd(18)} ${(r.ms / 1000).toFixed(1)}s\n`);
+  for (const b of r.bad.slice(0, 8)) process.stdout.write('        ! ' + b.slice(0, 300) + '\n');
+  for (const e of r.errors.slice(0, 6)) process.stdout.write('        × ' + e.slice(0, 300) + '\n');
+}
+
+async function main() {
+  const server = await startServer();
+  await openSession();
 
   if (SHOTS) fs.mkdirSync('shots', { recursive: true });
 
+  let relaunches = 0;
   for (const s of SCENARIOS) {
     if (ONLY.length && !ONLY.includes(s.name)) continue;
+    if (!alive) {
+      // Something killed the page. Note it, start again, and keep going —
+      // the remaining scenarios still have something to say.
+      await closeSession();
+      relaunches++;
+      try {
+        await openSession();
+      } catch (e) {
+        results.push({ name: s.name, ms: 0, bad: ['could not restart the browser: ' + String(e).slice(0, 200)], errors: [] });
+        line(results[results.length - 1]);
+        break;
+      }
+    }
     const errBefore = errors.length;
     const t0 = Date.now();
     try {
@@ -401,11 +443,16 @@ async function main() {
     } catch (e) {
       results.push({ name: s.name, ms: Date.now() - t0, bad: ['scenario threw: ' + String(e).slice(0, 300)], errors: [] });
     }
-    process.stdout.write(`· ${s.name}\n`);
+    line(results[results.length - 1]);
   }
 
-  const report = await page.evaluate(() => window.__VC.report());
-  await browser.close();
+  let report = null;
+  try {
+    if (alive) report = await page.evaluate(() => window.__VC.report());
+  } catch (e) {
+    errors.push('[report] could not read the final state: ' + String(e).slice(0, 200));
+  }
+  await closeSession();
   server.kill();
 
   console.log('\n=== SCENARIO REPORT ===');
@@ -417,9 +464,28 @@ async function main() {
     for (const b of r.bad.slice(0, 8)) console.log('        ! ' + b.slice(0, 300));
     for (const e of r.errors.slice(0, 6)) console.log('        × ' + e.slice(0, 300));
   }
-  console.log('\nfinal state:', JSON.stringify(report));
-  console.log(failures ? `\n${failures}/${results.length} scenarios have issues` : `\nall ${results.length} scenarios clean`);
-  process.exit(failures ? 1 : 0);
+  console.log('\nfinal state:', report ? JSON.stringify(report) : 'unavailable — the page did not survive the run');
+
+  // A run that lost its browser is not a pass, however clean the scenarios were.
+  const expected = SCENARIOS.filter((s) => !ONLY.length || ONLY.includes(s.name)).length;
+  const hard = [];
+  if (relaunches) hard.push(`${relaunches} browser relaunch(es) — the page died mid-run`);
+  if (results.length < expected) hard.push(`only ${results.length} of ${expected} scenarios ran`);
+  if (!report) hard.push('the final state could not be read');
+  for (const h of hard) console.log('  ! ' + h);
+
+  console.log(failures || hard.length
+    ? `\n${failures}/${results.length} scenarios have issues${hard.length ? ` (plus ${hard.length} harness problem(s))` : ''}`
+    : `\nall ${results.length} scenarios clean`);
+  process.exit(failures || hard.length ? 1 : 0);
 }
 
-main().catch((e) => { console.error('harness crashed', e); process.exit(2); });
+main().catch((e) => {
+  // Even a crash in the harness itself should leave behind what it learned.
+  console.error('harness crashed', e);
+  if (results.length) {
+    console.log('\n=== PARTIAL SCENARIO REPORT ===');
+    for (const r of results) line(r);
+  }
+  process.exit(2);
+});
