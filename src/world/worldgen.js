@@ -38,6 +38,11 @@ export class World {
     this.spawnPoints = [];
     this.parkedSlots = [];
     this.stats = {};
+    // Generation failures are counted, not just logged. Every one of them is a
+    // building or a prop that is missing from the city, and a console.warn in a
+    // headless run is a message nobody reads: a world that generated nothing at
+    // all used to boot clean and pass the smoke test.
+    this.failures = { buildings: 0, props: 0, stuntSpots: 0, first: null };
   }
 
   async generate(seedString, onProgress) {
@@ -102,6 +107,7 @@ export class World {
       lights: this.lights.length,
       colliders: ctx.physics.statics.length,
       genMs: Math.round(performance.now() - t0),
+      failures: { ...this.failures },
       merge: this.mergeStats,
     };
     p(1, 'Ready');
@@ -210,11 +216,21 @@ export class World {
     }
   }
 
+  /** Records a generation failure so validate() can see it, and logs the first few. */
+  _failed(bucket, what, err) {
+    this.failures[bucket]++;
+    const msg = `${what}: ${(err && err.message) || err}`;
+    if (!this.failures.first) this.failures.first = msg;
+    const total = this.failures.buildings + this.failures.props + this.failures.stuntSpots;
+    if (total <= 5) console.warn('[worldgen] failed to build', msg);
+    else if (total === 6) console.warn('[worldgen] further generation failures suppressed');
+  }
+
   _placeBuilding(spec, x, y, z, yaw, rng, district, shopFront) {
     const ctx = this.ctx;
     let built;
     try { built = buildBuilding(spec, rng); }
-    catch (err) { console.warn('[worldgen] building failed', spec.kind, err); return null; }
+    catch (err) { this._failed('buildings', `building ${spec.kind}`, err); return null; }
     const { group, colliders, lights } = built;
     group.position.set(x, y, z);
     group.rotation.y = yaw;
@@ -308,7 +324,7 @@ export class World {
     const ctx = this.ctx;
     let prop;
     try { prop = makeProp(kind, opts, rng); }
-    catch (err) { console.warn('[worldgen] prop failed', kind, err); return null; }
+    catch (err) { this._failed('props', `prop ${kind}`, err); return null; }
     const y = opts.y !== undefined ? opts.y : this.terrain.heightAt(x, z);
     prop.group.position.set(x, y, z);
     prop.group.rotation.y = yaw;
@@ -521,7 +537,7 @@ export class World {
         }
         this.stuntSpots.push({ def: spot, x: spot.x, y, z: spot.z, group: built.group, best: 0 });
       } catch (err) {
-        console.warn('[worldgen] stunt spot failed', spot.id, err);
+        this._failed('stuntSpots', `stunt spot ${spot.id}`, err);
       }
     }
   }

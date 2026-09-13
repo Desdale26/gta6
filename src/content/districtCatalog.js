@@ -3,9 +3,28 @@
 // The map is a coastal metropolis: ocean to the east (x > 1150), hills to the west,
 // a canal running roughly north–south through the middle. Districts are resolved with a
 // weighted Voronoi so their edges blend instead of snapping.
+//
+// Every id in here is a reference into a sibling catalogue, and validateDistricts
+// at the bottom resolves all of them. These four imports are what makes that
+// possible; all four are leaf modules that import nothing, so there is no cycle.
+import { getPed } from './pedCatalog.js';
+import { vehiclesByClass, VEHICLE_CLASSES } from './vehicleCatalog.js';
+import { getShopType } from './shopCatalog.js';
+import { getStation } from './radioCatalog.js';
 
 export const DISTRICT_STYLES = ['downtown', 'beach', 'suburb', 'industrial', 'docks', 'airport',
   'hills', 'oldtown', 'strip', 'trailer', 'mall', 'marina', 'financial', 'barrio', 'park'];
+
+// Facade names buildings.js knows how to material. Anything else falls through to
+// plain concrete without complaint, which is a district quietly losing its look.
+export const FACADE_KINDS = ['glass', 'office', 'apartment', 'artdeco',
+  'shopfront', 'brick', 'stucco', 'warehouse', 'concrete'];
+
+// The prop dials worldgen reads off `district.props`. A missing key is not a zero:
+// the generator multiplies it through, gets NaN, and that prop silently never
+// appears anywhere in the district.
+export const DISTRICT_PROP_KEYS = ['palms', 'streetlights', 'billboards',
+  'benches', 'trees', 'hydrants', 'bins', 'parkedCars', 'powerlines', 'neon'];
 
 const P = {
   neonPink: 0xff2d95, neonCyan: 0x22e3ff, neonGold: 0xffc93c, neonLime: 0x4dff9e,
@@ -361,9 +380,59 @@ export function validateDistricts() {
     if (!DISTRICT_STYLES.includes(d.style)) problems.push(`${d.id}: unknown style ${d.style}`);
     if (d.heightRange[0] >= d.heightRange[1]) problems.push(`${d.id}: bad heightRange`);
     if (!(d.density > 0 && d.density <= 1)) problems.push(`${d.id}: density out of range`);
+
+    // Every reference has to resolve. Checking only that these lists are
+    // non-empty passes a district whose entire ped mix is misspelled: the
+    // spawner falls back to something generic and the district loses its
+    // character with nothing in the log to say so.
     if (!d.pedMix.length) problems.push(`${d.id}: empty pedMix`);
+    for (const e of d.pedMix) {
+      if (!getPed(e.id)) problems.push(`${d.id}: pedMix references unknown archetype ${e.id}`);
+      if (!(e.w > 0)) problems.push(`${d.id}: pedMix weight for ${e.id} is ${e.w}`);
+    }
+
     if (!d.vehicleMix.length) problems.push(`${d.id}: empty vehicleMix`);
+    for (const e of d.vehicleMix) {
+      if (!VEHICLE_CLASSES.includes(e.cls)) {
+        problems.push(`${d.id}: vehicleMix references unknown class ${e.cls}`);
+      } else if (!vehiclesByClass(e.cls).some((v) => v.spawnWeight > 0 && !v.tags.includes('police'))) {
+        // The class exists but nothing in it can appear in traffic, so the
+        // spawner silently falls through to "any civilian car".
+        problems.push(`${d.id}: no spawnable civilian vehicle in class ${e.cls}`);
+      }
+      if (!(e.w > 0)) problems.push(`${d.id}: vehicleMix weight for ${e.cls} is ${e.w}`);
+    }
+
     if (!d.shopTypes.length) problems.push(`${d.id}: empty shopTypes`);
+    for (const e of d.shopTypes) {
+      if (!getShopType(e.type)) problems.push(`${d.id}: shopTypes references unknown shop ${e.type}`);
+      if (!(e.w > 0)) problems.push(`${d.id}: shopTypes weight for ${e.type} is ${e.w}`);
+    }
+
+    if (!getStation(d.radio)) problems.push(`${d.id}: radio references unknown station ${d.radio}`);
+
+    if (!d.facade || !d.facade.length) problems.push(`${d.id}: empty facade list`);
+    for (const f of d.facade || []) {
+      if (!FACADE_KINDS.includes(f)) problems.push(`${d.id}: unknown facade ${f}`);
+    }
+
+    // Prop dials: present, numeric and in range. A missing key reads back as
+    // undefined and turns the generator's probability into NaN.
+    for (const k of DISTRICT_PROP_KEYS) {
+      const v = d.props ? d.props[k] : undefined;
+      if (!Number.isFinite(v)) problems.push(`${d.id}: props.${k} is ${v}`);
+      else if (v < 0 || v > 1) problems.push(`${d.id}: props.${k} is ${v}, outside 0..1`);
+    }
+    for (const k of Object.keys(d.props || {})) {
+      if (!DISTRICT_PROP_KEYS.includes(k)) problems.push(`${d.id}: props.${k} is not a dial anything reads`);
+    }
+
+    // Palettes are picked from by index, so an empty band throws at generation time.
+    for (const band of ['wall', 'roof', 'accent', 'neon']) {
+      const arr = d.palette && d.palette[band];
+      if (!Array.isArray(arr) || !arr.length) problems.push(`${d.id}: palette.${band} is empty`);
+    }
+    if (!Number.isFinite(d.palette && d.palette.ground)) problems.push(`${d.id}: palette.ground is missing`);
   }
   // spacing
   for (let i = 0; i < DISTRICTS.length; i++) {

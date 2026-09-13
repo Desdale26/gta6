@@ -66,31 +66,84 @@ if (!css.hiddenWorks) problems.push('.hidden does not compute to display:none �
 if (css.rules < 100) problems.push(`only ${css.rules} CSS rules reached the page`);
 
 // --- 2. it boots ------------------------------------------------------------
+let booted = false;
 try {
   await page.waitForFunction(() => window.__VC && window.__VC.ready === true, null,
     { timeout: 240000, polling: 500 });
+  booted = true;
   note('boot: ok');
 } catch (e) {
   problems.push('did not boot: ' + e.message);
 }
 
-if (!problems.length) {
+// Only the boot gates the rest. Gating on `problems.length` meant a single
+// unrelated console message silently skipped the direction-key test, which is
+// the one check here that exists to catch a bug a player would notice.
+if (booted) {
   // --- 3. overlays actually hide -------------------------------------------
-  await page.evaluate(() => window.__VC.simulate(2));
-  const overlays = await page.evaluate(() => {
-    const out = [];
-    for (const id of ['startScreen', 'start', 'pauseMenu', 'mapScreen', 'phone', 'shop', 'crash']) {
-      const el = document.getElementById(id);
-      if (!el) continue;
-      const cs = getComputedStyle(el);
-      out.push({ id, hidden: el.classList.contains('hidden'), display: cs.display, visible: cs.display !== 'none' });
-    }
-    return out;
-  });
-  for (const o of overlays) {
-    note(`overlay ${o.id.padEnd(12)} class=hidden:${String(o.hidden).padEnd(5)} computed display:${o.display}`);
-    if (o.hidden && o.visible) problems.push(`overlay ${o.id} is marked hidden but still rendering`);
+  // Two halves, because either alone is fair-weather. The named list is the
+  // positive assertion: these specific panels cover the screen, so if one is
+  // still rendering after boot the game is unplayable -- and if an id in the
+  // list no longer exists, that is a failure too, not a quiet skip. (An earlier
+  // version of this check listed ids that had never existed, so it was really
+  // inspecting one element out of seven and passed with the loading screen
+  // welded open.) The sweep is the general assertion: whatever else carries
+  // `.hidden`, it has to actually be gone.
+  const MUST_HIDE = ['loading', 'pauseMenu', 'mapOverlay', 'shopOverlay', 'wheelOverlay',
+    'phoneOverlay', 'deathOverlay', 'crashOverlay', 'debugPanel', 'scopeOverlay'];
+  const MUST_SHOW = ['startGate', 'hud'];
+
+  // The loading screen fades for 900 ms before it is marked hidden, and
+  // `ready` can be observed inside that window.
+  try {
+    await page.waitForFunction(
+      () => document.getElementById('loading')?.classList.contains('hidden'),
+      null, { timeout: 15000, polling: 100 });
+  } catch {
+    problems.push('the loading screen never got the hidden class — it stays over the game');
   }
+
+  await page.evaluate(() => window.__VC.simulate(2));
+  const ov = await page.evaluate(([mustHide, mustShow]) => {
+    const shown = (el) => {
+      const cs = getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden';
+    };
+    const named = [];
+    for (const id of [...mustHide, ...mustShow]) {
+      const el = document.getElementById(id);
+      named.push(el
+        ? { id, missing: false, marked: el.classList.contains('hidden'), display: getComputedStyle(el).display, shown: shown(el) }
+        : { id, missing: true });
+    }
+    const marked = [...document.querySelectorAll('.hidden')];
+    return {
+      named,
+      markedCount: marked.length,
+      markedButShowing: marked.filter(shown).map((el) => el.id || el.className),
+    };
+  }, [MUST_HIDE, MUST_SHOW]);
+
+  for (const o of ov.named) {
+    const want = MUST_HIDE.includes(o.id) ? 'hidden' : 'shown';
+    if (o.missing) {
+      problems.push(`no element #${o.id} — this check is looking for an overlay that no longer exists`);
+      note(`overlay ${o.id.padEnd(13)} MISSING`);
+      continue;
+    }
+    const ok = want === 'hidden' ? !o.shown : o.shown;
+    note(`overlay ${o.id.padEnd(13)} want:${want.padEnd(6)} class=hidden:${String(o.marked).padEnd(5)} display:${o.display.padEnd(7)} ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) {
+      problems.push(want === 'hidden'
+        ? `#${o.id} is still on screen after boot (display:${o.display})`
+        : `#${o.id} never appeared after boot (display:${o.display})`);
+    }
+  }
+  note(`overlay sweep:  ${ov.markedCount} elements carry .hidden, ${ov.markedButShowing.length} of them still render`);
+  // 12 is a floor, not a target: the markup carries about twenty. A sweep that
+  // finds almost nothing is a sweep that has stopped testing anything.
+  if (ov.markedCount < 12) problems.push(`only ${ov.markedCount} elements carry .hidden — the class was probably renamed and this check has gone blind`);
+  for (const id of ov.markedButShowing) problems.push(`element ${id} is marked hidden but still rendering`);
 
   // --- 4. the direction keys move the player the right way ------------------
   // The real question is not "does W do something" but "does W move the player
@@ -105,7 +158,7 @@ if (!problems.length) {
   note('');
   note('key  expected      along-forward  along-right   verdict');
   for (const d of DIRS) {
-    const r = await page.evaluate(([code, ax, sg]) => {
+    const r = await page.evaluate(([code]) => {
       const ctx = window.__VC.ctx;
       const p = ctx.player;
       // Put the player somewhere flat and open, facing a known way, and settle.
@@ -141,7 +194,7 @@ if (!problems.length) {
         alongForward: dist > 1e-6 ? moved.dot(camDir) / dist : 0,
         alongRight: dist > 1e-6 ? moved.dot(camRight) / dist : 0,
       };
-    }, [d.key, d.axis, d.sign]);
+    }, [d.key]);
 
     const along = d.axis === 'forward' ? r.alongForward : r.alongRight;
     const want = d.sign;
@@ -157,6 +210,65 @@ if (!problems.length) {
   // --- 5. nothing the engine itself considers broken ------------------------
   const bad = await page.evaluate(() => window.__VC.validate());
   if (bad && bad.length) for (const b of bad) problems.push('[validate] ' + b);
+  note(`engine validate: ${bad && bad.length ? bad.length + ' problem(s)' : 'clean'}`);
+
+  // --- 6. the guards fail when they should ---------------------------------
+  // A validator that returns nothing is indistinguishable from a validator
+  // that checks nothing, and this project has already shipped one of each. So
+  // the checks get checked: feed the world and population guards a city that
+  // is empty, broken and unpopulated, and require them to object. Every stub
+  // is put back before the next one goes in.
+  const guards = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const g = ctx.game;
+    const out = {};
+
+    const realStats = ctx.world.stats;
+    const noFailures = { buildings: 0, props: 0, stuntSpots: 0, first: null };
+    ctx.world.stats = { buildings: 0, shops: 0, roadNodes: 0, roadEdges: 0, blocks: 0,
+      colliders: 0, lights: 0, failures: noFailures };
+    out.emptyCity = g._validateWorld().length;
+    ctx.world.stats = { ...realStats, failures: { buildings: 3, props: 1, stuntSpots: 0, first: 'building tower: boom' } };
+    out.droppedObjects = g._validateWorld().length;
+    ctx.world.stats = { ...realStats, failures: undefined };
+    out.noFailureTally = g._validateWorld().length;
+    ctx.world.stats = realStats;
+    out.realWorld = g._validateWorld().length;
+
+    const realTraffic = ctx.traffic, realPeds = ctx.peds;
+    const realPeak = g._popPeak, realElapsed = ctx.time.elapsed;
+    ctx.time.elapsed = 60;
+    ctx.traffic = { count: 0, parked: [] };
+    ctx.peds = { count: 0 };
+    g._popPeak = null;
+    out.deadStreets = g._validatePopulation().length;
+    ctx.traffic = realTraffic; ctx.peds = realPeds;
+    g._popPeak = { traffic: 40, peds: 40, reported: false };
+    out.livePopulation = g._validatePopulation().length;
+    ctx.time.elapsed = realElapsed;
+    g._popPeak = realPeak;
+    return out;
+  });
+  const GUARD_CASES = [
+    ['emptyCity', 'fire', 'a city with zero buildings, roads and colliders'],
+    ['droppedObjects', 'fire', 'four objects dropped during generation'],
+    ['noFailureTally', 'fire', 'generation failures not being counted at all'],
+    ['realWorld', 'pass', 'the world that actually generated'],
+    ['deadStreets', 'fire', 'no traffic and no pedestrians after a minute'],
+    ['livePopulation', 'pass', 'a populated city'],
+  ];
+  note('');
+  note('guard self-test (does the check object when it should?)');
+  for (const [key, want, what] of GUARD_CASES) {
+    const n = guards[key];
+    const ok = want === 'fire' ? n > 0 : n === 0;
+    note(`  ${String(n).padStart(2)} problem(s) for ${what.padEnd(52)} ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) {
+      problems.push(want === 'fire'
+        ? `the world/population guard said nothing about ${what} — it is not actually checking`
+        : `the world/population guard objected to ${what}`);
+    }
+  }
 }
 
 await browser.close();
@@ -166,4 +278,4 @@ if (problems.length) {
   problems.slice(0, 20).forEach((p) => console.log('  ! ' + p));
   process.exit(1);
 }
-console.log('single-file bundle verified: stylesheet applied, overlays hide, direction keys correct');
+console.log('single-file bundle verified: stylesheet applied, every overlay hides, direction keys correct,\nengine validate clean, and the world/population guards object when fed a broken world');

@@ -367,6 +367,63 @@ export class Game {
   }
 
   /**
+   * Floors on what generation actually produced. Everything else in validate()
+   * asks whether the world is behaving; this asks whether there is a world at
+   * all. Without it a run that generated an empty map -- no buildings, no
+   * roads, no colliders -- reports no problems, because nothing that does not
+   * exist can misbehave.
+   */
+  _validateWorld() {
+    const bad = [];
+    const st = this.ctx.world && this.ctx.world.stats;
+    if (!st) return ['world generated no stats at all'];
+    // Deliberately far below what the generator produces (thousands of
+    // buildings, tens of thousands of colliders). These are "is it there",
+    // not "is it the right size".
+    const FLOOR = { buildings: 200, shops: 12, roadNodes: 60, roadEdges: 60, blocks: 20, colliders: 500, lights: 50 };
+    for (const [key, min] of Object.entries(FLOOR)) {
+      const got = st[key];
+      if (!Number.isFinite(got)) bad.push(`world.stats.${key} is missing`);
+      else if (got < min) bad.push(`the city only generated ${got} ${key} (expected at least ${min})`);
+    }
+    // A swallowed generation failure is content the player will never see.
+    const f = st.failures;
+    if (f) {
+      const total = (f.buildings || 0) + (f.props || 0) + (f.stuntSpots || 0);
+      if (total > 0) {
+        bad.push(`worldgen dropped ${total} object(s): ${f.buildings} building(s), ${f.props} prop(s),`
+          + ` ${f.stuntSpots} stunt spot(s) — first: ${f.first}`);
+      }
+    } else {
+      bad.push('world.stats.failures is missing — generation failures are not being counted');
+    }
+    return bad;
+  }
+
+  /**
+   * The city has to actually be populated. Traffic and pedestrians stream in
+   * around the player, so this tracks the high-water mark rather than the
+   * instantaneous count -- a momentary dip while a district unloads is normal,
+   * never having spawned anything is not -- and reports once.
+   */
+  _validatePopulation() {
+    const ctx = this.ctx;
+    if (!this._popPeak) this._popPeak = { traffic: 0, peds: 0, reported: false };
+    const peak = this._popPeak;
+    peak.traffic = Math.max(peak.traffic, ctx.traffic ? ctx.traffic.count : 0);
+    peak.peds = Math.max(peak.peds, ctx.peds ? ctx.peds.count : 0);
+    // Give the streamers time to fill in; the budgets are 22 cars and 24 peds
+    // even on the cheapest preset, so these floors clear by a wide margin.
+    if (peak.reported || ctx.time.elapsed < 15) return [];
+    const bad = [];
+    if (peak.traffic < 4) bad.push(`no traffic: ${peak.traffic} car(s) at peak after ${ctx.time.elapsed.toFixed(0)}s`);
+    if (peak.peds < 5) bad.push(`no pedestrians: ${peak.peds} at peak after ${ctx.time.elapsed.toFixed(0)}s`);
+    if (ctx.traffic && ctx.traffic.parked.length < 10) bad.push(`only ${ctx.traffic.parked.length} parked cars in the whole city`);
+    if (bad.length) peak.reported = true;
+    return bad;
+  }
+
+  /**
    * The content catalogues check themselves. Running them once, on the first
    * validate call, means a smoke run fails on a broken mission graph or an
    * out-of-band weapon instead of only on something the physics notices.
@@ -397,7 +454,9 @@ export class Game {
     if (!this._contentChecked) {
       this._contentChecked = true;
       bad.push(...this._validateContent());
+      bad.push(...this._validateWorld());
     }
+    bad.push(...this._validatePopulation());
     const finite = (v, name) => { if (!Number.isFinite(v)) bad.push(`${name} is not finite (${v})`); };
     const p = ctx.player;
     finite(p.position.x, 'player.x'); finite(p.position.y, 'player.y'); finite(p.position.z, 'player.z');
