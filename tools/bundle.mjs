@@ -225,17 +225,49 @@ bundle += `\n__load(${JSON.stringify(entry)});\n`;
 // contains things like `+ '$'` (three's own source does), and in a replacement
 // string `$'` means "everything after the match", which silently eats the file.
 const sub = (text, re, value) => text.replace(re, () => value);
-let outHtml = html;
-outHtml = sub(outHtml, /<script type="importmap">[\s\S]*?<\/script>\s*/, '');
-outHtml = sub(outHtml, /<link[^>]+href="\.\/styles\/game\.css"[^>]*>/, `<style>\n${css}\n</style>`);
-outHtml = sub(outHtml, /<script type="module" src="\.\/src\/main\.js"><\/script>/,
-  `<script type="module">\n${bundle}\n</script>`);
 
-// Anything still pointing at a file on disk would break a standalone copy.
-const leftovers = [...outHtml.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)].map((m) => m[1]);
+// Every substitution below MUST match. A regex that quietly matches nothing is
+// how this tool shipped a build with no stylesheet in it: the pattern required a
+// "./" prefix and the tag is written href="styles/game.css", so the <link>
+// survived, `.hidden{display:none}` never loaded, and every overlay in the game
+// stayed on screen forever. Silence is the failure mode, so it is now an error.
+const subOnce = (text, re, value, what) => {
+  const hits = text.match(new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'));
+  if (!hits || hits.length !== 1) {
+    throw new Error(`bundle: expected exactly one ${what} in index.html, found ${hits ? hits.length : 0}`);
+  }
+  return sub(text, re, value);
+};
+
+let outHtml = html;
+outHtml = subOnce(outHtml, /<script type="importmap">[\s\S]*?<\/script>\s*/, '', 'import map');
+outHtml = subOnce(outHtml, /<link\b[^>]*\brel=["']stylesheet["'][^>]*>/i,
+  `<style>\n${css}\n</style>`, 'stylesheet link');
+outHtml = subOnce(outHtml, /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["'][^"']+["'][^>]*><\/script>/i,
+  `<script type="module">\n${bundle}\n</script>`, 'entry module script');
+
+// Anything still pointing at a file on disk breaks a standalone copy. Absolute
+// URLs are fine (nothing here uses them, but a favicon or font would be); any
+// remaining relative src/href is not, with or without a leading "./".
+const leftovers = [...outHtml.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+  .map((m) => m[1])
+  .filter((u) => !/^(?:[a-z]+:|\/\/|#|data:)/i.test(u));
+
+// The stylesheet is the one asset whose absence is invisible at runtime: no
+// console error, no failed request once inlined, just a game whose UI never
+// hides. Prove it actually landed.
+const cssLanded = outHtml.includes('.hidden{display:none !important}');
 
 writeFileSync(OUT, outHtml);
 const kb = (statSync(OUT).size / 1024).toFixed(0);
 console.log(`bundled ${modules.size} modules into ${relative(ROOT, OUT)} (${kb} KB)`);
 if (cycles.length) { console.log(`WARNING: ${cycles.length} import cycle(s):`); cycles.slice(0, 5).forEach((c) => console.log('  ' + c)); }
-if (leftovers.length) { console.log(`WARNING: still references files on disk:`); [...new Set(leftovers)].forEach((l) => console.log('  ' + l)); }
+
+const fatal = [];
+if (leftovers.length) fatal.push(`still references files on disk: ${[...new Set(leftovers)].join(', ')}`);
+if (!cssLanded) fatal.push('stylesheet did not make it into the bundle');
+if (fatal.length) {
+  for (const f of fatal) console.error('ERROR: ' + f);
+  process.exit(1);
+}
+console.log('stylesheet inlined, no external references');
