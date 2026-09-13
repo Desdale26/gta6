@@ -65,6 +65,19 @@ export class Thing {
 
 - Metres, kilograms, seconds. **+Y is up. -Z is north.** Vehicle forward is local **+Z**.
 - Yaw is rotation about +Y; `0` faces +Z; increases counter-clockwise seen from above.
+- **Build direction vectors from components, never from an Euler.** For yaw `y`
+  and pitch `p`, forward is `(cos p · sin y, sin p, cos p · cos y)`. Going through
+  `new Vector3(0,0,1).applyEuler(p, y, 0, 'YXZ')` instead gives `y = -sin p`, so a
+  positive pitch aims **down** while every other part of the engine — the camera,
+  the character rig, the mouse mapping — treats a positive pitch as looking **up**.
+  That is the bug that made aiming point behind the player.
+- **Screen-right is not `cross(up, forward)`.** A three.js camera looks down its
+  own local **−Z**, so its screen-right axis is local **+X**, which for yaw `y`
+  works out to `(-cos y, 0, sin y)` — the *negative* of `cross(up, forward)`.
+  Project a point at world +X through the chase camera at yaw 0 and it lands at
+  NDC `x = -0.67`, on the left of the screen. Where a test needs this axis, read
+  it off `camera.matrixWorld` column 0; deriving it by hand is how a mirrored
+  strafe once passed its own check.
 - Speeds internally in m/s; the HUD shows mph (`* 2.23694`).
 - Colours are integers (`0xff8844`) unless a `THREE.Color` is explicitly required.
 - The world spans roughly **x,z ∈ [-1600, 1600]**; ocean beyond `x > 1150`.
@@ -73,9 +86,19 @@ export class Thing {
 
 # Content catalog contracts (`src/content/*.js`)
 
-These files are **pure data**: no imports except from `src/core/*`, no DOM, no THREE, no
-side effects. Each exports a frozen array/record plus a lookup helper. They are consumed by
-systems that build meshes and behaviour from them.
+These files are **pure data**: no DOM, no THREE, no side effects, and no imports except from
+`src/core/*` and from each other. Each exports a frozen array/record plus a lookup helper.
+They are consumed by systems that build meshes and behaviour from them.
+
+Cross-catalogue imports exist so that references can be *resolved* rather than merely counted:
+`districtCatalog` imports the ped, vehicle, shop and radio lookups so `validateDistricts` can
+check that every id it names actually exists. Keep those imports one-directional — the four
+leaf catalogues import nothing, and `tools/bundle.mjs` fails the build on an import cycle.
+
+Each `validate*()` takes the data to check as an optional argument, defaulting to the real
+catalogue. `tools/verify-guards.mjs` uses that to pass a deliberately broken copy and fail if
+the validator does not object; the entries are deep-frozen, so there is no other way to prove
+a validator is checking anything at all.
 
 ## `content/vehicleCatalog.js`
 

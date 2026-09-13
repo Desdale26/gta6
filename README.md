@@ -114,13 +114,33 @@ Some details worth knowing:
 ## Testing
 
 ```bash
+npm run check              # everything below, in order
+npm run guards             # breaks each content catalogue and checks it complains
+npm run albedo             # every ground surface against real-world reflectance
+npm run verify             # bundles, then boots the single file and checks it
+npm run scenarios          # 17 gameplay scenarios
 npm run smoke              # boots the game headless and runs 600 frames
-node tools/scenarios.mjs   # 16 gameplay scenarios: driving, shooting, robbing, stunts, weather, lighting…
 node tools/shots.mjs       # writes screenshots to shots/
 node tools/diag.mjs        # one-shot diagnostic dump
-node tools/bundle.mjs      # writes a standalone vice-coast.html
 ```
 
-All of these drive a real browser through Playwright and fail on any console
-error, page error, failed request or NaN that appears along the way. The content
-catalogs additionally validate themselves at import time.
+Most of these drive a real browser through Playwright and fail on any console
+error, page error, failed request or NaN that appears along the way.
+
+The scenarios cover driving, shooting, aiming, robbing, stunts, swimming,
+weather and lighting, and each one runs the engine's own `validate()` every two
+seconds — which checks that the world generated, that the streets fill up, that
+no vehicle is inside the terrain and that no tyre is at 300 °C.
+
+`verify-bundle.mjs` exists because the single-file build once shipped with its
+stylesheet silently dropped. Nothing errored; the only symptom was that nothing
+could hide, so every overlay stayed on screen and the page became a scrolling
+document. Checking for the absence of errors could never have caught it, so that
+tool asserts what is true of a working page instead: the stylesheet applied, the
+overlays are gone, and W/A/S/D each move the player the way the camera is facing.
+
+`verify-guards.mjs` exists for the same reason one layer down. Seven content
+catalogues validate themselves and all seven reported clean — which is also what
+they would report if they checked nothing, and one of them was doing exactly
+that. It hands each validator a copy of its own data with one field wrecked and
+fails if the validator stays quiet.

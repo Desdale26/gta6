@@ -119,6 +119,133 @@ const SCENARIOS = [
     teardown: (c) => { c.input.mouse.left = false; c.input.mouse.right = false; },
   },
   {
+    // The bug a player actually reported was "when you aim, it aims behind
+    // you", and nothing in this suite would have caught it: the shoot scenario
+    // only checks that ammunition goes down. So this one asks where the bullets
+    // go.
+    //
+    // The trap here is that the aim camera is built by pointing it along
+    // player.aimDirection, so comparing the two proves nothing -- a mirrored
+    // aim would mirror the camera with it and still agree with itself. That is
+    // how this bug passed its own test once already. Everything below is
+    // anchored on things aimDirection had no hand in: the yaw convention the
+    // rest of the engine turns by, the chase camera's orbit (built from
+    // player.yaw, not from the aim vector), and a car standing in the street
+    // that has to be the one that gets shot.
+    name: 'aim',
+    seconds: 6,
+    setup: (c) => {
+      const p = c.player;
+      const T = c.THREE;
+      if (p.inVehicle) p.exitVehicle(true);
+      const spot = c.world.safeRoadPoint(806, -300);
+      p.body.position.set(spot.x, c.physics.groundHeight(spot.x, spot.z) + 1.0, spot.z);
+      p.body.velocity.set(0, 0, 0);
+      p.yaw = 0.7; p.pitch = 0;
+      p.weapons.add('assault-rifle', 300);
+      p.weapons.select('assault-rifle');
+      c.input.mouse.right = false;                // hip fire: keep the chase camera
+      window.__VC.simulate(1.5);                  // let the chase camera settle
+
+      // Anchor 1: the engine's yaw convention. Forward is (sin y, 0, cos y) --
+      // the same relation the movement basis and the camera orbit are built on.
+      const convention = new T.Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw));
+      // Anchor 2: where the chase camera is actually looking, read off its world
+      // matrix. It is positioned by orbiting player.yaw, so it is independent of
+      // the aim vector under test.
+      c.camera.updateMatrixWorld(true);
+      const camFwd = new T.Vector3();
+      c.camera.getWorldDirection(camFwd);
+      const camFlat = camFwd.clone(); camFlat.y = 0; camFlat.normalize();
+
+      // Pitch: looking up has to aim up, down the barrel and in the view alike.
+      // The camera half is read as a change rather than an absolute, because a
+      // chase camera orbits and looks back at the player, so its own forward
+      // tilts down at rest — what matters is which way it moves.
+      const sample = (pitch) => {
+        p.pitch = pitch;
+        window.__VC.simulate(0.8);
+        c.camera.updateMatrixWorld(true);
+        const f = new T.Vector3();
+        c.camera.getWorldDirection(f);
+        return { cam: f.y, aim: p.aimDirection.y };
+      };
+      const lookDown = sample(-0.5);
+      const lookUp = sample(0.5);
+      const lookLevel = sample(0);
+
+      // Straight ahead is sometimes a wall, so try a few distances before
+      // giving up — a target that could not be parked is a harness problem,
+      // not an aiming one, and should not read as either.
+      let target = null, range = 0;
+      for (const d of [24, 18, 30, 14]) {
+        target = c.traffic.spawnAt(c.__anyCar, p.position.x + camFlat.x * d, p.position.z + camFlat.z * d,
+          Math.atan2(camFlat.x, camFlat.z), { ai: false });
+        if (target) { range = d; break; }
+      }
+      c.__aim = {
+        convention: [convention.x, convention.y, convention.z],
+        camFlat: [camFlat.x, camFlat.y, camFlat.z],
+        lookDown,
+        lookUp,
+        lookLevel,
+        hits: 0,
+        range,
+        health0: target ? target.sim.health : 0,
+        hasTarget: !!target,
+      };
+      c.__aimTarget = target;
+      c.__aimOff = c.bus.on('combat:vehicleHit', (e) => { if (e.vehicle === c.__aimTarget) c.__aim.hits++; });
+      c.input.mouse.left = true;                  // open fire
+    },
+    assert: (c) => {
+      const bad = [];
+      const a = c.__aim;
+      const p = c.player;
+      const T = c.THREE;
+      const convention = new T.Vector3(...a.convention);
+      const camFlat = new T.Vector3(...a.camFlat);
+      const deg = (d) => (Math.acos(Math.max(-1, Math.min(1, d))) * 180 / Math.PI).toFixed(1);
+
+      // 1. The chase camera looks the way the player's yaw says they face.
+      const camVsYaw = camFlat.dot(convention);
+      if (camVsYaw < 0.95) bad.push(`the chase camera looks ${deg(camVsYaw)} degrees away from the player's facing`);
+
+      // 2. The gun points that way too.
+      const aimFlat = p.aimDirection.clone(); aimFlat.y = 0; aimFlat.normalize();
+      const aimVsYaw = aimFlat.dot(convention);
+      if (aimVsYaw < 0) bad.push(`the gun aims behind the player (dot ${aimVsYaw.toFixed(3)})`);
+      else if (aimVsYaw < 0.9) bad.push(`the gun points ${deg(aimVsYaw)} degrees off the player's facing`);
+
+      // 3. Looking up aims up, in the camera and down the barrel alike.
+      //    sin(0.5) is 0.48, so a correctly signed pitch clears 0.3 easily and
+      //    an inverted one lands at -0.48.
+      if (!(a.lookUp.aim > 0.3)) bad.push(`looking up aimed the gun down (aimDirection.y ${a.lookUp.aim.toFixed(3)})`);
+      if (!(a.lookDown.aim < -0.3)) bad.push(`looking down aimed the gun up (aimDirection.y ${a.lookDown.aim.toFixed(3)})`);
+      if (!(Math.abs(a.lookLevel.aim) < 0.05)) bad.push(`a level view aims ${a.lookLevel.aim.toFixed(3)} off horizontal`);
+      if (!(a.lookUp.cam - a.lookLevel.cam > 0.04)) {
+        bad.push(`looking up did not raise the camera (forward.y ${a.lookLevel.cam.toFixed(3)} -> ${a.lookUp.cam.toFixed(3)})`);
+      }
+      if (!(a.lookLevel.cam - a.lookDown.cam > 0.04)) {
+        bad.push(`looking down did not lower the camera (forward.y ${a.lookLevel.cam.toFixed(3)} -> ${a.lookDown.cam.toFixed(3)})`);
+      }
+
+      // 4. And the car standing in front of the player is the one that gets shot.
+      if (!a.hasTarget) bad.push('could not park a target in front of the player');
+      else {
+        const v = c.__aimTarget;
+        if (a.hits === 0) bad.push(`fired a full magazine at a car ${a.range} m dead ahead and never hit it`);
+        if (v && v.sim.health >= a.health0) bad.push('the target took no damage');
+      }
+      return bad;
+    },
+    teardown: (c) => {
+      c.input.mouse.left = false; c.input.mouse.right = false;
+      if (c.__aimOff) c.__aimOff();
+      c.__aimTarget = null;
+    },
+  },
+  {
     name: 'explosions',
     seconds: 8,
     setup: (c) => {
@@ -231,7 +358,14 @@ const SCENARIOS = [
       if (c.player.position.y < -30) bad.push('player sank through the sea bed');
       return bad;
     },
-    teardown: () => window.__VC.release(),
+    // Put the player back on dry land. Left offshore, every scenario after this
+    // one runs in an empty ocean with no traffic, no pedestrians and no city to
+    // look at — which is a very easy way to pass.
+    teardown: (c) => {
+      window.__VC.release();
+      const spot = c.world.safeRoadPoint(806, -300);
+      c.player.spawn(spot.x, c.physics.groundHeight(spot.x, spot.z) + 1.0, spot.z, spot.yaw || 0);
+    },
   },
   {
     name: 'menus',
