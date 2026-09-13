@@ -130,17 +130,30 @@ error, page error, failed request or NaN that appears along the way.
 The scenarios cover driving, shooting, aiming, robbing, stunts, swimming,
 weather and lighting, and each one runs the engine's own `validate()` every two
 seconds — which checks that the world generated, that the streets fill up, that
-no vehicle is inside the terrain and that no tyre is at 300 °C.
+no vehicle is inside the terrain and that no safety clamp in the sim has had to
+bite.
 
-`verify-bundle.mjs` exists because the single-file build once shipped with its
+Every one of these tools exists because something shipped broken and nothing
+noticed, so they are all written the same way: assert what is true of a working
+game, never merely the absence of errors.
+
+`verify-bundle.mjs` was written after the single-file build shipped with its
 stylesheet silently dropped. Nothing errored; the only symptom was that nothing
 could hide, so every overlay stayed on screen and the page became a scrolling
-document. Checking for the absence of errors could never have caught it, so that
-tool asserts what is true of a working page instead: the stylesheet applied, the
-overlays are gone, and W/A/S/D each move the player the way the camera is facing.
+document. It now asserts the stylesheet applied and every overlay is gone; that
+W/A/S/D each move the player the way the camera is facing and D steers a car
+toward the right of the screen; that a blip 120 m ahead lands above the centre
+of the radar and 120 m to the side lands out to that side; that the map's
+player arrow points where the player is going; that the drawn ground and the
+ground you collide with agree at 256 points across the map; and — because a
+validator that reports nothing looks exactly like one that checks nothing — it
+feeds the engine's own world and population guards an empty, broken city and
+fails if they stay quiet.
 
-`verify-guards.mjs` exists for the same reason one layer down. Seven content
-catalogues validate themselves and all seven reported clean — which is also what
-they would report if they checked nothing, and one of them was doing exactly
-that. It hands each validator a copy of its own data with one field wrecked and
-fails if the validator stays quiet.
+`verify-guards.mjs` does the same one layer down, in Node and in seconds. It
+hands each content validator a copy of its own catalogue with one field wrecked
+and fails if the validator says nothing — 69 wrecked catalogues, 69 caught. It
+also measures three things that are pure geometry and cheap to ask: that traffic
+is put on the right-hand side of the road at every bearing, that the wheels a
+player sees touch the ground, and that the air resists a sliding car rather than
+pushing it along.
