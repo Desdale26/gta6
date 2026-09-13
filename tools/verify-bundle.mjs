@@ -207,6 +207,209 @@ if (booted) {
     note(`${d.name}    ${(want > 0 ? '+' : '-') + d.axis.padEnd(11)} ${r.alongForward.toFixed(2).padStart(11)} ${r.alongRight.toFixed(2).padStart(12)}   ${ok ? 'ok' : 'WRONG'}`);
   }
 
+  // --- 4b. the direction keys in a car -------------------------------------
+  // Same question as above and the same method: hold the key, then measure
+  // which way the car actually went against the camera's own screen-right,
+  // read off its world matrix. The engine's internal steering convention is
+  // self-consistent but says nothing about which side of the screen it is on,
+  // so the only way to answer that is to look at the camera.
+  note('');
+  note('key  expected            lateral   verdict');
+  for (const d of [{ key: 'KeyD', name: 'D', sign: 1 }, { key: 'KeyA', name: 'A', sign: -1 }]) {
+    const r = await page.evaluate(([code]) => {
+      const ctx = window.__VC.ctx;
+      const p = ctx.player;
+      window.__VC.release();
+      if (p.inVehicle) p.exitVehicle(true);
+      const spot = ctx.world.safeRoadPoint(806, -300);
+      p.body.position.set(spot.x, ctx.physics.groundHeight(spot.x, spot.z) + 1.0, spot.z);
+      p.body.velocity.set(0, 0, 0);
+      // A single-file bundle cannot import the catalogue, so borrow a body from
+      // something already driving around.
+      const donor = ctx.traffic.all().find((v) => !v.dead && v.def.body.kind === 'car')
+        || ctx.traffic.all().find((v) => !v.dead);
+      if (!donor) return { error: 'no traffic to borrow a car from' };
+      const car = ctx.traffic.spawnAt(donor.def, spot.x + 3, spot.z + 3, spot.yaw || 0, { ai: false });
+      if (!car) return { error: 'no car could be spawned on the road' };
+      p.enterVehicle(car, 0);
+
+      // Get rolling in a straight line first.
+      window.__VC.hold(['KeyW']);
+      window.__VC.simulate(2.2);
+
+      ctx.camera.updateMatrixWorld(true);
+      const right = new ctx.THREE.Vector3().setFromMatrixColumn(ctx.camera.matrixWorld, 0);
+      right.y = 0; right.normalize();
+      const before = car.sim.position.clone();
+
+      window.__VC.hold(['KeyW', code]);
+      window.__VC.simulate(1.6);
+      window.__VC.release();
+      const moved = car.sim.position.clone().sub(before);
+      moved.y = 0;
+      const dist = moved.length();
+      const speed = car.sim.speed;
+      p.exitVehicle(true);
+      return { dist, speed, lateral: dist > 1e-6 ? moved.dot(right) / dist : 0 };
+    }, [d.key]);
+
+    if (r.error) { problems.push(r.error); note(`${d.name}    ${r.error}`); continue; }
+    // The car keeps most of its momentum down the road over 1.6 s, so the
+    // lateral fraction is modest even in a hard turn; the sign is the point.
+    const ok = r.dist > 3 && r.lateral * d.sign > 0.08;
+    note(`${d.name}    steer ${(d.sign > 0 ? 'right' : 'left ')} on screen  ${r.lateral.toFixed(2).padStart(7)}   ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) {
+      problems.push(r.dist <= 3
+        ? `${d.name} in a car: the car only moved ${r.dist.toFixed(1)} m, nothing to measure`
+        : `${d.name} should steer ${d.sign > 0 ? 'right' : 'left'} but the car went the other way (lateral ${r.lateral.toFixed(2)})`);
+    }
+  }
+
+  // Put the player back on foot before the remaining checks.
+  await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    window.__VC.release();
+    if (ctx.player.inVehicle) ctx.player.exitVehicle(true);
+  });
+
+  // --- 4c. the radar turns with the player ---------------------------------
+  // The minimap draws a "player arrow, always pointing up", so it is a
+  // heading-up radar: whatever is straight ahead in the world has to appear
+  // straight above the centre. Measured by reading the pixels back, because
+  // the question is what the canvas transform actually did, not what the
+  // rotate() call was meant to do.
+  const radar = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const p = ctx.player;
+    const mm = ctx.hud.minimap;
+    if (p.inVehicle) p.exitVehicle(true);
+    const out = [];
+    // Straight ahead and out to the right. "Ahead" alone cannot catch a radar
+    // that is mirrored left-to-right, because a mirror leaves the forward axis
+    // exactly where it was — which is why the sideways case is here.
+    const cases = [
+      { yaw: 0, side: 0 }, { yaw: 1.0, side: 0 }, { yaw: -2.2, side: 0 },
+      { yaw: 0, side: 1 }, { yaw: 1.0, side: 1 }, { yaw: -2.2, side: -1 },
+    ];
+    for (const { yaw, side } of cases) {
+      p.yaw = yaw;
+      // The chase camera damps toward the player's yaw, so give it a moment to
+      // get there before asking it which way is right.
+      window.__VC.release();
+      window.__VC.simulate(0.9);
+      p.yaw = yaw; p.bodyYaw = yaw;      // the radar reads bodyYaw on foot
+      // Ahead is the engine's own forward. Sideways is the camera's screen-right,
+      // read off its world matrix rather than derived.
+      ctx.camera.updateMatrixWorld(true);
+      const right = new ctx.THREE.Vector3().setFromMatrixColumn(ctx.camera.matrixWorld, 0);
+      right.y = 0; right.normalize();
+      const dx = side ? right.x * 120 * side : Math.sin(yaw) * 120;
+      const dz = side ? right.z * 120 * side : Math.cos(yaw) * 120;
+      mm.setWaypoint(p.position.x + dx, p.position.z + dz);
+      mm.draw();
+      const W = mm.canvas.width, H = mm.canvas.height;
+      const d = mm.g.getImageData(0, 0, W, H).data;
+      // The waypoint blip is #ff2d95.
+      let sx = 0, sy = 0, n = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i] > 200 && d[i + 1] < 100 && d[i + 2] > 110 && d[i + 2] < 190) { sx += x; sy += y; n++; }
+        }
+      }
+      out.push(n ? { yaw, side, x: sx / n - W / 2, y: sy / n - H / 2, n } : { yaw, side, n: 0 });
+    }
+    mm.setWaypoint(null);
+    return out;
+  });
+  note('');
+  note('radar: where a waypoint 120 m away actually lands on the canvas');
+  for (const r of radar) {
+    const what = r.side === 0 ? 'straight ahead' : r.side > 0 ? 'out to the right' : 'out to the left';
+    if (!r.n) {
+      problems.push(`the radar drew nothing for a waypoint ${what} at yaw ${r.yaw}`);
+      note(`  yaw ${String(r.yaw).padStart(5)} ${what.padEnd(17)} blip not found`);
+      continue;
+    }
+    // Canvas y grows downward, so "above centre" is a negative y.
+    const ok = r.side === 0
+      ? (r.y < -20 && Math.abs(r.x) < 18)
+      : (r.x * r.side > 20 && Math.abs(r.y) < 18);
+    note(`  yaw ${String(r.yaw).padStart(5)} ${what.padEnd(17)} blip at ${r.x.toFixed(0).padStart(4)},${r.y.toFixed(0).padStart(4)} px   ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) {
+      problems.push(`at yaw ${r.yaw} a waypoint ${what} lands at ${r.x.toFixed(0)},${r.y.toFixed(0)} px on the radar`
+        + (r.side === 0 ? ' — it should be straight above centre' : ` — it should be well to the ${r.side > 0 ? 'right' : 'left'} of centre`));
+    }
+  }
+
+  // --- 4d. the map arrow points where the player is going ------------------
+  // Measured, not derived: put a waypoint a long way straight ahead, draw the
+  // map, and find both the waypoint's pink crosshair and the player's white
+  // arrow in the pixels. The arrow is one pixel wide at the tip and twelve
+  // across at the tail, so which end is which is unambiguous — and the tip has
+  // to be the end facing the waypoint.
+  const mapArrow = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const p = ctx.player;
+    const mn = ctx.menus;
+    if (p.inVehicle) p.exitVehicle(true);
+    mn.mapZoom = 1; mn.mapPan.x = 0; mn.mapPan.z = 0;
+    const out = [];
+    for (const yaw of [0.6, -2.0]) {
+      p.yaw = yaw; p.bodyYaw = yaw;
+      ctx.hud.minimap.setWaypoint(p.position.x + Math.sin(yaw) * 320, p.position.z + Math.cos(yaw) * 320);
+      mn._drawMap();
+      const c = mn.el.bigMap;
+      const W = c.width, H = c.height;
+      const d = c.getContext('2d').getImageData(0, 0, W, H).data;
+      const [px, py] = mn._worldToMap(p.position.x, p.position.z);
+
+      let wx = 0, wy = 0, wn = 0;
+      const white = [];
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          if (r > 200 && g < 100 && b > 110 && b < 190) { wx += x; wy += y; wn++; }
+          else if (r >= 240 && g >= 240 && b >= 240) {
+            const dx = x - px, dy = y - py;
+            if (dx * dx + dy * dy < 200) white.push([dx, dy]);
+          }
+        }
+      }
+      if (!wn || white.length < 20) { out.push({ yaw, wn, arrowPixels: white.length }); continue; }
+      // Unit vector from the player toward the waypoint, in map pixels.
+      let ux = wx / wn - px, uy = wy / wn - py;
+      const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+      let tipSpread = 0, tailSpread = 0, tipN = 0, tailN = 0;
+      for (const [dx, dy] of white) {
+        const along = dx * ux + dy * uy;
+        const across = Math.abs(-dx * uy + dy * ux);
+        if (along > 3) { tipN++; tipSpread = Math.max(tipSpread, across); }
+        else if (along < -3) { tailN++; tailSpread = Math.max(tailSpread, across); }
+      }
+      out.push({ yaw, wn, arrowPixels: white.length, tipSpread, tailSpread, tipN, tailN });
+    }
+    ctx.hud.minimap.setWaypoint(null);
+    return out;
+  });
+  note('');
+  note('map: the player arrow should point at a waypoint placed straight ahead');
+  for (const r of mapArrow) {
+    if (!r.wn || r.arrowPixels < 20) {
+      problems.push(`the map drew ${r.wn ? 'no player arrow' : 'no waypoint'} at yaw ${r.yaw}`);
+      note(`  yaw ${String(r.yaw).padStart(5)}  waypoint px ${r.wn}, arrow px ${r.arrowPixels}  NOTHING TO MEASURE`);
+      continue;
+    }
+    const ok = r.tipN > 0 && r.tailN > 0 && r.tailSpread > r.tipSpread + 1.5;
+    note(`  yaw ${String(r.yaw).padStart(5)}  toward-waypoint end ${r.tipSpread.toFixed(1)} px wide,`
+      + ` away end ${r.tailSpread.toFixed(1)} px wide   ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) {
+      problems.push(`at yaw ${r.yaw} the map arrow's broad tail faces the waypoint`
+        + ` (${r.tipSpread.toFixed(1)} px toward it, ${r.tailSpread.toFixed(1)} px away) — the arrow points backwards`);
+    }
+  }
+
   // --- 5. nothing the engine itself considers broken ------------------------
   const bad = await page.evaluate(() => window.__VC.validate());
   if (bad && bad.length) for (const b of bad) problems.push('[validate] ' + b);
