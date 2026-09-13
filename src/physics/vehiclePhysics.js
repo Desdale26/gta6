@@ -521,7 +521,10 @@ export class VehicleSim {
     // Countersteer assist: nudge the rack toward the slide so the car is catchable.
     if (this.assist > 0 && absFwd > 5 && this.wheelsOnGround >= 3) {
       const drift = Math.atan2(this.lateralSpeed, absFwd);
-      const help = clamp(-drift * this.assist * 0.9, -this.maxSteer * 0.5, this.maxSteer * 0.5);
+      // Catching a slide means steering INTO it: if the tail has stepped out to
+      // the left the rack has to go left too. The negation steered away from
+      // the slide, which is the input that spins a car rather than saving it.
+      const help = clamp(drift * this.assist * 0.9, -this.maxSteer * 0.5, this.maxSteer * 0.5);
       this.steerAngle = clamp(this.steerAngle + help * dt * 6, -this.maxSteer, this.maxSteer);
     }
     this._applySteerGeometry();
@@ -907,7 +910,11 @@ export class VehicleSim {
     for (const w of this.wheels) {
       if (!w.steered) continue;
       // A wheel on the inside of the turn sits closer to the centre.
-      const inner = (w.lx * s) < 0;
+      // The inner wheel is the one on the side the car is turning toward, so
+      // its lateral offset shares the sign of the steer. Testing for the
+      // opposite sign gave the OUTER wheel the tighter angle -- measured at
+      // full lock: 41.1 deg outside against 30.3 deg inside.
+      const inner = (w.lx * s) > 0;
       const arm = R + (inner ? -this.halfTrack : this.halfTrack);
       w.steerAngle = arm > 0.05
         ? s * Math.atan(this.wheelbase / arm)
@@ -1263,7 +1270,10 @@ export class VehicleSim {
       const thrust = this.throttle * this.def.engine.peakPowerKw * 26 * sub;
       this._fx += this.forward.x * thrust;
       this._fz += this.forward.z * thrust;
-      const steerTorque = -this.steerInput * this.speed * this.mass * 0.9;
+      // Positive steerInput is "right" everywhere else in the game, and a
+      // positive yaw torque turns the hull toward its own `right`. Negating it
+      // made D turn a boat left, the opposite of every car in the catalogue.
+      const steerTorque = this.steerInput * this.speed * this.mass * 0.9;
       this._ty += steerTorque;
     } else if (sub > 0.55) {
       this.engineHealth = Math.max(0, this.engineHealth - dt * 0.55);

@@ -120,7 +120,13 @@ if (!problems.length) {
       const camDir = new before.constructor();
       ctx.camera.getWorldDirection(camDir);
       camDir.y = 0; camDir.normalize();
-      const camRight = new before.constructor(camDir.z, 0, -camDir.x); // right = forward rotated -90 about Y
+      // Screen-right is the camera's own local +X, read straight off its world
+      // matrix. Deriving it by hand is how this check previously certified a
+      // mirrored strafe: cross(up, forward) is screen-LEFT for a three.js
+      // camera, because the camera looks down local -Z. Never re-derive it.
+      ctx.camera.updateMatrixWorld(true);
+      const camRight = new before.constructor().setFromMatrixColumn(ctx.camera.matrixWorld, 0);
+      camRight.y = 0; camRight.normalize();
 
       window.__VC.hold([code]);
       window.__VC.simulate(1.0);

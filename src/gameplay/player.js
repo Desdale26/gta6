@@ -206,9 +206,17 @@ export class Player {
     this.yaw = ((this.yaw + Math.PI) % TAU + TAU) % TAU - Math.PI;
 
     // Recoil pushes the actual aim, and the aim decays back down.
+    //
+    // Built explicitly rather than through an Euler: applyEuler(p, y, 0, 'YXZ')
+    // on (0,0,1) gives y = -sin(p), so a positive pitch pointed the gun DOWN
+    // while the third-person camera treats positive pitch as looking UP. The
+    // result was that vertical look inverted the moment you aimed or went first
+    // person, and a shot taken while aiming up went into the ground.
     const r = this.weapons.recoil;
-    _e.set(this.pitch + r.y * 0.016, this.yaw + r.x * 0.012, 0, 'YXZ');
-    this.aimDirection.set(0, 0, 1).applyEuler(_e).normalize();
+    const ap = clamp(this.pitch + r.y * 0.016, -1.5, 1.5);
+    const ay = this.yaw + r.x * 0.012;
+    const acp = Math.cos(ap);
+    this.aimDirection.set(acp * Math.sin(ay), Math.sin(ap), acp * Math.cos(ay)).normalize();
   }
 
   // ---- on foot ------------------------------------------------------------
@@ -224,9 +232,17 @@ export class Player {
     this.crouching = !captured && input.down('crouch');
     this.body.crouching = this.crouching;
 
-    // movement basis from camera yaw
+    // Movement basis from camera yaw.
+    //
+    // Forward is (sin y, 0, cos y), matching aimDirection and the chase camera.
+    // Strafe is the part that is easy to get backwards: a three.js camera looks
+    // down its own local -Z, so its screen-right axis is local +X, which works
+    // out to (-cos y, 0, sin y) -- the NEGATIVE of cross(up, forward). Project a
+    // point at world +X through the chase camera at yaw 0 and it lands at NDC
+    // x = -0.67, i.e. on the left of the screen. Using cross(up, forward) here
+    // sent D to screen-left and A to screen-right.
     const sinY = Math.sin(this.yaw), cosY = Math.cos(this.yaw);
-    _v1.set(mx * cosY + my * sinY, 0, -mx * sinY + my * cosY);
+    _v1.set(-mx * cosY + my * sinY, 0, mx * sinY + my * cosY);
     const mag = _v1.length();
     if (mag > 1) _v1.divideScalar(mag);
 
@@ -359,9 +375,12 @@ export class Player {
       const brake = input.brakeAxis;
       const steer = input.moveX;
       const handbrake = input.down('handbrake') ? 1 : 0;
-      // Holding "back" at a stop selects reverse.
+      // Holding "back" at a stop selects reverse. Once it is selected the back
+      // axis has to become the throttle: input.throttle is max(0, moveY), so
+      // holding S leaves it at zero, and passing brake as 0 too meant the car
+      // shifted into reverse and then sat there with no drive force at all.
       const wantReverse = brake > 0.1 && v.sim.forwardSpeed < 1.2 ? 1 : 0;
-      v.setControls(throttle, wantReverse ? 0 : brake, steer, handbrake, wantReverse);
+      v.setControls(wantReverse ? brake : throttle, wantReverse ? 0 : brake, steer, handbrake, wantReverse);
 
       // Airborne stunt control.
       if (v.sim.wheelsOnGround === 0) {
