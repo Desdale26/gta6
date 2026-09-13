@@ -135,10 +135,15 @@ export class Player {
       this.legs.push({ hip, knee, foot, side });
     }
 
-    // The weapon hangs off the right hand.
+    // The weapon hangs off the right hand. Weapon models are built along their
+    // own +Z, but an arm in this rig points down its local -Y -- every segment
+    // hangs from the joint above it -- so mounting the gun unrotated left it
+    // pointing at right angles to the arm. Measured in game: the visible barrel
+    // sat 101 degrees off the direction the bullets went. A quarter turn about
+    // X lays the barrel along the arm.
     this.arms[1].hand.add(this.weapons.modelGroup);
-    this.weapons.modelGroup.position.set(0, -0.03, 0.06);
-    this.weapons.modelGroup.rotation.set(0, 0, 0);
+    this.weapons.modelGroup.position.set(0, -0.04, 0);
+    this.weapons.modelGroup.rotation.set(Math.PI / 2, 0, 0);
 
     ctx.scene.add(this.group);
     this.animPhase = 0;
@@ -354,7 +359,14 @@ export class Player {
       } else if (aiming || (this.weapons.currentId !== 'fists' && !this.weapons.isMelee)) {
         // Two-handed ready pose, with the off hand supporting.
         const lift = aiming ? 1 : 0.55;
-        arm.shoulder.rotation.x = lerp(-0.2, -1.5, lift) - this.pitch * 0.7 * lift;
+        // The barrel now runs down the arm, so the shoulder and elbow together
+        // have to come to -(PI/2 + pitch) for the gun to point along the aim.
+        // The right elbow sits at -0.25 when raised, hence the base below; and
+        // the pitch is tracked in full rather than at 0.7, so the gun follows
+        // the aim up and down instead of drifting off it. Measured across the
+        // pitch range afterwards: a constant 6.7 degrees, which is the
+        // deliberate sideways splay of the shoulder and nothing else.
+        arm.shoulder.rotation.x = lerp(-0.2, -(Math.PI / 2 - 0.25), lift) - this.pitch * lift;
         arm.shoulder.rotation.z = arm.side * lerp(0.12, i === 1 ? 0.12 : 0.5, lift);
         arm.elbow.rotation.x = lerp(-0.2, i === 1 ? -0.25 : -1.0, lift);
       } else {

@@ -252,9 +252,13 @@ const SCENARIOS = [
       // 4. The gun in the player's hands points where the bullets go. A model
       //    angled off the aim is the difference between a game that looks like
       //    it is shooting at the thing and one that plainly is not.
-      for (const [name, b] of [['aiming down sights', a.barrelAimed], ['from the hip', a.barrelHip]]) {
+      // Aimed is held tight: the arm pose is built to put the barrel on the aim,
+      // and what is left over is the shoulder's deliberate sideways splay, about
+      // 7 degrees. From the hip the gun is carried lowered, around 31 degrees,
+      // so that one only has to stay recognisably forward.
+      for (const [name, b, limit] of [['aiming down sights', a.barrelAimed, 0.9], ['from the hip', a.barrelHip, 0.6]]) {
         if (!b) { bad.push(`no weapon model to measure ${name}`); continue; }
-        if (!(b.cos > 0.5)) {
+        if (!(b.cos > limit)) {
           bad.push(`${name}, the visible barrel points ${deg(b.cos)} degrees away from where the gun shoots`);
         }
       }
