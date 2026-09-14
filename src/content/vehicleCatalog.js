@@ -1391,8 +1391,14 @@ export const VEHICLES = Object.freeze([
 
   veh({
     id: 'tanuki-dustdevil-450', name: 'Tanuki Dust Devil 450', cls: 'motorcycle', seats: 1, doors: 0,
-    length: 2.18, width: 0.84, height: 1.28, wheelbase: 1.48, track: 0.08, mass: 116,
-    cogHeight: 0.62, weightBiasFront: 0.49, eff: 0.82,
+    // 116 kg was this bike dry, with nobody on it, while every other machine in
+    // the catalogue is quoted wet and ridden — 198 for the Revenant, 342 for the
+    // Roadsaint. Forty-two kilowatts on 116 kg is a better power-to-weight than
+    // a superbike, and it showed: full throttle in a straight line stood the
+    // thing on its tail. A 450 enduro with fluids and a rider aboard is a bit
+    // over two hundred.
+    length: 2.18, width: 0.84, height: 1.28, wheelbase: 1.48, track: 0.08, mass: 208,
+    cogHeight: 0.58, weightBiasFront: 0.49, eff: 0.82,
     body: {
       kind: 'bike',
       sections: sec(0.84, 1.28, [[0, 0.30, 0.72, 0.52], [0.12, 0.44, 0.76, 0.46], [0.26, 0.58, 0.66, 0.34],

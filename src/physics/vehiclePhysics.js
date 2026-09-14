@@ -61,6 +61,16 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+// applyImpulseAt needs a scratch vector of its own. It used to borrow _v1, and
+// _v1 is also where _collide() keeps the contact point — so the second of a
+// pair of calls ("push me, push them back, both at the same point") read the
+// first call's leftover torque vector as its contact point. The lever arm that
+// produced was metres long and pointed anywhere, so a gentle nudge between two
+// cars handed one of them an enormous spin; the next substep read the contact's
+// point velocity off that spin, called it a closing speed, and answered with a
+// proportionally enormous impulse. Two cars idling 7 m apart went from 1 m/s to
+// the 140 m/s ceiling in a single frame.
+const _vImp = new THREE.Vector3();
 const _sat = { depth: 0, nx: 0, ny: 0, nz: 0 };
 const _scratch = [];
 
@@ -83,7 +93,26 @@ export class Wheel {
     this.travel = cfg.travel ?? 0.22;
     this.stiffness = cfg.stiffness ?? 42000;
     this.damping = cfg.damping ?? 3600;
-    this.inertia = Math.max(0.6, cfg.radius * cfg.radius * 18);
+    // Rotational inertia of the wheel, hub and brake turning with it.
+    //
+    // r^2 * 18 alone says a wheel's rotating mass is the same whatever it is
+    // bolted to, and it is not: a car wheel and tyre is about 20 kg, a laden
+    // truck's wheel, hub and drum is nearer two hundred. Getting that wrong is
+    // not cosmetic. The tyre's reaction torque scales with the load the corner
+    // carries, so a fourteen-tonne truck with car-sized wheel inertia is a very
+    // stiff system stepped explicitly at 120 Hz — the wheel overshoots road
+    // speed, overshoots back harder, and ends up alternating between spinning
+    // forwards and backwards while the truck is doing 50 km/h. Every bus, both
+    // fire engines, the APC, the mixer and the refuse truck did it, and it cost
+    // them between a third and two thirds of their top speed.
+    //
+    // So scale with the mass the corner actually carries — 5% of it is a good
+    // estimate for unsprung rotating mass, at a radius of gyration of about
+    // three quarters of the tread radius — and keep the old figure as a floor
+    // so nothing light changes at all.
+    const cornerMass = (cfg.vehicleMass ?? 0) * 0.05 / Math.max(1, cfg.wheelCount ?? 4);
+    this.inertia = Math.max(0.6, cfg.radius * cfg.radius * 18,
+      0.56 * cornerMass * cfg.radius * cfg.radius);
 
     // runtime state
     this.compression = 0;          // 0 = fully extended, 1 = bottomed out
@@ -193,6 +222,13 @@ export function wheelMeshLocalY(wheel) {
   return wheel.ly - (wheel.contact ? wheel.suspensionLength : wheel.maxLength);
 }
 
+let _simSerial = 1;
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
 export class VehicleSim {
   /**
    * @param {object} def a VehicleDef from content/vehicleCatalog.js
@@ -202,6 +238,20 @@ export class VehicleSim {
     this.def = def;
     this.phys = phys;
     this.owner = opts.owner || null;
+    // The one place the sim used to reach for Math.random() was the blowout
+    // roll, and that was enough to make two runs of the same scene diverge:
+    // a tyre that lets go a second earlier changes where its car ends up, and
+    // a few seconds later the whole street is somewhere else. Physics that
+    // cannot be replayed cannot be bisected, so the roll comes from here, off
+    // a seed the spawn itself fixes.
+    this._rngState = (Math.imul(hashString(def.id), 0x9e3779b1)
+      ^ Math.imul((opts.x ?? 0) * 73856093 | 0, 1)
+      ^ Math.imul((opts.z ?? 0) * 19349663 | 0, 1)
+      ^ (_simSerial++ * 0x85ebca6b)) >>> 0;
+    // _collide() falls back to this flag when a bare sim is registered as a
+    // dynamic instead of the Vehicle that wraps one. Nothing ever set it, so
+    // the fallback quietly treated such a car as a one-tonne-per-gram wall.
+    this.isVehicleSim = true;
     this.dead = false;
 
     const h = def.handling;
@@ -333,6 +383,7 @@ export class VehicleSim {
     const common = {
       radius: r, width: d.wheels.width, restLength: sp.restLength,
       travel: sp.travel, stiffness: sp.stiffness, damping: sp.damping,
+      vehicleMass: d.mass, wheelCount: d.body.kind === 'bike' ? 2 : (d.body.axles ?? 2) * 2,
     };
 
     if (d.body.kind === 'bike') {
@@ -386,6 +437,16 @@ export class VehicleSim {
     return out;
   }
   /** Velocity of a world point rigidly attached to the body. */
+  /** This body's own xorshift stream. Same spawn, same rolls, every run. */
+  random() {
+    let x = this._rngState;
+    x ^= x << 13; x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5; x >>>= 0;
+    this._rngState = x;
+    return x / 4294967296;
+  }
+
   pointVelocity(wx, wy, wz, out) {
     const rx = wx - this.position.x, ry = wy - this.position.y, rz = wz - this.position.z;
     const w = this.angularVelocity;
@@ -420,12 +481,12 @@ export class VehicleSim {
     if (spin <= 0) return;
     const rx = wx - this.position.x, ry = wy - this.position.y, rz = wz - this.position.z;
     // torque impulse in world → body space → scaled by inverse inertia → back to world
-    _v1.set(ry * iz - rz * iy, rz * ix - rx * iz, rx * iy - ry * ix);
+    _vImp.set(ry * iz - rz * iy, rz * ix - rx * iz, rx * iy - ry * ix);
     _q1.copy(this.quaternion).invert();
-    _v1.applyQuaternion(_q1);
-    _v1.x *= this.invInertia.x; _v1.y *= this.invInertia.y; _v1.z *= this.invInertia.z;
-    _v1.applyQuaternion(this.quaternion);
-    this.angularVelocity.addScaledVector(_v1, spin);
+    _vImp.applyQuaternion(_q1);
+    _vImp.x *= this.invInertia.x; _vImp.y *= this.invInertia.y; _vImp.z *= this.invInertia.z;
+    _vImp.applyQuaternion(this.quaternion);
+    this.angularVelocity.addScaledVector(_vImp, spin);
   }
 
   // -------------------------------------------------------------------------
@@ -482,7 +543,16 @@ export class VehicleSim {
 
     const wantReverse = this.reverseHeld > 0.4 && this.forwardSpeed < 1.4;
     if (wantReverse && this.gear >= 0) { this.gear = -1; return; }
-    if (this.gear === -1 && this.throttle > 0.1 && this.forwardSpeed > -0.4 && this.reverseHeld < 0.2) { this.gear = 1; return; }
+    // Out of reverse the moment the driver asks to go forward — at ANY speed.
+    // This used to hold the box in reverse until the car was already rolling
+    // forward, which made reverse a trap: the throttle drove the wheels the way
+    // the box was pointing, so pressing forward while rolling backwards made the
+    // car go backwards faster, and the faster it went the further it was from
+    // the -0.4 m/s that would have let it change its mind. An AI car that
+    // reversed out of a jam came out of the manoeuvre still in reverse, read its
+    // own -8 m/s as "miles below my target", floored it, and was doing 110 km/h
+    // backwards across the map thirty seconds later.
+    if (this.gear === -1 && this.throttle > 0.1 && this.reverseHeld < 0.2) { this.gear = 1; return; }
     if (this.gear <= 0) { if (!wantReverse && this.gear === 0) this.gear = 1; return; }
 
     const upRpm = e.redlineRpm * (this.throttle > 0.75 ? 0.955 : 0.80);
@@ -562,7 +632,7 @@ export class VehicleSim {
     const driveTorque = this._drivetrain(dt, totalLoad);
     for (let i = 0; i < this.nWheels; i++) this._tyre(this.wheels[i], dt, driveTorque);
     this._chassisGround(dt);
-    if (this.isBike) this._bikeBalance(dt);
+    if (this.isBike) { this._bikeBalance(dt); this._bikeWheelieLimit(dt); }
 
     // ---- aerodynamics ----
     this._aero(dt);
@@ -806,6 +876,39 @@ export class VehicleSim {
    * upright reference that leans into the corner, at the velocity level so the
    * response does not depend on the bike's roll inertia.
    */
+  /**
+   * The rider's weight, fore and aft.
+   *
+   * _bikeBalance keeps a two-wheeler from falling over sideways and nothing
+   * kept it from going over backwards. On most of the catalogue that never came
+   * up, but the Dust Devil is 116 kg with a 1.48 m wheelbase and enough torque
+   * in first to pull a 1 g wheelie: held at full throttle in a straight line it
+   * stood up, went past vertical and finished on its back, every time, in five
+   * seconds. A rider does not sit there and let that happen — they move forward
+   * over the bars, and if that is not enough they shut the throttle.
+   *
+   * Wheelies themselves are the fun part and stay: this only comes in past
+   * BIKE_WHEELIE_LIMIT, only with the front wheel up and the rear still driving,
+   * so a deliberate stunt still lifts the front and a jump is left alone
+   * entirely — in the air neither wheel is on the ground and this does nothing.
+   */
+  _bikeWheelieLimit(dt) {
+    const front = this.wheels[0], rear = this.wheels[1];
+    if (!rear || !rear.contact || !front || front.contact) return;
+    const pitch = Math.asin(clamp(this.forward.y, -1, 1));
+    if (pitch <= BIKE_WHEELIE_LIMIT) return;
+    // Which way round the bike's own right axis lifts the nose. Derived rather
+    // than assumed: the basis convention here has caught this project out often
+    // enough that a cross product is cheaper than being wrong.
+    _v1.crossVectors(this.right, this.forward);
+    const noseUp = _v1.y >= 0 ? 1 : -1;
+    const rate = this.angularVelocity.dot(this.right) * noseUp;
+    const over = (pitch - BIKE_WHEELIE_LIMIT) / BIKE_WHEELIE_LIMIT;
+    const want = -Math.min(3.2, over * 5.5);
+    if (rate <= want) return;
+    this.angularVelocity.addScaledVector(this.right, (want - rate) * Math.min(1, 13 * dt) * noseUp);
+  }
+
   _bikeBalance(dt) {
     const groundedFrac = this.wheelsOnGround / this.nWheels;
     // Deliberate stunt tumbling: keep authority low while airborne and inverted
@@ -899,6 +1002,18 @@ export class VehicleSim {
       let worst = 0;
       for (const w of this.wheels) if (w.driven) worst = Math.max(worst, Math.abs(w.slipRatio));
       if (worst > 0.22) throttle *= clamp(1 - (worst - 0.22) * 2.4, 0.18, 1);
+    }
+    // Anti-wheelie: the other half of _bikeWheelieLimit. Sliding forward over
+    // the bars is what a rider does first; shutting the throttle is what they do
+    // when that is not enough, and it is what every modern bike's electronics
+    // does for them. The weight shift alone could not hold the Dust Devil — 116
+    // kg with enough torque in first for a 1 g wheelie — and it ended up sitting
+    // on its tail at 67 degrees with the back wheel spinning. The front wheel is
+    // long clear of the ground by the time this comes in, so a wheelie is still
+    // a wheelie and still scores as one.
+    if (this.isBike) {
+      const pitch = Math.asin(clamp(this.forward.y, -1, 1));
+      if (pitch > BIKE_WHEELIE_LIMIT) throttle *= clamp(1 - (pitch - BIKE_WHEELIE_LIMIT) * 5.5, 0.06, 1);
     }
     const torque = this.engineTorque(this.engineRpm, throttle) * this.engineHealth;
     // Gearbox, differential and driveshafts are not free. Around 12% of crank
@@ -1074,7 +1189,11 @@ export class VehicleSim {
 
     // --- integrate wheel spin ---
     const reaction = -fLong * wheel.radius;
-    let netTorque = torque + reaction - roll * wheel.radius;
+    const netTorque = torque + reaction - roll * wheel.radius;
+    // The tyre is a very stiff spring against slip, so this step's stability
+    // depends on the wheel having an inertia in proportion to the load it
+    // carries. See Wheel's constructor: get that wrong and a heavy vehicle's
+    // wheels oscillate between spinning forwards and backwards at speed.
     wheel.angularVel = clamp(wheel.angularVel + (netTorque / wheel.inertia) * dt, -420, 420);
     if (brakeTorque > 0) {
       const dv = (brakeTorque / wheel.inertia) * dt;
@@ -1193,7 +1312,7 @@ export class VehicleSim {
     if (nextWear < 0) this.clamped.wear++;
     wheel.wear = clamp(nextWear, 0, 1);
     // A tyre run to the canvas eventually lets go.
-    if (wheel.wear >= 1 && !wheel.flat && wheel.temp > TYRE_MAX_C && Math.random() < dt * 0.35) {
+    if (wheel.wear >= 1 && !wheel.flat && wheel.temp > TYRE_MAX_C && this.random() < dt * 0.35) {
       wheel.flat = true;
       this.lastTyreBlowout = wheel;
     }
@@ -1578,3 +1697,7 @@ export class VehicleSim {
 const UP = new THREE.Vector3(0, 1, 0);
 // Share of a collision impulse's rotation that reaches the body (see applyImpulseAt).
 const COLLISION_SPIN = 0.3;
+// How far a two-wheeler may wheelie before the rider slides forward: 34 degrees
+// is a proper crowd-pleasing wheelie and still a long way short of the balance
+// point, which is where a bike that carries on gets away from its rider.
+const BIKE_WHEELIE_LIMIT = 0.6;

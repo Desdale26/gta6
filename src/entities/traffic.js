@@ -170,6 +170,14 @@ export class VehicleAI {
       v.setControls(throttle, 0, steer, 0, 1);
       return;
     }
+    // Rolling backwards without meaning to: stop, then set off again. Without
+    // this the error term reads a car doing -8 m/s as eight metres per second
+    // short of its target and answers with full throttle, which is exactly the
+    // wrong pedal — it is already going the wrong way.
+    if (speed < -0.6) {
+      v.setControls(0, clamp(-speed * 0.5, 0.35, 1), steer, 0, 0);
+      return;
+    }
     const err = target - speed;
     if (err > 0.4) throttle = clamp(err * 0.38, 0, 1);
     else if (err < -0.6) brake = clamp(-err * 0.34, 0, 1);
@@ -263,14 +271,19 @@ export class VehicleAI {
       this.pathIndex++;
       node = this.path[this.pathIndex];
     }
-    // Offset to the right-hand lane of the segment we're on so we don't drive down the middle.
+    // Offset to the right-hand lane of the segment we're on so we don't drive
+    // down the middle. Facing (dx, dz), the driver's right is (-dz, dx) — the
+    // same normal RoadEdge builds its lanes from. This had the opposite sign,
+    // so anything steering by the path graph rather than by lane — a police car
+    // closing from range, a fleeing driver, anyone sent somewhere — aimed at the
+    // oncoming lane and met the traffic head on.
     _v2.set(node.x, 0, node.z);
     const next = this.path[this.pathIndex + 1];
     if (next) {
       const dx = next.x - node.x, dz = next.z - node.z;
       const l = Math.hypot(dx, dz) || 1;
-      _v2.x += (dz / l) * 2.4;
-      _v2.z += (-dx / l) * 2.4;
+      _v2.x += (-dz / l) * 2.4;
+      _v2.z += (dx / l) * 2.4;
     }
     _v2.y = this.ctxHeight(_v2.x, _v2.z);
     return _v2;

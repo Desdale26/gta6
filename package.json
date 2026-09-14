@@ -7,14 +7,16 @@
   "version": "1.0.0",
   "description": "Vice Coast: Leonida \u2014 an open-world action game that runs entirely in the browser.",
   "scripts": {
-    "start": "node tools/serve.js",
-    "serve": "node tools/serve.js",
-    "smoke": "node tools/smoke.js",
-    "guards": "node tools/verify-guards.mjs",
     "albedo": "node tools/albedo.mjs",
     "bundle": "node tools/bundle.mjs",
-    "verify": "node tools/bundle.mjs && node tools/verify-bundle.mjs",
+    "check": "npm run guards && npm run vehicles && npm run traffic && npm run albedo && npm run verify && npm run scenarios",
+    "guards": "node tools/verify-guards.mjs",
     "scenarios": "node tools/scenarios.mjs",
-    "check": "npm run guards && npm run albedo && npm run verify && npm run scenarios"
+    "serve": "node tools/serve.js",
+    "smoke": "node tools/smoke.js",
+    "start": "node tools/serve.js",
+    "traffic": "node tools/verify-traffic.mjs",
+    "vehicles": "node tools/verify-vehicles.mjs",
+    "verify": "node tools/bundle.mjs && node tools/verify-bundle.mjs"
   }
 }
