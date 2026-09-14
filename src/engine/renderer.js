@@ -18,6 +18,26 @@ import { clamp, RollingAverage } from '../core/mathx.js';
 // Radius of the ambient-occlusion sample disc, in metres of world space.
 const AO_WORLD_RADIUS = 0.9;
 
+// The only resolutions the adaptive scaler is allowed to pick, and how long it
+// must wait between changes. Every change reallocates every render target in the
+// chain, so the set is small and the cooldown is long on purpose.
+/**
+ * How far the camera can see, from the preset that claims to set it.
+ *
+ * This was `Math.max(2400, drawDistance * 2.6)`, which meant the far plane never
+ * went below 2400 m however low the preset's draw distance was — so a preset
+ * asking for 320 m and a preset asking for 900 m drew exactly the same city, and
+ * the setting did nothing on four presets out of five. Measured on a busy street
+ * at medium: geometry beyond 220 m accounted for 999 of 2884 draw calls, and
+ * draw calls are paid by the CPU, so no amount of dropping the resolution could
+ * reach them. The sky mesh sets frustumCulled = false, so nothing needs the far
+ * plane to be huge.
+ */
+function farPlaneFor(preset) { return Math.max(420, (preset.drawDistance || 540) * 1.25); }
+
+const RESOLUTION_RUNGS = [1, 0.85, 0.7, 0.55];
+const RESOLUTION_COOLDOWN = 5;
+
 const COMPOSITE_SHADER = {
   name: 'ViceComposite',
   uniforms: {
@@ -287,7 +307,7 @@ export class Renderer {
     this.scene.matrixWorldAutoUpdate = true;
 
     const preset = settings.preset;
-    this.camera = new THREE.PerspectiveCamera(settings.get('fov'), 1, 0.22, Math.max(2400, preset.drawDistance * 2.6));
+    this.camera = new THREE.PerspectiveCamera(settings.get('fov'), 1, 0.22, farPlaneFor(preset));
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
 
@@ -405,7 +425,7 @@ export class Renderer {
     this.grade.uVignette.value = this.settings.get('vignette');
     this.grade.uDofStrength.value = p.dof ? 0.9 : 0.0;
     this.grade.uAOStrength.value = p.ssao ? 0.55 : 0.0;
-    this.camera.far = Math.max(2400, p.drawDistance * 2.6);
+    this.camera.far = farPlaneFor(p);
     this.camera.updateProjectionMatrix();
     this.resize();
   }
@@ -421,10 +441,13 @@ export class Renderer {
     // pixel budget is the honest limit anyway — it is what the GPU actually
     // pays. The default budget is one 4K frame; the render scale lets you sit
     // below it on a slower machine or push past it for a downsampled image.
-    const dpr = window.devicePixelRatio || 1;
+    // Capped by the preset, not taken at face value. A 2x-density laptop panel
+    // asked for four times the pixels of the same window on a 1x panel, through
+    // the whole post chain, and nothing in the picture was four times better.
+    const dpr = Math.min(window.devicePixelRatio || 1, p.dprCap ?? 1);
     const userScale = clamp(this.settings.get('renderScale') ?? 1, 0.5, 2);
     let ratio = Math.max(0.35, p.pixelRatio * this._resolutionScale * userScale * dpr);
-    const budget = this.settings.get('pixelBudget') || (3840 * 2160);
+    const budget = this.settings.get('pixelBudget') || (1920 * 1080);
     const wanted = w * h * ratio * ratio;
     if (wanted > budget) ratio = Math.sqrt(budget / Math.max(1, w * h));
     this.renderScaleUsed = ratio;
@@ -444,6 +467,12 @@ export class Renderer {
     // of view depth, which is what the shader divides by.
     this.grade.uAORadius.value = AO_WORLD_RADIUS * this.camera.projectionMatrix.elements[5] * 0.5;
     if (this.bloomPass) this.bloomPass.setSize(w * ratio, h * ratio);
+    // Morphological antialiasing reconstructs edges at the resolution it runs at,
+    // and the composer runs at `ratio` while the canvas is stretched back up to
+    // the window. Below about 0.95 the upscale undoes everything SMAA just did,
+    // so it is three passes and two full-size half-float targets spent on a
+    // result the next blit throws away.
+    if (this.smaaPass) this.smaaPass.enabled = !!p.smaa && ratio >= 0.95;
     // Particle points are sized in pixels, from the height of the frame they are
     // drawn into. That was set once during boot and never again, so every spark,
     // splash and puff of smoke stayed the size it was when the window first
@@ -455,24 +484,51 @@ export class Renderer {
   get resolutionScale() { return this._resolutionScale; }
 
   /** Adaptive resolution: keep the frame time near the target. */
+  /**
+   * Adaptive resolution, on four fixed rungs.
+   *
+   * This used to walk the scale in steps of 0.08 down and 0.05 up, every 1.2
+   * seconds, and every single step called resize() — which reallocates the HDR
+   * target, its twin, the depth texture, the composer's buffers, eleven bloom
+   * targets and two SMAA targets. On a machine that was struggling, which is the
+   * only machine this code runs on, that was a GPU reallocation every 1.2
+   * seconds forever. The thing meant to cure the stutter was a metronome for it.
+   *
+   * Four rungs and a five-second cooldown means a settled machine resizes never,
+   * and a struggling one resizes two or three times on the way down and then
+   * stops.
+   */
   _autoScale(dt, frameMs) {
     if (!this.settings.get('autoQuality')) return;
     this._autoTimer += dt;
-    if (this._autoTimer < 1.2) return;
+    if (this._autoTimer < RESOLUTION_COOLDOWN) return;
     this._autoTimer = 0;
     const target = 1000 / (this.settings.get('targetFps') || 60);
-    // `frameMs` times the render alone. On a machine where the simulation costs
-    // more than the draw -- which is most of them once the city is busy -- that
-    // reads comfortably under target while the player is at 30 fps, and the
-    // adaptive resolution responds by turning the resolution UP. `dt` is the
-    // real frame-to-frame time and includes everything.
-    const avg = Math.max(this.frameMs.avg, dt * 1000);
-    if (avg > target * 1.35 && this._resolutionScale > 0.55) {
-      this._resolutionScale = Math.max(0.55, this._resolutionScale - 0.08);
+    const rungs = RESOLUTION_RUNGS;
+    let at = rungs.indexOf(this._resolutionScale);
+    if (at < 0) at = 0;
+    // Down on the honest number: `frameMs` times the render submission alone, and
+    // on a machine where the simulation costs more than the draw that reads
+    // comfortably fast while the player is at 20 fps. dt is what the player feels.
+    const felt = Math.max(this.frameMs.avg, dt * 1000);
+    if (felt > target * 1.3 && at < rungs.length - 1) {
+      this._resolutionScale = rungs[at + 1];
       this.resize();
-    } else if (avg < target * 0.72 && this._resolutionScale < 1) {
-      this._resolutionScale = Math.min(1, this._resolutionScale + 0.05);
-      this.resize();
+      return;
+    }
+    // Up only when there is real headroom AND the frame is actually landing on
+    // time. Comparing dt alone can never climb: a game comfortably hitting vsync
+    // reports dt == target forever, so the old up-branch was unreachable on every
+    // machine that had spare capacity.
+    if (at > 0 && dt * 1000 <= target * 1.06 && this.frameMs.avg < target * 0.45) {
+      this._goodScale = (this._goodScale || 0) + 1;
+      if (this._goodScale >= 3) {
+        this._goodScale = 0;
+        this._resolutionScale = rungs[at - 1];
+        this.resize();
+      }
+    } else {
+      this._goodScale = 0;
     }
   }
 

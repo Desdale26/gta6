@@ -1,46 +1,86 @@
 // settings.js — quality presets + persisted user options.
 const KEY = 'vicecoast.settings.v1';
 
+// Quality presets.
+//
+// These were built as a showcase and shipped as a default, and the result was a
+// game that stuttered on the machine it was written for. Every one of them has
+// come down. The things that changed, and why:
+//
+// - `cascades` is gone. Nothing implemented cascaded shadow maps; the number was
+//   only ever used to pick a shadow extent, so the extent is now stated outright
+//   as `shadowExtent` and it is much smaller. The shadow pass redraws every
+//   caster inside that box, so the extent is the single biggest multiplier on
+//   the draw-call count in the whole renderer.
+// - `shadows` is true everywhere. Whether a light casts a shadow is part of
+//   every material's shader cache key in three.js, so turning shadows off
+//   recompiled the entire city — and it was the adaptive system, on the slowest
+//   machines, that did the turning off. Shadow cost is now controlled by
+//   `shadowMapSize` and `shadowExtent`, neither of which is in the key.
+// - `smaa` is new and off below `high`. The composer runs at the reduced render
+//   resolution and the canvas is stretched back up, so morphological
+//   antialiasing below about 0.95 scale is undone by the bilinear upscale that
+//   follows it. Three passes and two full-resolution half-float targets, for
+//   nothing.
+// - `dprCap` is new. A 4K frame on a high-density laptop display is eight
+//   megapixels through a seventeen-pass post chain, which is where most of "very
+//   laggy" came from.
+// - The population and draw-distance budgets are roughly halved throughout. 900 m
+//   of draw distance in a city this dense was 2.5 million triangles and 5800 draw
+//   calls a frame, and draw calls are paid by the CPU, so no amount of dropping
+//   the resolution could rescue it.
 export const QUALITY_PRESETS = {
   potato: {
-    label: 'Potato', pixelRatio: 0.6, shadows: false, shadowMapSize: 1024, cascades: 1,
-    ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false,
-    drawDistance: 320, pedBudget: 24, trafficBudget: 22, particleBudget: 200,
+    label: 'Potato', pixelRatio: 0.55, shadows: true, shadowMapSize: 512, shadowExtent: 55,
+    ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
+    drawDistance: 320, pedBudget: 18, trafficBudget: 16, particleBudget: 180,
     grassDensity: 0, anisotropy: 1, waterQuality: 0, decalBudget: 48, volumetrics: false,
+    dprCap: 1,
   },
   low: {
-    label: 'Low', pixelRatio: 0.75, shadows: true, shadowMapSize: 1024, cascades: 2,
-    ssao: false, bloom: true, motionBlur: false, dof: false, reflections: false,
-    drawDistance: 450, pedBudget: 40, trafficBudget: 34, particleBudget: 400,
-    grassDensity: 0.25, anisotropy: 2, waterQuality: 1, decalBudget: 96, volumetrics: false,
+    label: 'Low', pixelRatio: 0.7, shadows: true, shadowMapSize: 1024, shadowExtent: 70,
+    ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
+    drawDistance: 420, pedBudget: 28, trafficBudget: 24, particleBudget: 320,
+    grassDensity: 0.2, anisotropy: 2, waterQuality: 1, decalBudget: 96, volumetrics: false,
+    dprCap: 1,
   },
   medium: {
-    label: 'Medium', pixelRatio: 1.0, shadows: true, shadowMapSize: 2048, cascades: 3,
-    ssao: true, bloom: true, motionBlur: true, dof: false, reflections: true,
-    drawDistance: 650, pedBudget: 70, trafficBudget: 55, particleBudget: 900,
-    grassDensity: 0.55, anisotropy: 4, waterQuality: 2, decalBudget: 192, volumetrics: true,
+    label: 'Medium', pixelRatio: 0.85, shadows: true, shadowMapSize: 1024, shadowExtent: 90,
+    ssao: false, bloom: true, motionBlur: true, dof: false, reflections: true, smaa: false,
+    drawDistance: 540, pedBudget: 42, trafficBudget: 34, particleBudget: 650,
+    grassDensity: 0.45, anisotropy: 4, waterQuality: 2, decalBudget: 160, volumetrics: true,
+    dprCap: 1,
   },
   high: {
-    label: 'High', pixelRatio: 1.0, shadows: true, shadowMapSize: 2048, cascades: 4,
-    ssao: true, bloom: true, motionBlur: true, dof: true, reflections: true,
-    drawDistance: 900, pedBudget: 110, trafficBudget: 80, particleBudget: 1600,
-    grassDensity: 0.85, anisotropy: 8, waterQuality: 3, decalBudget: 320, volumetrics: true,
+    label: 'High', pixelRatio: 1.0, shadows: true, shadowMapSize: 2048, shadowExtent: 120,
+    ssao: true, bloom: true, motionBlur: true, dof: false, reflections: true, smaa: true,
+    drawDistance: 720, pedBudget: 75, trafficBudget: 55, particleBudget: 1100,
+    grassDensity: 0.75, anisotropy: 8, waterQuality: 3, decalBudget: 240, volumetrics: true,
+    dprCap: 1,
   },
   ultra: {
-    label: 'Ultra', pixelRatio: 1.25, shadows: true, shadowMapSize: 4096, cascades: 4,
-    ssao: true, bloom: true, motionBlur: true, dof: true, reflections: true,
-    drawDistance: 1300, pedBudget: 160, trafficBudget: 110, particleBudget: 2600,
-    grassDensity: 1.0, anisotropy: 16, waterQuality: 3, decalBudget: 512, volumetrics: true,
+    label: 'Ultra', pixelRatio: 1.15, shadows: true, shadowMapSize: 2048, shadowExtent: 160,
+    ssao: true, bloom: true, motionBlur: true, dof: true, reflections: true, smaa: true,
+    drawDistance: 1000, pedBudget: 120, trafficBudget: 85, particleBudget: 2000,
+    grassDensity: 1.0, anisotropy: 16, waterQuality: 3, decalBudget: 380, volumetrics: true,
+    dprCap: 1.25,
   },
 };
 
 const DEFAULTS = {
-  quality: 'high',
+  // 'high' out of the box asked an ordinary laptop for a 4K frame, seventeen
+  // full-screen post passes, a 190 m shadow box and 900 m of draw distance. It
+  // ran at single-figure frame rates and the adaptive system then spent the next
+  // half minute clawing its way down, stalling on every step. Start where a
+  // laptop can actually live and let a fast machine earn its way up.
+  quality: 'medium',
   autoQuality: true,
   // Render scale multiplies the preset's resolution; pixelBudget is the ceiling
   // on the frame the GPU is actually asked to draw. One 4K frame by default.
   renderScale: 1.0,
-  pixelBudget: 3840 * 2160,
+  // One 1080p frame, not one 4K frame. The old budget meant a 2x-density display
+  // rendered eight megapixels through the whole post chain by default.
+  pixelBudget: 1920 * 1080,
   masterVolume: 0.8,
   sfxVolume: 1.0,
   musicVolume: 0.55,

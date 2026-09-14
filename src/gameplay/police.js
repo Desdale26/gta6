@@ -254,6 +254,8 @@ export class PoliceSystem {
     for (const h of this.helis) {
       h.sound?.stop();
       h.sound = null;
+      this.ctx.lights?.releaseSpot(h);
+      h.spot = null;
       this.ctx.scene.remove(h.group);
     }
     this.helis.length = 0;
@@ -360,16 +362,18 @@ export class PoliceSystem {
     tailRotor.rotation.y = Math.PI / 2;
     group.add(tailRotor);
 
-    const spot = new THREE.SpotLight(0xf0f6ff, 0, 160, 0.22, 0.5, 1.2);
-    spot.position.set(0, -0.6, 1.2);
-    group.add(spot, spot.target);
+    // The searchlight is borrowed from the fixed light pool rather than built
+    // here. A SpotLight added to the scene with the helicopter and removed with
+    // it changes the scene's spot-light count, and that count is part of every
+    // material's shader cache key — so the arrival of the police recompiled the
+    // whole city, and so did their departure.
 
     const p = player.position;
     group.position.set(p.x + 60, 58, p.z + 60);
     ctx.scene.add(group);
 
     const heli = {
-      group, rotor, tailRotor, spot, position: group.position,
+      group, rotor, tailRotor, spot: null, position: group.position,
       vel: new THREE.Vector3(), fireTimer: 2, sound: null,
     };
     heli.sound = ctx.audio?.startLoop('helicopterLoop', { volume: 0.5, position: group.position, maxDistance: 260, refDistance: 25 });
@@ -429,6 +433,8 @@ export class PoliceSystem {
       const h = this.helis[i];
       if (this.stars === 0) {
         h.sound?.stop();
+        ctx.lights?.releaseSpot(h);
+        h.spot = null;
         ctx.scene.remove(h.group);
         this.helis.splice(i, 1);
         continue;
@@ -455,9 +461,22 @@ export class PoliceSystem {
 
       // Searchlight tracks the player at night.
       const night = ctx.sky ? ctx.sky.palette.night : 0;
-      h.spot.intensity = night > 0.2 ? 900 : 0;
-      h.spot.target.position.copy(target);
-      h.spot.target.updateMatrixWorld();
+      if (night > 0.2) {
+        if (!h.spot) h.spot = ctx.lights?.acquireSpots(h, 1, 8)[0] || null;
+        if (h.spot) {
+          h.spot.position.set(h.position.x, h.position.y - 0.6, h.position.z);
+          h.spot.color.setHex(0xf0f6ff);
+          h.spot.distance = 160;
+          h.spot.angle = 0.22;
+          h.spot.penumbra = 0.5;
+          h.spot.intensity = 900;
+          h.spot.target.position.copy(target);
+          h.spot.target.updateMatrixWorld();
+        }
+      } else if (h.spot) {
+        ctx.lights?.releaseSpot(h);
+        h.spot = null;
+      }
 
       // Snipers on board at 5 stars.
       if (this.stars >= 5 && !this.searching) {

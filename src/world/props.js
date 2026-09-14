@@ -190,13 +190,15 @@ export function makeProp(kind, opts = {}, rng) {
           m.position.set(px, h - 0.85 - l * 0.3, pz + 0.17);
           m.userData.lamp = l;   // 0 red, 1 amber, 2 green
           m.userData.head = i;
+          // The lens is the only part of a traffic light that changes at runtime,
+          // so it is the only part that has to stay out of the world merge.
+          m.userData.noMerge = true;
           group.add(m);
           lensMeshes.push(m);
         }
       }
       add(metal, mat('metalPanel', 0x2f3339));
       group.userData.lenses = lensMeshes;
-      group.userData.noMerge = true;   // lenses are switched at runtime
       colliders.push({ type: 'box', x: 0, y: h / 2, z: 0, hw: 0.18, hh: h / 2, hd: 0.18, yaw: 0 });
       break;
     }

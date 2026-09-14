@@ -118,6 +118,7 @@ export class World {
       genMs: Math.round(performance.now() - t0),
       failures: { ...this.failures },
       merge: this.mergeStats,
+      shadows: this.shadowStats,
     };
     p(1, 'Ready');
     return this;
@@ -583,6 +584,7 @@ export class World {
       child.updateMatrixWorld(true);
       let mergeable = true;
       const collected = [];
+      let stayed = 0;
       child.traverse((o) => {
         if (!o.isMesh) return;
         // Skinned, instanced or multi-material meshes stay as they are.
@@ -590,6 +592,13 @@ export class World {
           mergeable = false;
           return;
         }
+        // A single mesh can opt out without condemning the whole prop. This used
+        // to be a flag on the group, and a traffic light sets it because its six
+        // lens caps switch material at runtime — so the pole, the arm and the two
+        // housings stayed out of the merge along with them. Six hundred traffic
+        // lights times four static meshes is two and a half thousand draw calls
+        // held back by six that had a reason.
+        if (o.userData.noMerge) { stayed++; return; }
         collected.push(o);
       });
       if (!mergeable || !collected.length) continue;
@@ -624,10 +633,17 @@ export class World {
         b.cast = b.cast || mesh.castShadow;
         b.receive = b.receive || mesh.receiveShadow;
       }
-      toRemove.push(child);
+      toRemove.push({ child, collected, keep: stayed > 0 });
     }
 
-    for (const child of toRemove) {
+    for (const { child, collected, keep } of toRemove) {
+      if (keep) {
+        // Some of this prop is still live. Take out only what was merged, and
+        // leave the group where it is so whatever drives it at runtime still has
+        // its handles.
+        for (const m of collected) { m.parent?.remove(m); m.geometry?.dispose?.(); }
+        continue;
+      }
       this.group.remove(child);
       child.traverse((o) => { if (o.isMesh) o.geometry?.dispose?.(); });
     }
@@ -661,6 +677,42 @@ export class World {
       if (++yielded % 60 === 0) await yieldFrame();
     }
     this.mergeStats = { sources: considered, chunks: merged };
+    this._trimShadowCasters();
+  }
+
+  /**
+   * Decide what is worth a second pass.
+   *
+   * Everything the world generator made cast a shadow, and the shadow map is a
+   * whole extra render of every caster inside the sun's box. Measured on a busy
+   * street: 4036 of the scene's 8371 meshes cast, and the shadow pass alone was
+   * 865 of 1810 draw calls — very nearly half the frame, spent on a picture that
+   * is one grey channel.
+   *
+   * Most of those casters were objects whose shadow nobody could identify: bin
+   * lids, sign brackets, the six lens caps on every traffic light. So the rule is
+   * size. Anything under a couple of metres across stops casting and keeps
+   * receiving, which is the half of the effect that actually reads — an object
+   * still sits in the shade of the building above it, it just no longer pays for
+   * its own two-centimetre smudge. The merged building chunks are enormous and
+   * keep casting, which is the shadow you were looking at anyway.
+   */
+  _trimShadowCasters() {
+    const MIN_CASTER_RADIUS = 2.2;
+    let off = 0, kept = 0;
+    this.group.traverse((o) => {
+      if (!o.isMesh || !o.castShadow) return;
+      // Traffic lights are a special case: 620 of them, six lens caps and a pole
+      // each, and the pole is tall enough to pass the size test while casting a
+      // shadow two pixels wide. They were 934 casters on their own.
+      const isLight = o.parent && o.parent.userData && o.parent.userData.isTrafficLight;
+      const g = o.geometry;
+      if (g && !g.boundingSphere) g.computeBoundingSphere();
+      const scale = Math.max(Math.abs(o.scale.x), Math.abs(o.scale.y), Math.abs(o.scale.z));
+      const r = g && g.boundingSphere ? g.boundingSphere.radius * scale : 0;
+      if (isLight || r < MIN_CASTER_RADIUS) { o.castShadow = false; off++; } else kept++;
+    });
+    this.shadowStats = { casters: kept, trimmed: off };
   }
 
   _buildWater() {
@@ -724,7 +776,10 @@ export class World {
   updateTrafficLights(camX, camZ) {
     const graph = this.roads;
     if (!graph) return;
-    const VIS2 = 150 * 150;
+    // 150 m of traffic lights in a city with a junction every ninety metres is
+    // several hundred of them, six lens meshes apiece, all drawn individually.
+    // At 95 m you still see the one you are stopping at and the one after it.
+    const VIS2 = 95 * 95;
     const mats = trafficLightMaterials();
     for (const light of graph.lights) {
       const n = light.node;
@@ -743,7 +798,14 @@ export class World {
         const lenses = g.userData.lenses;
         if (!lenses) continue;
         for (const m of lenses) {
-          const want = m.userData.lamp === lit ? mats.on[m.userData.lamp] : mats.off[m.userData.lamp];
+          // Only the lamp that is lit is drawn. The other two are a dark disc on
+          // a dark housing, indistinguishable from the housing itself at any
+          // distance you can see a traffic light from — and they were two thirds
+          // of the several hundred lens draw calls a city frame was spending.
+          const on = m.userData.lamp === lit;
+          if (m.visible !== on) m.visible = on;
+          if (!on) continue;
+          const want = mats.on[m.userData.lamp];
           if (m.material !== want) m.material = want;
         }
       }

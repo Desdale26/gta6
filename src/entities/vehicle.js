@@ -7,6 +7,7 @@ import { LAYER, SURFACE, SURFACE_PROPS } from '../physics/world.js';
 import { AmbientEngineSound } from '../audio/engineSound.js';
 
 const _v1 = new THREE.Vector3();
+const _lampPos = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
@@ -107,25 +108,52 @@ export class Vehicle {
   get name() { return this.def.name; }
 
   // -------------------------------------------------------------------------
+  /**
+   * Ask for headlight beams. This used to build two SpotLights and parent them
+   * to the car, and give them back when the car was disposed — which changed the
+   * number of spot lights in the scene, which is part of every material's shader
+   * cache key, which recompiled every material in the city. Getting into a car
+   * cost a stall; so did every police unit that spawned. The beams now come from
+   * a fixed pool that lives in the scene for the whole session (see
+   * render/lighting.js), so this is a borrow, not an allocation.
+   */
   attachHeadlightSpots() {
-    if (this.hasSpots || this.def.body.kind === 'boat') return;
+    if (this.def.body.kind === 'boat') return;
+    this.hasSpots = true;
+    this._lightsDirty = true;
+  }
+  detachHeadlightSpots() {
+    this.ctx.lights?.releaseSpot(this);
+    this.headSpots.length = 0;
+    this.hasSpots = false;
+  }
+  /** The pool took our beams back for something more important. */
+  onSpotLightLost() { this.headSpots.length = 0; }
+
+  /**
+   * Put the borrowed beams where this car's headlamps are. They are pool lights
+   * living in world space rather than children of the car, so their transform is
+   * ours to maintain — cheaper than it sounds, since it is two matrix-transformed
+   * points per lit car per frame and only a handful of cars are ever lit.
+   */
+  _placeHeadSpots(intensity) {
     const cfg = this.def.lights || {};
     const hY = (cfg.headlightY ?? 0.58) * this.def.height - this.def.height * 0.5;
     const spread = (cfg.headlightSpread ?? 0.72) * this.def.width * 0.42;
-    for (const sx of [-1, 1]) {
-      const s = new THREE.SpotLight(0xfff0d0, 0, 62, 0.60, 0.45, 1.4);
-      s.position.set(sx * spread, hY, this.def.length * 0.46);
-      s.target.position.set(sx * spread * 1.6, hY - 5, this.def.length * 0.46 + 26);
-      s.castShadow = false;
-      this.group.add(s, s.target);
-      this.headSpots.push(s);
+    this.group.updateMatrixWorld();
+    for (let i = 0; i < this.headSpots.length; i++) {
+      const s = this.headSpots[i];
+      const sx = i === 0 ? -1 : 1;
+      _lampPos.set(sx * spread, hY, this.def.length * 0.46).applyMatrix4(this.group.matrixWorld);
+      s.position.copy(_lampPos);
+      _lampPos.set(sx * spread * 1.6, hY - 5, this.def.length * 0.46 + 26).applyMatrix4(this.group.matrixWorld);
+      s.target.position.copy(_lampPos);
+      s.intensity = intensity;
+      s.color.setHex(0xfff0d0);
+      s.distance = 62;
+      s.angle = 0.60;
+      s.penumbra = 0.45;
     }
-    this.hasSpots = true;
-  }
-  detachHeadlightSpots() {
-    for (const s of this.headSpots) { this.group.remove(s, s.target); s.dispose?.(); }
-    this.headSpots.length = 0;
-    this.hasSpots = false;
   }
 
   // -------------------------------------------------------------------------
@@ -262,8 +290,17 @@ export class Vehicle {
     if (wantHeads !== this.headlightsOn || this._lightsDirty) {
       this.headlightsOn = wantHeads;
       this.headMaterial.emissiveIntensity = wantHeads ? 3.4 : 0;
-      for (const s of this.headSpots) s.intensity = wantHeads ? 46 : 0;
       this._lightsDirty = false;
+      if (!wantHeads && this.headSpots.length) { ctx.lights?.releaseSpot(this); this.headSpots.length = 0; }
+    }
+    if (this.hasSpots && wantHeads) {
+      // The player's own beams are the ones lighting the road they are looking
+      // down, so they outrank the fifth police car in the queue for a pool slot.
+      if (!this.headSpots.length && ctx.lights) {
+        const mine = ctx.player && ctx.player.vehicle === this;
+        this.headSpots = ctx.lights.acquireSpots(this, 2, mine ? 10 : 4);
+      }
+      if (this.headSpots.length) this._placeHeadSpots(46);
     }
     // brake / reverse
     const braking = sim.brake > 0.05 || (sim.handbrake > 0.1 && sim.speed > 0.4);

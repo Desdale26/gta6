@@ -163,7 +163,10 @@ export function buildWheel(def, materials, rng) {
   sidewallA.rotateY(Math.PI / 2); sidewallA.translate(w * 0.5, 0, 0);
   const sidewallB = sidewallA.clone(); sidewallB.rotateY(Math.PI);
   const tyre = new THREE.Mesh(mergeGeometries([tyreGeo, sidewallA, sidewallB], false) || tyreGeo, materials.tire);
-  tyre.castShadow = true;
+  // Wheels do not cast. They live under a body that already casts a shadow over
+  // the ground they would darken, and four tyres and four rims is eight extra
+  // draws into the shadow map per car for a difference nobody can point to.
+  tyre.castShadow = false;
   group.add(tyre);
 
   const rimParts = [];
@@ -193,7 +196,7 @@ export function buildWheel(def, materials, rng) {
     : def.wheels.rimColor !== undefined ? materials.rimDark : (rng && rng.bool(0.45) ? materials.rimChrome : materials.rimDark);
   if (rimGeo) {
     const rim = new THREE.Mesh(rimGeo, rimMat);
-    rim.castShadow = true;
+    rim.castShadow = false;
     group.add(rim);
   }
   // brake disc + caliper

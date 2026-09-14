@@ -283,25 +283,31 @@ export class Ped {
     this.group.add(root);
     this.root = root;
 
-    const mk = (geo, mat, x, y, z) => {
+    // Only the parts that make the silhouette cast. A pedestrian is fifteen small
+    // meshes and every one of them used to be redrawn into the shadow map, which
+    // with the city's pedestrian budget was the single largest block of draw
+    // calls in the shadow pass — measured at 776 of a 1781-call frame for the
+    // peds alone. Torso, hips and head are the shape you recognise on the
+    // pavement; the shadow of a separate forearm at this scale is four pixels.
+    const mk = (geo, mat, x, y, z, shadow = false) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
-      m.castShadow = true;
+      m.castShadow = shadow;
       m.receiveShadow = false;
       return m;
     };
 
     // torso + hips
-    this.torso = mk(g.torso, topM, 0, 1.18 * s, 0);
+    this.torso = mk(g.torso, topM, 0, 1.18 * s, 0, true);
     root.add(this.torso);
-    this.hips = mk(g.hips, botM, 0, 0.93 * s, 0);
+    this.hips = mk(g.hips, botM, 0, 0.93 * s, 0, true);
     root.add(this.hips);
 
     // head
     this.neck = new THREE.Group();
     this.neck.position.set(0, 1.42 * s, 0);
     root.add(this.neck);
-    this.head = mk(g.head, skinM, 0, 0.06, 0);
+    this.head = mk(g.head, skinM, 0, 0.06, 0, true);
     this.neck.add(this.head);
     const hair = mk(g.hair, hairM, 0, 0.06, 0);
     this.neck.add(hair);

@@ -119,6 +119,15 @@ export class Game {
       this.grantStarterKit();
     }
 
+    // Hand the quality preset to everything that has to act on it. Nothing did
+    // this at boot: the renderer configured itself from the preset in its own
+    // constructor, but the sky kept the shadow map size and the shadow extent it
+    // was built with, and the traffic and pedestrian budgets kept their defaults,
+    // until the adaptive system happened to step the preset. A city booted on
+    // 'medium' was drawing 'high' shadows over a 140 m box.
+    p(0.96, 'Setting the dials');
+    this.applyQuality();
+
     p(0.98, 'Ready');
     this.running = true;
     return this;
@@ -306,16 +315,16 @@ export class Game {
 
   applyQuality() {
     const ctx = this.ctx;
-    const hadShadows = ctx.renderer.renderer.shadowMap.enabled;
+    // No scene-wide material rebuild here any more, and nothing should ever put
+    // one back. It existed because switching shadows on or off changes the shader
+    // every material compiles to, so every material had to be rebuilt — a stall
+    // of hundreds of milliseconds across a scene of two thousand meshes. The
+    // adaptive quality system called this, which meant the machine slow enough to
+    // need a lower preset was punished with the longest stall in the game for
+    // asking. Shadows are now on at every preset (their cost is the map size and
+    // the extent, neither of which is in the shader key), so the rebuild is not
+    // needed and the stall is gone.
     ctx.renderer.applyQuality();
-    if (hadShadows !== ctx.renderer.renderer.shadowMap.enabled) {
-      // Shadow support is compiled into each program, so every material needs rebuilding.
-      ctx.scene.traverse((o) => {
-        if (!o.material) return;
-        const list = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of list) m.needsUpdate = true;
-      });
-    }
     ctx.sky.setQuality(ctx.settings.preset);
     ctx.traffic.budget = ctx.settings.preset.trafficBudget;
     ctx.peds.budget = ctx.settings.preset.pedBudget;

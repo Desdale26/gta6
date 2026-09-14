@@ -202,7 +202,7 @@ export class Sky {
     // --- lights ---
     this.sun = new THREE.DirectionalLight(0xfff3dc, 3);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.035;
     this.sun.shadow.camera.near = 1;
@@ -241,13 +241,19 @@ export class Sky {
   }
 
   setQuality(preset) {
-    const size = preset.shadowMapSize || 2048;
+    const size = preset.shadowMapSize || 1024;
     if (this.sun.shadow.mapSize.x !== size) {
       this.sun.shadow.mapSize.set(size, size);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
-    this.sun.castShadow = !!preset.shadows;
-    this._setShadowExtent(preset.cascades >= 4 ? 190 : preset.cascades >= 3 ? 150 : 110);
+    // castShadow is deliberately NOT touched here. Whether a light casts a shadow
+    // is part of every material's shader cache key, so turning it off for the
+    // potato preset recompiled the entire city — and the potato preset is exactly
+    // what the adaptive system drops a struggling machine to, which meant the
+    // machine least able to afford a stall got one at the worst moment. Shadow
+    // COST is controlled by the map size and the extent below, neither of which
+    // is in the key, and the cheapest setting is cheap enough.
+    this._setShadowExtent(preset.shadowExtent || 110);
     // The environment probe is what puts the sky and the neon into every wet
     // road and car body, so it is the reflection budget.
     this.reflections = preset.reflections !== false;
@@ -323,7 +329,15 @@ export class Sky {
     const sunStrength = p.sunI * 0.95 * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
     this.sun.color.copy(p.sun);
     this.sun.intensity = sunStrength;
-    this.sun.visible = sunStrength > 0.01;
+    // The sun stays IN the scene after dark, turned down rather than hidden.
+    // Hiding it changed the scene's directional-light count and its
+    // shadow-casting-light count, both of which are part of every material's
+    // shader cache key — so dusk recompiled every material in the city, and so
+    // did dawn. Measured: the program count jumped from 58 to 100 crossing
+    // nightfall. An intensity of zero costs a multiply; a recompile costs frames.
+    // Its shadow map stops being redrawn instead, which is where the real saving
+    // was anyway.
+    this.sun.shadow.autoUpdate = sunStrength > 0.01;
     this.moon.color.setHex(0xaebeff);
     this.moon.intensity = p.night * 0.55 * (1 - overcast * 0.8);
     this.moon.position.copy(this.moonDir).multiplyScalar(400);

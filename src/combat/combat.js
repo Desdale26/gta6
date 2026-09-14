@@ -391,19 +391,13 @@ export class CombatSystem {
     ctx.decals?.addScorch(x, ctx.physics.groundHeight(x, z) + 0.02, z, radius * 0.55);
     ctx.cameraRig?.shake(clamp(radius * 0.16, 0.3, 2.2), 0.7);
     ctx.renderer?.grade && (ctx.renderer.grade.uFlash.value = Math.min(0.5, radius * 0.03));
+    ctx.lights?.flash(x, y + 1, z, 0xff9040, radius * 7, 0.45, radius * 6);
 
-    // A momentary light makes the blast read properly at night.
-    const light = new THREE.PointLight(0xff9040, radius * 7, radius * 6, 1.8);
-    light.position.set(x, y + 1, z);
-    ctx.scene.add(light);
-    let t = 0;
-    const fade = () => {
-      t += 0.05;
-      light.intensity = Math.max(0, radius * 7 * (1 - t / 0.45));
-      if (t < 0.45) setTimeout(fade, 50);
-      else ctx.scene.remove(light);
-    };
-    setTimeout(fade, 40);
+    // A momentary light makes the blast read properly at night. It comes from the
+    // light pool: adding a PointLight to the scene and taking it away again 450 ms
+    // later changes the scene's light count twice, and every material in the city
+    // is recompiled on each change. Two multi-frame stalls per explosion, which is
+    // the worst possible moment to have one.
 
     // --- peds ---
     if (ctx.peds) {

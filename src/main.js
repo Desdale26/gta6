@@ -155,10 +155,27 @@ async function boot() {
   // ...and again every time the window changes size, which is what the old
   // single call at boot never did.
   ctx.renderer.onResized = (w, h) => ctx.particles.setPixelScale(h);
+  // Compile every shader in the city before the player sees the city.
+  //
+  // "First render primes shaders" was wishful: a render only compiles what is
+  // inside the first frame's frustum, which is one street. Every other material
+  // compiled the first time the player turned a corner and saw it — a stall, at
+  // the exact moment they were moving. renderer.compile walks the whole scene
+  // instead, and because the number of lights in the scene is now fixed for the
+  // session (see render/lighting.js), what it compiles here is what runs for the
+  // rest of the game rather than being invalidated at the next dusk.
+  setProgress(0.985, 'Compiling shaders');
+  const cam = ctx.renderer.camera;
+  if (ctx.renderer.renderer.compileAsync) {
+    // The async form yields between materials, so the loading bar keeps painting
+    // instead of the page appearing to hang on a big scene.
+    await ctx.renderer.renderer.compileAsync(ctx.scene, cam);
+  } else {
+    ctx.renderer.renderer.compile(ctx.scene, cam);
+  }
   clearInterval(tipTimer);
   setProgress(1, 'Ready');
 
-  // First render primes shaders so the first interactive frame isn't a stutter.
   ctx.renderer.render(1 / 60, 0);
 
   el.loading.classList.add('gone');
