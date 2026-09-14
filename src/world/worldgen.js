@@ -719,15 +719,19 @@ export class World {
     const size = (WORLD.maxX - WORLD.minX) * 1.4;
     const geo = new THREE.PlaneGeometry(size, size, 64, 64);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshPhysicalMaterial({
+    // Standard, not Physical. A clearcoat layer is a second full specular lobe
+    // evaluated per light per pixel plus its own environment sample, and this
+    // material covers the entire horizon — on a coastal map it is often a third
+    // of the screen, at the back where nothing occludes it. The sheen it bought
+    // is indistinguishable from the same sheen produced by a slightly rougher
+    // surface reflecting the environment a little harder, which is free.
+    const mat = new THREE.MeshStandardMaterial({
       color: 0x1c4a5e,
-      roughness: 0.06,
+      roughness: 0.12,
       metalness: 0.0,
       transparent: true,
       opacity: 0.88,
-      envMapIntensity: 2.0,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
+      envMapIntensity: 2.6,
     });
     try {
       const n = tex('water', { size: 512 });

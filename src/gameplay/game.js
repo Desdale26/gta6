@@ -24,6 +24,7 @@ import { StuntSystem } from './stunts.js';
 import { Radio } from './radio.js';
 import { HUD } from '../ui/hud.js';
 import { Menus } from '../ui/menus.js';
+import { Credits } from '../ui/credits.js';
 import { Dialogs } from '../ui/dialogs.js';
 import { saveGame, loadGame, applySave, clearSave, hasSave } from '../core/save.js';
 import { validateMissions } from '../content/missionCatalog.js';
@@ -101,6 +102,7 @@ export class Game {
     ctx.dialogs = new Dialogs(ctx);
     ctx.missions = new MissionSystem(ctx);
     ctx.menus = new Menus(ctx);
+    ctx.credits = new Credits(ctx);
     ctx.missions.refreshStartMarkers();
 
     p(0.90, 'Opening the doors');
@@ -178,6 +180,7 @@ export class Game {
 
     // Menus and the pause state run on unscaled time so the UI stays responsive.
     ctx.menus.update(rawDt);
+    ctx.credits?.update(rawDt);
 
     if (dt > 0) {
       ctx.physics.update();
@@ -277,39 +280,99 @@ export class Game {
   setPaused(p) { this.paused = p; }
 
   /**
-   * Adaptive quality preset. Adaptive *resolution* alone cannot rescue a machine
-   * that simply cannot draw this many cars, pedestrians and lights, so when the
-   * frame time stays bad after the resolution has already bottomed out, drop a
-   * preset; climb back only after a long, comfortable stretch, and never past
-   * where we last had to come down.
+   * The governor. One controller, one signal, one order of cuts.
+   *
+   * There used to be two of these fighting each other: the renderer walked the
+   * resolution on its own timer while the game stepped the preset on another,
+   * each reading a different number, neither aware of the other. Worse, the
+   * number the preset stepper read was `renderer.frameMs`, which times the
+   * submission of the draw calls and nothing else — not the GPU, not the
+   * simulation. On a machine where the simulation costs more than the draw, that
+   * reads comfortably fast while the player is at twenty frames a second.
+   *
+   * The signal here is the one the player actually feels: the median real gap
+   * between frames. Median, not mean, because one 400 ms hitch should not
+   * convince the governor to tear the picture apart. Sixty frames a second is
+   * 16.7 ms; anything under 18.5 is holding it, and 13.5 is enough headroom to
+   * risk asking for more.
    */
   _adaptQuality(rawDt) {
     const ctx = this.ctx;
+    const t = this._frameTimes || (this._frameTimes = []);
+    t.push(rawDt * 1000);
+    if (t.length > 120) t.shift();
     if (!ctx.settings.get('autoQuality') || this.paused) return;
     this._qualityTimer = (this._qualityTimer || 0) + rawDt;
-    if (this._qualityTimer < 3) return;
+    if (this._qualityTimer < 1.5) return;
     this._qualityTimer = 0;
-    // Give the world a few seconds after loading before judging it.
-    if (ctx.time.elapsed < 8) return;
+    // The first seconds after the world is built are full of one-off costs —
+    // the first sight of every material, the first save, the streamers filling.
+    // Judging the machine on those would condemn every machine.
+    if (ctx.time.elapsed < 6 || t.length < 45) return;
 
+    const sorted = t.slice().sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
     const target = 1000 / (ctx.settings.get('targetFps') || 60);
-    const avg = ctx.renderer.frameMs.avg;
+    const HOLDING = target * 1.11;     // 18.5 ms at 60 — still reads as smooth
+
     const order = ['potato', 'low', 'medium', 'high', 'ultra'];
     const at = order.indexOf(ctx.settings.data.quality);
 
-    if (avg > target * 1.5 && ctx.renderer.resolutionScale <= 0.62) {
-      this._qualityCeiling = Math.max(0, at - 1);
-      if (ctx.settings.stepDown()) { this.applyQuality(); this._goodStreak = 0; }
+    if (median > HOLDING) {
+      this._goodStreak = 0;
+      // Resolution first: it is the cheapest thing to give up and the fastest to
+      // take back, and on a fill-bound machine it is also the whole problem.
+      if (ctx.renderer.stepResolutionDown()) { this._afterCut(median); return; }
+      // Resolution is already at the floor and it is still not enough, so the
+      // machine cannot draw this many cars, pedestrians, shadows and effects at
+      // any size. That is a preset, not a pixel count.
+      if (at > 0 && ctx.settings.stepDown()) {
+        // Remember where it broke. Climbing back past this is how the old one
+        // got into a loop of dropping, recovering, climbing and dropping again.
+        this._qualityCeiling = Math.max(0, at - 1);
+        this.applyQuality();
+        this._afterCut(median, order[at - 1]);
+      }
       return;
     }
-    if (avg < target * 0.62) {
-      this._goodStreak = (this._goodStreak || 0) + 3;
-      if (this._goodStreak > 25 && at < (this._qualityCeiling ?? order.length - 1)
-          && ctx.renderer.resolutionScale >= 0.98) {
-        if (ctx.settings.stepUp()) { this.applyQuality(); this._goodStreak = 0; }
-      }
-    } else {
+
+    // Giving quality back needs a different number entirely. The gap between
+    // frames stops at the display's refresh interval, so a machine with three
+    // times the headroom it needs reports exactly the same 16.7 ms as one with
+    // none — read that alone and the governor can never climb, which is the bug
+    // the renderer's old loop had and this one would have inherited. What does
+    // not saturate is how long the frame's actual work took, measured either
+    // side of update and render in main.js. Half the budget spent is real room.
+    const work = ctx.perf ? ctx.perf.workMs : median;
+    if (median < HOLDING && work < target * 0.5) {
+      // Twelve consecutive comfortable checks is eighteen seconds. Slow on the
+      // way up is the entire difference between adapting and oscillating.
+      this._goodStreak = (this._goodStreak || 0) + 1;
+      if (this._goodStreak < 12) return;
       this._goodStreak = 0;
+      if (ctx.renderer.stepResolutionUp()) return;
+      const ceiling = this._qualityCeiling ?? order.length - 1;
+      if (at < ceiling && ctx.settings.stepUp()) this.applyQuality();
+      return;
+    }
+    this._goodStreak = 0;
+  }
+
+  /** Tell the player why the picture changed, without making a fuss about it. */
+  _afterCut(median, presetName) {
+    this._goodStreak = 0;
+    this._frameTimes.length = 0;
+    const fps = Math.round(1000 / Math.max(median, 1));
+    // Once per session per kind of cut. A toast every fifteen seconds while a
+    // slow machine walks down the ladder is worse than saying nothing.
+    if (presetName) {
+      if (this._toldPreset) return;
+      this._toldPreset = true;
+      this.ctx.hud?.toast('Graphics lowered', `Holding ${fps} fps — now on ${presetName}`, 'info');
+    } else {
+      if (this._toldRes) return;
+      this._toldRes = true;
+      this.ctx.hud?.toast('Resolution lowered', `To keep the frame rate up`, 'info');
     }
   }
 

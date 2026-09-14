@@ -335,3 +335,35 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block;backgrou
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;transition-duration:.01ms !important}
 }
+
+/* ---------------------------------------------------------------------------
+ * The end of the story.
+ *
+ * Finishing the last mission of act six used to be indistinguishable from
+ * finishing any other job: the same MISSION PASSED card, the same money, and
+ * then the city carried on as if eighteen thousand words of script had not just
+ * resolved. A campaign with no ending does not read as a campaign.
+ * ------------------------------------------------------------------------- */
+.overlay.credits{background:radial-gradient(ellipse at 50% 30%,rgba(28,8,42,.94),rgba(4,2,10,.985) 70%);}
+.credits-inner{display:flex;flex-direction:column;align-items:center;gap:18px;
+  width:min(760px,92vw);max-height:88vh;padding:8px 16px}
+.credits-scroll{overflow-y:auto;width:100%;padding:8px 4px 16px;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 34px,#000 calc(100% - 28px),transparent 100%);
+          mask-image:linear-gradient(180deg,transparent 0,#000 34px,#000 calc(100% - 28px),transparent 100%)}
+.credits-scroll h1{margin:12px 0 2px;font-size:clamp(26px,5.2vw,52px);letter-spacing:.14em;font-weight:800;
+  text-align:center;background:linear-gradient(180deg,#fff 12%,#ffd36e 52%,#ff2d95 94%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.credits-scroll h2{margin:26px 0 8px;font-size:13px;letter-spacing:.42em;font-weight:600;
+  text-align:center;color:#ff7ac0;text-transform:uppercase}
+.credits-scroll p{margin:0 auto 12px;max-width:56ch;line-height:1.62;font-size:15px;color:#e8e2f2;text-align:center}
+.credits-scroll p.quiet{color:#9d93b4;font-size:13.5px;font-style:italic}
+.credits-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;
+  margin:14px auto 4px;max-width:620px}
+.credits-stats div{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);
+  border-radius:10px;padding:11px 12px;text-align:center}
+.credits-stats b{display:block;font-size:21px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.credits-stats span{display:block;margin-top:3px;font-size:10.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:#9d93b4}
+.credits-cast{margin:0 auto;max-width:520px;font-size:14px;line-height:1.9;color:#cfc6e0}
+.credits-cast span{display:block;text-align:center}
+.credits-cast span i{font-style:normal;color:#8a819e}

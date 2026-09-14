@@ -25,41 +25,57 @@ const KEY = 'vicecoast.settings.v1';
 // - `dprCap` is new. A 4K frame on a high-density laptop display is eight
 //   megapixels through a seventeen-pass post chain, which is where most of "very
 //   laggy" came from.
+// - `post` is new, and it is the largest single lever here. The two bottom
+//   presets no longer build or run the post chain at all: the scene is drawn
+//   once, straight to the canvas, with ACES tone mapping done on the way out.
+//   That is seventeen full-screen passes and an HDR ping-pong replaced by one
+//   draw. It is also exactly how the reference build the player asked this to
+//   be like works, and that one looks good — the look comes from the tone
+//   mapping, the prefiltered environment map and emissive neon, none of which
+//   needs a composer.
+// - `bloomMips`, `aoTaps` and `blurTaps` are new: the passes that DO run are now
+//   sized per preset instead of every preset paying ultra's tap counts. Bloom
+//   was five mip levels (ten blur draws) at every preset that had it on; the
+//   composite's ambient-occlusion loop was ten taps and its motion blur seven,
+//   compiled in and paid by every pixel whose wave straddled the horizon.
 // - The population and draw-distance budgets are roughly halved throughout. 900 m
 //   of draw distance in a city this dense was 2.5 million triangles and 5800 draw
 //   calls a frame, and draw calls are paid by the CPU, so no amount of dropping
 //   the resolution could rescue it.
 export const QUALITY_PRESETS = {
   potato: {
-    label: 'Potato', pixelRatio: 0.55, shadows: true, shadowMapSize: 512, shadowExtent: 55,
+    label: 'Potato', pixelRatio: 0.55, post: false, shadows: true, shadowMapSize: 512, shadowExtent: 55,
     ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
     drawDistance: 320, pedBudget: 18, trafficBudget: 16, particleBudget: 180,
     grassDensity: 0, anisotropy: 1, waterQuality: 0, decalBudget: 48, volumetrics: false,
     dprCap: 1,
   },
   low: {
-    label: 'Low', pixelRatio: 0.7, shadows: true, shadowMapSize: 1024, shadowExtent: 70,
+    label: 'Low', pixelRatio: 0.7, post: false, shadows: true, shadowMapSize: 1024, shadowExtent: 70,
     ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
     drawDistance: 420, pedBudget: 28, trafficBudget: 24, particleBudget: 320,
     grassDensity: 0.2, anisotropy: 2, waterQuality: 1, decalBudget: 96, volumetrics: false,
     dprCap: 1,
   },
   medium: {
-    label: 'Medium', pixelRatio: 0.85, shadows: true, shadowMapSize: 1024, shadowExtent: 90,
+    label: 'Medium', pixelRatio: 0.85, post: true, bloomMips: 3, aoTaps: 0, blurTaps: 3,
+    shadows: true, shadowMapSize: 1024, shadowExtent: 90,
     ssao: false, bloom: true, motionBlur: true, dof: false, reflections: true, smaa: false,
     drawDistance: 540, pedBudget: 42, trafficBudget: 34, particleBudget: 650,
     grassDensity: 0.45, anisotropy: 4, waterQuality: 2, decalBudget: 160, volumetrics: true,
     dprCap: 1,
   },
   high: {
-    label: 'High', pixelRatio: 1.0, shadows: true, shadowMapSize: 2048, shadowExtent: 120,
+    label: 'High', pixelRatio: 1.0, post: true, bloomMips: 3, aoTaps: 6, blurTaps: 3,
+    shadows: true, shadowMapSize: 2048, shadowExtent: 120,
     ssao: true, bloom: true, motionBlur: true, dof: false, reflections: true, smaa: true,
     drawDistance: 720, pedBudget: 75, trafficBudget: 55, particleBudget: 1100,
     grassDensity: 0.75, anisotropy: 8, waterQuality: 3, decalBudget: 240, volumetrics: true,
     dprCap: 1,
   },
   ultra: {
-    label: 'Ultra', pixelRatio: 1.15, shadows: true, shadowMapSize: 2048, shadowExtent: 160,
+    label: 'Ultra', pixelRatio: 1.15, post: true, bloomMips: 4, aoTaps: 10, blurTaps: 7,
+    shadows: true, shadowMapSize: 2048, shadowExtent: 160,
     ssao: true, bloom: true, motionBlur: true, dof: true, reflections: true, smaa: true,
     drawDistance: 1000, pedBudget: 120, trafficBudget: 85, particleBudget: 2000,
     grassDensity: 1.0, anisotropy: 16, waterQuality: 3, decalBudget: 380, volumetrics: true,
@@ -120,9 +136,13 @@ export class Settings {
   onChange(fn) { this._listeners.push(fn); return () => { const i = this._listeners.indexOf(fn); if (i >= 0) this._listeners.splice(i, 1); }; }
   reset() { this.data = { ...DEFAULTS }; this.save(); for (const fn of this._listeners) fn('*', null); }
   load() {
+    // `wasLoaded` is how boot tells a returning player from a new one. A stored
+    // preference is a choice and must survive; the device probe only gets to
+    // pick the opening preset for somebody who has never played before.
+    this.wasLoaded = false;
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) Object.assign(this.data, JSON.parse(raw));
+      if (raw) { Object.assign(this.data, JSON.parse(raw)); this.wasLoaded = true; }
     } catch (e) { /* storage may be blocked — defaults are fine */ }
   }
   save() {

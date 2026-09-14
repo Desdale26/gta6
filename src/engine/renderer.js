@@ -18,9 +18,8 @@ import { clamp, RollingAverage } from '../core/mathx.js';
 // Radius of the ambient-occlusion sample disc, in metres of world space.
 const AO_WORLD_RADIUS = 0.9;
 
-// The only resolutions the adaptive scaler is allowed to pick, and how long it
-// must wait between changes. Every change reallocates every render target in the
-// chain, so the set is small and the cooldown is long on purpose.
+// The only resolutions the governor is allowed to pick. Every change reallocates
+// every render target in the chain, so the set is small on purpose.
 /**
  * How far the camera can see, from the preset that claims to set it.
  *
@@ -36,7 +35,6 @@ const AO_WORLD_RADIUS = 0.9;
 function farPlaneFor(preset) { return Math.max(420, (preset.drawDistance || 540) * 1.25); }
 
 const RESOLUTION_RUNGS = [1, 0.85, 0.7, 0.55];
-const RESOLUTION_COOLDOWN = 5;
 
 const COMPOSITE_SHADER = {
   name: 'ViceComposite',
@@ -47,9 +45,6 @@ const COMPOSITE_SHADER = {
     uExposure: { value: 1.0 },
     uContrast: { value: 1.04 },
     uSaturation: { value: 1.08 },
-    uLift: { value: new THREE.Vector3(0, 0, 0) },
-    uGain: { value: new THREE.Vector3(1, 1, 1) },
-    uGamma: { value: new THREE.Vector3(1, 1, 1) },
     uVignette: { value: 0.5 },
     uGrain: { value: 0.35 },
     uChroma: { value: 0.3 },
@@ -82,7 +77,6 @@ const COMPOSITE_SHADER = {
     uniform sampler2D tDepth;
     uniform vec2 uResolution;
     uniform float uExposure, uContrast, uSaturation, uVignette, uGrain, uChroma, uTime;
-    uniform vec3 uLift, uGain, uGamma;
     uniform float uMotionScale;
     uniform mat4 uPrevViewProj, uInvViewProj;
     uniform vec2 uCameraNearFar;
@@ -133,7 +127,11 @@ const COMPOSITE_SHADER = {
         float vlen = length(vel);
         vel = vlen > 0.06 ? vel * (0.06 / vlen) : vel;
         vec3 sum = vec3(0.0);
-        const int STEPS = 7;
+        // Four taps, not seven. There are no shader permutations here — every
+        // preset compiles the same program, so the tap counts set register
+        // pressure and therefore occupancy for everyone, including the machine
+        // running at the bottom preset that never switches this effect on.
+        const int STEPS = 4;
         for (int i = 0; i < STEPS; i++){
           float t = (float(i) / float(STEPS - 1)) - 0.5;
           sum += texture2D(tDiffuse, uv + vel * t).rgb;
@@ -181,7 +179,7 @@ const COMPOSITE_SHADER = {
         slopeX = clamp(slopeX, -lim, lim);
         slopeY = clamp(slopeY, -lim, lim);
         float occ = 0.0;
-        const int AO_TAPS = 10;
+        const int AO_TAPS = 6;
         for (int i = 0; i < AO_TAPS; i++){
           float fi = float(i);
           float a = fi * 2.3999632;                 // golden angle spiral
@@ -225,9 +223,13 @@ const COMPOSITE_SHADER = {
       col *= uExposure;
       col = aces(col);
 
-      // ---- grade: lift / gamma / gain, contrast, saturation ----
-      col = uLift + col * uGain;
-      col = pow(max(col, vec3(0.0)), uGamma);
+      // ---- grade: contrast, saturation ----
+      // Lift, gain and gamma used to sit here as three more vec3 uniforms and a
+      // pow(). Nothing in the game ever wrote any of them, so every pixel of
+      // every frame computed zero plus col times one, then raised the result to the
+      // power of one — three transcendentals a pixel to arrive back where it
+      // started. Contrast and saturation below are driven by the weather and do
+      // real work, so they stay.
       col = (col - 0.5) * uContrast + 0.5;
       float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = mix(vec3(luma), col, uSaturation);
@@ -417,8 +419,26 @@ export class Renderer {
   /** Re-read the quality preset and reconfigure passes. */
   applyQuality() {
     const p = this.settings.preset;
-    this.bloomPass.enabled = !!p.bloom;
-    this.bloomPass.strength = p.bloom ? 0.34 : 0;
+    // Which of the two renderers we are. `post: false` presets never touch the
+    // composer, so none of its targets are bound, resized or cleared.
+    const direct = p.post === false;
+    if (direct !== this._direct) {
+      this._direct = direct;
+      // ACES has to happen somewhere. In direct mode the renderer does it on the
+      // way out; with the chain running, the composite does it and the renderer
+      // must not do it twice.
+      this.renderer.toneMapping = direct ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+      this.renderer.toneMappingExposure = direct ? (this.exposure ?? this.grade.uExposure.value ?? 1) : 1.0;
+      // No rebuild here. Tone mapping is part of three.js's program cache key, so
+      // crossing this line needs a second program variant for every material —
+      // and the governor crosses it, on the machine least able to afford a stall,
+      // at the exact moment it has decided that machine is struggling. Both
+      // variants are compiled during the loading screen instead (see main.js), so
+      // by the time this flips, the programs the flip needs are already warm and
+      // three.js swaps to them without touching the compiler.
+    }
+    this.bloomPass.enabled = !!p.bloom && !direct;
+    this.bloomPass.strength = this.bloomPass.enabled ? 0.34 : 0;
     this.renderer.shadowMap.enabled = !!p.shadows;
     this.grade.uGrain.value = this.settings.get('filmGrain');
     this.grade.uChroma.value = this.settings.get('chromaticAberration');
@@ -432,8 +452,68 @@ export class Renderer {
 
   setMotionBlur(scale) { this.grade.uMotionScale.value = this.settings.preset.motionBlur ? scale : 0; }
 
+  /**
+   * The look of the world: exposure, contrast, saturation, the colour of the
+   * air, and how much water is on the lens. Driven every frame by the weather,
+   * which reads the sky's palette for the hour.
+   *
+   * This method did not exist. Weather has called it every frame since the
+   * engine was written, so every frame threw a TypeError at that line — and
+   * because the call sits in the middle of Game.update, everything after it
+   * never ran: the street lights never came on at night, the ambience never
+   * played, the audio listener never followed the camera, the HUD never
+   * updated, and input.endFrame() never cleared the frame's key edges. The
+   * error was caught by the loop's own try/catch and logged, so nothing ever
+   * stopped, which is exactly why it survived this long: the game kept running,
+   * slightly wrong, in a dozen places at once.
+   */
+  setGrade(g) {
+    if (!g) return;
+    const u = this.grade;
+    if (g.exposure !== undefined) this.exposure = u.uExposure.value = g.exposure;
+    if (g.contrast !== undefined) u.uContrast.value = g.contrast;
+    if (g.saturation !== undefined) u.uSaturation.value = g.saturation;
+    if (g.haze !== undefined) u.uHazeStrength.value = g.haze;
+    if (g.wetLens !== undefined) u.uWetLens.value = g.wetLens;
+    if (g.fogColor) {
+      if (g.fogColor.isColor) u.uFogColor.value.copy(g.fogColor);
+      else u.uFogColor.value.set(g.fogColor);
+    }
+    // With no composite pass to apply it, the exposure has to be handed to the
+    // renderer's own tone mapping instead — otherwise the cheap path renders the
+    // same city two stops darker than the expensive one.
+    if (this._direct && g.exposure !== undefined) this.renderer.toneMappingExposure = g.exposure;
+  }
+
   resize() {
     const p = this.settings.preset;
+    // In direct mode nothing downstream of the scene exists, so none of it is
+    // resized. EffectComposer.setSize ignores a pass's `enabled` flag, which
+    // means a disabled bloom still reallocated its eleven half-float render
+    // targets on every resize — tens of megabytes of VRAM, churned, for a pass
+    // that was never going to run.
+    if (this._direct) {
+      const dprD = Math.min(window.devicePixelRatio || 1, p.dprCap ?? 1);
+      const wD = Math.max(320, window.innerWidth || 1280);
+      const hD = Math.max(240, window.innerHeight || 720);
+      const userD = clamp(this.settings.get('renderScale') ?? 1, 0.5, 2);
+      const budgetD = this.settings.get('pixelBudget') || (1920 * 1080);
+      let baseD = p.pixelRatio * userD * dprD;
+      if (wD * hD * baseD * baseD > budgetD) baseD = Math.sqrt(budgetD / Math.max(1, wD * hD));
+      let rD = baseD * this._resolutionScale;
+      if (wD * hD * rD * rD < 240_000) rD = Math.sqrt(240_000 / Math.max(1, wD * hD));
+      rD = Math.min(rD, baseD);
+      this.renderScaleUsed = rD;
+      this.width = wD; this.height = hD;
+      this.renderer.setPixelRatio(rD);
+      this.renderer.setSize(wD, hD, false);
+      this.camera.aspect = wD / hD;
+      this.camera.fov = this.settings.get('fov');
+      this.camera.far = farPlaneFor(p);
+      this.camera.updateProjectionMatrix();
+      if (this.onResized) this.onResized(wD, hD);
+      return;
+    }
     const w = Math.max(320, window.innerWidth || 1280);
     const h = Math.max(240, window.innerHeight || 720);
     // Resolution is budgeted in pixels rather than clamped as a ratio. A ratio
@@ -446,10 +526,22 @@ export class Renderer {
     // the whole post chain, and nothing in the picture was four times better.
     const dpr = Math.min(window.devicePixelRatio || 1, p.dprCap ?? 1);
     const userScale = clamp(this.settings.get('renderScale') ?? 1, 0.5, 2);
-    let ratio = Math.max(0.35, p.pixelRatio * this._resolutionScale * userScale * dpr);
+    // Budget first, THEN the governor's rung — in that order, and it matters.
+    // The other way round, the clamp simply overwrote the rung: on any window
+    // big enough to exceed the pixel budget, dropping from rung 1.0 to 0.85 to
+    // 0.7 produced three byte-identical frames, because all three landed above
+    // the budget and were flattened to the same number. The governor's fastest
+    // lever did nothing at all, while still reallocating every render target in
+    // the chain each time it pulled it.
     const budget = this.settings.get('pixelBudget') || (1920 * 1080);
-    const wanted = w * h * ratio * ratio;
-    if (wanted > budget) ratio = Math.sqrt(budget / Math.max(1, w * h));
+    let base = p.pixelRatio * userScale * dpr;
+    if (w * h * base * base > budget) base = Math.sqrt(budget / Math.max(1, w * h));
+    // The floor is on pixels, not on the ratio: a fixed ratio floor collapses the
+    // bottom rungs into each other on a large display for the same reason.
+    const MIN_PIXELS = 240_000;
+    let ratio = base * this._resolutionScale;
+    if (w * h * ratio * ratio < MIN_PIXELS) ratio = Math.sqrt(MIN_PIXELS / Math.max(1, w * h));
+    ratio = Math.min(ratio, base);
     this.renderScaleUsed = ratio;
     this.width = w; this.height = h;
     this.renderer.setPixelRatio(ratio);
@@ -483,72 +575,65 @@ export class Renderer {
   /** Current render-resolution multiplier, 0.55 to 1. */
   get resolutionScale() { return this._resolutionScale; }
 
-  /** Adaptive resolution: keep the frame time near the target. */
   /**
-   * Adaptive resolution, on four fixed rungs.
+   * One rung down, one rung up. The decision belongs to Game's governor — there
+   * used to be a second control loop in here, walking the scale on its own timer
+   * against its own signal, and two controllers reading different numbers while
+   * pulling the same lever is how a frame rate ends up oscillating.
    *
-   * This used to walk the scale in steps of 0.08 down and 0.05 up, every 1.2
-   * seconds, and every single step called resize() — which reallocates the HDR
-   * target, its twin, the depth texture, the composer's buffers, eleven bloom
-   * targets and two SMAA targets. On a machine that was struggling, which is the
-   * only machine this code runs on, that was a GPU reallocation every 1.2
-   * seconds forever. The thing meant to cure the stutter was a metronome for it.
-   *
-   * Four rungs and a five-second cooldown means a settled machine resizes never,
-   * and a struggling one resizes two or three times on the way down and then
-   * stops.
+   * Four rungs and nothing between them, because every change reallocates the
+   * HDR targets, the depth texture, the composer's buffers, eleven bloom targets
+   * and two SMAA targets. The loop this replaces stepped by 0.08 every 1.2
+   * seconds, which on the only machine that ever ran it meant a GPU
+   * reallocation every 1.2 seconds, forever: the thing meant to cure the stutter
+   * was a metronome for it.
    */
-  _autoScale(dt, frameMs) {
-    if (!this.settings.get('autoQuality')) return;
-    this._autoTimer += dt;
-    if (this._autoTimer < RESOLUTION_COOLDOWN) return;
-    this._autoTimer = 0;
-    const target = 1000 / (this.settings.get('targetFps') || 60);
-    const rungs = RESOLUTION_RUNGS;
-    let at = rungs.indexOf(this._resolutionScale);
-    if (at < 0) at = 0;
-    // Down on the honest number: `frameMs` times the render submission alone, and
-    // on a machine where the simulation costs more than the draw that reads
-    // comfortably fast while the player is at 20 fps. dt is what the player feels.
-    const felt = Math.max(this.frameMs.avg, dt * 1000);
-    if (felt > target * 1.3 && at < rungs.length - 1) {
-      this._resolutionScale = rungs[at + 1];
-      this.resize();
-      return;
-    }
-    // Up only when there is real headroom AND the frame is actually landing on
-    // time. Comparing dt alone can never climb: a game comfortably hitting vsync
-    // reports dt == target forever, so the old up-branch was unreachable on every
-    // machine that had spare capacity.
-    if (at > 0 && dt * 1000 <= target * 1.06 && this.frameMs.avg < target * 0.45) {
-      this._goodScale = (this._goodScale || 0) + 1;
-      if (this._goodScale >= 3) {
-        this._goodScale = 0;
-        this._resolutionScale = rungs[at - 1];
-        this.resize();
-      }
-    } else {
-      this._goodScale = 0;
-    }
+  stepResolutionDown() {
+    const at = RESOLUTION_RUNGS.indexOf(this._resolutionScale);
+    const i = at < 0 ? 0 : at;
+    if (i >= RESOLUTION_RUNGS.length - 1) return false;
+    this._resolutionScale = RESOLUTION_RUNGS[i + 1];
+    this.resize();
+    return true;
   }
 
-  /** Per-frame grading hook used by the weather/time-of-day systems. */
-  setGrade({ exposure, contrast, saturation, lift, gain, gamma, fogColor, haze, wetLens }) {
-    const g = this.grade;
-    if (exposure !== undefined) g.uExposure.value = exposure;
-    if (contrast !== undefined) g.uContrast.value = contrast;
-    if (saturation !== undefined) g.uSaturation.value = saturation;
-    if (lift) g.uLift.value.set(lift[0], lift[1], lift[2]);
-    if (gain) g.uGain.value.set(gain[0], gain[1], gain[2]);
-    if (gamma) g.uGamma.value.set(gamma[0], gamma[1], gamma[2]);
-    if (fogColor !== undefined) g.uFogColor.value.set(fogColor);
-    if (haze !== undefined) g.uHazeStrength.value = haze;
-    if (wetLens !== undefined) g.uWetLens.value = wetLens;
+  stepResolutionUp() {
+    const at = RESOLUTION_RUNGS.indexOf(this._resolutionScale);
+    const i = at < 0 ? 0 : at;
+    if (i <= 0) return false;
+    this._resolutionScale = RESOLUTION_RUNGS[i - 1];
+    this.resize();
+    return true;
   }
 
   render(dt, elapsed) {
     const t0 = performance.now();
     this.frame++;
+
+    // Direct mode: no composer at all. One draw of the scene, straight to the
+    // canvas, with the tone mapping done by the material instead of by a
+    // full-screen pass.
+    //
+    // The chain this replaces is seventeen full-screen passes a frame — a bloom
+    // high-pass, ten bloom blurs, a mip composite, an additive blend, the big
+    // composite with up to twenty-nine texture fetches per pixel, and three SMAA
+    // passes — plus the bandwidth of an HDR half-float target with a depth
+    // texture, ping-ponged. At the bottom two presets that is the entire frame
+    // budget of a slow machine spent on grading a picture it is struggling to
+    // draw at all. The reference build the player asked this to be like has no
+    // post-processing whatsoever and looks good on ACES tone mapping, a
+    // prefiltered environment map and emissive neon, which is exactly what is
+    // left standing here.
+    if (this._direct) {
+      this.renderer.info.reset();
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+      const msD = performance.now() - t0;
+      this.frameMs.push(msD);
+      this._fpsAccum += dt; this._fpsFrames++;
+      if (this._fpsAccum >= 0.5) { this.fps = this._fpsFrames / this._fpsAccum; this._fpsAccum = 0; this._fpsFrames = 0; }
+      return;
+    }
 
     const g = this.grade;
     g.uTime.value = elapsed;
@@ -570,7 +655,6 @@ export class Renderer {
     this.frameMs.push(ms);
     this._fpsAccum += dt; this._fpsFrames++;
     if (this._fpsAccum >= 0.5) { this.fps = this._fpsFrames / this._fpsAccum; this._fpsAccum = 0; this._fpsFrames = 0; }
-    this._autoScale(dt, ms);
   }
 
   stats() {

@@ -158,10 +158,8 @@ export class Sky {
     this.cloudCover = 0.28;
     this.storm = 0;
     this.envNeedsUpdate = true;
-    this._envTimer = 0;
     this._lastEnvHour = -99;
     this.reflections = true;     // set from the quality preset in setQuality()
-    this._envInterval = 4;
 
     const geo = new THREE.SphereGeometry(1, 32, 18);
     this.material = new THREE.ShaderMaterial({
@@ -195,7 +193,18 @@ export class Sky {
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.name = 'sky';
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1000;
+    // Drawn LAST, not first.
+    //
+    // A sky dome at renderOrder -1000 is a full-screen quad's worth of a fairly
+    // expensive procedural shader — gradient, sun disc, clouds, stars — evaluated
+    // for every pixel on the screen and then painted over by the entire city. At
+    // -1000 nothing has been drawn yet, so nothing can reject it. Drawn after the
+    // opaque pass instead, early-Z throws away every pixel a building already
+    // covers, and in a city view that is most of them. It still renders correctly
+    // because the vertex shader pins the dome to the far plane (gl_Position.z =
+    // gl_Position.w) and the material writes no depth, so it fills exactly the
+    // gaps and nothing else.
+    this.mesh.renderOrder = 100;
     this.mesh.scale.setScalar(1);
     this.scene.add(this.mesh);
 
@@ -257,7 +266,6 @@ export class Sky {
     // The environment probe is what puts the sky and the neon into every wet
     // road and car body, so it is the reflection budget.
     this.reflections = preset.reflections !== false;
-    this._envInterval = this.reflections ? 4 : 14;
     if (this.pmrem) this.refreshEnvironment();   // not yet built during boot
   }
 
@@ -376,10 +384,17 @@ export class Sky {
     // almost entirely environment — so a stale one keeps the world lit by the
     // previous sky. `envNeedsUpdate` was set once and never read, which meant a
     // weather change took up to four seconds to reach anything reflective.
-    this._envTimer -= dt;
-    if (this._envTimer <= 0 || this.envNeedsUpdate || Math.abs(hour - this._lastEnvHour) > 0.28) {
+    // Rebuilt when the sky has actually changed, and not otherwise.
+    //
+    // A PMREM rebuild is six cube-face renders of the sky plus the whole
+    // prefilter chain, and a four-second timer meant the game paid for one
+    // fifteen times a minute whether or not anything had moved. The hour test
+    // below and `envNeedsUpdate`, which the weather system sets when conditions
+    // change, are between them the complete set of reasons the environment can
+    // differ from the one already prefiltered — the timer was only ever
+    // rediscovering that nothing had happened.
+    if (this.envNeedsUpdate || Math.abs(hour - this._lastEnvHour) > 0.28) {
       this.envNeedsUpdate = false;
-      this._envTimer = this._envInterval ?? 4;
       this._lastEnvHour = hour;
       this.refreshEnvironment();
     }

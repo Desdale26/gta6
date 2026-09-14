@@ -76,6 +76,8 @@ const out = await page.evaluate(() => {
       calls: gl.info.render.calls,
       tris: gl.info.render.triangles,
       lit: ctx.lights.activeCount,
+      night: +(ctx.sky?.palette?.night ?? -1).toFixed(2),
+      errors: (ctx.game?.errors || []).length,
       scale: +ctx.renderer.renderScaleUsed.toFixed(3),
       quality: ctx.settings.data.quality,
     });
@@ -152,11 +154,81 @@ const out = await page.evaluate(() => {
   };
 });
 
+// --- the cheap path has to draw the same city, not a black rectangle --------
+// The bottom two presets skip the post chain entirely and render the scene
+// straight to the canvas. That is the single largest saving in the renderer and
+// also the easiest thing to get silently wrong: tone mapping moves from the
+// composite pass into the materials, and if that swap is missed the picture
+// comes out either black or blown out, and no count anywhere would say so.
+const modes = await page.evaluate(async () => {
+  const ctx = window.__VC.ctx;
+  const gl = ctx.renderer.renderer;
+  // Read the default framebuffer with readPixels in the SAME task as the draw.
+  // Copying the canvas with drawImage cannot work here: the context is created
+  // without preserveDrawingBuffer, so by the time a 2D canvas gets to copy it
+  // the buffer has been presented and cleared, and every preset reads as pure
+  // black whether it drew a city or not.
+  const read = () => {
+    const g = gl.getContext();
+    ctx.renderer.render(1 / 60, ctx.time.elapsed);
+    gl.setRenderTarget(null);
+    const w = Math.max(1, gl.domElement.width | 0);
+    const h = Math.max(1, gl.domElement.height | 0);
+    const sw = Math.min(96, w), sh = Math.min(54, h);
+    const x0 = ((w - sw) / 2) | 0, y0 = ((h - sh) / 2) | 0;
+    const px = new Uint8Array(sw * sh * 4);
+    g.readPixels(x0, y0, sw, sh, g.RGBA, g.UNSIGNED_BYTE, px);
+    let sum = 0, min = 255, max = 0, lit = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const l = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+      sum += l; if (l < min) min = l; if (l > max) max = l;
+      if (l > 12) lit++;
+    }
+    const n = px.length / 4;
+    return { mean: sum / n, min, max, litFrac: lit / n };
+  };
+  const out = [];
+  for (const q of ['medium', 'low', 'potato', 'medium']) {
+    ctx.settings.set('quality', q);
+    ctx.game.applyQuality();
+    window.__VC.simulate(1.2);
+    const pic = read();
+    out.push({
+      quality: q,
+      direct: !!ctx.renderer._direct,
+      calls: gl.info.render.calls,
+      programs: gl.info.programs ? gl.info.programs.length : -1,
+      night: +(ctx.sky?.palette?.night ?? -1).toFixed(2),
+      ...pic,
+    });
+  }
+  return out;
+});
+note('');
+note('render modes: does the composer-free path still draw the city?');
+for (const m of modes) {
+  const ok = m.mean > 8 && m.mean < 245 && m.litFrac > 0.25 && m.max > 40;
+  note(`  ${ok ? 'ok    ' : 'WRONG '} ${m.quality.padEnd(7)} ${m.direct ? 'direct ' : 'composer'}`
+    + `  ${String(m.calls).padStart(5)} calls, ${String(m.programs).padStart(3)} programs,`
+    + ` mean luma ${m.mean.toFixed(1)}, ${(m.litFrac * 100).toFixed(0)}% lit, night ${m.night}`);
+  if (!ok) {
+    problems.push(`the ${m.quality} preset renders a picture with mean luma ${m.mean.toFixed(1)}`
+      + ` and ${(m.litFrac * 100).toFixed(0)}% of pixels lit — that is not a city`);
+  }
+}
+if (!modes.some((m) => m.direct)) {
+  problems.push('no preset used the composer-free path — the cheap renderer is unreachable');
+}
+if (!modes.some((m) => !m.direct)) {
+  problems.push('every preset used the composer-free path — the post chain is unreachable');
+}
+
 note('perf  (one minute of play: walk, nightfall, drive, an explosion, dawn)');
-note('label                       programs   calls      tris   lit  scale  quality');
+note('label                       programs   calls      tris   lit night  err  scale  quality');
 for (const s of out.samples) {
   note(`  ${s.label.padEnd(24)} ${String(s.programs).padStart(8)} ${String(s.calls).padStart(7)} `
-    + `${String(s.tris).padStart(9)} ${String(s.lit).padStart(5)} ${String(s.scale).padStart(6)} ${s.quality}`);
+    + `${String(s.tris).padStart(9)} ${String(s.lit).padStart(5)} ${String(s.night).padStart(5)} `
+    + `${String(s.errors).padStart(4)} ${String(s.scale).padStart(6)} ${s.quality}`);
 }
 
 const first = out.samples[0].programs;
@@ -190,6 +262,18 @@ if (out.sceneLights.length > 1) {
 if (out.sceneLights[out.sceneLights.length - 1] > MAX_SCENE_LIGHTS) {
   problems.push(`${out.sceneLights[out.sceneLights.length - 1]} lights in the scene`
     + ` — every one of them is evaluated by every fragment of every lit material`);
+}
+const errs = out.samples[out.samples.length - 1].errors;
+if (errs > 0) {
+  problems.push(`the game threw ${errs} runtime error(s) during play — the update loop catches them and carries on,`
+    + ` so everything after the throw silently stops running for that frame`);
+}
+// Night has to actually light the street lights. This is the symptom that
+// exposed setGrade: an exception two lines above ctx.lights.update meant the
+// city never lit up after dark, and no count anywhere said so.
+const litAtNight = out.samples.find((s) => s.label === 'after nightfall');
+if (litAtNight && litAtNight.night > 0.5 && litAtNight.lit === 0) {
+  problems.push(`night is at ${litAtNight.night} and not one street light is lit`);
 }
 if (peakCalls > MAX_CALLS) problems.push(`a frame asked for ${peakCalls} draw calls`);
 if (peakTris > MAX_TRIS) problems.push(`a frame asked for ${peakTris} triangles`);

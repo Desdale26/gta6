@@ -90,7 +90,7 @@ if (booted) {
   // welded open.) The sweep is the general assertion: whatever else carries
   // `.hidden`, it has to actually be gone.
   const MUST_HIDE = ['loading', 'pauseMenu', 'mapOverlay', 'shopOverlay', 'wheelOverlay',
-    'phoneOverlay', 'deathOverlay', 'crashOverlay', 'debugPanel', 'scopeOverlay'];
+    'phoneOverlay', 'deathOverlay', 'crashOverlay', 'debugPanel', 'scopeOverlay', 'creditsOverlay'];
   const MUST_SHOW = ['startGate', 'hud'];
 
   // The loading screen fades for 900 ms before it is marked hidden, and

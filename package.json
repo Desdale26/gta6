@@ -9,13 +9,14 @@
   "scripts": {
     "albedo": "node tools/albedo.mjs",
     "bundle": "node tools/bundle.mjs",
-    "check": "npm run guards && npm run vehicles && npm run traffic && npm run albedo && npm run verify && npm run perf && npm run scenarios",
+    "check": "npm run guards && npm run story && npm run vehicles && npm run traffic && npm run albedo && npm run verify && npm run perf && npm run scenarios",
     "guards": "node tools/verify-guards.mjs",
     "perf": "node tools/verify-perf.mjs",
     "scenarios": "node tools/scenarios.mjs",
     "serve": "node tools/serve.js",
     "smoke": "node tools/smoke.js",
     "start": "node tools/serve.js",
+    "story": "node tools/verify-story.mjs",
     "traffic": "node tools/verify-traffic.mjs",
     "vehicles": "node tools/verify-vehicles.mjs",
     "verify": "node tools/bundle.mjs && node tools/verify-bundle.mjs"

@@ -4,6 +4,7 @@ import { Settings } from './core/settings.js';
 import { Input } from './core/input.js';
 import { bus } from './core/events.js';
 import { Renderer } from './engine/renderer.js';
+import { probeDevice, presetForDevice, describeDevice } from './engine/deviceProbe.js';
 import { AudioSystem } from './audio/audio.js';
 import { Ambience } from './audio/ambience.js';
 import { Game } from './gameplay/game.js';
@@ -39,7 +40,11 @@ const el = {
 const params = new URLSearchParams(location.search);
 const SMOKE = params.get('smoke') === '1';
 
+/** What the last frame actually cost, split by side. Read by the governor. */
+const perf = { updateMs: 0, renderMs: 0, workMs: 0 };
+
 const ctx = {
+  perf,
   THREE,
   bus,
   settings: new Settings(),
@@ -99,8 +104,23 @@ function tick(forcedDt, manual, render = true) {
   dt = Math.min(dt, 0.1);
 
   try {
+    // Time the two halves separately. The governor needs to know not just that
+    // the frame is late but WHICH side is late — the resolution lever is free
+    // money on a machine that is fill-bound and does absolutely nothing on one
+    // that is spending its frame simulating eighty cars. It also needs a number
+    // that does not saturate: the gap between frames stops at the display's
+    // refresh interval, so on a 60 Hz panel a machine with three times the
+    // headroom it needs reports exactly the same 16.7 ms as one with none, and
+    // a governor reading only that can never work out that it is safe to give
+    // quality back.
+    const a = performance.now();
     ctx.game.update(dt);
+    const b = performance.now();
     if (render) ctx.renderer.render(dt, ctx.time.elapsed);
+    const c = performance.now();
+    ctx.perf.updateMs = b - a;
+    ctx.perf.renderMs = c - b;
+    ctx.perf.workMs = c - a;
   } catch (err) {
     handleRuntimeError(err);
   }
@@ -140,6 +160,23 @@ async function boot() {
   }
   ctx.gl = ctx.renderer.renderer;          // the raw THREE.WebGLRenderer
   ctx.scene = ctx.renderer.scene;
+
+  // Ask the machine what it is before asking it to draw a city.
+  //
+  // Every player used to start on the same preset and let the adaptive system
+  // find its way down, which meant the first thirty seconds — the window in
+  // which someone decides whether a game is broken — was reliably the worst the
+  // game would ever look and feel. A saved preference always wins; this only
+  // picks the opening setting for someone who has never played before.
+  ctx.device = probeDevice(ctx.gl);
+  if (!ctx.settings.wasLoaded) {
+    const want = presetForDevice(ctx.device);
+    if (want !== ctx.settings.data.quality) {
+      ctx.settings.set('quality', want);
+      ctx.renderer.applyQuality();
+    }
+  }
+  console.log(`[device] ${describeDevice(ctx.device)} -> ${ctx.settings.data.quality}`);
   ctx.camera = ctx.renderer.camera;
   ctx.input = new Input(el.canvas, ctx.settings);
 
@@ -166,13 +203,28 @@ async function boot() {
   // rest of the game rather than being invalidated at the next dusk.
   setProgress(0.985, 'Compiling shaders');
   const cam = ctx.renderer.camera;
-  if (ctx.renderer.renderer.compileAsync) {
+  const gl3 = ctx.renderer.renderer;
+  const compile = async () => {
     // The async form yields between materials, so the loading bar keeps painting
     // instead of the page appearing to hang on a big scene.
-    await ctx.renderer.renderer.compileAsync(ctx.scene, cam);
-  } else {
-    ctx.renderer.renderer.compile(ctx.scene, cam);
-  }
+    if (gl3.compileAsync) await gl3.compileAsync(ctx.scene, cam);
+    else gl3.compile(ctx.scene, cam);
+  };
+  // Both tone-mapping variants, because there are two renderers in here.
+  //
+  // The bottom two presets skip the post chain and let the renderer tone-map on
+  // the way out; the rest tone-map inside the composite pass. That setting is
+  // part of three.js's program cache key, so every material needs a program for
+  // whichever mode it is drawn in — and the adaptive governor crosses between
+  // them, on the machine least able to afford a compile, at the exact moment it
+  // has worked out that machine is in trouble. Compiling both here costs a second
+  // or two of a loading screen that is already up, and makes that crossing free.
+  const wantTone = gl3.toneMapping;
+  gl3.toneMapping = THREE.NoToneMapping;
+  await compile();
+  gl3.toneMapping = THREE.ACESFilmicToneMapping;
+  await compile();
+  gl3.toneMapping = wantTone;
   clearInterval(tipTimer);
   setProgress(1, 'Ready');
 
