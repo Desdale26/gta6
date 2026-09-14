@@ -76,8 +76,19 @@ export class Ambience {
     this.gullTimer -= dt;
     if (this.gullTimer <= 0) {
       this.gullTimer = 7 + Math.random() * 16;
-      const overWater = ctx.physics.terrain
-        && ctx.physics.groundHeight(px, pz) < (ctx.physics.waterLevel ?? 0) + 9;
+      // "Within nine metres of sea level" is most of a coastal city, so gulls
+      // were calling over half the downtown blocks. Ask whether there is water
+      // out there instead: a ring of eight samples at a hundred and forty
+      // metres, which is as far as the sound carries anyway.
+      const terr = ctx.physics.terrain;
+      let overWater = false;
+      if (terr && terr.isWater) {
+        for (let i = 0; i < 8 && !overWater; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          overWater = terr.isWater(px + Math.cos(a) * 140, pz + Math.sin(a) * 140);
+        }
+        if (!overWater) overWater = terr.isWater(px, pz);
+      }
       if (overWater && hour > 5.5 && hour < 20.5) {
         const a = Math.random() * Math.PI * 2, r = 18 + Math.random() * 45;
         ctx.audio.playAt('seagull', {

@@ -251,11 +251,19 @@ const COMPOSITE_SHADER = {
   `,
 };
 
+// Settings the renderer has to re-read when they change. '*' (a reset) counts too.
+const RENDER_SETTINGS = new Set([
+  'fov', 'renderScale', 'pixelBudget', 'quality', 'filmGrain',
+  'chromaticAberration', 'vignette', 'targetFps',
+]);
+
 export class Renderer {
   constructor(canvas, settings) {
     this.canvas = canvas;
     this.settings = settings;
     this.frame = 0;
+    /** Called with (width, height) whenever the drawing surface changes size. */
+    this.onResized = null;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -299,6 +307,19 @@ export class Renderer {
 
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
+
+    // Post-processing settings used to be written into the store and left there.
+    // The renderer only re-reads them in applyQuality(), and the pause menu only
+    // called that for the two settings it happened to render as a cycle — so
+    // film grain, chromatic aberration, vignette and render scale moved their
+    // sliders, showed their new numbers, and changed nothing on screen at all.
+    // (Field of view was fine: the camera controller reads that one every frame
+    // because it also has to widen it with speed.) Listening here means the
+    // renderer picks up a change whoever makes it — the menu, a loaded profile,
+    // or anything added later.
+    this._offSettings = settings.onChange((k) => {
+      if (k === '*' || RENDER_SETTINGS.has(k)) this.applyQuality();
+    });
     this._onLost = (e) => { e.preventDefault(); console.warn('[renderer] WebGL context lost'); };
     canvas.addEventListener('webglcontextlost', this._onLost, false);
   }
@@ -423,6 +444,11 @@ export class Renderer {
     // of view depth, which is what the shader divides by.
     this.grade.uAORadius.value = AO_WORLD_RADIUS * this.camera.projectionMatrix.elements[5] * 0.5;
     if (this.bloomPass) this.bloomPass.setSize(w * ratio, h * ratio);
+    // Particle points are sized in pixels, from the height of the frame they are
+    // drawn into. That was set once during boot and never again, so every spark,
+    // splash and puff of smoke stayed the size it was when the window first
+    // opened however the window was resized afterwards.
+    if (this.onResized) this.onResized(w, h);
   }
 
   /** Current render-resolution multiplier, 0.55 to 1. */

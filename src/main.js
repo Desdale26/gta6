@@ -142,7 +142,6 @@ async function boot() {
   ctx.scene = ctx.renderer.scene;
   ctx.camera = ctx.renderer.camera;
   ctx.input = new Input(el.canvas, ctx.settings);
-  ctx.particlesPixelScale = () => ctx.renderer.height;
 
   setProgress(0.04, 'Tuning the radio');
   ctx.audio = new AudioSystem(ctx);
@@ -153,6 +152,9 @@ async function boot() {
   await game.boot((frac, label) => setProgress(0.10 + frac * 0.88, label));
 
   ctx.particles.setPixelScale(ctx.renderer.height || window.innerHeight);
+  // ...and again every time the window changes size, which is what the old
+  // single call at boot never did.
+  ctx.renderer.onResized = (w, h) => ctx.particles.setPixelScale(h);
   clearInterval(tipTimer);
   setProgress(1, 'Ready');
 

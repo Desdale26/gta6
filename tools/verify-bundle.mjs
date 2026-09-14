@@ -492,6 +492,107 @@ if (booted) {
     }
   }
 
+  // --- 4f. the settings menu actually changes something --------------------
+  // Four graphics sliders wrote their value into the settings store and stopped
+  // there. The renderer only re-reads them inside applyQuality(), and the menu
+  // only called that for the two settings it happened to expose as a cycle, so
+  // film grain, chromatic aberration, vignette and render scale did nothing at
+  // all — the slider moved, the number changed, the picture did not. Measured
+  // on a build without the fix: grain stayed at 0.35 when set to 0.73, chroma
+  // at 0.30 when set to 0.41, vignette at 0.50 when set to 0.62, and the render
+  // resolution did not budge. Field of view is here to keep it honest rather
+  // than because it was broken — the camera reads that one every frame anyway.
+  const settings = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const s = ctx.settings;
+    const g = ctx.renderer.grade;
+    const probes = [
+      { key: 'fov', to: 95, read: () => ctx.renderer.camera.fov, drives: 'the camera' },
+      { key: 'filmGrain', to: 0.73, read: () => g.uGrain.value, drives: 'the grain pass' },
+      { key: 'chromaticAberration', to: 0.41, read: () => g.uChroma.value, drives: 'the chroma pass' },
+      { key: 'vignette', to: 0.62, read: () => g.uVignette.value, drives: 'the vignette pass' },
+    ];
+    const out = [];
+    for (const pr of probes) {
+      const was = s.get(pr.key);
+      const before = pr.read();
+      s.set(pr.key, pr.to);
+      // Long enough for anything that eases toward its target to arrive: the
+      // camera damps its field of view rather than snapping, so a couple of
+      // frames would read most of the way there and call it a failure.
+      window.__VC.simulate(1.5);
+      out.push({ key: pr.key, drives: pr.drives, to: pr.to, before, after: pr.read() });
+      s.set(pr.key, was);
+      window.__VC.simulate(1.5);
+    }
+    // Render scale is read on resize rather than held in a uniform, so ask the
+    // renderer what resolution it settled on rather than what it was told.
+    const wasScale = s.get('renderScale');
+    const scaleBefore = ctx.renderer.renderScaleUsed;
+    s.set('renderScale', Math.abs(wasScale - 0.6) < 0.01 ? 1.4 : 0.6);
+    window.__VC.simulate(0.1);
+    const scaleAfter = ctx.renderer.renderScaleUsed;
+    s.set('renderScale', wasScale);
+    window.__VC.simulate(0.1);
+    return { out, scaleBefore, scaleAfter };
+  });
+  note('');
+  note('settings: does moving a slider reach the renderer?');
+  for (const r of settings.out) {
+    const ok = Math.abs(r.after - r.to) < 0.05;
+    note(`  ${ok ? 'ok    ' : 'WRONG '} ${r.key.padEnd(22)} set to ${r.to}, ${r.drives} reads `
+      + `${typeof r.after === 'number' ? r.after.toFixed(3) : r.after} (was ${typeof r.before === 'number' ? r.before.toFixed(3) : r.before})`);
+    if (!ok) problems.push(`the ${r.key} setting never reaches ${r.drives}`);
+  }
+  {
+    const ok = Math.abs(settings.scaleAfter - settings.scaleBefore) > 1e-3;
+    note(`  ${ok ? 'ok    ' : 'WRONG '} ${'renderScale'.padEnd(22)} moved the rendered resolution `
+      + `${settings.scaleBefore.toFixed(3)} -> ${settings.scaleAfter.toFixed(3)}`);
+    if (!ok) problems.push('the renderScale setting never reaches the renderer');
+  }
+
+  // --- 4g. a marker over a moving target moves with it ---------------------
+  // Five of the eleven places that raise an objective marker hand it the thing
+  // the marker is for — the gunman to kill, the car to wreck, the passenger to
+  // collect. Nothing ever read that, so the marker stayed where the target
+  // spawned and the player drove to an empty street corner.
+  const marker = await page.evaluate(() => {
+    const ctx = window.__VC.ctx;
+    const pp = ctx.player.position;
+    // The nearest one, not the first in the array: the far end of the list is
+    // whatever the streamer is about to recycle, and a marker over a target
+    // that has been despawned mid-test is a false accusation, not a finding.
+    let ped = null, best = Infinity;
+    for (const p of ctx.peds.peds) {
+      if (p.dead) continue;
+      const d = Math.hypot(p.body.position.x - pp.x, p.body.position.z - pp.z);
+      if (d < best) { best = d; ped = p; }
+    }
+    if (!ped) return { error: 'no pedestrian to follow' };
+    const m = ctx.missions;
+    m._clearMarkers();
+    m._addMarker(ped.body.position.x, ped.body.position.z, 2, 'kill', ped);
+    const start = m.markers[0].mesh.position.clone();
+    ped.body.position.x += 37;
+    ped.body.position.z -= 24;
+    window.__VC.simulate(0.1);
+    if (ped.dead) { m._clearMarkers(); return { error: 'the pedestrian was despawned mid-test' }; }
+    const after = m.markers[0].mesh.position.clone();
+    const gap = Math.hypot(after.x - ped.body.position.x, after.z - ped.body.position.z);
+    m._clearMarkers();
+    return { moved: start.distanceTo(after), gap };
+  });
+  note('');
+  if (marker.error) {
+    problems.push(marker.error);
+    note(`marker: ${marker.error}`);
+  } else {
+    const ok = marker.gap < 1;
+    note(`marker: target moved 44 m, its marker moved ${marker.moved.toFixed(1)} m and ended `
+      + `${marker.gap.toFixed(2)} m from the target  ${ok ? 'ok' : 'WRONG'}`);
+    if (!ok) problems.push(`an objective marker left ${marker.gap.toFixed(0)} m behind the target it is for`);
+  }
+
   // --- 5. nothing the engine itself considers broken ------------------------
   const bad = await page.evaluate(() => window.__VC.validate());
   if (bad && bad.length) for (const b of bad) problems.push('[validate] ' + b);

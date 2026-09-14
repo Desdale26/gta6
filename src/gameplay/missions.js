@@ -13,6 +13,10 @@ import { CRIME } from './police.js';
 // 'kill' is deliberately absent: an open rampage counts any kill and keeps
 // `targets` empty on purpose.
 const TARGET_KINDS = new Set(['killAll', 'destroy', 'chase', 'protect']);
+// How far from where it started an 'escape' objective counts as escaped. A car
+// covers it in fifteen seconds and a runner in under a minute, which is inside
+// every deadline in the catalogue.
+const ESCAPE_DISTANCE = 220;
 
 const _v1 = new THREE.Vector3();
 
@@ -156,6 +160,7 @@ export class MissionSystem {
       const near = clamp((d - 2.5) / 7, 0, 1);
       u.uOpacity.value = (o.userData.baseOpacity ?? 0.3) * near;
     });
+    this._followMarkers();
     for (const s of this.startMarkers) {
       const show = !this.active && availableIds.has(s.mission.id);
       if (s.mesh.visible !== show) s.mesh.visible = show;
@@ -349,8 +354,15 @@ export class MissionSystem {
           && (o.x === undefined || dist2D(p, o) < (o.radius || 20));
         break;
       case 'escape': {
+        // Getting away is the objective. This used to be satisfied by the timer
+        // running out, so "Lose the tail" and "Get out of the district" were both
+        // completed by standing still for a minute and a quarter — the seconds
+        // field was a reward for waiting rather than a deadline to beat. Now the
+        // distance is what finishes it and the clock is what fails it.
         const from = _v1.set(o.x ?? m.start.x, 0, o.z ?? m.start.z);
-        done = st.time >= (o.seconds || 60) || Math.hypot(p.x - from.x, p.z - from.z) > 220;
+        const away = Math.hypot(p.x - from.x, p.z - from.z);
+        done = away > ESCAPE_DISTANCE;
+        if (!done && st.time > (o.seconds || 60)) { this._fail('They caught up'); return; }
         break;
       }
       case 'losewanted':
@@ -670,6 +682,26 @@ export class MissionSystem {
     this._markerGroup.add(mesh);
     this.markers.push({ mesh, x, z, kind, color, follow });
   }
+  /**
+   * Keep a marker over the thing it is for.
+   *
+   * Five of the places that raise an objective marker hand _addMarker the
+   * target it belongs to — the gunman to kill, the car to wreck, the passenger
+   * to pick up — and that argument was stored and never read again. The marker
+   * stayed where the target happened to be standing when the objective started,
+   * so a target that walked or drove away left the player following a column of
+   * light to an empty street corner. A marker over something that has died stays
+   * put, which is where the body is.
+   */
+  _followMarkers() {
+    for (let i = 0; i < this.markers.length; i++) {
+      const f = this.markers[i].follow;
+      if (!f || f.dead) continue;
+      const pos = f.sim ? f.sim.position : (f.body ? f.body.position : null);
+      if (pos) this._moveMarker(i, pos);
+    }
+  }
+
   _moveMarker(i, pos) {
     const m = this.markers[i];
     if (!m || !pos) return;
