@@ -193,6 +193,13 @@ export function makeProp(kind, opts = {}, rng) {
           // The lens is the only part of a traffic light that changes at runtime,
           // so it is the only part that has to stay out of the world merge.
           m.userData.noMerge = true;
+          // Nothing has moved these since the world was generated, and the
+          // default was recomposing a local matrix and a world matrix for all
+          // 2802 of them on every frame to prove it. Object3D.updateMatrixWorld
+          // recurses into every child with no visible test, so hiding the group
+          // beyond 95 m never saved a single one of them.
+          m.matrixAutoUpdate = false;
+          m.updateMatrix();
           group.add(m);
           lensMeshes.push(m);
         }

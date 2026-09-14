@@ -33,6 +33,15 @@ const KEY = 'vicecoast.settings.v1';
 //   be like works, and that one looks good — the look comes from the tone
 //   mapping, the prefiltered environment map and emissive neon, none of which
 //   needs a composer.
+// - Medium renders at full resolution now, where it used to render at 0.85 and
+//   stretch the result back up to the window. That softness was the single most
+//   visible difference between this game and the reference build it was measured
+//   against, and it is bought outright by everything else on this list: the
+//   bottom presets dropped their whole post chain, the sky stopped drawing
+//   underneath the city, the environment probe stopped rebuilding fifteen times
+//   a minute, and three dead per-pixel effects came out of the composite. If a
+//   particular machine still cannot hold it, the governor drops the rung — which
+//   is a thing it can now actually do.
 // - `bloomMips`, `aoTaps` and `blurTaps` are new: the passes that DO run are now
 //   sized per preset instead of every preset paying ultra's tap counts. Bloom
 //   was five mip levels (ten blur draws) at every preset that had it on; the
@@ -58,7 +67,7 @@ export const QUALITY_PRESETS = {
     dprCap: 1,
   },
   medium: {
-    label: 'Medium', pixelRatio: 0.85, post: true, bloomMips: 3, aoTaps: 0, blurTaps: 3,
+    label: 'Medium', pixelRatio: 1.0, post: true, bloomMips: 3, aoTaps: 0, blurTaps: 3,
     shadows: true, shadowMapSize: 1024, shadowExtent: 90,
     ssao: false, bloom: true, motionBlur: true, dof: false, reflections: true, smaa: false,
     drawDistance: 540, pedBudget: 42, trafficBudget: 34, particleBudget: 650,
@@ -79,7 +88,10 @@ export const QUALITY_PRESETS = {
     ssao: true, bloom: true, motionBlur: true, dof: true, reflections: true, smaa: true,
     drawDistance: 1000, pedBudget: 120, trafficBudget: 85, particleBudget: 2000,
     grassDensity: 1.0, anisotropy: 16, waterQuality: 3, decalBudget: 380, volumetrics: true,
-    dprCap: 1.25,
+    // Ultra is the preset that means "I have the machine for this", and the
+    // global 1080p budget was quietly cancelling the higher display density it
+    // asks for. It gets its own ceiling.
+    dprCap: 1.25, pixelBudget: 2560 * 1440,
   },
 };
 

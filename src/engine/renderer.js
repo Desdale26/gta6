@@ -62,9 +62,6 @@ const COMPOSITE_SHADER = {
     uAORadius: { value: 0.9 },
     uWetLens: { value: 0.0 },
     uFlash: { value: 0.0 },
-    uDamage: { value: 0.0 },
-    uDrunk: { value: 0.0 },
-    uScanline: { value: 0.0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -82,7 +79,7 @@ const COMPOSITE_SHADER = {
     uniform vec2 uCameraNearFar;
     uniform float uDofFocus, uDofRange, uDofStrength;
     uniform vec3 uFogColor;
-    uniform float uHazeStrength, uWetLens, uFlash, uDamage, uDrunk, uScanline;
+    uniform float uHazeStrength, uWetLens, uFlash;
     uniform float uAOStrength, uAORadius;
 
     float linearDepth(float d){
@@ -106,10 +103,11 @@ const COMPOSITE_SHADER = {
       vec2 center = uv - 0.5;
       float r2 = dot(center, center);
 
-      // Drunk / impact warp
-      if (uDrunk > 0.001){
-        uv += vec2(sin(uTime * 1.7 + uv.y * 9.0), cos(uTime * 1.3 + uv.x * 7.0)) * 0.006 * uDrunk;
-      }
+      // Three effects used to live here and in the tail below — a drunk warp, a
+      // damage tint and a scanline — and nothing in the game has ever written
+      // any of their uniforms. The damage tint was not even branched, so every
+      // pixel of every frame mixed towards red by exactly zero and then paid a
+      // smoothstep for the privilege.
 
       float depth = texture2D(tDepth, uv).x;
       float lin = linearDepth(depth);
@@ -252,8 +250,7 @@ const COMPOSITE_SHADER = {
         col += uWetLens * 0.015 * hash(uv * 700.0 + uTime);
       }
 
-      // ---- damage + flash ----
-      col = mix(col, vec3(0.55, 0.03, 0.03), uDamage * smoothstep(0.05, 0.42, r2) * 0.8);
+      // ---- flash ----
       col = mix(col, vec3(1.0), uFlash);
 
       // ---- vignette ----
@@ -263,9 +260,6 @@ const COMPOSITE_SHADER = {
       if (uGrain > 0.001){
         float n = hash(uv * uResolution + fract(uTime) * 1234.5) - 0.5;
         col += n * uGrain * 0.055 * (0.35 + 0.65 * (1.0 - luma));
-      }
-      if (uScanline > 0.001){
-        col *= 1.0 - uScanline * 0.12 * step(0.5, fract(gl_FragCoord.y * 0.5));
       }
 
       gl_FragColor = vec4(toSRGB(clamp(col, 0.0, 1.0)), 1.0);
@@ -497,7 +491,7 @@ export class Renderer {
       const wD = Math.max(320, window.innerWidth || 1280);
       const hD = Math.max(240, window.innerHeight || 720);
       const userD = clamp(this.settings.get('renderScale') ?? 1, 0.5, 2);
-      const budgetD = this.settings.get('pixelBudget') || (1920 * 1080);
+      const budgetD = p.pixelBudget || this.settings.get('pixelBudget') || (1920 * 1080);
       let baseD = p.pixelRatio * userD * dprD;
       if (wD * hD * baseD * baseD > budgetD) baseD = Math.sqrt(budgetD / Math.max(1, wD * hD));
       let rD = baseD * this._resolutionScale;
@@ -533,7 +527,7 @@ export class Renderer {
     // the budget and were flattened to the same number. The governor's fastest
     // lever did nothing at all, while still reallocating every render target in
     // the chain each time it pulled it.
-    const budget = this.settings.get('pixelBudget') || (1920 * 1080);
+    const budget = p.pixelBudget || this.settings.get('pixelBudget') || (1920 * 1080);
     let base = p.pixelRatio * userScale * dpr;
     if (w * h * base * base > budget) base = Math.sqrt(budget / Math.max(1, w * h));
     // The floor is on pixels, not on the ratio: a fixed ratio floor collapses the

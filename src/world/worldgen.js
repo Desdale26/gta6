@@ -92,7 +92,14 @@ export class World {
     // so the two disagreed by however much the hill fell away under each
     // building -- you could see a kerb your car drove straight through.
     p(0.93, 'Laying the ground');
-    const terrainMesh = this.terrain.buildMesh(ctx.materials, 200, 5);
+    // 400 m tiles, not 200. A 200 m grid over this map is 256 tiles on one
+    // shared material, and roughly 28 of them are in frustum at any moment —
+    // twenty-eight draw calls spent culling ground that is flat, opaque and
+    // never occluded by anything worth culling for. The grid was buying fine
+    // culling granularity with draw calls, which is the wrong currency. The
+    // resolution stays at 5 m: 6.25 would stop agreeing with the 4 m collision
+    // height grid the lines above exist to keep in step.
+    const terrainMesh = this.terrain.buildMesh(ctx.materials, 400, 5);
     this.group.add(terrainMesh);
     await yieldFrame();
 
@@ -572,7 +579,31 @@ export class World {
    * still works because each chunk is only ~130 m across.
    */
   async _mergeStatics() {
+    // A chunk size per material, not one size for everything.
+    //
+    // The 170 m grid was never the problem. The problem is that a chunk is
+    // keyed by cell AND material, and about eight and a half different
+    // materials land in every occupied cell — so the great majority of the 152
+    // materials in the city were paying a whole chunk, and therefore a whole
+    // draw call, per cell to hold a handful of meshes. A material used
+    // everywhere wants small cells so frustum culling can reject most of it; a
+    // material used in forty places wants one cell for the entire map. Sizing
+    // each by how much of it there is gets both.
     const CHUNK = 170;
+    const perMaterial = new Map();
+    for (const child of this.group.children) {
+      if (!child.isGroup || !(child.name.startsWith('building:') || child.name.startsWith('prop:'))) continue;
+      if (child.userData.noMerge) continue;
+      child.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.material) return;
+        if (o.userData.noMerge) return;
+        perMaterial.set(o.material.uuid, (perMaterial.get(o.material.uuid) || 0) + 1);
+      });
+    }
+    const cellFor = (uuid) => {
+      const n = perMaterial.get(uuid) || 1;
+      return Math.min(1600, CHUNK * Math.sqrt(4500 / n));
+    };
     const buckets = new Map();      // "cx,cz|materialUUID" -> { material, geos, cx, cz }
     const toRemove = [];
     let considered = 0;
@@ -603,9 +634,10 @@ export class World {
       });
       if (!mergeable || !collected.length) continue;
       considered++;
-      const cx = Math.floor(child.position.x / CHUNK);
-      const cz = Math.floor(child.position.z / CHUNK);
       for (const mesh of collected) {
+        const cell = cellFor(mesh.material.uuid);
+        const cx = Math.floor(child.position.x / cell);
+        const cz = Math.floor(child.position.z / cell);
         const key = `${cx},${cz}|${mesh.material.uuid}`;
         let b = buckets.get(key);
         if (!b) {
