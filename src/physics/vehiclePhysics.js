@@ -234,7 +234,7 @@ export class VehicleSim {
     // sanity checks in Game.validate() could never fire: they all tested for
     // states the clamps had already made impossible. A clamp biting IS the
     // fault, so each one is counted and validate() reports the count.
-    this.clamped = { speed: 0, tyreTemp: 0, brakeTemp: 0, wear: 0, nonFinite: 0, tyrePeak: 0, brakePeak: 0 };
+    this.clamped = { speed: 0, tyreTemp: 0, brakeTemp: 0, wear: 0, nonFinite: 0, tyrePeak: 0, brakePeak: 0, speedPeak: 0 };
     this.clutch = 1; this.boost = 0; this.airPitch = 0; this.airRoll = 0; this.airYaw = 0;
     this.reverseHeld = 0;
 
@@ -1503,9 +1503,18 @@ export class VehicleSim {
       for (const w of this.wheels) w.angularVel *= 0.5;
     }
     // Safety net: nothing in this game should ever exceed ~500 km/h.
-    const MAX_SPEED = 140;
+    // Two ceilings. The global one is the last line of defence; the per-vehicle
+    // one is what stops a solver spike teleporting a car across the street. A
+    // road vehicle simply cannot reach much over half again its own catalogue
+    // top speed under its own power, and a fall does not get there either --
+    // terminal velocity for a car is around 60 m/s. Anything past that came
+    // from a numerical event, not from driving, and clamping it there removes
+    // the jump while leaving every legitimate speed alone.
+    const own = Math.max(50, (this.def.topSpeed || 60) * 1.6);
+    const MAX_SPEED = Math.min(140, own);
     if (this.speed > MAX_SPEED) {
       this.clamped.speed++;
+      if (this.speed > this.clamped.speedPeak) this.clamped.speedPeak = this.speed;
       this.velocity.multiplyScalar(MAX_SPEED / this.speed);
       this.speed = MAX_SPEED;
     }

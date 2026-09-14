@@ -49,12 +49,24 @@ const SCENARIOS = [
     setup: (c) => {
       const v = c.traffic.spawnAt('', c.player.position.x + 4, c.player.position.z + 4, 0, { ai: false })
         || c.traffic.spawnAt(c.__anyCar, c.player.position.x + 4, c.player.position.z + 4, 0, { ai: false });
+      c.__driveCar = v;
       if (v) c.player.enterVehicle(v, 0);
       window.__VC.hold(['KeyW']);
     },
     assert: (c) => {
       const bad = [];
-      if (!c.player.inVehicle) { bad.push('player is not in a vehicle'); return bad; }
+      if (!c.player.inVehicle) {
+        // Say WHY. A bare "not in a vehicle" gives nothing to act on: the car
+        // may never have spawned, or it may have been wrecked by fourteen
+        // seconds of holding W through a city.
+        const v = c.__driveCar;
+        bad.push(v
+          ? `player is not in a vehicle — the ${v.def.id} they got into is `
+            + `${v.dead ? 'dead' : 'alive'}, hp ${Math.round(v.sim.health)}/${Math.round(v.sim.maxHealth)}, `
+            + `${v.sim.exploded ? 'exploded' : 'intact'}, up.y ${v.sim.up.y.toFixed(2)}`
+          : 'player is not in a vehicle — none was ever spawned to get into');
+        return bad;
+      }
       const sim = c.player.vehicle.sim;
       if (c.player.distanceDriven < 25) bad.push(`drove only ${c.player.distanceDriven.toFixed(1)} m at full throttle`);
       if (sim.speed > 120) bad.push(`vehicle reached ${sim.speed.toFixed(0)} m/s`);

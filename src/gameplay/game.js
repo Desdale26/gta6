@@ -537,7 +537,7 @@ export class Game {
         // or a disc that STAYS there. 60 substeps is half a second.
         const HELD = 60;
         const hit = cl.nonFinite ? `went non-finite ${cl.nonFinite} time(s)`
-          : cl.speed ? `hit the 140 m/s ceiling ${cl.speed} time(s)`
+          : cl.speed > HELD ? `held its speed ceiling for ${(cl.speed / 120).toFixed(1)}s (peak ${cl.speedPeak.toFixed(0)} m/s)`
           : cl.wear ? `computed negative tyre wear ${cl.wear} time(s)`
           : cl.tyreTemp > HELD ? `held a tyre at the 220 C ceiling for ${(cl.tyreTemp / 120).toFixed(1)}s (peak ${cl.tyrePeak.toFixed(0)} C)`
           : cl.brakeTemp > HELD ? `held a brake disc at the 900 C ceiling for ${(cl.brakeTemp / 120).toFixed(1)}s (peak ${cl.brakePeak.toFixed(0)} C)`
