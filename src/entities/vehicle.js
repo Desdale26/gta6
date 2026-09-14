@@ -4,6 +4,7 @@ import { clamp, lerp, damp, formatMoney } from '../core/mathx.js';
 import { VehicleSim, wheelMeshLocalY } from '../physics/vehiclePhysics.js';
 import { buildVehicleMesh, applyDeformation } from './vehicleBody.js';
 import { LAYER, SURFACE, SURFACE_PROPS } from '../physics/world.js';
+import { AmbientEngineSound } from '../audio/engineSound.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -78,6 +79,12 @@ export class Vehicle {
     this._skidTimers = new Float32Array(this.sim.nWheels);
     this._lastSkidMark = new Array(this.sim.nWheels).fill(null);
     this._engineSound = null;
+    this._siren = null;
+    this._crashCooldown = 0;
+    // Nothing was ever hooked up to this, so a car hitting a wall, a lamp post
+    // or another car made no sound at all -- carCrashLight and carCrashHeavy sat
+    // in the bank with no call site anywhere in the game.
+    this.sim.events.impact = (im) => this._onImpact(im);
     this._lastSurface = SURFACE.ROAD;
     this._lightsDirty = true;
     this._distToCam = 0;
@@ -151,8 +158,53 @@ export class Vehicle {
     if (this.hornTime > 0) this.hornTime -= dt;
     if (this.alarmTime > 0) this.alarmTime -= dt;
     if (this.sirenOn) this.sirenTime += dt;
+    if (this._crashCooldown > 0) this._crashCooldown -= dt;
+    this._updateAmbientAudio(dt);
 
     if (sim.exploded && this.explodeTime === undefined) this.onExplode();
+  }
+
+  /** Bang, scrape or crunch, by how hard it was. */
+  _onImpact(im) {
+    if (this._crashCooldown > 0 || !im || im.speed === undefined) return;
+    const speed = im.speed;
+    if (speed < 2.2) return;
+    this._crashCooldown = 0.18;
+    const heavy = speed > 9;
+    this.ctx.audio?.playAt(heavy ? 'carCrashHeavy' : 'carCrashLight',
+      { x: im.x, y: im.y, z: im.z },
+      { volume: Math.min(1, 0.28 + speed * 0.05), maxDistance: heavy ? 220 : 140 });
+  }
+
+  /**
+   * Engine note and siren for cars the player is not driving. The player's own
+   * car gets the full EngineSound rig from Player; every other vehicle in the
+   * city had nothing at all -- AmbientEngineSound was written and never
+   * constructed, and because the siren lived inside the player's rig, a police
+   * car chasing you was silent unless you were sitting in it.
+   */
+  _updateAmbientAudio(dt) {
+    const ctx = this.ctx;
+    const mine = ctx.player && ctx.player.vehicle === this;
+    const near = !this.dead && !mine && this._distToCam < 95;
+
+    if (near && !this._engineSound && !this.sim.exploded) {
+      this._engineSound = new AmbientEngineSound(ctx, this);
+    } else if (!near && this._engineSound) {
+      this._engineSound.dispose();
+      this._engineSound = null;
+    }
+    if (this._engineSound) this._engineSound.update(dt);
+
+    const wantSiren = this.sirenOn && !mine && !this.dead && this._distToCam < 340;
+    if (wantSiren && !this._siren) {
+      this._siren = ctx.audio?.startLoop('sirenWail',
+        { volume: 0.5, position: this.sim.position, maxDistance: 340, refDistance: 20 }) || null;
+    } else if (!wantSiren && this._siren) {
+      this._siren.stop();
+      this._siren = null;
+    }
+    if (this._siren) this._siren.setPosition(this.sim.position);
   }
 
   syncMesh(dt) {
@@ -395,7 +447,8 @@ export class Vehicle {
       // any one of them.
       if (o.isMesh && !o.geometry?.userData?.shared) o.geometry?.dispose?.();
     });
-    if (this._engineSound) { this._engineSound.stop(); this._engineSound = null; }
+    if (this._engineSound) { this._engineSound.dispose(); this._engineSound = null; }
+    if (this._siren) { this._siren.stop(); this._siren = null; }
     if (this.blip && this.ctx.hud) this.ctx.hud.removeBlip(this.blip);
   }
 }

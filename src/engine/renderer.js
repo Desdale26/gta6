@@ -182,11 +182,17 @@ const COMPOSITE_SHADER = {
       }
 
       // ---- chromatic aberration (lens, strongest at the edges) ----
+      // Added as a DIFFERENCE, never as a replacement. Assigning the offset
+      // samples straight into col.r and col.b overwrote two of the three
+      // channels with the raw scene, so the motion blur, the depth of field and
+      // the ambient occlusion computed above all survived in the green channel
+      // alone -- every one of them rendered as a green ghost of itself.
       if (uChroma > 0.001){
         float amt = uChroma * 0.0028 * (0.25 + r2 * 3.0);
         vec2 dir = normalize(center + 1e-5);
-        col.r = texture2D(tDiffuse, uv + dir * amt).r;
-        col.b = texture2D(tDiffuse, uv - dir * amt).b;
+        vec3 flatCol = texture2D(tDiffuse, uv).rgb;
+        col.r += texture2D(tDiffuse, uv + dir * amt).r - flatCol.r;
+        col.b += texture2D(tDiffuse, uv - dir * amt).b - flatCol.b;
       }
 
       // ---- aerial perspective haze ----
@@ -213,7 +219,13 @@ const COMPOSITE_SHADER = {
         if (d > 0.965 - uWetLens * 0.06){
           vec2 f = fract(uv * vec2(24.0, 14.0)) - 0.5;
           float drop = smoothstep(0.34, 0.05, length(f));
-          col = mix(col, texture2D(tDiffuse, uv + f * 0.02).rgb * 1.15, drop * uWetLens * 0.7);
+          // The droplet reads the scene buffer, which is still linear HDR, while
+          // col has already been exposed, tonemapped and graded. Mixing the two
+          // spaces put a raw over-bright smear on the lens instead of a bead of
+          // water; running the sample through the same exposure and tonemap puts
+          // it back in the picture's own range.
+          vec3 dropCol = aces(texture2D(tDiffuse, uv + f * 0.02).rgb * uExposure);
+          col = mix(col, dropCol * 1.15, drop * uWetLens * 0.7);
         }
         col += uWetLens * 0.015 * hash(uv * 700.0 + uTime);
       }
@@ -423,7 +435,12 @@ export class Renderer {
     if (this._autoTimer < 1.2) return;
     this._autoTimer = 0;
     const target = 1000 / (this.settings.get('targetFps') || 60);
-    const avg = this.frameMs.avg;
+    // `frameMs` times the render alone. On a machine where the simulation costs
+    // more than the draw -- which is most of them once the city is busy -- that
+    // reads comfortably under target while the player is at 30 fps, and the
+    // adaptive resolution responds by turning the resolution UP. `dt` is the
+    // real frame-to-frame time and includes everything.
+    const avg = Math.max(this.frameMs.avg, dt * 1000);
     if (avg > target * 1.35 && this._resolutionScale > 0.55) {
       this._resolutionScale = Math.max(0.55, this._resolutionScale - 0.08);
       this.resize();

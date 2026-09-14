@@ -219,38 +219,46 @@ if (booted) {
     const r = await page.evaluate(([code]) => {
       const ctx = window.__VC.ctx;
       const p = ctx.player;
-      window.__VC.release();
-      if (p.inVehicle) p.exitVehicle(true);
-      const spot = ctx.world.safeRoadPoint(806, -300);
-      p.body.position.set(spot.x, ctx.physics.groundHeight(spot.x, spot.z) + 1.0, spot.z);
-      p.body.velocity.set(0, 0, 0);
       // A single-file bundle cannot import the catalogue, so borrow a body from
       // something already driving around.
       const donor = ctx.traffic.all().find((v) => !v.dead && v.def.body.kind === 'car')
         || ctx.traffic.all().find((v) => !v.dead);
       if (!donor) return { error: 'no traffic to borrow a car from' };
-      const car = ctx.traffic.spawnAt(donor.def, spot.x + 3, spot.z + 3, spot.yaw || 0, { ai: false });
-      if (!car) return { error: 'no car could be spawned on the road' };
-      p.enterVehicle(car, 0);
 
-      // Get rolling in a straight line first.
-      window.__VC.hold(['KeyW']);
-      window.__VC.simulate(2.2);
+      // A city street is full of things to hit, and a car that stops against a
+      // kerb after nine-tenths of a metre says nothing about which way the
+      // wheels were pointing. Try a few spots and measure the first clear run.
+      let last = null;
+      for (const along of [0, 26, -26, 52]) {
+        window.__VC.release();
+        if (p.inVehicle) p.exitVehicle(true);
+        const spot = ctx.world.safeRoadPoint(806 + along * 0.2, -300 + along);
+        p.body.position.set(spot.x, ctx.physics.groundHeight(spot.x, spot.z) + 1.0, spot.z);
+        p.body.velocity.set(0, 0, 0);
+        const car = ctx.traffic.spawnAt(donor.def, spot.x + 3, spot.z + 3, spot.yaw || 0, { ai: false });
+        if (!car) continue;
+        p.enterVehicle(car, 0);
 
-      ctx.camera.updateMatrixWorld(true);
-      const right = new ctx.THREE.Vector3().setFromMatrixColumn(ctx.camera.matrixWorld, 0);
-      right.y = 0; right.normalize();
-      const before = car.sim.position.clone();
+        // Get rolling in a straight line first.
+        window.__VC.hold(['KeyW']);
+        window.__VC.simulate(2.2);
 
-      window.__VC.hold(['KeyW', code]);
-      window.__VC.simulate(1.6);
-      window.__VC.release();
-      const moved = car.sim.position.clone().sub(before);
-      moved.y = 0;
-      const dist = moved.length();
-      const speed = car.sim.speed;
-      p.exitVehicle(true);
-      return { dist, speed, lateral: dist > 1e-6 ? moved.dot(right) / dist : 0 };
+        ctx.camera.updateMatrixWorld(true);
+        const right = new ctx.THREE.Vector3().setFromMatrixColumn(ctx.camera.matrixWorld, 0);
+        right.y = 0; right.normalize();
+        const before = car.sim.position.clone();
+
+        window.__VC.hold(['KeyW', code]);
+        window.__VC.simulate(1.6);
+        window.__VC.release();
+        const moved = car.sim.position.clone().sub(before);
+        moved.y = 0;
+        const dist = moved.length();
+        p.exitVehicle(true);
+        last = { dist, attempts: (last ? last.attempts : 0) + 1, lateral: dist > 1e-6 ? moved.dot(right) / dist : 0 };
+        if (dist > 3) return last;
+      }
+      return last || { error: 'no car could be spawned anywhere on the road' };
     }, [d.key]);
 
     if (r.error) { problems.push(r.error); note(`${d.name}    ${r.error}`); continue; }
@@ -260,7 +268,7 @@ if (booted) {
     note(`${d.name}    steer ${(d.sign > 0 ? 'right' : 'left ')} on screen  ${r.lateral.toFixed(2).padStart(7)}   ${ok ? 'ok' : 'WRONG'}`);
     if (!ok) {
       problems.push(r.dist <= 3
-        ? `${d.name} in a car: the car only moved ${r.dist.toFixed(1)} m, nothing to measure`
+        ? `${d.name} in a car: the car only moved ${r.dist.toFixed(1)} m in ${r.attempts} attempt(s), nothing to measure`
         : `${d.name} should steer ${d.sign > 0 ? 'right' : 'left'} but the car went the other way (lateral ${r.lateral.toFixed(2)})`);
     }
   }

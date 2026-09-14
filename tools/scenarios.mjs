@@ -318,6 +318,17 @@ const SCENARIOS = [
       // firefight is holding the weapon they are firing is not, and this makes
       // the second one deterministic.
       const p = c.player.position;
+      // A tracer lives 0.07 s, so looking at combat.tracers once at the end of
+      // the scenario almost always sees an empty list. Watch them as they are
+      // made instead, and keep the longest.
+      c.__tracerPeak = 0; c.__tracerCount = 0;
+      c.__tracerOrig = c.combat._tracer.bind(c.combat);
+      c.combat._tracer = (from, to) => {
+        const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+        if (d > c.__tracerPeak) c.__tracerPeak = d;
+        c.__tracerCount++;
+        return c.__tracerOrig(from, to);
+      };
       const ped = c.peds.spawn('gang-viper', p.x + 6, p.z + 6, 0, {});
       if (ped) {
         ped.armed = 'pistol-9';
@@ -367,16 +378,15 @@ const SCENARIOS = [
       // so from and to arrived as the same object and every NPC tracer was a
       // point: enemy fire came out of nowhere with nothing drawn between them
       // and the player.
-      const tr = c.combat.tracers || [];
-      if (!tr.length) bad.push('nobody fired a visible shot in eighteen seconds of a four-star chase');
-      else {
-        const longest = Math.max(...tr.map((t) => Math.hypot(t.x1 - t.x0, t.y1 - t.y0, t.z1 - t.z0)));
-        if (!(longest > 0.5)) bad.push(`every tracer on screen is ${longest.toFixed(3)} m long — they are drawing as points`);
+      if (!c.__tracerCount) bad.push('nobody fired a visible shot in eighteen seconds of a four-star chase');
+      else if (!(c.__tracerPeak > 0.5)) {
+        bad.push(`all ${c.__tracerCount} tracers drawn were under ${c.__tracerPeak.toFixed(3)} m long — they are drawing as points`);
       }
       return bad;
     },
     teardown: (c) => {
       c.police.clear();
+      if (c.__tracerOrig) { c.combat._tracer = c.__tracerOrig; c.__tracerOrig = null; }
       if (c.__gunman) { c.__gunman.dispose?.(); c.__gunman = null; }
     },
   },

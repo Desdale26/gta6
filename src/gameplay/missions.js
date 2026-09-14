@@ -98,6 +98,13 @@ export class MissionSystem {
 
     ctx.bus.on('ped:killed', (e) => this._onPedKilled(e));
     ctx.bus.on('vehicle:explode', (e) => this._onVehicleDestroyed(e));
+    // `rob` used to complete the moment ctx.shops.robbery went back to null,
+    // which happens when a robbery is ABANDONED as well as finished, and at
+    // any shop in the city rather than the one the objective named.
+    ctx.bus.on('robbery:finished', (e) => {
+      if (!this.active || !this.objectiveState) return;
+      this.objectiveState.lastRobbery = { shop: e.shop, take: e.take };
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -298,16 +305,27 @@ export class MissionSystem {
         done = dist2D(p, o) < (o.radius || 10) && (!o.inVehicle || player.inVehicle);
         break;
       case 'steal':
-        done = !!player.vehicle && this.spawned.vehicles.includes(player.vehicle);
+        // st.targets is this objective's car; spawned.vehicles accumulates over
+        // the whole mission, so a second 'steal' completed the instant it began
+        // if the player was still sitting in the first one.
+        done = !!player.vehicle && st.targets.includes(player.vehicle);
         break;
-      case 'rob':
+      case 'rob': {
         if (ctx.shops.robbery && ctx.shops.robbery.shop) st.robbing = true;
-        done = st.robbing && !ctx.shops.robbery;
+        // A robbery that paid out, at the shop the objective points at if it
+        // names one. Watching ctx.shops.robbery go back to null counted an
+        // abandoned hold-up, and counted one at a shop on the other side of town.
+        const r = st.lastRobbery;
+        const rightShop = !r ? false
+          : (o.x === undefined || dist2D({ x: r.shop.x, z: r.shop.z }, o) < (o.radius || 25));
+        done = !!r && r.take > 0 && rightShop;
+        if (r && !done) st.lastRobbery = null;      // wrong shop, or nothing taken
         if (!done && !st.robbing && dist2D(p, o) < (o.radius || 12) && ctx.shops.nearby) {
           // Nudge the player toward the right verb.
           st.hint = true;
         }
         break;
+      }
       case 'kill': case 'killAll':
         done = st.count >= st.need;
         if (o.seconds && st.time > o.seconds) { this._fail('Ran out of time'); return; }
@@ -320,6 +338,9 @@ export class MissionSystem {
         done = st.collected >= st.need;
         break;
       case 'survive':
+        // "Hold the yard for ninety seconds" has to mean holding the yard. The
+        // bare timer was satisfied by driving away and waiting it out.
+        if (o.x !== undefined && dist2D(p, o) > (o.radius || 30) * 1.6) st.time = Math.max(0, st.time - dt * 2);
         done = st.time >= (o.seconds || 60);
         this._maintainEnemies(o, dt);
         break;
@@ -341,11 +362,15 @@ export class MissionSystem {
         break;
       case 'chase': {
         const target = st.targets[0];
-        if (!target || target.dead) { done = true; break; }
+        // A wrecked target counts as caught. A target that is simply gone does
+        // not -- that used to complete the objective, which meant the surest way
+        // to finish a chase was to let the car get away.
+        if (!target) { this._fail('Lost the target'); return; }
+        if (target.dead) { done = true; break; }
         const d = Math.hypot(target.sim ? target.sim.position.x - p.x : target.body.position.x - p.x,
           target.sim ? target.sim.position.z - p.z : target.body.position.z - p.z);
         this._moveMarker(0, target.sim ? target.sim.position : target.body.position);
-        if (d > 260 && m.fail.onTargetEscaped) { this._fail('Target escaped'); return; }
+        if (d > 320) { this._fail('Target escaped'); return; }
         done = d < (o.radius || 14);
         break;
       }
@@ -362,7 +387,12 @@ export class MissionSystem {
         if (done) ctx.audio?.play('cameraShutter', { ui: true });
         break;
       case 'stunt':
-        if (o.seconds) done = ctx.stunts.maxAirTime >= o.seconds;
+        // ctx.stunts.maxAirTime is a lifetime best and is restored from the save,
+        // so reading it meant the objective was already complete before it
+        // started for anyone who had ever landed a big jump. Track the peak
+        // reached during THIS objective instead.
+        st.airPeak = Math.max(st.airPeak || 0, ctx.stunts.airTime);
+        if (o.seconds) done = st.airPeak >= o.seconds;
         else done = dist2D(p, o) < (o.radius || 40) && ctx.stunts.airTime > 0.9;
         break;
       default:
@@ -555,7 +585,10 @@ export class MissionSystem {
     const n = o.count || 3;
     const cx = o.x ?? ctx.player.position.x;
     const cz = o.z ?? ctx.player.position.z;
-    const spread = o.count > 5 ? 700 : (o.radius || 20);
+    // The objective carries a radius; a count above five is not a licence to
+    // scatter pickups seven hundred metres across the city. Widen with the
+    // count, but stay in the neighbourhood the objective named.
+    const spread = Math.min(240, (o.radius || 20) * (1 + Math.max(0, n - 3) * 0.35));
     const geo = new THREE.OctahedronGeometry(0.5);
     const mat = new THREE.MeshStandardMaterial({
       color: 0x101018, emissive: 0xffc93c, emissiveIntensity: 2.4, roughness: 0.3,

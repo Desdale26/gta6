@@ -158,6 +158,15 @@ export class MusicPlayer {
     const t = this.track;
     const spb = 60 / t.bpm;
     const stepDur = spb / 4;
+    // A backgrounded tab leaves nextStepTime minutes behind. Catching up step by
+    // step then schedules dozens of them at instants that have already passed,
+    // and the context fires the lot together -- a wall of about a hundred and
+    // seventy voices the moment the tab comes back. Pick the music up from here
+    // instead of replaying the gap.
+    if (this.nextStepTime < now - 0.25) {
+      this.nextStepTime = now + 0.05;
+      this.step = 0;
+    }
     let guard = 0;
     while (this.nextStepTime < now + LOOKAHEAD && guard++ < 64) {
       const swung = (this.step % 2 === 1) ? stepDur * (t.swing || 0) : 0;

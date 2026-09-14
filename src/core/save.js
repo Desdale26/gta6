@@ -50,7 +50,13 @@ export function applySave(ctx, d) {
   if (!d) return false;
   const p = ctx.player;
   p.spawn(d.player.x, d.player.y, d.player.z, d.player.yaw);
-  p.health = d.player.health ?? p.maxHealth;
+  // A save written while dead stores health 0, and `??` lets a stored 0
+  // through: the player came back alive on no health, and regeneration is
+  // gated on health > 0, so it never ticked up and the first scratch killed
+  // them again. Anything at or below zero starts the player whole.
+  const savedHealth = d.player.health;
+  p.health = Number.isFinite(savedHealth) && savedHealth > 0 ? savedHealth : p.maxHealth;
+  p.dead = false;
   p.armor = d.player.armor ?? 0;
   p.kills = d.player.kills ?? 0;
   p.distanceDriven = d.player.distanceDriven ?? 0;

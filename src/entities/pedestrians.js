@@ -46,7 +46,11 @@ export class PedestrianManager {
         }
         continue;
       }
-      if (dist2 > this.despawnRadius * this.despawnRadius) {
+      // Mission peds are not ambient population: streaming one out sets its
+      // `dead` flag, which a 'protect' objective reads as the ally having been
+      // killed and a 'kill' objective can never credit -- so walking 130 m away
+      // either failed the mission outright or stalled it for good.
+      if (dist2 > this.despawnRadius * this.despawnRadius && !p.isMissionTarget && !p.isAlly) {
         p.dispose();
         this.peds.splice(i, 1);
         continue;

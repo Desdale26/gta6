@@ -107,15 +107,16 @@ export class Game {
     this._placePlayer();
     this._wireEvents();
 
-    // Starter kit so the first minute is not empty.
-    ctx.player.weapons.add('pistol-9', 60);
-    ctx.player.weapons.add('baseball-bat');
-    ctx.player.weapons.select('fists');
-
     const save = loadGame();
     if (save) {
       try { applySave(ctx, save); ctx.hud.toast('Welcome back', 'Progress restored', 'info'); }
       catch (e) { console.warn('[game] could not apply save', e); }
+    } else {
+      // Starter kit so the first minute is not empty -- for a NEW game only.
+      // Handing it out before the save was applied put back every weapon the
+      // save did not list, and applySave only ever adds: get arrested, lose the
+      // pistol, and it was waiting for you again, fully loaded, on every reload.
+      this.grantStarterKit();
     }
 
     p(0.98, 'Ready');
@@ -322,6 +323,14 @@ export class Game {
 
   save() { return saveGame(this.ctx); }
 
+  /** What a brand-new game starts with. */
+  grantStarterKit() {
+    const w = this.ctx.player.weapons;
+    w.add('pistol-9', 60);
+    w.add('baseball-bat');
+    w.select('fists');
+  }
+
   restart() {
     clearSave();
     const ctx = this.ctx;
@@ -331,9 +340,30 @@ export class Game {
     ctx.player.weapons.slots.clear();
     ctx.player.weapons.order = [];
     ctx.player.weapons.add('fists');
-    ctx.player.weapons.select('fists');
+    // A new game is a new game: the same kit a first boot gets, not fists only.
+    this.grantStarterKit();
     ctx.player.health = ctx.player.maxHealth;
     ctx.player.armor = 0;
+    ctx.player.dead = false;
+    // Lifetime totals and stunt records are on the Statistics page and in the
+    // save, so leaving them behind meant "Wipes your progress" kept your medals
+    // -- and, worse, left every stunt challenge already beaten and therefore
+    // unearnable, with the next autosave baking the old numbers into the new
+    // save two minutes later.
+    ctx.player.kills = 0;
+    ctx.player.distanceDriven = 0;
+    ctx.player.distanceWalked = 0;
+    if (ctx.stunts) {
+      ctx.stunts.totalScore = 0;
+      ctx.stunts.bestCombo = 0;
+      ctx.stunts.maxAirTime = 0;
+      // Reset each record rather than clearing the map: _scoreChallenge looks
+      // its spot up and bails if there is no entry, so an emptied map would
+      // make every challenge unscorable instead of unbeaten.
+      if (ctx.stunts.challenges) {
+        for (const rec of ctx.stunts.challenges.values()) { rec.best = 0; rec.medal = 'none'; }
+      }
+    }
     ctx.police.clear();
     ctx.time.hour = 8.5;
     ctx.time.day = 1;
@@ -480,7 +510,10 @@ export class Game {
     for (const v of ctx.traffic.all()) {
       if (v.dead) continue;
       trafficAlive++;
-      if (v.sim.up.y < 0.2) trafficRolled++;
+      // A motorcycle on its side is a motorcycle someone knocked over, not
+      // evidence of broken physics. Counting them made a clipped bike read as
+      // "a third of the traffic is on its roof".
+      if (v.sim.up.y < 0.2 && v.def.body.kind !== 'bike') trafficRolled++;
       if (v.sim.health < v.sim.maxHealth * 0.5) trafficWrecked++;
       const s = v.sim;
       if (!Number.isFinite(s.position.x + s.position.y + s.position.z)) { bad.push(`vehicle ${v.def.id} has a non-finite position`); break; }
@@ -496,11 +529,19 @@ export class Game {
       // them and this reads the count.
       const cl = s.clamped;
       if (cl) {
+        // A non-finite transform, a car past 140 m/s or negative wear are always
+        // faults. The thermal ceilings are different: a single substep over the
+        // line is the clamp doing its job on a transient -- measured across
+        // burnouts, thirty-second drifts, wall impacts and spun-up landings,
+        // none of them touch it at all -- so what is worth reporting is a tyre
+        // or a disc that STAYS there. 60 substeps is half a second.
+        const HELD = 60;
         const hit = cl.nonFinite ? `went non-finite ${cl.nonFinite} time(s)`
           : cl.speed ? `hit the 140 m/s ceiling ${cl.speed} time(s)`
-          : cl.tyreTemp ? `ran a tyre past 220 C ${cl.tyreTemp} time(s)`
-          : cl.brakeTemp ? `ran a brake disc past 900 C ${cl.brakeTemp} time(s)`
-          : cl.wear ? `computed negative tyre wear ${cl.wear} time(s)` : null;
+          : cl.wear ? `computed negative tyre wear ${cl.wear} time(s)`
+          : cl.tyreTemp > HELD ? `held a tyre at the 220 C ceiling for ${(cl.tyreTemp / 120).toFixed(1)}s (peak ${cl.tyrePeak.toFixed(0)} C)`
+          : cl.brakeTemp > HELD ? `held a brake disc at the 900 C ceiling for ${(cl.brakeTemp / 120).toFixed(1)}s (peak ${cl.brakePeak.toFixed(0)} C)`
+          : null;
         if (hit) { bad.push(`vehicle ${v.def.id} ${hit}`); break; }
       }
       // Thermal state has to stay physical: a tyre or a disc that runs away is
@@ -523,7 +564,7 @@ export class Game {
     // drivers or the physics are failing, not that the city is having a bad day.
     if (trafficAlive >= 6) {
       if (trafficRolled / trafficAlive > 0.25) {
-        const ex = ctx.traffic.all().find((v) => !v.dead && v.sim.up.y < 0.2);
+        const ex = ctx.traffic.all().find((v) => !v.dead && v.sim.up.y < 0.2 && v.def.body.kind !== 'bike');
         const d = ex ? ` e.g. ${ex.def.id} at ${ex.sim.position.x.toFixed(0)},${ex.sim.position.z.toFixed(0)}`
           + ` doing ${(ex.sim.speed * 3.6).toFixed(0)} km/h, up.y=${ex.sim.up.y.toFixed(2)},`
           + ` wheels=${ex.sim.wheelsOnGround}, hp=${Math.round(ex.sim.health)}, age=${(ctx.time.elapsed - (ex.spawnedAt ?? 0)).toFixed(0)}s` : '';

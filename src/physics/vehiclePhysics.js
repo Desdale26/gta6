@@ -234,7 +234,7 @@ export class VehicleSim {
     // sanity checks in Game.validate() could never fire: they all tested for
     // states the clamps had already made impossible. A clamp biting IS the
     // fault, so each one is counted and validate() reports the count.
-    this.clamped = { speed: 0, tyreTemp: 0, brakeTemp: 0, wear: 0, nonFinite: 0 };
+    this.clamped = { speed: 0, tyreTemp: 0, brakeTemp: 0, wear: 0, nonFinite: 0, tyrePeak: 0, brakePeak: 0 };
     this.clutch = 1; this.boost = 0; this.airPitch = 0; this.airRoll = 0; this.airYaw = 0;
     this.reverseHeld = 0;
 
@@ -1167,7 +1167,10 @@ export class VehicleSim {
     const over = wheel.temp - AMBIENT_TYRE_C;
     wheel.temp -= (over * (TYRE_COOL_BASE + TYRE_COOL_PER_MS * this.speed)
       + TYRE_COOL_QUAD * over * Math.abs(over)) * dt;
-    if (wheel.temp > 220) this.clamped.tyreTemp++;
+    if (wheel.temp > 220) {
+      this.clamped.tyreTemp++;
+      if (wheel.temp > this.clamped.tyrePeak) this.clamped.tyrePeak = wheel.temp;
+    }
     wheel.temp = clamp(wheel.temp, AMBIENT_TYRE_C - 6, 220);
 
     // Wear accelerates once the rubber is past its window — that is exactly when
@@ -1189,7 +1192,10 @@ export class VehicleSim {
     const brakePower = brakeTorque * Math.abs(wheel.angularVel);
     wheel.brakeTemp += brakePower * this.brakeHeatPerJoule * dt;
     wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * (1 + this.speed * 0.09) * dt;
-    if (wheel.brakeTemp > 900) this.clamped.brakeTemp++;
+    if (wheel.brakeTemp > 900) {
+      this.clamped.brakeTemp++;
+      if (wheel.brakeTemp > this.clamped.brakePeak) this.clamped.brakePeak = wheel.brakeTemp;
+    }
     wheel.brakeTemp = clamp(wheel.brakeTemp, AMBIENT_TYRE_C - 6, 900);
     if (absVLong < 0.1 && this.brake < 0.02) wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * 0.02 * dt;
   }

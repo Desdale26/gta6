@@ -346,7 +346,10 @@ export class TrafficManager {
       const dist2 = dx * dx + dz * dz;
 
       // Despawn far-away traffic that the player is not looking at.
-      if (dist2 > this.despawnRadius * this.despawnRadius && v !== player.vehicle) {
+      // A mission vehicle is the mission. Streaming one out deleted the car a
+      // 'steal' objective was pointing at before the player could walk to it,
+      // and made a 'chase' target that simply outran the radius read as caught.
+      if (dist2 > this.despawnRadius * this.despawnRadius && v !== player.vehicle && !v.missionVehicle) {
         v.dispose();
         this.vehicles.splice(i, 1);
         this._stats.despawned++;

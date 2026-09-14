@@ -681,7 +681,14 @@ export class World {
       const n = tex('water', { size: 512 });
       const nm = tex('waterNormal', { size: 512 });
       if (n) { n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(60, 60); mat.map = n; }
-      if (nm) { nm.wrapS = nm.wrapT = THREE.RepeatWrapping; nm.repeat.set(80, 80); }
+      // Generated, wrapped, tiled -- and then never attached, so the sea was a
+      // flat mirror however rough the weather got.
+      if (nm) {
+        nm.wrapS = nm.wrapT = THREE.RepeatWrapping;
+        nm.repeat.set(80, 80);
+        mat.normalMap = nm;
+        mat.normalScale = new THREE.Vector2(0.6, 0.6);
+      }
     } catch (e) { /* plain water is fine */ }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(200, this.terrain.waterLevel, 0);

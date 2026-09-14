@@ -247,7 +247,15 @@ export class PoliceSystem {
     for (const o of this.officers) { o.threat = null; o._setState('wander'); }
     // Let them drive off rather than vanishing.
     setTimeout(() => this._prune(), 4000);
-    for (const h of this.helis) this.ctx.scene.remove(h.group);
+    // The rotor loop has to be stopped here as well. Emptying this.helis was
+    // the only teardown, and _updateHelis -- the one place that calls
+    // h.sound.stop() -- iterates that same array: every wanted level that ended
+    // left a helicopter droning over the city with nothing left to switch it off.
+    for (const h of this.helis) {
+      h.sound?.stop();
+      h.sound = null;
+      this.ctx.scene.remove(h.group);
+    }
     this.helis.length = 0;
   }
 

@@ -163,7 +163,7 @@ export class Menus {
         { id: 'h1', label: 'Graphics', header: true },
         { id: 'quality', label: 'Quality preset', value: QUALITY_PRESETS[s.get('quality')].label, cycle: q, get: () => s.get('quality') },
         { id: 'autoQuality', label: 'Adaptive quality', value: s.get('autoQuality') ? 'On' : 'Off', toggle: true },
-        { id: 'renderScale', label: 'Render scale', value: pct(s.get('renderScale') / 2), range: [0.5, 2, 0.05] },
+        { id: 'renderScale', label: 'Render scale', value: pct(s.get('renderScale')), range: [0.5, 2, 0.05] },
         { id: 'pixelBudget', label: 'Resolution limit', value: budgetLabel(s.get('pixelBudget')),
           cycle: PIXEL_BUDGETS.map((b) => b.value), get: () => s.get('pixelBudget') },
         { id: 'fov', label: 'Field of view', value: `${Math.round(s.get('fov'))}°`, range: [60, 105, 1] },
@@ -323,7 +323,15 @@ export class Menus {
       case 'settings': this.menuPage = 'settings'; this.menuIndex = 2; break;
       case 'stats': this.menuPage = 'stats'; this.menuIndex = 0; break;
       case 'controls': this.menuPage = 'controls'; this.menuIndex = 0; break;
-      case 'save': this.ctx.game.save(); this.ctx.hud.toast('Saved', 'Progress stored locally', 'good'); break;
+      case 'save': {
+        // saveGame returns false when storage is blocked -- a private window,
+        // site data turned off. Throwing that away told the player their run
+        // was stored when nothing had been written at all.
+        const ok = this.ctx.game.save();
+        if (ok) this.ctx.hud.toast('Saved', 'Progress stored locally', 'good');
+        else this.ctx.hud.toast('Could not save', 'This browser is blocking local storage', 'bad');
+        break;
+      }
       case 'restart': this.ctx.game.restart(); this._close(); return;
       case 'abandon': this.ctx.missions.abandon(); this._close(); return;
       case 'reset': this.ctx.settings.reset(); this.ctx.game.applyQuality(); break;
