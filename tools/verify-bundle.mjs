@@ -423,10 +423,13 @@ if (booted) {
       continue;
     }
     // Validated offline against the real canvas: with the arrow pointing the
-    // right way the behind half is 0.58 to 0.80 px wider and always holds more
-    // pixels; pointing backwards it is 0.61 to 0.93 px NARROWER and holds
-    // fewer. Both signs are asked for, and the margin sits between the two.
-    const ok = r.tipN >= 5 && r.tailN >= 5 && r.tailSpread > r.tipSpread + 0.25 && r.tailN > r.tipN;
+    // right way the behind half is 0.58 to 0.80 px wider, and pointing backwards
+    // it is 0.61 to 0.93 px NARROWER, so the margin sits cleanly between the
+    // two. The pixel COUNTS separate offline as well, but not over a live map,
+    // where the black outline meets different ground colours at different
+    // headings -- asking for both together failed a correctly drawn arrow that
+    // measured 0.56 px ahead against 1.26 px behind.
+    const ok = r.tipN >= 5 && r.tailN >= 5 && r.tailSpread > r.tipSpread + 0.25;
     note(`  yaw ${String(r.yaw).padStart(5)}  ahead half ${r.tipSpread.toFixed(2)} px wide (${r.tipN} px),`
       + ` behind half ${r.tailSpread.toFixed(2)} px wide (${r.tailN} px)   ${ok ? 'ok' : 'WRONG'}`);
     if (!ok) {

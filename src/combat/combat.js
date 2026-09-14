@@ -432,7 +432,15 @@ export class CombatSystem {
         if (d > radius * 1.7) continue;
         const falloff = clamp(1 - d / (radius * 1.2), 0, 1);
         const inv = 1 / Math.max(d, 0.8);
-        v.sim.applyImpulseAt(dx * inv * force * falloff, (Math.abs(dy) * inv + 0.6) * force * falloff, dz * inv * force * falloff,
+        // The impulse is in newton-seconds and the same for everything, so the
+        // velocity it imparts goes as 1/mass: a 124 kg scooter took 145 m/s off
+        // one grenade and sat pinned against the sim's own 140 m/s ceiling.
+        // Heavier things still move less; nothing gets launched into orbit.
+        const MAX_BLAST_DV = 26;
+        const mag = force * falloff * 1.17;              // incl. the vertical term
+        const cap = Math.min(1, (MAX_BLAST_DV * v.sim.mass) / Math.max(mag, 1e-3));
+        const imp = force * falloff * cap;
+        v.sim.applyImpulseAt(dx * inv * imp, (Math.abs(dy) * inv + 0.6) * imp, dz * inv * imp,
           v.sim.position.x, v.sim.position.y - 0.2, v.sim.position.z);
         if (v !== source) v.damage(damage * falloff * 2.2, x, y, z, source);
       }

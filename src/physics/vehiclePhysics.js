@@ -1152,10 +1152,20 @@ export class VehicleSim {
     // hysteresis — the rubber flexing as it rolls, which is why a tyre that has
     // never slid still runs forty degrees over ambient on a motorway.
     const force = Math.hypot(wheel.forceLong, wheel.forceLat);
-    const frictionPower = force * slipSpeed;
+    // Bound the sliding speed the heat model is allowed to believe in. A contact
+    // patch "sliding" at hundreds of metres a second under a load spike -- a car
+    // slammed into the ground by a blast, a wheel spun up in the air and then
+    // planted -- is not a contact patch any more, and integrating it as one took
+    // the tread to 2219 C inside a tenth of a second. Sixty metres a second of
+    // slide is already total destruction; past that the extra power is fiction.
+    const frictionPower = force * Math.min(slipSpeed, 60);
     const hysteresisPower = Math.abs(rollForce) * absVLong;
     const treadMass = Math.max(1.1, wheel.radius * wheel.width * 260 * 0.10);
-    const heatIn = frictionPower * TYRE_HEAT_FRACTION + hysteresisPower * TYRE_HYSTERESIS_FRACTION;
+    // And a ceiling on the rate itself, so a load spike cannot do the same thing
+    // by the other term. 250 kW into a couple of kilograms of rubber is about
+    // ninety degrees a second -- a tyre going from cold to destroyed in two.
+    const heatIn = Math.min(250000,
+      frictionPower * TYRE_HEAT_FRACTION + hysteresisPower * TYRE_HYSTERESIS_FRACTION);
     wheel.temp += (heatIn * dt) / (treadMass * RUBBER_SPECIFIC_HEAT);
     // Heat soaks out of the disc into the tyre after a stop — and it is heat the
     // disc then no longer has. Exchanging it both ways keeps the two from
@@ -1189,7 +1199,9 @@ export class VehicleSim {
     }
 
     // --- brakes ---
-    const brakePower = brakeTorque * Math.abs(wheel.angularVel);
+    // Same ceiling for the disc: a wheel whose angular velocity has run away
+    // must not be allowed to invent megawatts of braking.
+    const brakePower = Math.min(400000, brakeTorque * Math.abs(wheel.angularVel));
     wheel.brakeTemp += brakePower * this.brakeHeatPerJoule * dt;
     wheel.brakeTemp -= (wheel.brakeTemp - AMBIENT_TYRE_C) * BRAKE_COOL_RATE * (1 + this.speed * 0.09) * dt;
     if (wheel.brakeTemp > 900) {
