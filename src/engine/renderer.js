@@ -15,6 +15,28 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { clamp, RollingAverage } from '../core/mathx.js';
 
+// One tone curve, used by both renderers.
+//
+// The composite pass tone-maps with Narkowicz's ACES fit; three.js's own
+// ACESFilmicToneMapping is the full RRT/ODT fit and divides exposure by 0.6
+// before it starts. So the same city at the same hour came out most of a stop
+// brighter on the composer-free path than on the post path — and the governor
+// switches between those two paths while the player is standing still. Teaching
+// three's CustomToneMapping slot the composite's curve makes the switch
+// invisible, which is the only acceptable outcome for a change the player did
+// not ask for.
+THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace(
+  'vec3 CustomToneMapping( vec3 color ) { return color; }',
+  [
+    'vec3 CustomToneMapping( vec3 color ) {',
+    '  color *= toneMappingExposure;',
+    '  const float na = 2.51, nb = 0.03, nc = 2.43, nd = 0.59, ne = 0.14;',
+    '  color = clamp((color * (na * color + nb)) / (color * (nc * color + nd) + ne), 0.0, 1.0);',
+    '  return clamp((color - 0.5) * 1.06 + 0.5, 0.0, 1.0);',
+    '}',
+  ].join('\n'),
+);
+
 // Radius of the ambient-occlusion sample disc, in metres of world space.
 const AO_WORLD_RADIUS = 0.9;
 
@@ -283,7 +305,12 @@ export class Renderer {
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: false,
+      // The composer-free presets draw the scene straight into this buffer and
+      // have no antialiasing of any kind without this. The flag can only be set
+      // when the context is created, so it cannot be a preset — and on the post
+      // path the only thing ever drawn here is a full-screen quad with no
+      // interior edges, so it costs the resolve and nothing else.
+      antialias: true,
       alpha: false,
       powerPreference: 'high-performance',
       stencil: false,
@@ -391,23 +418,50 @@ export class Renderer {
     };
     this.composer.addPass(bindDepth);
 
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.52, 0.92);
-    this.bloomPass.enabled = !!p.bloom;
-    this.composer.addPass(this.bloomPass);
+    this._renderPass = this.renderPass;
+    this._bindDepth = bindDepth;
 
     this.compositePass = new ShaderPass(COMPOSITE_SHADER);
     this.compositePass.material.depthTest = false;
     this.compositePass.material.depthWrite = false;
     this.compositePass.uniforms.tDepth.value = this.depthTexture;
     this.composer.addPass(this.compositePass);
-    // bindDepth was inserted before the composite existed; give it the reference now.
 
-    this.smaaPass = new SMAAPass();
-    this.smaaPass.enabled = true;
-    this.composer.addPass(this.smaaPass);
-
+    this.bloomPass = null;
+    this.smaaPass = null;
     this.grade = this.compositePass.uniforms;
     this.applyQuality();
+  }
+
+  /**
+   * The pass list is rebuilt per preset rather than having passes sit in it
+   * switched off.
+   *
+   * EffectComposer walks every pass it holds on every resize with no regard for
+   * `enabled` — so a preset with bloom off still churned eleven render targets
+   * on every adaptive-resolution step, and a pass that ran once and was then
+   * switched off held its VRAM for the rest of the session. `composer.passes` is
+   * a plain array, so the honest fix is to put in it only what is going to run.
+   */
+  _syncPasses() {
+    const p = this.settings.preset;
+    if (this._direct) { this.composer.passes = [this._renderPass, this._bindDepth, this.compositePass]; return; }
+    const wantBloom = !!p.bloom;
+    const wantSmaa = !!p.smaa && (this.renderScaleUsed ?? 1) >= 0.95;
+    if (wantBloom && !this.bloomPass) {
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.52, 0.92);
+    } else if (!wantBloom && this.bloomPass) {
+      this.bloomPass.dispose?.();
+      this.bloomPass = null;
+    }
+    if (wantSmaa && !this.smaaPass) this.smaaPass = new SMAAPass();
+    else if (!wantSmaa && this.smaaPass) { this.smaaPass.dispose?.(); this.smaaPass = null; }
+
+    const list = [this._renderPass, this._bindDepth];
+    if (this.bloomPass) list.push(this.bloomPass);
+    list.push(this.compositePass);
+    if (this.smaaPass) list.push(this.smaaPass);
+    this.composer.passes = list;
   }
 
   /** Re-read the quality preset and reconfigure passes. */
@@ -421,7 +475,7 @@ export class Renderer {
       // ACES has to happen somewhere. In direct mode the renderer does it on the
       // way out; with the chain running, the composite does it and the renderer
       // must not do it twice.
-      this.renderer.toneMapping = direct ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+      this.renderer.toneMapping = direct ? THREE.CustomToneMapping : THREE.NoToneMapping;
       this.renderer.toneMappingExposure = direct ? (this.exposure ?? this.grade.uExposure.value ?? 1) : 1.0;
       // No rebuild here. Tone mapping is part of three.js's program cache key, so
       // crossing this line needs a second program variant for every material —
@@ -431,8 +485,7 @@ export class Renderer {
       // by the time this flips, the programs the flip needs are already warm and
       // three.js swaps to them without touching the compiler.
     }
-    this.bloomPass.enabled = !!p.bloom && !direct;
-    this.bloomPass.strength = this.bloomPass.enabled ? 0.34 : 0;
+    this._syncPasses();
     this.renderer.shadowMap.enabled = !!p.shadows;
     this.grade.uGrain.value = this.settings.get('filmGrain');
     this.grade.uChroma.value = this.settings.get('chromaticAberration');
@@ -538,6 +591,11 @@ export class Renderer {
     ratio = Math.min(ratio, base);
     this.renderScaleUsed = ratio;
     this.width = w; this.height = h;
+    // The pass list is settled BEFORE the composer is sized, not after: a pass
+    // constructed here for the first time is only given its render targets by
+    // the setSize sweep below, and one that never gets sized renders into
+    // nothing at all.
+    this._syncPasses();
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
@@ -552,13 +610,12 @@ export class Renderer {
     // The AO disc is a fixed size in metres; convert it to vertical UV per unit
     // of view depth, which is what the shader divides by.
     this.grade.uAORadius.value = AO_WORLD_RADIUS * this.camera.projectionMatrix.elements[5] * 0.5;
-    if (this.bloomPass) this.bloomPass.setSize(w * ratio, h * ratio);
     // Morphological antialiasing reconstructs edges at the resolution it runs at,
     // and the composer runs at `ratio` while the canvas is stretched back up to
     // the window. Below about 0.95 the upscale undoes everything SMAA just did,
     // so it is three passes and two full-size half-float targets spent on a
     // result the next blit throws away.
-    if (this.smaaPass) this.smaaPass.enabled = !!p.smaa && ratio >= 0.95;
+
     // Particle points are sized in pixels, from the height of the frame they are
     // drawn into. That was set once during boot and never again, so every spark,
     // splash and puff of smoke stayed the size it was when the window first

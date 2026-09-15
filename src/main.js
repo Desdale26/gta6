@@ -222,7 +222,7 @@ async function boot() {
   const wantTone = gl3.toneMapping;
   gl3.toneMapping = THREE.NoToneMapping;
   await compile();
-  gl3.toneMapping = THREE.ACESFilmicToneMapping;
+  gl3.toneMapping = THREE.CustomToneMapping;
   await compile();
   gl3.toneMapping = wantTone;
   clearInterval(tipTimer);

@@ -33,7 +33,6 @@ const FLAT = {
 const MIX = ['pennant-meridian', 'helion-quicksilver-ev', 'ardent-sidewinder-gt', 'civicworks-districtliner'];
 const SEEDS = [1, 7, 42, 1234, 99999];
 const CARS = 24;
-const SECONDS = 60;
 const DT = 1 / 60;
 
 // Two ceilings, because the two failures look different. A solver that has
@@ -46,9 +45,12 @@ const DT = 1 / 60;
 // where the governor works, and it is signed, so backwards counts.
 const MAX_SPEED = 45;
 const MAX_DRIVEN_SPEED = 30;
-// One car in five sixty-second runs finding a way to end up on its roof is a
-// bad driver. Two in one run is the physics.
-const MAX_ROLLED = 1;
+const SECONDS = Number(process.env.TRAFFIC_SECONDS || 60);
+// One car per sixty seconds finding a way to end up on its roof is a bad
+// driver; several is the physics. Scaled with the run, because this file is also
+// used at five minutes to watch damage accumulate and a fixed count would call a
+// proportionally identical result a regression.
+const MAX_ROLLED = Math.max(1, Math.round(SECONDS / 60));
 
 function grid() {
   const g = new RoadGraph();
@@ -151,11 +153,13 @@ function runSeed(seed) {
     }
   }
   const wrecked = cars.filter((c) => c.sim.health < c.sim.maxHealth * 0.5).length;
+  const exploded = cars.filter((c) => c.sim.exploded).length;
+  const burning = cars.filter((c) => !c.sim.exploded && c.sim.onFire > 0).length;
   const moved = cars.filter((c) => c.sim.speed > 1).length;
-  return { seed, n: cars.length, rolled, wrecked, moved, fastest, driven };
+  return { seed, n: cars.length, rolled, wrecked, exploded, burning, moved, fastest, driven };
 }
 
-console.log('traffic  (24 AI cars, 60 s, flat 6x6 arterial grid)');
+console.log(`traffic  (24 AI cars, ${SECONDS} s, flat 6x6 arterial grid)`);
 const failures = [];
 for (const seed of SEEDS) {
   const r = runSeed(seed);
@@ -173,7 +177,7 @@ for (const seed of SEEDS) {
   if (r.moved < r.n * 0.5) bad.push(`only ${r.moved} of ${r.n} were still driving`);
   const ok = !bad.length;
   console.log(`  ${ok ? 'ok     ' : 'WRONG  '}seed ${String(r.seed).padStart(5)}: `
-    + `${r.rolled.length} rolled, ${r.wrecked} wrecked, ${r.moved}/${r.n} driving, `
+    + `${r.rolled.length} rolled, ${r.wrecked} wrecked, ${r.exploded} exploded, ${r.burning} on fire, ${r.moved}/${r.n} driving, `
     + `peak ${r.fastest.speed.toFixed(1)} m/s (${r.driven.speed.toFixed(1)} driven)`);
   for (const b of bad) failures.push(`traffic seed ${r.seed}: ${b}`);
 }

@@ -1589,9 +1589,20 @@ export class VehicleSim {
     }
 
     // damage from impacts
+    //
+    // This used to start at 2.2 m/s and charge 26 hp for every metre per second
+    // above it, so a 36 km/h nudge took a fifth of a car's life and a parking
+    // scrape took 7%. Nothing ever repairs, so the city's traffic simply ground
+    // itself down: measured over five minutes on an empty grid with no player in
+    // it, half of every twenty-four cars ended up wrecked and four to six of them
+    // caught fire and exploded. That is where "random explosions" came from —
+    // cars nobody had touched, blowing up down the street.
+    //
+    // A bump is now free below 5 m/s and costs a third of what it did above it,
+    // which leaves a real crash lethal and routine city driving survivable.
     for (const im of this._impacts) {
       if (im.type === 'impact') {
-        const dmg = Math.max(0, (im.speed - 2.2)) * 26 * (1 / (this.def.durability || 1));
+        const dmg = Math.max(0, (im.speed - 5.0)) * 9 * (1 / (this.def.durability || 1));
         if (dmg > 0) this.damage(dmg, im.x, im.y, im.z);
         if (this.events.impact) this.events.impact(im);
       } else if (this.events.impact) this.events.impact(im);
@@ -1599,7 +1610,8 @@ export class VehicleSim {
     this._impacts.length = 0;
 
     // fire / explosion
-    if (this.health <= this.maxHealth * 0.16 && !this.onFire && this.health > 0) this.onFire = 0.001;
+    // A car has to be genuinely finished before it catches, not merely battered.
+    if (this.health <= this.maxHealth * 0.09 && !this.onFire && this.health > 0) this.onFire = 0.001;
     if (this.onFire > 0 && !this.exploded) {
       this.onFire += dt;
       this.health -= dt * 26;

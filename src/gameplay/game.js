@@ -127,6 +127,9 @@ export class Game {
     // was built with, and the traffic and pedestrian budgets kept their defaults,
     // until the adaptive system happened to step the preset. A city booted on
     // 'medium' was drawing 'high' shadows over a 140 m box.
+    // Put the radio on before the doors open, so the game is never silent.
+    ctx.radio.startAmbient();
+
     p(0.96, 'Setting the dials');
     this.applyQuality();
 

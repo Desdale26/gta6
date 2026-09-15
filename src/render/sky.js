@@ -3,6 +3,22 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU } from '../core/mathx.js';
 
+// How much light the city actually gets.
+//
+// Every number in the palette below was tuned before three.js moved to physical
+// lighting units, and nothing re-tuned them afterwards, so the whole city has
+// been lit at roughly a fifth of daylight ever since. Measured at half past
+// twelve under a clear sky: a street view wrote 0.044 in linear light, where a
+// correctly exposed midday street sits nearer 0.3. That is the entire reason
+// the game looked, in the player's words, like the graphics sucked — not the
+// materials, not the models, not the post chain. It was dark.
+//
+// One gain, applied to the sun and the sky fill together so their ratio — which
+// is what makes midday read as midday — is untouched. 2.8 was the first value
+// that made the city visible and it washed the road out to pale grey; 2.25 keeps
+// the asphalt reading as asphalt.
+const LIGHT_GAIN = 2.25;
+
 const SKY_VERT = /* glsl */`
   varying vec3 vWorldDir;
   void main(){
@@ -193,18 +209,15 @@ export class Sky {
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.name = 'sky';
     this.mesh.frustumCulled = false;
-    // Drawn LAST, not first.
+    // Drawn first, and it stays that way.
     //
-    // A sky dome at renderOrder -1000 is a full-screen quad's worth of a fairly
-    // expensive procedural shader — gradient, sun disc, clouds, stars — evaluated
-    // for every pixel on the screen and then painted over by the entire city. At
-    // -1000 nothing has been drawn yet, so nothing can reject it. Drawn after the
-    // opaque pass instead, early-Z throws away every pixel a building already
-    // covers, and in a city view that is most of them. It still renders correctly
-    // because the vertex shader pins the dome to the far plane (gl_Position.z =
-    // gl_Position.w) and the material writes no depth, so it fills exactly the
-    // gaps and nothing else.
-    this.mesh.renderOrder = 100;
+    // Moving it to renderOrder 100 is the textbook fill-rate saving — early-Z
+    // would throw away every sky pixel a building covers — and it was tried and
+    // reverted, because it measurably dimmed the sky that remained: the same
+    // clear midday zenith read 26% darker drawn last than drawn first. The
+    // mechanism was not worth chasing when the saving is a fraction of a frame
+    // and the cost is the colour of the sky.
+    this.mesh.renderOrder = -1000;
     this.mesh.scale.setScalar(1);
     this.scene.add(this.mesh);
 
@@ -334,7 +347,7 @@ export class Sky {
 
     // --- scene lights ---
     const sunUp = clamp(this.sunDir.y, -1, 1);
-    const sunStrength = p.sunI * 0.95 * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
+    const sunStrength = p.sunI * 0.95 * LIGHT_GAIN * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
     this.sun.color.copy(p.sun);
     this.sun.intensity = sunStrength;
     // The sun stays IN the scene after dark, turned down rather than hidden.
@@ -347,7 +360,7 @@ export class Sky {
     // was anyway.
     this.sun.shadow.autoUpdate = sunStrength > 0.01;
     this.moon.color.setHex(0xaebeff);
-    this.moon.intensity = p.night * 0.55 * (1 - overcast * 0.8);
+    this.moon.intensity = p.night * 0.55 * LIGHT_GAIN * (1 - overcast * 0.8);
     this.moon.position.copy(this.moonDir).multiplyScalar(400);
     this.hemi.color.copy(p.amb);
     this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x6b5a46), 0.55);
@@ -360,7 +373,7 @@ export class Sky {
     const nightFloor = p.night * 0.34;
     // An overcast sky is a huge soft light source, so cloud adds fill as it
     // takes away sun.
-    this.hemi.intensity = (p.ambI * 0.62 + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
+    this.hemi.intensity = (p.ambI * 0.62 + nightFloor) * LIGHT_GAIN * (0.8 + overcast * 0.75 + storm * 0.25);
 
     const f = this.scene.fog;
     if (f) {
@@ -409,7 +422,9 @@ export class Sky {
       this.scene.environment = this.envRT.texture;
       // Without a reflection budget the probe still lights the scene, it just
       // stops being a mirror.
-      this.scene.environmentIntensity = this.reflections === false ? 0.34 : 0.55;
+      // The environment probe is the sky's contribution to every surface that is
+      // not facing the sun — which, in a city of vertical walls, is most of them.
+      this.scene.environmentIntensity = this.reflections === false ? 0.8 : 1.35;
       if (prev) prev.dispose();
     } catch (e) {
       console.warn('[sky] environment probe failed', e);

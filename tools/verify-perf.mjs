@@ -45,6 +45,7 @@ const MAX_CALLS = 2200;             // was 5824; is ~1150
 const MAX_TRIS = 1_600_000;         // was 2_530_000; is ~860k
 const MAX_SCENE_LIGHTS = 16;        // the fixed pools plus sun, moon, hemisphere
 
+const T0 = Date.now();
 const problems = [];
 const note = (s) => console.log(s);
 
@@ -64,6 +65,7 @@ try {
   process.exit(1);
 }
 
+note(`booted in ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 const out = await page.evaluate(() => {
   const ctx = window.__VC.ctx;
   const gl = ctx.renderer.renderer;
@@ -153,6 +155,7 @@ const out = await page.evaluate(() => {
     sceneLights: [...sceneLights].sort((a, b) => a - b),
   };
 });
+note(`  play pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 
 // --- the cheap path has to draw the same city, not a black rectangle --------
 // The bottom two presets skip the post chain entirely and render the scene
@@ -187,11 +190,18 @@ const modes = await page.evaluate(async () => {
     const n = px.length / 4;
     return { mean: sum / n, min, max, litFrac: lit / n };
   };
+  // Nothing is simulated between these reads. The world, the clock and the
+  // camera are held exactly where they are and only the render path changes, so
+  // the brightness difference below is the path's and nothing else's. Letting
+  // the world run for a second between samples made this a comparison of two
+  // different moments and hid a whole stop of disagreement between the two
+  // tone curves.
   const out = [];
+  window.__VC.simulate(0.5);
+  ctx.game.setPaused(true);
   for (const q of ['medium', 'low', 'potato', 'medium']) {
     ctx.settings.set('quality', q);
     ctx.game.applyQuality();
-    window.__VC.simulate(1.2);
     const pic = read();
     out.push({
       quality: q,
@@ -202,8 +212,10 @@ const modes = await page.evaluate(async () => {
       ...pic,
     });
   }
+  ctx.game.setPaused(false);
   return out;
 });
+note(`  render-mode pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 note('');
 note('render modes: does the composer-free path still draw the city?');
 for (const m of modes) {
@@ -214,6 +226,95 @@ for (const m of modes) {
   if (!ok) {
     problems.push(`the ${m.quality} preset renders a picture with mean luma ${m.mean.toFixed(1)}`
       + ` and ${(m.litFrac * 100).toFixed(0)}% of pixels lit — that is not a city`);
+  }
+}
+// --- is the city lit at all? --------------------------------------------------
+// Half past twelve, clear sky, standing on a road. This is the check that did
+// not exist, and its absence let the whole game ship rendering at a fifth of
+// daylight: a street view wrote 0.044 in linear light where a correctly exposed
+// one sits nearer 0.3, and every count-based check in this file passed happily
+// while the player looked at a black screen. Draw calls, triangles, shader
+// programs and light counts can all be perfect on a game nobody can see.
+const daylight = await page.evaluate(() => {
+  const ctx = window.__VC.ctx;
+  const gl = ctx.renderer.renderer;
+  ctx.settings.set('quality', 'medium');
+  ctx.settings.data.autoQuality = false;
+  ctx.game.applyQuality();
+  ctx.time.hour = 12.5;
+  ctx.weather.setWeather('clear', true);
+  // The widest road there is, looking along it.
+  let best = null, bestScore = -1;
+  for (const e of ctx.world.roads.edges) {
+    const score = (e.lanesPerDir || 1) * 1000 + e.length;
+    if (score > bestScore) { bestScore = score; best = e; }
+  }
+  if (best) {
+    const t = 0.18;
+    const px = best.a.x + (best.b.x - best.a.x) * t;
+    const pz = best.a.z + (best.b.z - best.a.z) * t;
+    ctx.player.position.set(px, ctx.physics.groundHeight(px, pz) + 1.0, pz);
+    ctx.player.yaw = Math.atan2(best.dx, best.dz);
+    ctx.player.bodyYaw = ctx.player.yaw;
+    ctx.player.pitch = -0.04;
+  }
+  window.__VC.simulate(2.5);
+
+  const g = gl.getContext();
+  ctx.renderer.render(1 / 60, ctx.time.elapsed);
+  gl.setRenderTarget(null);
+  const w = Math.max(1, gl.domElement.width | 0);
+  const h = Math.max(1, gl.domElement.height | 0);
+  const sw = Math.min(160, w), sh = Math.min(90, h);
+  const px2 = new Uint8Array(sw * sh * 4);
+  g.readPixels(((w - sw) / 2) | 0, ((h - sh) / 2) | 0, sw, sh, g.RGBA, g.UNSIGNED_BYTE, px2);
+  let sum = 0, dark = 0, blown = 0, sat = 0;
+  for (let i = 0; i < px2.length; i += 4) {
+    const r = px2[i], gg = px2[i + 1], b = px2[i + 2];
+    const l = r * 0.3 + gg * 0.59 + b * 0.11;
+    sum += l;
+    if (l < 24) dark++;
+    if (l > 248) blown++;
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+    sat += mx > 0 ? (mx - mn) / mx : 0;
+  }
+  const n = px2.length / 4;
+  return { mean: sum / n, darkFrac: dark / n, blownFrac: blown / n, sat: sat / n,
+    sun: +ctx.sky.sun.intensity.toFixed(2), hemi: +ctx.sky.hemi.intensity.toFixed(2),
+    env: ctx.scene.environmentIntensity };
+});
+note(`  daylight pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
+note('');
+note('daylight: half past twelve, clear sky, standing on the widest road');
+{
+  const d = daylight;
+  note(`  mean luma ${d.mean.toFixed(1)}, ${(d.darkFrac * 100).toFixed(0)}% near-black, `
+    + `${(d.blownFrac * 100).toFixed(0)}% blown, mean saturation ${(d.sat * 100).toFixed(0)}%`);
+  note(`  sun ${d.sun}, sky fill ${d.hemi}, environment ${d.env}`);
+  if (d.mean < 70) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
+  if (d.mean > 225) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is blown out`);
+  if (d.darkFrac > 0.35) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
+  if (d.blownFrac > 0.2) problems.push(`${(d.blownFrac * 100).toFixed(0)}% of a clear midday street is pure white`);
+}
+
+// The governor switches between these two paths while the player is standing
+// still, so they have to agree on how bright the world is. They did not: the
+// composite tone-maps with Narkowicz's ACES fit and three.js's own ACES is the
+// full RRT/ODT fit with exposure pre-divided by 0.6, which is most of a stop.
+{
+  const composed = modes.filter((m) => !m.direct);
+  const direct = modes.filter((m) => m.direct);
+  if (composed.length && direct.length) {
+    const cAvg = composed.reduce((n, m) => n + m.mean, 0) / composed.length;
+    const dAvg = direct.reduce((n, m) => n + m.mean, 0) / direct.length;
+    const ratio = dAvg / Math.max(cAvg, 0.001);
+    const ok = ratio > 0.8 && ratio < 1.25;
+    note(`  ${ok ? 'ok    ' : 'WRONG '} the two paths agree on exposure: composer ${cAvg.toFixed(1)}, `
+      + `composer-free ${dAvg.toFixed(1)} (${ratio.toFixed(2)}x)`);
+    if (!ok) {
+      problems.push(`the composer-free path renders the same frame ${ratio.toFixed(2)}x the brightness of the`
+        + ` post path — the governor switches between them mid-play, so that is a visible jump`);
+    }
   }
 }
 if (!modes.some((m) => m.direct)) {

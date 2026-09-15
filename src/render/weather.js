@@ -8,18 +8,31 @@ import { fbm2D } from '../core/rng.js';
 import { tex } from './proctex.js';
 
 export const WEATHER_TYPES = {
-  clear: { cloud: 0.12, rain: 0, fog: 0.02, wind: 0.25, storm: 0, weight: 5, label: 'Clear' },
-  fair: { cloud: 0.34, rain: 0, fog: 0.05, wind: 0.35, storm: 0, weight: 4, label: 'Fair' },
-  overcast: { cloud: 0.82, rain: 0, fog: 0.12, wind: 0.5, storm: 0.1, weight: 2, label: 'Overcast' },
-  drizzle: { cloud: 0.72, rain: 0.35, fog: 0.18, wind: 0.4, storm: 0.1, weight: 2, label: 'Drizzle' },
-  rain: { cloud: 0.9, rain: 0.8, fog: 0.25, wind: 0.7, storm: 0.35, weight: 2, label: 'Rain' },
+  // Leonida is a sunny coast, and the weights say so now. They used to give
+  // clear and fair 9 of 17, so the other 8 — overcast, drizzle, rain, storm,
+  // sea fog — between them held the sky more than half the time, on a wheel
+  // that spun every ninety seconds. A game set in Miami spent most of itself
+  // grey.
+  clear: { cloud: 0.12, rain: 0, fog: 0.02, wind: 0.2, storm: 0, weight: 16, label: 'Clear' },
+  fair: { cloud: 0.34, rain: 0, fog: 0.05, wind: 0.28, storm: 0, weight: 12, label: 'Fair' },
+  overcast: { cloud: 0.82, rain: 0, fog: 0.12, wind: 0.4, storm: 0.1, weight: 3, label: 'Overcast' },
+  drizzle: { cloud: 0.72, rain: 0.35, fog: 0.18, wind: 0.35, storm: 0.1, weight: 2, label: 'Drizzle' },
+  rain: { cloud: 0.9, rain: 0.8, fog: 0.25, wind: 0.55, storm: 0.35, weight: 2, label: 'Rain' },
   storm: { cloud: 0.98, rain: 1, fog: 0.3, wind: 1, storm: 1, weight: 1, label: 'Thunderstorm' },
-  fog: { cloud: 0.55, rain: 0, fog: 0.85, wind: 0.15, storm: 0, weight: 1, label: 'Sea Fog' },
+  fog: { cloud: 0.55, rain: 0, fog: 0.85, wind: 0.12, storm: 0, weight: 1, label: 'Sea Fog' },
 };
 
 const RAIN_COUNT = 3200;
 // A full storm blows about 25 m/s (90 km/h) at the surface.
-const MAX_WIND_MS = 25;
+// Peak wind, in metres per second, at the worst the weather gets.
+//
+// This was 25 — ninety kilometres an hour, a genuine storm — and it is fed
+// straight into the physics world, where every car's aerodynamics and every
+// particle reads it. Even 'clear' weather carried a quarter of it, so the city
+// always had a 22 km/h crosswind shoving cars sideways, and a thunderstorm
+// could move a parked one. Nine is a stiff sea breeze you can see in the palms
+// and feel in a bike, and cannot feel in a car, which is the right place for it.
+const MAX_WIND_MS = 9;
 
 export class Weather {
   constructor(ctx) {
@@ -144,7 +157,9 @@ export class Weather {
     // --- schedule a change ---
     this.changeTimer -= dt;
     if (this.changeTimer <= 0) {
-      this.changeTimer = 90 + Math.random() * 260;
+      // Four to twelve minutes, not ninety seconds to four minutes. Weather that
+      // turns over faster than a mission takes reads as random, not as weather.
+      this.changeTimer = 240 + Math.random() * 480;
       this.randomWeather();
     }
 
@@ -171,10 +186,14 @@ export class Weather {
         // Under a storm the eye adapts up, not down — cutting exposure as well
         // as the light was the third place the same weather dimmed the scene.
         exposure: ctx.sky.exposure * 0.85 * (1 + this.storm * 0.04) * (1 + night * 0.5),
-        contrast: lerp(1.04, 1.12, this.storm) - this.fog * 0.06,
-        saturation: lerp(1.1, 0.72, Math.max(this.storm, this.fog * 0.7)),
+        // A touch more contrast than before. With the light budget corrected the
+        // midtones carry the whole image, and 1.04 left a bright street flat.
+        contrast: lerp(1.11, 1.18, this.storm) - this.fog * 0.06,
+        saturation: lerp(1.22, 0.72, Math.max(this.storm, this.fog * 0.7)),
         fogColor: fogCol,
-        haze: 0.16 + this.fog * 1.9 + this.storm * 0.45,
+        // Less standing haze on a clear day: the skyline is the selling point of
+        // a city on a coast, and 0.16 was quietly greying it out at every hour.
+        haze: 0.07 + this.fog * 1.9 + this.storm * 0.45,
         wetLens: clamp(this.rain * 0.9, 0, 1),
       });
       ctx.renderer.grade.uFlash.value = Math.max(ctx.renderer.grade.uFlash.value * 0.85, this.flash);
