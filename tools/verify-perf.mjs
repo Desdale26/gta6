@@ -324,11 +324,24 @@ if (daylight) {
   // the lighting that shipped reads 32 here, and this build reads 88. 60 sits
   // between them with most of a stop either way, and the near-black fraction
   // separates them just as cleanly at 31% against 12%, so that is tightened to
-  // 20% from the 35% it was. What this still will not catch is a partial
-  // dimming — it is a floor against a city nobody can see, not a tuner.
+  // 60 from the 100 it was.
+  //
+  // Mean luma is the discriminator and the near-black fraction is not, which
+  // took a full run to find out. Standalone, this build reads 12% near-black
+  // and the shipped lighting reads 31%, which looks like a clean split; run as
+  // part of the whole check, after the play pass and the render-mode pass have
+  // left the world somewhere else, the same build reads 21%. That fraction
+  // swings nine points on preceding state while the mean moves four, so a
+  // threshold anywhere between the two builds would fail on which passes ran
+  // rather than on how the city looks. It stays at 35% as a backstop against a
+  // frame that is mostly black, and it is worth being plain that at 35% it
+  // would NOT have caught the build that shipped. The mean is what does that.
+  //
+  // What none of this will catch is a partial dimming — it is a floor against a
+  // city nobody can see, not a tuner.
   if (d.mean < 60) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
   if (d.mean > 225) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is blown out`);
-  if (d.darkFrac > 0.20) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
+  if (d.darkFrac > 0.35) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
   if (d.blownFrac > 0.2) problems.push(`${(d.blownFrac * 100).toFixed(0)}% of a clear midday street is pure white`);
 }
 
