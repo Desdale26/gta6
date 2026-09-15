@@ -45,6 +45,22 @@ const MAX_CALLS = 2200;             // was 5824; is ~1150
 const MAX_TRIS = 1_600_000;         // was 2_530_000; is ~860k
 const MAX_SCENE_LIGHTS = 16;        // the fixed pools plus sun, moon, hemisphere
 
+// Which passes to run. The play pass simulates a minute of the game and the
+// render-mode pass boots every preset, and under SwiftShader those take ten and
+// fourteen minutes; the daylight pass takes under two. Working on the lighting
+// meant a twenty-five minute wait to see one number, so each pass can be asked
+// for by name — PERF_ONLY=daylight — and the checks that need a pass that did
+// not run are skipped rather than reported against missing data. No argument
+// runs everything, which is what CI and the final check do.
+const ONLY = (process.env.PERF_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean);
+const want = (pass) => !ONLY.length || ONLY.includes(pass);
+for (const o of ONLY) {
+  if (!['play', 'modes', 'daylight'].includes(o)) {
+    console.log(`unknown pass "${o}" — PERF_ONLY takes play, modes, daylight`);
+    process.exit(2);
+  }
+}
+
 const T0 = Date.now();
 const problems = [];
 const note = (s) => console.log(s);
@@ -66,7 +82,7 @@ try {
 }
 
 note(`booted in ${((Date.now() - T0) / 1000).toFixed(0)} s`);
-const out = await page.evaluate(() => {
+const out = !want('play') ? null : await page.evaluate(() => {
   const ctx = window.__VC.ctx;
   const gl = ctx.renderer.renderer;
   const samples = [];
@@ -155,7 +171,7 @@ const out = await page.evaluate(() => {
     sceneLights: [...sceneLights].sort((a, b) => a - b),
   };
 });
-note(`  play pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
+if (out) note(`  play pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 
 // --- the cheap path has to draw the same city, not a black rectangle --------
 // The bottom two presets skip the post chain entirely and render the scene
@@ -163,7 +179,7 @@ note(`  play pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 // also the easiest thing to get silently wrong: tone mapping moves from the
 // composite pass into the materials, and if that swap is missed the picture
 // comes out either black or blown out, and no count anywhere would say so.
-const modes = await page.evaluate(async () => {
+const modes = !want('modes') ? [] : await page.evaluate(async () => {
   const ctx = window.__VC.ctx;
   const gl = ctx.renderer.renderer;
   // Read the default framebuffer with readPixels in the SAME task as the draw.
@@ -215,9 +231,11 @@ const modes = await page.evaluate(async () => {
   ctx.game.setPaused(false);
   return out;
 });
-note(`  render-mode pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
+if (modes.length) note(`  render-mode pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
+if (modes.length) {
 note('');
 note('render modes: does the composer-free path still draw the city?');
+}
 for (const m of modes) {
   const ok = m.mean > 8 && m.mean < 245 && m.litFrac > 0.25 && m.max > 40;
   note(`  ${ok ? 'ok    ' : 'WRONG '} ${m.quality.padEnd(7)} ${m.direct ? 'direct ' : 'composer'}`
@@ -235,7 +253,7 @@ for (const m of modes) {
 // one sits nearer 0.3, and every count-based check in this file passed happily
 // while the player looked at a black screen. Draw calls, triangles, shader
 // programs and light counts can all be perfect on a game nobody can see.
-const daylight = await page.evaluate(() => {
+const daylight = !want('daylight') ? null : await page.evaluate(() => {
   const ctx = window.__VC.ctx;
   const gl = ctx.renderer.renderer;
   ctx.settings.set('quality', 'medium');
@@ -283,15 +301,23 @@ const daylight = await page.evaluate(() => {
     sun: +ctx.sky.sun.intensity.toFixed(2), hemi: +ctx.sky.hemi.intensity.toFixed(2),
     env: ctx.scene.environmentIntensity };
 });
-note(`  daylight pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
-note('');
-note('daylight: half past twelve, clear sky, standing on the widest road');
-{
+if (daylight) note(`  daylight pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
+if (daylight) {
+  note('');
+  note('daylight: half past twelve, clear sky, standing on the widest road');
   const d = daylight;
   note(`  mean luma ${d.mean.toFixed(1)}, ${(d.darkFrac * 100).toFixed(0)}% near-black, `
     + `${(d.blownFrac * 100).toFixed(0)}% blown, mean saturation ${(d.sat * 100).toFixed(0)}%`);
   note(`  sun ${d.sun}, sky fill ${d.hemi}, environment ${d.env}`);
-  if (d.mean < 70) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
+  // The floor is 100, and it is worth saying what that does and does not buy.
+  // The build that shipped measured 66 here, so this catches it with a third of
+  // the band to spare, and the current build measures 128-136 across runs — the
+  // spread is where the harness happens to stand and how far the weather has
+  // settled, not noise in the reading, and it is what stops this being tightened
+  // further. What it will NOT catch is a partial dimming: with the sky gain put
+  // back to 1 but the environment probe left alone the street still reads 111
+  // and passes. This is a floor against a city nobody can see, not a tuner.
+  if (d.mean < 100) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
   if (d.mean > 225) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is blown out`);
   if (d.darkFrac > 0.35) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
   if (d.blownFrac > 0.2) problems.push(`${(d.blownFrac * 100).toFixed(0)}% of a clear midday street is pure white`);
@@ -317,13 +343,14 @@ note('daylight: half past twelve, clear sky, standing on the widest road');
     }
   }
 }
-if (!modes.some((m) => m.direct)) {
+if (modes.length && !modes.some((m) => m.direct)) {
   problems.push('no preset used the composer-free path — the cheap renderer is unreachable');
 }
-if (!modes.some((m) => !m.direct)) {
+if (modes.length && !modes.some((m) => !m.direct)) {
   problems.push('every preset used the composer-free path — the post chain is unreachable');
 }
 
+if (out) {
 note('perf  (one minute of play: walk, nightfall, drive, an explosion, dawn)');
 note('label                       programs   calls      tris   lit night  err  scale  quality');
 for (const s of out.samples) {
@@ -378,6 +405,7 @@ if (litAtNight && litAtNight.night > 0.5 && litAtNight.lit === 0) {
 }
 if (peakCalls > MAX_CALLS) problems.push(`a frame asked for ${peakCalls} draw calls`);
 if (peakTris > MAX_TRIS) problems.push(`a frame asked for ${peakTris} triangles`);
+}
 
 await browser.close();
 
@@ -387,4 +415,6 @@ if (problems.length) {
   for (const p of problems) note('  ! ' + p);
   process.exit(1);
 }
-note('the frame stays inside its budget and the game stops compiling once it has started');
+note(ONLY.length
+  ? `pass(es) ${ONLY.join(', ')} clean — this was NOT the full check`
+  : 'the frame stays inside its budget and the game stops compiling once it has started');

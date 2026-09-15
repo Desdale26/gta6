@@ -3,21 +3,31 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU } from '../core/mathx.js';
 
-// How much light the city actually gets.
+// How much DAYLIGHT the city gets.
 //
-// Every number in the palette below was tuned before three.js moved to physical
-// lighting units, and nothing re-tuned them afterwards, so the whole city has
+// Every daylight number in the palette below was tuned before three.js moved to
+// physical lighting units, and nothing re-tuned them afterwards, so the city has
 // been lit at roughly a fifth of daylight ever since. Measured at half past
 // twelve under a clear sky: a street view wrote 0.044 in linear light, where a
 // correctly exposed midday street sits nearer 0.3. That is the entire reason
 // the game looked, in the player's words, like the graphics sucked — not the
 // materials, not the models, not the post chain. It was dark.
 //
-// One gain, applied to the sun and the sky fill together so their ratio — which
-// is what makes midday read as midday — is untouched. 2.8 was the first value
-// that made the city visible and it washed the road out to pale grey; 2.25 keeps
-// the asphalt reading as asphalt.
-const LIGHT_GAIN = 2.25;
+// Daylight, and only daylight. The first version of this multiplied everything
+// the sky emits, night included, and the lighting-levels scenario caught it
+// immediately: the ambient floor a clear night sits on went from 1.09 to 2.45
+// against a ceiling of 1.6, and rain at night to 2.72. Night was never the
+// broken case — it is lit by the moon, the street-light pool and a lot of
+// emissive neon, none of which went through the units change — so washing it
+// out would have traded one bad-looking game for another, and thrown away the
+// entire street-light system on the way. The sun and the daylight half of the
+// sky fill are gained; the night floor and the moon are left exactly as they
+// were.
+//
+// 2.8 was the first value that made the city visible and it washed the road out
+// to pale grey. 2.15 keeps the asphalt reading as asphalt and keeps the key
+// light under the ceiling that same scenario puts on it.
+const DAY_GAIN = 2.15;
 
 const SKY_VERT = /* glsl */`
   varying vec3 vWorldDir;
@@ -347,7 +357,7 @@ export class Sky {
 
     // --- scene lights ---
     const sunUp = clamp(this.sunDir.y, -1, 1);
-    const sunStrength = p.sunI * 0.95 * LIGHT_GAIN * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
+    const sunStrength = p.sunI * 0.95 * DAY_GAIN * clamp(sunUp * 5.0 + 0.05, 0, 1) * (1 - cloudCut);
     this.sun.color.copy(p.sun);
     this.sun.intensity = sunStrength;
     // The sun stays IN the scene after dark, turned down rather than hidden.
@@ -360,7 +370,7 @@ export class Sky {
     // was anyway.
     this.sun.shadow.autoUpdate = sunStrength > 0.01;
     this.moon.color.setHex(0xaebeff);
-    this.moon.intensity = p.night * 0.55 * LIGHT_GAIN * (1 - overcast * 0.8);
+    this.moon.intensity = p.night * 0.55 * (1 - overcast * 0.8);
     this.moon.position.copy(this.moonDir).multiplyScalar(400);
     this.hemi.color.copy(p.amb);
     this.hemi.groundColor.copy(p.ground).lerp(new THREE.Color(0x6b5a46), 0.55);
@@ -373,7 +383,14 @@ export class Sky {
     const nightFloor = p.night * 0.34;
     // An overcast sky is a huge soft light source, so cloud adds fill as it
     // takes away sun.
-    this.hemi.intensity = (p.ambI * 0.62 + nightFloor) * LIGHT_GAIN * (0.8 + overcast * 0.75 + storm * 0.25);
+    // The gain rides out with the sun. `ambI` is not a daylight-only quantity —
+    // it is still better than half its midday value at eleven at night — so
+    // multiplying it flat lifted the night too, and the lighting-levels scenario
+    // caught rain at night at 1.83 against a ceiling of 1.6. Scaled by how much
+    // daylight is left, it is the full gain at noon and exactly one after dark,
+    // which puts every night back on the floor it was tuned for.
+    const ambGain = 1 + (DAY_GAIN - 1) * (1 - p.night);
+    this.hemi.intensity = (p.ambI * 0.62 * ambGain + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
 
     const f = this.scene.fog;
     if (f) {
