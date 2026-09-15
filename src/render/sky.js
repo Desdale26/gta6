@@ -135,17 +135,30 @@ const SKY_FRAG = /* glsl */`
   }
 `;
 
-/** Keyframed sky/lighting palette across a 24 h day. */
+/** Keyframed sky/lighting palette across a 24 h day.
+ *
+ * `amb` is the hemisphere light's sky colour — the fill that lands on every
+ * surface the sun is not hitting. At midday and mid-afternoon it is correctly a
+ * cool blue (0xa8c2e2, 0x9db2cc), because that is what the sky overhead is. At
+ * dawn and dusk it had been set warm instead (0x8e7466, 0xb08464, 0x8a5f66),
+ * following the horizon rather than the sky, and the result was that the key
+ * light and the fill were both orange and a sunset had no second colour in it
+ * anywhere: road, pavement, walls and people all came out the same red, which
+ * reads as a filter over the picture rather than as light in a city. The sun
+ * goes orange at dusk; the sky above it stays blue, and that contrast is the
+ * whole of what golden hour looks like. These three are now sampled toward
+ * their own zenith, keeping a little of the warmth but not the monochrome.
+ */
 const DAY_KEYS = [
   { h: 0.0, zenith: 0x060a1a, horizon: 0x121631, ground: 0x08080f, sun: 0x223055, amb: 0x38415f, fog: 0x121730, sunI: 0.05, ambI: 0.55, night: 1.0, exposure: 1.5 },
   { h: 4.6, zenith: 0x0c1430, horizon: 0x2a2040, ground: 0x0c0a14, sun: 0x4b3a58, amb: 0x343553, fog: 0x1f1c36, sunI: 0.10, ambI: 0.46, night: 0.92, exposure: 1.46 },
-  { h: 6.1, zenith: 0x2a3f78, horizon: 0xd86a44, ground: 0x2a1e22, sun: 0xff9a52, amb: 0x8e7466, fog: 0x9a6a62, sunI: 1.15, ambI: 0.52, night: 0.35, exposure: 1.16 },
+  { h: 6.1, zenith: 0x2a3f78, horizon: 0xd86a44, ground: 0x2a1e22, sun: 0xff9a52, amb: 0x70789a, fog: 0x9a6a62, sunI: 1.15, ambI: 0.52, night: 0.35, exposure: 1.16 },
   { h: 7.4, zenith: 0x4d7cc4, horizon: 0xf0b183, ground: 0x4a4038, sun: 0xffd3a0, amb: 0x7d90b0, fog: 0xc9b5a8, sunI: 1.75, ambI: 0.72, night: 0.05, exposure: 1.06 },
   { h: 10.0, zenith: 0x3f7ed6, horizon: 0xa8ccf0, ground: 0x60625e, sun: 0xfff3dc, amb: 0x9fb8d8, fog: 0xbdd3ea, sunI: 2.85, ambI: 0.95, night: 0.0, exposure: 0.94 },
   { h: 13.0, zenith: 0x2f76e0, horizon: 0xb3d6f7, ground: 0x6a6c66, sun: 0xfffaf0, amb: 0xa8c2e2, fog: 0xc6dcf0, sunI: 3.15, ambI: 1.0, night: 0.0, exposure: 0.9 },
   { h: 16.5, zenith: 0x3a78cf, horizon: 0xd7c193, ground: 0x6a6156, sun: 0xffe7bb, amb: 0x9db2cc, fog: 0xd0cbb5, sunI: 2.45, ambI: 0.88, night: 0.0, exposure: 0.98 },
-  { h: 18.6, zenith: 0x2a4f92, horizon: 0xff8a4c, ground: 0x4a3228, sun: 0xff9d4f, amb: 0xb08464, fog: 0xd08a63, sunI: 1.75, ambI: 0.66, night: 0.08, exposure: 1.06 },
-  { h: 19.8, zenith: 0x1b2a5c, horizon: 0xd2497c, ground: 0x261a26, sun: 0xff6a7a, amb: 0x8a5f66, fog: 0x7a4a60, sunI: 0.75, ambI: 0.5, night: 0.45, exposure: 1.24 },
+  { h: 18.6, zenith: 0x2a4f92, horizon: 0xff8a4c, ground: 0x4a3228, sun: 0xff9d4f, amb: 0x8084a8, fog: 0xd08a63, sunI: 1.75, ambI: 0.66, night: 0.08, exposure: 1.06 },
+  { h: 19.8, zenith: 0x1b2a5c, horizon: 0xd2497c, ground: 0x261a26, sun: 0xff6a7a, amb: 0x60608c, fog: 0x7a4a60, sunI: 0.75, ambI: 0.5, night: 0.45, exposure: 1.24 },
   { h: 21.2, zenith: 0x0a1028, horizon: 0x35213f, ground: 0x0c0a12, sun: 0x2e2a48, amb: 0x3a3d5e, fog: 0x231a36, sunI: 0.08, ambI: 0.56, night: 0.95, exposure: 1.46 },
   { h: 24.0, zenith: 0x060a1a, horizon: 0x121631, ground: 0x08080f, sun: 0x223055, amb: 0x38415f, fog: 0x121730, sunI: 0.05, ambI: 0.55, night: 1.0, exposure: 1.5 },
 ];
@@ -439,9 +452,15 @@ export class Sky {
       this.scene.environment = this.envRT.texture;
       // Without a reflection budget the probe still lights the scene, it just
       // stops being a mirror.
-      // The environment probe is the sky's contribution to every surface that is
-      // not facing the sun — which, in a city of vertical walls, is most of them.
-      this.scene.environmentIntensity = this.reflections === false ? 0.8 : 1.35;
+      //
+      // The probe is the sky's contribution to every surface not facing the sun,
+      // which in a city of vertical walls is most of them — and it is blue. At
+      // 1.35 it was lifted further than the sun was (2.45x against 2.15x), so
+      // skylight out-weighed sunlight and every shadow on the road came out
+      // purple. A clear midday has a sun-to-sky ratio around five to one and this
+      // had it closer to three. 0.95 is still most of a doubling on the 0.55 it
+      // shipped at, and it puts the ratio back without putting the light back.
+      this.scene.environmentIntensity = this.reflections === false ? 0.6 : 0.95;
       if (prev) prev.dispose();
     } catch (e) {
       console.warn('[sky] environment probe failed', e);

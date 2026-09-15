@@ -174,7 +174,21 @@ function hexRgb(hex) { return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]; 
 // Generators — each returns a Field
 // ---------------------------------------------------------------------------
 const GEN = {
+  // How dark the road is.
+  //
+  // The generator below was written to average 0.29 sRGB, which is the very top
+  // of the 0.16-0.32 band this texture is checked against and squarely in
+  // concrete territory — real tarmac is 0.10 fresh and 0.18 well worn. It did
+  // not matter while the city was rendering at a fifth of daylight, because
+  // everything was dark. Correctly lit, a 0.29 road renders at sRGB 146 and the
+  // street reads as a pale concrete apron with the lane markings barely
+  // separating from it. One scale on the finished value, so every feature the
+  // generator draws — aggregate, tyre polish, tar seams, cracks — keeps its
+  // relative weight and only the overall tone moves. 0.72 lands it at 0.21:
+  // still inside the band, still a sunny coast rather than a documentary, and
+  // dark enough that the white lines are white.
   asphalt(size, o) {
+    const TONE = 0.72;
     const seed = o.seed ?? 1;
     return new Field(size).fill((u, v, x, y) => {
       const aggregate = tileWorley(u * 120, v * 120, 120, seed);
@@ -192,7 +206,7 @@ const GEN = {
       const cracks = tileWorley(u * 34, v * 34, 34, seed + 77);
       const crack = cracks < 0.018 ? 1 : 0;
       if (crack) base *= 0.74;
-      const c = clamp255(base);
+      const c = clamp255(base * TONE);
       const h = (grain * 0.4 + aggregate * 0.55 + (isSeam ? -0.4 : 0) - crack * 0.6) * 0.5;
       const rough = 0.95 - polish * 0.28 - aggregate * 0.05;
       return [c, c * 1.0, c * 1.05, h, rough];

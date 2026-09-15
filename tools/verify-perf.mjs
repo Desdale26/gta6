@@ -309,17 +309,26 @@ if (daylight) {
   note(`  mean luma ${d.mean.toFixed(1)}, ${(d.darkFrac * 100).toFixed(0)}% near-black, `
     + `${(d.blownFrac * 100).toFixed(0)}% blown, mean saturation ${(d.sat * 100).toFixed(0)}%`);
   note(`  sun ${d.sun}, sky fill ${d.hemi}, environment ${d.env}`);
-  // The floor is 100, and it is worth saying what that does and does not buy.
-  // The build that shipped measured 66 here, so this catches it with a third of
-  // the band to spare, and the current build measures 128-136 across runs — the
-  // spread is where the harness happens to stand and how far the weather has
-  // settled, not noise in the reading, and it is what stops this being tightened
-  // further. What it will NOT catch is a partial dimming: with the sky gain put
-  // back to 1 but the environment probe left alone the street still reads 111
-  // and passes. This is a floor against a city nobody can see, not a tuner.
-  if (d.mean < 100) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
+  // The floor, and how it was arrived at.
+  //
+  // This viewpoint stands on a road, so what it reads depends on the road's
+  // albedo as much as on the light. The first floor here was 100, derived when
+  // the asphalt texture averaged 0.29 sRGB — the top of its own band, and the
+  // reason the street looked like a concrete apron. With the asphalt at 0.21
+  // the same correctly-lit street reads 88, so the old floor would have failed
+  // a build that is better than the one it was written for. Numbers derived
+  // from a material do not survive that material changing, and keeping it at
+  // 100 would only have meant tuning the picture to satisfy the check.
+  //
+  // So both ends were measured again against the materials as they now are:
+  // the lighting that shipped reads 32 here, and this build reads 88. 60 sits
+  // between them with most of a stop either way, and the near-black fraction
+  // separates them just as cleanly at 31% against 12%, so that is tightened to
+  // 20% from the 35% it was. What this still will not catch is a partial
+  // dimming — it is a floor against a city nobody can see, not a tuner.
+  if (d.mean < 60) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is not lit`);
   if (d.mean > 225) problems.push(`a clear midday street reads at luma ${d.mean.toFixed(0)} — the city is blown out`);
-  if (d.darkFrac > 0.35) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
+  if (d.darkFrac > 0.20) problems.push(`${(d.darkFrac * 100).toFixed(0)}% of a clear midday street is near-black`);
   if (d.blownFrac > 0.2) problems.push(`${(d.blownFrac * 100).toFixed(0)}% of a clear midday street is pure white`);
 }
 
