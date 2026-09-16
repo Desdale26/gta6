@@ -29,6 +29,22 @@ import { clamp, lerp, smoothstep, TAU } from '../core/mathx.js';
 // light under the ceiling that same scenario puts on it.
 const DAY_GAIN = 2.15;
 
+// The sky's share of daylight, kept separate from the sun's.
+//
+// Taken from the reference build this was asked to look like: it runs a
+// directional sun at 2.0 against a hemisphere fill at 0.85, a ratio of about
+// 2.35 to 1. This game was at 5.86 against 1.18, nearly 5 to 1 — a hard key with
+// very little fill, which is why the sunlit faces were fine and everything
+// turning away from the sun fell into a dark, flat block. Opening the fill is
+// also the only way left to brighten the picture: the key light is already at
+// 5.86 against a ceiling of 6 that the lighting-levels scenario puts on it, and
+// fill has room to 4. 3.6 lands it near 1.8, a ratio around 3 to 1 — most of the
+// way to the reference without losing the sense that there is a sun.
+//
+// It rides out with the daylight exactly as DAY_GAIN does, so every night still
+// sits on the floor it was tuned for.
+const AMB_GAIN = 3.6;
+
 const SKY_VERT = /* glsl */`
   varying vec3 vWorldDir;
   void main(){
@@ -84,12 +100,23 @@ const SKY_FRAG = /* glsl */`
     if (up < 0.0) sky = mix(uHorizon, uGround, clamp(-up * 2.4, 0.0, 1.0));
 
     // --- Rayleigh-ish sun glow near the horizon ---
+    //
+    // The scattering is deliberately NOT driven by the full sun intensity. The
+    // three constants below were chosen against a sun of about 1, and uSunIntensity
+    // is a physical value that reaches 3.15 at midday, so the horizon glow came out
+    // around triple strength: it added a near-white 1.1 on top of a horizon that is
+    // only 0.70,0.84,0.97 to begin with, and the sky went milky white wherever it
+    // met the ground. That is what made a city of cream and pink buildings read as
+    // grey — not the palette, which was Miami all along, but the sky behind it.
+    // Scattering is an atmospheric effect that saturates; the sun disc and its halo
+    // are not, so those keep the real intensity below.
     float sunDot = max(dot(dir, uSunDir), 0.0);
     float sunAlt = clamp(uSunDir.y, -1.0, 1.0);
+    float scatterI = min(uSunIntensity, 1.2);
     float horizonBoost = pow(1.0 - abs(up), 5.0);
     vec3 scatter = uSunColor * (pow(sunDot, 6.0) * 0.45 + pow(sunDot, 1.6) * 0.12) * uTurbidity;
-    scatter += uSunColor * horizonBoost * 0.35 * smoothstep(-0.22, 0.30, sunAlt);
-    sky += scatter * uSunIntensity;
+    scatter += uSunColor * horizonBoost * 0.16 * smoothstep(-0.22, 0.30, sunAlt);
+    sky += scatter * scatterI;
 
     // --- Mie halo + sun disc ---
     float disc = smoothstep(0.99955, 0.99985, sunDot);
@@ -402,7 +429,7 @@ export class Sky {
     // caught rain at night at 1.83 against a ceiling of 1.6. Scaled by how much
     // daylight is left, it is the full gain at noon and exactly one after dark,
     // which puts every night back on the floor it was tuned for.
-    const ambGain = 1 + (DAY_GAIN - 1) * (1 - p.night);
+    const ambGain = 1 + (AMB_GAIN - 1) * (1 - p.night);
     this.hemi.intensity = (p.ambI * 0.62 * ambGain + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
 
     const f = this.scene.fog;

@@ -189,7 +189,11 @@ export class Weather {
         // A touch more contrast than before. With the light budget corrected the
         // midtones carry the whole image, and 1.04 left a bright street flat.
         contrast: lerp(1.11, 1.18, this.storm) - this.fog * 0.06,
-        saturation: lerp(1.22, 0.72, Math.max(this.storm, this.fog * 0.7)),
+        // Leonida is pastel pink, cream, cyan and neon. 1.22 was set while the
+        // city was too dark for any of that to show; with the light and the sky
+        // corrected it is the number that decides whether a pink hotel reads as
+        // pink or as another grey block.
+        saturation: lerp(1.42, 0.72, Math.max(this.storm, this.fog * 0.7)),
         fogColor: fogCol,
         // Less standing haze on a clear day: the skyline is the selling point of
         // a city on a coast, and 0.16 was quietly greying it out at every hour.
