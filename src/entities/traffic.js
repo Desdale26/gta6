@@ -351,6 +351,36 @@ export class TrafficManager {
     if (!player) return;
     const px = player.position.x, pz = player.position.z;
 
+    // --- a parked car somebody has got into is not parked any more ---
+    //
+    // This is the bug behind "the cars don't work". Vehicle.update(dt) is the only
+    // thing in the codebase that calls sim.update(dt), and it is called from
+    // exactly one place: the loop immediately below, over `this.vehicles`.
+    // Kerbside cars live in `this.parked`, and _updateParked only ever spawns and
+    // despawns them — it never steps one. But `all()` returns vehicles.concat(
+    // parked), so findNearbyVehicle offers parked cars to the player like any
+    // other: the prompt appears, the door opens, they are in the driver's seat,
+    // and then Player._updateInVehicle writes throttle and steering into a sim
+    // that nothing integrates. The car sits there for ever.
+    //
+    // Measured: a parked car held at full throttle for six seconds moved 0.00 m;
+    // the same vehicle spawned into `this.vehicles` instead moved 11.1 m in five.
+    // The only difference was which array it was in. Every check missed it
+    // because the 'drive' scenario spawns with traffic.spawnAt(), which pushes to
+    // `this.vehicles` unless opts.parked is set — so the suite only ever drove
+    // cars from the list that gets stepped.
+    //
+    // Promoting is better than stepping `this.parked` in place: a car nobody is
+    // in does not need integrating, and once it has a driver it is ordinary
+    // traffic — it despawns by distance, rights itself, takes damage and is
+    // exempt from streaming while the player is in it, all for free.
+    for (let i = this.parked.length - 1; i >= 0; i--) {
+      const v = this.parked[i];
+      if (!v.driver && v !== player.vehicle) continue;
+      this.parked.splice(i, 1);
+      this.vehicles.push(v);
+    }
+
     // --- drive ---
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];

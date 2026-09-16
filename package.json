@@ -9,7 +9,8 @@
   "scripts": {
     "albedo": "node tools/albedo.mjs",
     "bundle": "node tools/bundle.mjs",
-    "check": "npm run guards && npm run story && npm run vehicles && npm run traffic && npm run albedo && npm run verify && npm run perf && npm run scenarios",
+    "check": "npm run guards && npm run story && npm run vehicles && npm run traffic && npm run albedo && npm run verify && npm run driving && npm run perf && npm run scenarios",
+    "driving": "node tools/verify-driving.mjs",
     "guards": "node tools/verify-guards.mjs",
     "perf": "node tools/verify-perf.mjs",
     "scenarios": "node tools/scenarios.mjs",

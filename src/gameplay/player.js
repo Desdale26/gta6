@@ -477,11 +477,31 @@ export class Player {
       if (v.dead || v.sim.exploded) continue;
       const d = Math.hypot(v.sim.position.x - p.x, v.sim.position.z - p.z);
       if (d > maxDist + v.def.length * 0.5) continue;
-      const seat = v.nearestFreeSeat(p.x, p.z);
-      if (seat < 0) continue;
-      v.doorPoint(seat, _v1);
+      // Which car: still the one with the nearest reachable door, unchanged.
+      const nearestSeat = v.nearestFreeSeat(p.x, p.z);
+      if (nearestSeat < 0) continue;
+      v.doorPoint(nearestSeat, _v1);
       const dd = Math.hypot(_v1.x - p.x, _v1.z - p.z);
       if (dd > maxDist) continue;
+
+      // Which SEAT: the driver's, whenever it is free.
+      //
+      // This used to be whichever free seat had the nearest door, full stop, so
+      // the seat a player got depended on which corner of the car they happened
+      // to walk up to. Approach a car from behind — which is what you do when you
+      // are chasing it, or when it is parked nose-in — and you got seat 3. You
+      // were a passenger in the back of your own stolen car: the throttle key did
+      // nothing, the car sat there, and the only thing the game told you was
+      // "ride in the Tanuki Kaze RS". Measured on the shipped build, walking up
+      // to the nearest parked car and pressing the bound key put the player in
+      // seat 3 and six seconds of full throttle moved the car eight metres.
+      //
+      // `driver` is only ever set by an actor getting in; AI traffic drives
+      // through a separate `aiDriver`, so seat 0 is free on essentially every car
+      // in the city and this is nearly always the driver's seat. Getting in and
+      // driving away is the whole verb, and the reach test above has already
+      // decided the player is at this car.
+      const seat = v.driver ? nearestSeat : 0;
       if (dd < bestScore) { bestScore = dd; best = { vehicle: v, seat, dist: dd }; }
     }
     return best;
