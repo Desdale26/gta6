@@ -14,12 +14,14 @@ const VERT = /* glsl */`
   varying vec4 vColor;
   varying float vRot;
   varying float vFrame;
+  varying float vDepth;
   uniform float uPixelScale;
   void main(){
     vColor = aColor;
     vRot = aRot;
     vFrame = aFrame;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
     gl_PointSize = aSize * uPixelScale / max(-mv.z, 0.6);
   }
@@ -30,15 +32,21 @@ const FRAG = /* glsl */`
   varying vec4 vColor;
   varying float vRot;
   varying float vFrame;
+  varying float vDepth;
   uniform sampler2D uSmoke;
   uniform sampler2D uSpark;
+  uniform vec2 uNearFade;
   void main(){
     vec2 uv = gl_PointCoord - 0.5;
     float c = cos(vRot), s = sin(vRot);
     uv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c) + 0.5;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
     vec4 t = vFrame < 0.5 ? texture2D(uSmoke, uv) : texture2D(uSpark, uv);
-    float a = t.a * vColor.a;
+    // Never let a sprite sit on the lens. A point sprite is scaled by 1/depth,
+    // so a puff drifting through the camera covers the entire screen on its own
+    // -- which is what "I cannot see a thing" was. Fading it out over the last
+    // couple of metres costs nothing and makes that geometrically impossible.
+    float a = t.a * vColor.a * smoothstep(uNearFade.x, uNearFade.y, vDepth);
     if (a < 0.01) discard;
     gl_FragColor = vec4(t.rgb * vColor.rgb, a);
   }
@@ -146,18 +154,24 @@ export class ParticleSystem {
     if (!smokeTex) smokeTex = fallbackTexture(0.55);
     if (!sparkTex) sparkTex = fallbackTexture(0.14);
 
-    const uniforms = {
+    const shared = {
       uSmoke: { value: smokeTex },
       uSpark: { value: sparkTex },
       uPixelScale: { value: 520 },
     };
+    // Smoke gets a wide berth: a grey puff is pure occlusion, so it is gone well
+    // before it reaches the camera. Fire and sparks only vanish if they are
+    // effectively inside the lens — a muzzle flash while aiming is close to the
+    // camera and is meant to be seen.
     this.alphaMat = new THREE.ShaderMaterial({
-      uniforms, vertexShader: VERT, fragmentShader: FRAG,
+      uniforms: { ...shared, uNearFade: { value: new THREE.Vector2(0.9, 3.4) } },
+      vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, depthWrite: false, depthTest: true,
       blending: THREE.NormalBlending,
     });
     this.addMat = new THREE.ShaderMaterial({
-      uniforms, vertexShader: VERT, fragmentShader: FRAG,
+      uniforms: { ...shared, uNearFade: { value: new THREE.Vector2(0.12, 0.45) } },
+      vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, depthWrite: false, depthTest: true,
       blending: THREE.AdditiveBlending,
     });
@@ -185,8 +199,8 @@ export class ParticleSystem {
       x, y, z,
       vx: (Math.random() - 0.5) * 0.9, vy: 0.5 + Math.random() * 0.8, vz: (Math.random() - 0.5) * 0.9,
       size: size * 26, grow: size * 22, rot: Math.random() * 6.28, rotVel: (Math.random() - 0.5) * 1.1,
-      r: c.r, g: c.g, b: c.b, a: clamp(0.06 * strength, 0, 0.12),
-      life: 1.1 + Math.random() * 1.3, drag: 0.9, gravity: 0.35, frame: 0, fadeIn: 0.15,
+      r: c.r, g: c.g, b: c.b, a: clamp(0.18 * strength, 0, 0.32),
+      life: 0.8 + Math.random() * 0.9, drag: 0.9, gravity: 0.35, frame: 0, fadeIn: 0.15,
     });
   }
   spawnDust(x, y, z, color = 0xc0a878, strength = 1) {
@@ -297,15 +311,19 @@ export class ParticleSystem {
         life: 0.3 + Math.random() * 0.5, drag: 1.6, gravity: 2, frame: 0, rot: Math.random() * 6.3,
       });
     }
-    for (let i = 0; i < n * 0.8; i++) {
+    // The fireball is the part worth seeing. The smoke column behind it used to
+    // be 0.8 puffs per flame at nine times the blast radius and up to 3.2 s of
+    // life, which on a car bomb at the kerb is a wall across the whole screen
+    // for the three seconds you most need to steer.
+    for (let i = 0; i < n * 0.3; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = radius * (0.3 + Math.random() * 0.7);
       this.soft.spawn({
         x, y, z,
         vx: Math.cos(a) * sp, vy: Math.random() * sp * 0.9 + 1, vz: Math.sin(a) * sp,
-        size: radius * 9, grow: radius * 12, rot: Math.random() * 6.3, rotVel: (Math.random() - 0.5) * 1.6,
-        r: 0.16, g: 0.15, b: 0.14, a: 0.72,
-        life: 1.6 + Math.random() * 1.6, drag: 1.0, gravity: 1.1, frame: 0, fadeIn: 0.1,
+        size: radius * 5, grow: radius * 6, rot: Math.random() * 6.3, rotVel: (Math.random() - 0.5) * 1.6,
+        r: 0.16, g: 0.15, b: 0.14, a: 0.38,
+        life: 0.9 + Math.random() * 0.8, drag: 1.0, gravity: 1.1, frame: 0, fadeIn: 0.1,
       });
     }
     this.spawnSpark(x, y, z, Math.round(radius * 2.5), 0xffcc66, radius * 2.2);

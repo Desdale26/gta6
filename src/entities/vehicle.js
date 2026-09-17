@@ -206,22 +206,57 @@ export class Vehicle {
       { volume: Math.min(1, 0.28 + speed * 0.05), maxDistance: heavy ? 220 : 140 });
   }
 
+  /**
+   * Bodies under the wheels.
+   *
+   * The test is the car's own oriented box, not a circle around its centre: a
+   * circle wide enough to cover the bonnet is also wide enough to cover the
+   * pavement on both sides, so driving down a street mowed down everyone on it
+   * without the car ever touching them.
+   *
+   * Speed decides the outcome rather than a flat kill — a nudge in traffic hurts
+   * and scatters, a hit at speed is fatal — and each pedestrian is immune for a
+   * moment afterwards so one impact is charged once and not on all sixty frames
+   * they spend under the bumper.
+   */
   _checkPedestrianCollisions(dt) {
-    if (!this.ctx.peds) return;
+    const ctx = this.ctx;
+    if (!ctx.peds || this.sim.exploded) return;
     const speed = this.sim.speed;
-    if (speed < 3) return;
-    const hitRadius = this.def.width * 0.6 + this.def.length * 0.4;
-    const peds = this.ctx.peds.peds;
-    for (const ped of peds) {
+    if (speed < 2.5) return;
+
+    const sim = this.sim;
+    const fx = sim.forward.x, fz = sim.forward.z;
+    const flen = Math.hypot(fx, fz);
+    if (flen < 1e-4) return;
+    const nx = fx / flen, nz = fz / flen;
+
+    const halfLen = this.def.length * 0.5;
+    const halfWide = this.def.width * 0.5;
+    const broad = Math.hypot(halfLen, halfWide) + 0.6;
+    const now = ctx.time.elapsed;
+
+    for (const ped of ctx.peds.peds) {
       if (ped.dead || ped.inVehicle) continue;
-      const dx = ped.body.position.x - this.sim.position.x;
-      const dz = ped.body.position.z - this.sim.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < hitRadius) {
-        const vel = { x: this.sim.velocity.x * 0.8, y: 2.4, z: this.sim.velocity.z * 0.8 };
-        ped.kill({ velocity: vel, source: this });
-        this.ctx.particles?.spawnBlood(ped.body.position.x, ped.body.position.y + 0.6, ped.body.position.z, vel.x, vel.y, vel.z, 2);
-      }
+      if (now - (ped._runOverAt ?? -99) < 0.4) continue;
+
+      const dx = ped.body.position.x - sim.position.x;
+      const dz = ped.body.position.z - sim.position.z;
+      if (dx * dx + dz * dz > broad * broad) continue;
+      // Not a car on the road below, or a bridge above.
+      if (Math.abs(ped.body.position.y - sim.position.y) > 2.4) continue;
+
+      const pedR = 0.3 * ped.build;
+      const along = dx * nx + dz * nz;          // down the car's length
+      const across = dx * nz - dz * nx;         // out across its width
+      if (Math.abs(along) > halfLen + pedR) continue;
+      if (Math.abs(across) > halfWide + pedR) continue;
+
+      ped._runOverAt = now;
+      const vel = { x: sim.velocity.x * 0.8, y: 2.4, z: sim.velocity.z * 0.8 };
+      ped.damage(speed * 13, { velocity: vel, source: this, runOver: true });
+      ctx.particles?.spawnBlood(ped.body.position.x, ped.body.position.y + 0.6, ped.body.position.z,
+        vel.x, vel.y, vel.z, clamp(speed * 0.18, 0.5, 2.5));
     }
   }
 
@@ -366,10 +401,13 @@ export class Vehicle {
       if (!w.contact) { this._lastSkidMark[i] = null; continue; }
       const surf = SURFACE_PROPS[w.contactSurface] || SURFACE_PROPS.road;
       const skid = w.skid;
-      if (skid > 0.22 && near) {
+      // 0.02 s per wheel is fifty puffs a second from each of four wheels, and a
+      // puff lives over a second: any corner taken with commitment parked two
+      // hundred overlapping sprites between the camera and the road.
+      if (skid > 0.38 && near) {
         this._skidTimers[i] -= dt;
         if (this._skidTimers[i] <= 0) {
-          this._skidTimers[i] = 0.02;
+          this._skidTimers[i] = 0.09;
           if (surf.screech > 0.3) {
             ctx.particles.spawnSmoke(w.contactPoint.x, w.contactPoint.y + 0.1, w.contactPoint.z,
               0.5 + skid, 0xdddddd, 0.55 * skid);
@@ -398,8 +436,15 @@ export class Vehicle {
     if (sim.onFire > 0 && near) {
       this.localPoint(0, this.def.height * 0.15, this.def.length * 0.34, _v1);
       ctx.particles.spawnFire(_v1.x, _v1.y, _v1.z, 1);
-      ctx.particles.spawnSmoke(_v1.x, _v1.y + 0.4, _v1.z, 1.4, 0x222222, 0.8);
-    } else if (sim.engineHealth < 0.55 && near && Math.random() < 0.3) {
+      // The flame is cheap and reads well every frame; the smoke above it does
+      // not — sixty column puffs a second off your own bonnet is a blindfold in
+      // exactly the situation where you are trying to drive out of trouble.
+      this._fireSmokeTimer = (this._fireSmokeTimer ?? 0) - dt;
+      if (this._fireSmokeTimer <= 0) {
+        this._fireSmokeTimer = 0.14;
+        ctx.particles.spawnSmoke(_v1.x, _v1.y + 0.4, _v1.z, 0.9, 0x222222, 0.55);
+      }
+    } else if (sim.engineHealth < 0.55 && near && Math.random() < 0.12) {
       this.localPoint(0, this.def.height * 0.18, this.def.length * 0.36, _v1);
       ctx.particles.spawnSmoke(_v1.x, _v1.y, _v1.z, 0.7, 0x3a3a3a, 0.32 * (1 - sim.engineHealth));
     }

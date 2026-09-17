@@ -59,6 +59,20 @@ export class PoliceSystem {
     ctx.bus.on('vehicle:explode', (e) => {
       if (e.source === ctx.player || e.source?.isPlayer) this.report(CRIME.vehicleDestroyed);
     });
+    // Running someone over. Gunfire kills arrive on 'combat:hit' and explosion
+    // kills are charged once at the blast, so this handles only the case neither
+    // of those sees: a body under the player's own wheels. Without it
+    // CRIME.hitAndRun and CRIME.killCivilian were unreachable from a car and you
+    // could drive through a crowd without ever earning a star.
+    ctx.bus.on('ped:killed', (e) => this._onPedRunOver(e));
+  }
+
+  _onPedRunOver(e) {
+    const killer = e.source;
+    if (!killer || !killer.isVehicle) return;
+    if (killer !== this.ctx.player?.vehicle) return;   // an AI car's mess is not yours
+    this.report(e.ped?.isCop ? CRIME.killCop : CRIME.killCivilian);
+    this.report(CRIME.hitAndRun);
   }
 
   get wanted() { return this.stars; }
