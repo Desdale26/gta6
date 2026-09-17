@@ -17,6 +17,7 @@ import * as Districts from '../content/districtCatalog.js';
 import { SHOP_TYPES, getShopType, generateShopName } from '../content/shopCatalog.js';
 import { STUNT_SPOTS } from '../content/stuntCatalog.js';
 import { buildStuntSpot } from './stunts.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 const _v = new THREE.Vector3();
 
@@ -757,7 +758,7 @@ export class World {
     // of the screen, at the back where nothing occludes it. The sheen it bought
     // is indistinguishable from the same sheen produced by a slightly rougher
     // surface reflecting the environment a little harder, which is free.
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = stdMat({
       color: 0x1c4a5e,
       roughness: 0.12,
       metalness: 0.0,

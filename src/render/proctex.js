@@ -6,6 +6,7 @@
 //
 // THREE is injected so this module can be imported and unit-tested without a WebGL context.
 
+import { isMinimal } from './matmode.js';
 let THREE = null;
 let CANVAS = null;
 let DEFAULT_ANISO = 8;
@@ -1329,7 +1330,11 @@ export function texSet(name, opts = {}) {
   let normalMap = null, roughnessMap = null;
 
   const isFacade = !!FACADES[name];
-  if (NORMAL_ROUGH.has(name) || isFacade) {
+  // In the minimal mode nothing reads these. Lambert has no roughness term and
+  // takes no normal map, so generating them would be two full-size fields built,
+  // converted and uploaded per surface for a result no shader ever samples —
+  // 37 MiB of the library's 66 MiB, plus the boot time to make it.
+  if (!isMinimal() && (NORMAL_ROUGH.has(name) || isFacade)) {
     // `tex` above has already run for this key, so a facade's relief is waiting
     // in the cache; everything else builds its field from GEN.
     let f = cache.get('f:' + keyFor(name, opts));

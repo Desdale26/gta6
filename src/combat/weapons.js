@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, damp } from '../core/mathx.js';
 import { LAYER, MASK_BULLET, SURFACE } from '../physics/world.js';
 import { WEAPONS, getWeapon, WEAPON_SLOTS } from '../content/weaponCatalog.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -129,7 +130,7 @@ export function buildWeaponModel(def, materials) {
   const mk = (parts, color, rough, metal) => {
     if (!parts.length) return;
     const g = parts.length === 1 ? parts[0] : (mergeGeometries(parts, false) || parts[0]);
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    const mat = stdMat({ color, roughness: rough, metalness: metal });
     const mesh = new THREE.Mesh(g, mat);
     mesh.castShadow = true;
     group.add(mesh);

@@ -8,6 +8,7 @@ import { clamp, lerp } from '../core/mathx.js';
 import { LAYER, MASK_BULLET, MASK_SOLID, SURFACE } from '../physics/world.js';
 import { getWeapon } from '../content/weaponCatalog.js';
 import { applySpread } from './weapons.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -55,9 +56,9 @@ export class CombatSystem {
     // Rocket / grenade meshes come from a small pool.
     this.projGeo = new THREE.SphereGeometry(0.09, 7, 6);
     this.rocketGeo = new THREE.CapsuleGeometry(0.06, 0.24, 2, 7);
-    this.projMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.6, metalness: 0.4 });
-    this.rocketMat = new THREE.MeshStandardMaterial({ color: 0x6a6a70, roughness: 0.4, metalness: 0.7, emissive: 0xff6020, emissiveIntensity: 0.6 });
-    this.molotovMat = new THREE.MeshStandardMaterial({ color: 0x2a6a2a, roughness: 0.2, metalness: 0.1, emissive: 0xff7020, emissiveIntensity: 1.2 });
+    this.projMat = stdMat({ color: 0x3a3a40, roughness: 0.6, metalness: 0.4 });
+    this.rocketMat = stdMat({ color: 0x6a6a70, roughness: 0.4, metalness: 0.7, emissive: 0xff6020, emissiveIntensity: 0.6 });
+    this.molotovMat = stdMat({ color: 0x2a6a2a, roughness: 0.2, metalness: 0.1, emissive: 0xff7020, emissiveIntensity: 1.2 });
   }
 
   // -------------------------------------------------------------------------

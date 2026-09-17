@@ -8,6 +8,7 @@ import { ACTS, MISSIONS, getMission, availableMissions } from '../content/missio
 import { getVehicle, randomVehicleId } from '../content/vehicleCatalog.js';
 import { DRIVER_MODE, VehicleAI } from '../entities/traffic.js';
 import { CRIME } from './police.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 // Objective kinds whose completion is counted off `objectiveState.targets`.
 // 'kill' is deliberately absent: an open rampage counts any kill and keeps
@@ -602,7 +603,7 @@ export class MissionSystem {
     // count, but stay in the neighbourhood the objective named.
     const spread = Math.min(240, (o.radius || 20) * (1 + Math.max(0, n - 3) * 0.35));
     const geo = new THREE.OctahedronGeometry(0.5);
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = stdMat({
       color: 0x101018, emissive: 0xffc93c, emissiveIntensity: 2.4, roughness: 0.3,
     });
     for (let i = 0; i < n; i++) {

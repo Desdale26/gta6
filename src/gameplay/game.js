@@ -34,6 +34,7 @@ import { validateShops } from '../content/shopCatalog.js';
 import { validateStunts } from '../content/stuntCatalog.js';
 import { validateStations } from '../content/radioCatalog.js';
 import { validateDistricts } from '../content/districtCatalog.js';
+import { setShadingMode } from '../render/matmode.js';
 
 const MINUTES_PER_SECOND = 0.5;     // one in-game day ≈ 48 real minutes
 
@@ -64,6 +65,12 @@ export class Game {
     ctx.bus = bus;
     ctx.rng = new RNG(ctx.settings.get('seed'));
     ctx.time = { dt: 0, elapsed: 0, scale: 1, hour: 8.5, day: 1 };
+
+    // Latch how this session shades BEFORE the first material exists. Nothing may
+    // build a material above this line: a material's type is fixed at
+    // construction, so anything created earlier would keep full PBR for the rest
+    // of the session while the rest of the city went Lambert.
+    setShadingMode(ctx.settings.shadingMode);
 
     p(0.02, 'Mixing paint');
     ctx.materials = new MaterialLibrary(ctx).init();

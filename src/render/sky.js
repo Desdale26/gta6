@@ -2,6 +2,7 @@
 // that every reflective surface in the city samples.
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU } from '../core/mathx.js';
+import { isMinimal } from './matmode.js';
 
 // How much DAYLIGHT the city gets.
 //
@@ -471,6 +472,18 @@ export class Sky {
   }
 
   refreshEnvironment() {
+    // The single biggest saving in the minimal mode, measured: nulling
+    // scene.environment took the median frame down 25.6% on its own, more than
+    // shadows and the light pool put together. It is six cube-face renders of the
+    // sky plus the whole PMREM prefilter chain whenever the hour or the weather
+    // moves — and then an IBL sample per fragment on every lit surface for ever
+    // after. Lambert materials do not read an environment map at all, so in
+    // minimal this is pure cost with nothing to show for it.
+    if (isMinimal()) {
+      if (this.scene.environment) { this.scene.environment = null; }
+      this.scene.environmentIntensity = 0;
+      return;
+    }
     try {
       const prev = this.envRT;
       this.envSky.scale.setScalar(100);

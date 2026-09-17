@@ -52,6 +52,29 @@ const KEY = 'vicecoast.settings.v1';
 //   calls a frame, and draw calls are paid by the CPU, so no amount of dropping
 //   the resolution could rescue it.
 export const QUALITY_PRESETS = {
+  // Minimal is not "potato but worse" — it is a different way of drawing the same
+  // city, and it is the only preset that can hold 120 fps on ordinary hardware.
+  //
+  // Measured on the shipped build at potato, which was already the cheapest thing
+  // here: 353 draw calls, 547k triangles, 111 textures, and 594 materials of which
+  // every single one ran a full per-fragment PBR lighting loop over fourteen lights
+  // plus an image-based lighting sample. CPU update was 2.8 ms. So the frame was
+  // never CPU-bound — it was bound on shading, a shadow pass and an environment
+  // probe, and no amount of dropping pedestrians or draw distance was going to fix
+  // that. Minimal attacks the shading instead: Lambert in place of Standard and
+  // Physical, no normal or roughness maps, no environment probe, no shadow pass,
+  // and a smaller light pool.
+  //
+  // Because it costs so much less per pixel it can afford a nearly full-resolution
+  // frame, which is why pixelRatio is 0.9 here against potato's 0.55: a sharp flat
+  // image reads far better than a blurry lit one.
+  minimal: {
+    label: 'Minimal (120 fps)', pixelRatio: 0.9, post: false, shadows: false, shadowMapSize: 0, shadowExtent: 0,
+    ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
+    drawDistance: 300, pedBudget: 14, trafficBudget: 14, particleBudget: 120,
+    grassDensity: 0, anisotropy: 1, waterQuality: 0, decalBudget: 32, volumetrics: false,
+    dprCap: 1,
+  },
   potato: {
     label: 'Potato', pixelRatio: 0.55, post: false, shadows: true, shadowMapSize: 512, shadowExtent: 55,
     ssao: false, bloom: false, motionBlur: false, dof: false, reflections: false, smaa: false,
@@ -101,7 +124,7 @@ const DEFAULTS = {
   // ran at single-figure frame rates and the adaptive system then spent the next
   // half minute clawing its way down, stalling on every step. Start where a
   // laptop can actually live and let a fast machine earn its way up.
-  quality: 'medium',
+  quality: 'minimal',
   autoQuality: true,
   // Render scale multiplies the preset's resolution; pixelBudget is the ceiling
   // on the frame the GPU is actually asked to draw. One 4K frame by default.
@@ -123,7 +146,7 @@ const DEFAULTS = {
   showFps: false,
   minimapSize: 1.0,
   bloodFx: true,
-  targetFps: 60,
+  targetFps: 120,
   autoSave: true,
   seed: 'leonida-2026',
   invertSteerInReverse: true,
@@ -136,7 +159,14 @@ export class Settings {
     this.data = { ...DEFAULTS };
     this.load();
     this._listeners = [];
+    // Latched here and never written again. Everything that bakes a decision into
+    // a GPU resource — material type, light pool size, whether the environment
+    // probe exists at all — reads this once while it is being built.
+    this.shadingMode = this.data.quality === 'minimal' ? 'minimal' : 'full';
   }
+
+  /** True when this session is drawing the cheap way. Constant for the session. */
+  get minimal() { return this.shadingMode === 'minimal'; }
   get preset() { return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high; }
   get(k) { return this.data[k]; }
   set(k, v) {
@@ -161,15 +191,31 @@ export class Settings {
     try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { /* ignore */ }
   }
   /** Downgrade quality one notch; returns true if it changed. */
+  /**
+   * Which presets this session is allowed to move between.
+   *
+   * Shading is decided once, at boot, and cannot change afterwards: a material's
+   * type is fixed when it is constructed, and rebuilding every material mid-play
+   * to switch between Lambert and Standard would be a far worse stall than
+   * anything the governor is trying to avoid. So a session that booted minimal
+   * stays inside the cheap presets, and one that did not never drops into minimal
+   * and finds itself with PBR materials on a preset that assumes it has none.
+   */
+  get ladder() {
+    return this.shadingMode === 'minimal'
+      ? ['minimal', 'potato', 'low']
+      : ['potato', 'low', 'medium', 'high', 'ultra'];
+  }
+
   stepDown() {
-    const order = ['ultra', 'high', 'medium', 'low', 'potato'];
+    const order = this.ladder.slice().reverse();
     const i = order.indexOf(this.data.quality);
     if (i < 0 || i === order.length - 1) return false;
     this.set('quality', order[i + 1]);
     return true;
   }
   stepUp() {
-    const order = ['potato', 'low', 'medium', 'high', 'ultra'];
+    const order = this.ladder;
     const i = order.indexOf(this.data.quality);
     if (i < 0 || i === order.length - 1) return false;
     this.set('quality', order[i + 1]);

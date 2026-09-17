@@ -35,9 +35,20 @@ import { SpatialHash } from '../core/mathx.js';
 
 // Fixed for the life of the session. Changing either of these at runtime would
 // reintroduce the recompile storm this file exists to prevent, so they are not
-// settings and not per-preset.
+// settings and not per-preset — but they ARE chosen once, at construction, before
+// a single material has compiled, and that is safe for exactly the same reason
+// the material type is: nothing has been built against them yet.
+//
+// The minimal mode takes the smaller pair. Every visible light, lit or not, is
+// evaluated by every fragment of every lit material, so the pool is a per-pixel
+// bill paid at all hours; an agent measuring this directly found it the largest
+// remaining per-fragment lever once the PBR specular was gone. Four points and two
+// spots still lights a night street — three street lights plus the reserved flash
+// slot, and one car's pair of headlights, which is the player's own.
 const POINT_POOL = 8;
 const SPOT_POOL = 4;
+const POINT_POOL_MIN = 4;
+const SPOT_POOL_MIN = 2;
 
 export class LightManager {
   constructor(ctx) {
@@ -63,19 +74,22 @@ export class LightManager {
 
   _buildPools() {
     const scene = this.ctx.scene;
-    for (let i = 0; i < POINT_POOL; i++) {
+    const minimal = !!this.ctx.settings?.minimal;
+    const points = minimal ? POINT_POOL_MIN : POINT_POOL;
+    const spots = minimal ? SPOT_POOL_MIN : SPOT_POOL;
+    for (let i = 0; i < points; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 30, 1.8);
       l.castShadow = false;
       l.visible = true;                     // never toggled — see the header
       l.position.set(0, -500, 0);
       scene.add(l);
       this.pool.push(l);
-      if (i < POINT_POOL - 1) this.free.push(l);
+      if (i < points - 1) this.free.push(l);
     }
     // The last point slot belongs to flashes and is never handed to a street light.
-    this.flashLight = this.pool[POINT_POOL - 1];
+    this.flashLight = this.pool[points - 1];
 
-    for (let i = 0; i < SPOT_POOL; i++) {
+    for (let i = 0; i < spots; i++) {
       const s = new THREE.SpotLight(0xfff0d0, 0, 62, 0.60, 0.45, 1.4);
       s.castShadow = false;
       s.visible = true;                     // never toggled — see the header

@@ -4,6 +4,7 @@
 // surface: ramps are one tilted box, loops and pipes are a ring of them, bowls are a dish of
 // them. Nothing here is decoration — if you can see it, you can ride it.
 
+import { stdMat, physMat } from '../render/matmode.js';
 /** @returns {{ group, colliders }} colliders are local-space boxes with optional pitch/roll. */
 export function buildStuntSpot(THREE, spot, materials, rng, mergeGeometries) {
   const group = new THREE.Group();
@@ -29,8 +30,8 @@ export function buildStuntSpot(THREE, spot, materials, rng, mergeGeometries) {
   };
   const paint = paintFor(spot.color ?? 0xb4b0a8);
   const mainMat = tintClone(materials?.concrete, paint)
-    || new THREE.MeshStandardMaterial({ color: paint, roughness: 0.85 });
-  const accentMat = new THREE.MeshStandardMaterial({
+    || stdMat({ color: paint, roughness: 0.85 });
+  const accentMat = stdMat({
     color: 0x101018, emissive: spot.accent ?? 0x22e3ff, emissiveIntensity: 1.6, roughness: 0.4,
   });
   if (materials?.registerEmissive) materials.registerEmissive(accentMat, 2.6, 0.9);

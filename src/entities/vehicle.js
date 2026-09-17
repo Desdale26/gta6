@@ -5,6 +5,7 @@ import { VehicleSim, wheelMeshLocalY } from '../physics/vehiclePhysics.js';
 import { buildVehicleMesh, applyDeformation } from './vehicleBody.js';
 import { LAYER, SURFACE, SURFACE_PROPS } from '../physics/world.js';
 import { AmbientEngineSound } from '../audio/engineSound.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 const _v1 = new THREE.Vector3();
 const _lampPos = new THREE.Vector3();
@@ -408,7 +409,7 @@ export class Vehicle {
     this.ctx.bus.emit('vehicle:explode', { vehicle: this, source, x: p.x, y: p.y, z: p.z });
     if (this.ctx.explosions) this.ctx.explosions.spawn(p.x, p.y + 0.4, p.z, { radius: 9, damage: 180, force: 26000, source: source || this });
     // blacken the wreck
-    const burnt = new THREE.MeshStandardMaterial({ color: 0x1a1614, roughness: 0.96, metalness: 0.25 });
+    const burnt = stdMat({ color: 0x1a1614, roughness: 0.96, metalness: 0.25 });
     this.group.traverse((o) => {
       if (o.isMesh && o.material && o.material.name !== 'carGlass') o.material = burnt;
       if (o.isMesh && o.material && o.material.emissiveIntensity !== undefined) o.material.emissiveIntensity = 0;

@@ -157,12 +157,18 @@ export class Menus {
       return items;
     }
     if (this.menuPage === 'settings') {
-      const q = Object.keys(QUALITY_PRESETS);
+      // Only the presets this session can actually reach. Shading is latched at
+      // boot, so a session that started minimal cannot be cycled onto a preset
+      // that expects PBR materials and a post chain it has no materials for, and
+      // one that did not start minimal must not be cycled into it.
+      const q = s.ladder;
       return [
         { id: 'back', label: '‹ Back' },
         { id: 'h1', label: 'Graphics', header: true },
         { id: 'quality', label: 'Quality preset', value: QUALITY_PRESETS[s.get('quality')].label, cycle: q, get: () => s.get('quality') },
         { id: 'autoQuality', label: 'Adaptive quality', value: s.get('autoQuality') ? 'On' : 'Off', toggle: true },
+        { id: 'targetFps', label: 'Target frame rate', value: `${s.get('targetFps')} fps`,
+          cycle: [30, 60, 90, 120, 144], get: () => s.get('targetFps') },
         { id: 'renderScale', label: 'Render scale', value: pct(s.get('renderScale')), range: [0.5, 2, 0.05] },
         { id: 'pixelBudget', label: 'Resolution limit', value: budgetLabel(s.get('pixelBudget')),
           cycle: PIXEL_BUDGETS.map((b) => b.value), get: () => s.get('pixelBudget') },
@@ -222,7 +228,8 @@ export class Menus {
       save: 'Progress is also saved automatically after every mission.',
       restart: 'Start over from the bus station. This cannot be undone.',
       abandon: 'Give up the current mission. You can retry it from its marker.',
-      quality: 'Presets from Potato to Ultra. Adaptive resolution keeps the frame rate steady on top of this.',
+      quality: 'Minimal draws the whole city with flat shading, no shadows and no reflections — it looks simpler and runs several times faster. The richer presets are only offered if the session started on one, because how surfaces are shaded is decided when the game loads.',
+      targetFps: 'What the adaptive system aims for. It scales the render resolution, and drops a quality level if that is not enough, to hold this number.',
       renderScale: 'Multiplies the rendered resolution. Above 100% the frame is drawn larger than the window and downsampled, which is the cleanest image the game can produce.',
       pixelBudget: 'The largest frame the GPU will be asked to draw, whatever the render scale and display density work out to.',
       autoQuality: 'Holds your target frame rate by scaling the render resolution, and dropping a quality level if that is not enough. Turn it off to keep the level you picked.',

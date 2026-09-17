@@ -4,6 +4,7 @@
 // billboards. Each prop returns merged geometry plus collider and light descriptors, and any
 // prop that repeats hundreds of times can be driven through propInstancer for one draw call.
 
+import { stdMat, physMat } from '../render/matmode.js';
 let THREE = null;
 let DEPS = {};
 let mergeFn = null;
@@ -46,7 +47,7 @@ function mat(name, colorHex) {
   const lib = DEPS.materials;
   if (!lib || !lib.tintable) {
     let m = matCache.get(name);
-    if (!m) { m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }); matCache.set(name, m); }
+    if (!m) { m = stdMat({ color: 0xffffff, roughness: 0.85, vertexColors: true }); matCache.set(name, m); }
     return m;
   }
   return lib.tintable(name);
@@ -70,8 +71,8 @@ export function trafficLightMaterials() {
   const cols = [0xff2020, 0xffc020, 0x30ff50];
   LENS_MATS = { off: [], on: [] };
   for (let i = 0; i < 3; i++) {
-    LENS_MATS.off.push(new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 0.06, roughness: 0.4 }));
-    LENS_MATS.on.push(new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 4.5, roughness: 0.4 }));
+    LENS_MATS.off.push(stdMat({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 0.06, roughness: 0.4 }));
+    LENS_MATS.on.push(stdMat({ color: 0x0a0a0a, emissive: cols[i], emissiveIntensity: 4.5, roughness: 0.4 }));
   }
   return LENS_MATS;
 }
@@ -387,7 +388,7 @@ export function makeProp(kind, opts = {}, rng) {
       const art = DEPS.tex ? DEPS.tex('billboard', { seed: opts.seed ?? R.int(1, 9999), size: 512 }) : null;
       const face = new THREE.Mesh(
         new THREE.PlaneGeometry(w, h).translate(0, standH + h / 2, -0.08),
-        new THREE.MeshStandardMaterial({ map: art, roughness: 0.75, metalness: 0,
+        stdMat({ map: art, roughness: 0.75, metalness: 0,
           emissive: 0xffffff, emissiveMap: art, emissiveIntensity: 0 }),
       );
       if (DEPS.materials) DEPS.materials.registerEmissive(face.material, 0.9, 0.05);
@@ -569,7 +570,7 @@ export function makeProp(kind, opts = {}, rng) {
     case 'atm': {
       add([box(0.8, 1.7, 0.5)], mat('metalPanel', 0x2a3a4a));
       const screen = new THREE.Mesh(box(0.5, 0.4, 0.04, 0, 1.0, 0.26),
-        new THREE.MeshStandardMaterial({ color: 0x081018, emissive: 0x2288cc, emissiveIntensity: 1.4, roughness: 0.3 }));
+        stdMat({ color: 0x081018, emissive: 0x2288cc, emissiveIntensity: 1.4, roughness: 0.3 }));
       group.add(screen);
       lights.push({ x: 0, y: 1.2, z: 0.4, color: 0x3399dd, intensity: 0.8, distance: 5, kind: 'window' });
       colliders.push({ type: 'box', x: 0, y: 0.85, z: 0, hw: 0.4, hh: 0.85, hd: 0.26, yaw: 0 });
@@ -788,7 +789,7 @@ export function makeProp(kind, opts = {}, rng) {
       const w = opts.width ?? 4, h = opts.height ?? 3;
       const art = DEPS.tex ? DEPS.tex('graffiti', { seed: opts.seed ?? R.int(1, 9999), size: 256 }) : null;
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2 + 0.4, 0),
-        new THREE.MeshStandardMaterial({ map: art, transparent: true, alphaTest: 0.2, roughness: 0.95,
+        stdMat({ map: art, transparent: true, alphaTest: 0.2, roughness: 0.95,
           polygonOffset: true, polygonOffsetFactor: -2 }));
       m.castShadow = false;
       group.add(m);

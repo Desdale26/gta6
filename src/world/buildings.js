@@ -4,6 +4,7 @@
 // 40-storey tower and a two-storey shophouse read at the right scale from the same texture.
 // Geometry is merged per material: a full-detail building is at most a handful of draw calls.
 
+import { stdMat, physMat } from '../render/matmode.js';
 let THREE = null;
 let DEPS = {};
 let mergeFn = null;
@@ -41,7 +42,7 @@ function mat(name) {
   const lib = DEPS.materials;
   if (!lib || !lib.tintable) {
     let m = materialCache.get(name);
-    if (!m) { m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, vertexColors: true }); materialCache.set(name, m); }
+    if (!m) { m = stdMat({ color: 0xffffff, roughness: 0.9, vertexColors: true }); materialCache.set(name, m); }
     return m;
   }
   return lib.tintable(name);

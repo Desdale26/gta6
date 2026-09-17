@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, smoothstep } from '../core/mathx.js';
+import { stdMat, physMat } from '../render/matmode.js';
 
 const RING = 8;
 
@@ -372,10 +373,10 @@ export function buildVehicleMesh(def, materials, rng, opts = {}) {
 
       // indicator + reverse strips
       const ig = box(0.11, 0.07, 0.05, sx * (tSpread + 0.20), tY, tailZ);
-      const im = new THREE.Mesh(ig, new THREE.MeshStandardMaterial({ color: 0x30200a, emissive: 0xff8a10, emissiveIntensity: 0, roughness: 0.4 }));
+      const im = new THREE.Mesh(ig, stdMat({ color: 0x30200a, emissive: 0xff8a10, emissiveIntensity: 0, roughness: 0.4 }));
       group.add(im); indicators.push(im);
       const rg = box(0.10, 0.06, 0.05, sx * (tSpread - 0.20), tY - 0.02, tailZ);
-      const rm = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.4 }));
+      const rm = new THREE.Mesh(rg, stdMat({ color: 0x222222, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.4 }));
       group.add(rm); reverseLights.push(rm);
     }
     brakeLights.push(...tailLights);
@@ -467,7 +468,7 @@ export function buildVehicleMesh(def, materials, rng, opts = {}) {
   if (f.taxiSign) {
     const sign = box(0.52, 0.15, 0.20, 0, cabinTop + 0.09, 0.1);
     const signMesh = new THREE.Mesh(sign, materials.registerEmissive(
-      new THREE.MeshStandardMaterial({ color: 0x201800, emissive: 0xffc93c, emissiveIntensity: 0.4, roughness: 0.5 }), 2.4, 0.4));
+      stdMat({ color: 0x201800, emissive: 0xffc93c, emissiveIntensity: 0.4, roughness: 0.5 }), 2.4, 0.4));
     group.add(signMesh);
   }
   // police / emergency lightbar
@@ -481,7 +482,7 @@ export function buildVehicleMesh(def, materials, rng, opts = {}) {
       const isRed = i < segs / 2;
       const lx = (i - (segs - 1) / 2) * (s.hw * 1.36 / segs);
       const m = new THREE.Mesh(box(s.hw * 1.2 / segs, 0.085, 0.16, lx, barY + 0.04, 0.05),
-        new THREE.MeshStandardMaterial({
+        stdMat({
           color: 0x0a0a0a, emissive: isRed ? 0xff1414 : 0x2244ff,
           emissiveIntensity: 0.3, roughness: 0.35,
         }));

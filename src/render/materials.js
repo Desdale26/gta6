@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../core/mathx.js';
 import { initProcTex, tex, texSet, signTexture } from './proctex.js';
+import { stdMat, physMat } from './matmode.js';
 
 const REPEAT = THREE.RepeatWrapping;
 
@@ -31,6 +32,12 @@ export class MaterialLibrary {
     this.ready = false;
   }
 
+  // Both delegate to render/matmode.js so that the ~20 material sites outside this
+  // library shade identically. See that file for why minimal exists and why the
+  // mode has to be latched before the first material is built.
+  _mkStd(opts = {}) { return stdMat(opts); }
+  _mkPhys(opts = {}) { return physMat(opts); }
+
   init() {
     initProcTex(THREE, { anisotropy: this.aniso });
     const A = this.aniso;
@@ -43,7 +50,7 @@ export class MaterialLibrary {
 
     // ---------------- ground & roads ----------------
     const asphalt = S('asphalt', { size: 512 });
-    this.road = new THREE.MeshStandardMaterial({
+    this.road = this._mkStd({
       name: 'road',
       map: cfg(asphalt.map, 1, A),
       normalMap: cfg(asphalt.normalMap, 1, A),
@@ -55,7 +62,7 @@ export class MaterialLibrary {
     this._wetMats.push({ m: this.road, dryRough: 0.92, wetRough: 0.14, dryEnv: 0.35, wetEnv: 1.5 });
 
     const conc = S('concrete', { size: 512 });
-    this.sidewalk = new THREE.MeshStandardMaterial({
+    this.sidewalk = this._mkStd({
       name: 'sidewalk',
       map: cfg(S('sidewalk', { size: 512 }).map || conc.map, 1, A),
       normalMap: cfg(S('sidewalk', { size: 512 }).normalMap || conc.normalMap, 1, A),
@@ -63,7 +70,7 @@ export class MaterialLibrary {
     });
     this._wetMats.push({ m: this.sidewalk, dryRough: 0.94, wetRough: 0.36, dryEnv: 0.3, wetEnv: 0.95 });
 
-    this.ground = new THREE.MeshStandardMaterial({
+    this.ground = this._mkStd({
       name: 'ground',
       vertexColors: true,
       map: cfg(T('groundDetail') || asphalt.map, 1, A),
@@ -74,7 +81,7 @@ export class MaterialLibrary {
     this._wetMats.push({ m: this.ground, dryRough: 0.97, wetRough: 0.42, dryEnv: 0.25, wetEnv: 0.8 });
 
     const marks = T('roadLineWhite', { size: 256 });
-    this.roadMarking = new THREE.MeshStandardMaterial({
+    this.roadMarking = this._mkStd({
       name: 'roadMarking',
       map: cfg(marks, 1, A),
       transparent: true, alphaTest: 0.28, depthWrite: false,
@@ -97,7 +104,7 @@ export class MaterialLibrary {
     this.roofShingle = this._std('roofShingle', S('roofShingle'), { roughness: 0.9 });
 
     const glassTex = T('glassFacade', { size: 512 });
-    this.glassFacade = new THREE.MeshPhysicalMaterial({
+    this.glassFacade = this._mkPhys({
       name: 'glassFacade',
       map: cfg(glassTex, 1, A),
       color: 0xffffff,
@@ -114,35 +121,35 @@ export class MaterialLibrary {
     this.artdeco = this._facade('artdeco');
     this.shopFront = this._facade('shopFront', 0.95);
 
-    this.glass = new THREE.MeshPhysicalMaterial({
+    this.glass = this._mkPhys({
       name: 'glass', color: 0x9fc8d8, roughness: 0.03, metalness: 0,
       transparent: true, opacity: 0.34, envMapIntensity: 2.6,
       side: THREE.DoubleSide, depthWrite: false,
     });
 
     // ---------------- vehicles ----------------
-    this.carGlass = new THREE.MeshPhysicalMaterial({
+    this.carGlass = this._mkPhys({
       name: 'carGlass', color: 0x121820, roughness: 0.05, metalness: 0.1,
       transparent: true, opacity: 0.62, envMapIntensity: 2.4,
       clearcoat: 1, clearcoatRoughness: 0.03, side: THREE.DoubleSide, depthWrite: false,
     });
-    this.tire = new THREE.MeshStandardMaterial({
+    this.tire = this._mkStd({
       name: 'tire', color: 0x14141a, roughness: 0.94, metalness: 0.0,
       map: cfg(T('tireTread', { size: 256 }), 1, A),
     });
-    this.rimChrome = new THREE.MeshStandardMaterial({ name: 'rimChrome', color: 0xdfe4ea, roughness: 0.14, metalness: 1, envMapIntensity: 2.2 });
-    this.rimDark = new THREE.MeshStandardMaterial({ name: 'rimDark', color: 0x2c2f36, roughness: 0.42, metalness: 0.9, envMapIntensity: 1.2 });
-    this.chrome = new THREE.MeshStandardMaterial({ name: 'chrome', color: 0xf0f4f8, roughness: 0.08, metalness: 1, envMapIntensity: 2.6 });
+    this.rimChrome = this._mkStd({ name: 'rimChrome', color: 0xdfe4ea, roughness: 0.14, metalness: 1, envMapIntensity: 2.2 });
+    this.rimDark = this._mkStd({ name: 'rimDark', color: 0x2c2f36, roughness: 0.42, metalness: 0.9, envMapIntensity: 1.2 });
+    this.chrome = this._mkStd({ name: 'chrome', color: 0xf0f4f8, roughness: 0.08, metalness: 1, envMapIntensity: 2.6 });
     this.carbon = this._std('carbonFibre', S('carbonFibre'), { roughness: 0.28, metalness: 0.4, envMapIntensity: 1.4 });
-    this.plasticBlack = new THREE.MeshStandardMaterial({ name: 'plasticBlack', color: 0x16181d, roughness: 0.72, metalness: 0.1 });
-    this.plasticGrey = new THREE.MeshStandardMaterial({ name: 'plasticGrey', color: 0x3a3d44, roughness: 0.68, metalness: 0.1 });
+    this.plasticBlack = this._mkStd({ name: 'plasticBlack', color: 0x16181d, roughness: 0.72, metalness: 0.1 });
+    this.plasticGrey = this._mkStd({ name: 'plasticGrey', color: 0x3a3d44, roughness: 0.68, metalness: 0.1 });
     this.leather = this._std('leather', S('leather'), { roughness: 0.72 });
-    this.headlightGlass = new THREE.MeshPhysicalMaterial({
+    this.headlightGlass = this._mkPhys({
       name: 'headlightGlass', color: 0xf6f8ff, roughness: 0.06, metalness: 0.0,
       transmission: 0, opacity: 0.85, transparent: true,
       emissive: 0xfff2d0, emissiveIntensity: 0, envMapIntensity: 2.4,
     });
-    this.taillightGlass = new THREE.MeshStandardMaterial({
+    this.taillightGlass = this._mkStd({
       name: 'taillight', color: 0x5a0a0a, roughness: 0.18, metalness: 0.1,
       emissive: 0xff1a10, emissiveIntensity: 0.2, envMapIntensity: 1.4,
     });
@@ -150,19 +157,19 @@ export class MaterialLibrary {
     this.lightbarBlue = this._emissive('lightbarBlue', 0x3355ff, 3);
 
     // ---------------- characters ----------------
-    this.skin = new THREE.MeshStandardMaterial({ name: 'skin', color: 0xd2a07c, roughness: 0.66, metalness: 0 });
-    this.cloth = new THREE.MeshStandardMaterial({ name: 'cloth', color: 0x3a4a6a, roughness: 0.92, metalness: 0 });
+    this.skin = this._mkStd({ name: 'skin', color: 0xd2a07c, roughness: 0.66, metalness: 0 });
+    this.cloth = this._mkStd({ name: 'cloth', color: 0x3a4a6a, roughness: 0.92, metalness: 0 });
     this.denim = this._std('denim', S('denim'), { roughness: 0.94 });
-    this.hairMat = new THREE.MeshStandardMaterial({ name: 'hair', color: 0x21160f, roughness: 0.62, metalness: 0.05 });
+    this.hairMat = this._mkStd({ name: 'hair', color: 0x21160f, roughness: 0.62, metalness: 0.05 });
 
     // ---------------- nature ----------------
     const foliageTex = T('foliage', { size: 256 });
-    this.foliage = new THREE.MeshStandardMaterial({
+    this.foliage = this._mkStd({
       name: 'foliage', map: cfg(foliageTex, 1, A), color: 0xffffff,
       alphaTest: 0.42, transparent: false, side: THREE.DoubleSide,
       roughness: 0.86, metalness: 0,
     });
-    this.palmFrond = new THREE.MeshStandardMaterial({
+    this.palmFrond = this._mkStd({
       name: 'palmFrond', map: cfg(T('palmFrond', { size: 256 }), 1, A),
       alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.78, metalness: 0,
     });
@@ -174,7 +181,7 @@ export class MaterialLibrary {
     this.neonCyan = this._emissive('neonCyan', 0x22e3ff, 2.6);
     this.streetlightLens = this._emissive('lampLens', 0xffd9a0, 0);
     this._emissiveMats.push({ m: this.streetlightLens, night: 2.6, day: 0 });
-    this.fence = new THREE.MeshStandardMaterial({
+    this.fence = this._mkStd({
       name: 'fence', map: cfg(T('chainlink', { size: 256 }), 1, A),
       alphaTest: 0.5, transparent: false, side: THREE.DoubleSide,
       roughness: 0.5, metalness: 0.8,
@@ -197,7 +204,7 @@ export class MaterialLibrary {
 
   _std(name, set, opts = {}) {
     const A = this.aniso;
-    const m = new THREE.MeshStandardMaterial({
+    const m = this._mkStd({
       name,
       map: cfg(set.map, 1, A),
       normalMap: cfg(set.normalMap, 1, A),
@@ -217,7 +224,7 @@ export class MaterialLibrary {
     // reveals and sills are shallow in world terms and need the help.
     const set = (() => { try { return texSet(name, { size: 512, normalStrength: 3.4 }); } catch (e) { return {}; } })();
     const lit = (() => { try { return tex(name + 'Lit', { size: 512 }); } catch (e) { return null; } })();
-    const m = new THREE.MeshStandardMaterial({
+    const m = this._mkStd({
       name,
       map: cfg(set.map, 1, A),
       normalMap: cfg(set.normalMap, 1, A),
@@ -234,7 +241,7 @@ export class MaterialLibrary {
   }
 
   _emissive(name, color, intensity) {
-    return new THREE.MeshStandardMaterial({
+    return this._mkStd({
       name, color: 0x000000, emissive: color, emissiveIntensity: intensity,
       roughness: 0.4, metalness: 0, toneMapped: true,
     });
@@ -246,7 +253,7 @@ export class MaterialLibrary {
     let m = this._carPaints.get(key);
     if (m) return m;
     const matte = !!opts.matte;
-    m = new THREE.MeshPhysicalMaterial({
+    m = this._mkPhys({
       name: 'carPaint' + key,
       color: colorHex,
       metalness: matte ? 0.05 : clamp(opts.metallic ?? 0.85, 0, 1),
@@ -268,7 +275,7 @@ export class MaterialLibrary {
   sign(text, opts = {}) {
     let t = null;
     try { t = signTexture(text, opts); } catch (e) { /* fall through */ }
-    const m = new THREE.MeshStandardMaterial({
+    const m = this._mkStd({
       name: 'sign:' + text,
       map: t, color: 0xffffff,
       emissive: opts.neon ? new THREE.Color(opts.neonColor ?? 0xff2d95) : 0x000000,
