@@ -191,9 +191,11 @@ export class Weather {
         // environment probe; a Lambert one has the sun and the sky fill and
         // nothing else, so the same scene reads darker even with the fill raised
         // to stand in for the probe. Measured at the widest road at half twelve:
-        // 88 in the full mode against 48 flat. This is the last of the three
-        // places that gap is closed, after the sky fill and the probe itself.
-        exposure: ctx.sky.exposure * 0.85 * (isMinimal() ? 1.34 : 1)
+        // 88 in the full mode against 48 flat. The target is the brightness of the
+        // build this replaces — the mode should look as bright as the game it
+        // stands in for, just flatter — so this is sized to land near that 88
+        // rather than merely to clear a threshold.
+        exposure: ctx.sky.exposure * 0.85 * (isMinimal() ? 1.6 : 1)
           * (1 + this.storm * 0.04) * (1 + night * 0.5),
         // A touch more contrast than before. With the light budget corrected the
         // midtones carry the whole image, and 1.04 left a bright street flat.
