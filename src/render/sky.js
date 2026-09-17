@@ -46,6 +46,21 @@ const DAY_GAIN = 2.15;
 // sits on the floor it was tuned for.
 const AMB_GAIN = 3.6;
 
+// What the sky fill has to cover when there is no environment probe.
+//
+// In the normal mode a surface turning away from the sun is lit by two things:
+// the hemisphere light and the PMREM environment probe, which in a city of
+// vertical walls is doing a lot of the work. Minimal has no probe at all — that
+// was its single largest saving — so every shaded face lost a chunk of its fill
+// at once and whole towers came out as black slabs in the middle of a sunlit
+// street. The hemisphere has to carry what the probe used to.
+//
+// Applied through the same daylight ramp as AMB_GAIN rather than flat, so night
+// still sits on exactly the floor it was tuned for: the probe contributed after
+// dark too, but the street-light pool and the emissive windows are what actually
+// light a night street, and lifting the night ambient would grey them out.
+const AMB_GAIN_MINIMAL = 5.6;
+
 const SKY_VERT = /* glsl */`
   varying vec3 vWorldDir;
   void main(){
@@ -430,8 +445,18 @@ export class Sky {
     // caught rain at night at 1.83 against a ceiling of 1.6. Scaled by how much
     // daylight is left, it is the full gain at noon and exactly one after dark,
     // which puts every night back on the floor it was tuned for.
-    const ambGain = 1 + (AMB_GAIN - 1) * (1 - p.night);
-    this.hemi.intensity = (p.ambI * 0.62 * ambGain + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
+    const ambTarget = isMinimal() ? AMB_GAIN_MINIMAL : AMB_GAIN;
+    const ambGain = 1 + (ambTarget - 1) * (1 - p.night);
+    let hemiI = (p.ambI * 0.62 * ambGain + nightFloor) * (0.8 + overcast * 0.75 + storm * 0.25);
+    // The minimal gain is sized for a CLEAR sky, where the hemisphere is the only
+    // ambient there is. Cloud then multiplies it — an overcast sky is a huge soft
+    // source, which is right in the normal mode — and that took the fill to 5.0
+    // against the ceiling of 4 that the lighting-levels scenario puts on it, which
+    // is how this was caught. Clamping rather than lowering the gain keeps a clear
+    // midday properly filled and simply declines to pile cloud on top of a number
+    // that was already standing in for the missing probe.
+    if (isMinimal()) hemiI = Math.min(hemiI, 3.6);
+    this.hemi.intensity = hemiI;
 
     const f = this.scene.fog;
     if (f) {

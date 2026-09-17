@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../core/mathx.js';
 import { initProcTex, tex, texSet, signTexture } from './proctex.js';
-import { stdMat, physMat } from './matmode.js';
+import { stdMat, physMat, isMinimal } from './matmode.js';
 
 const REPEAT = THREE.RepeatWrapping;
 
@@ -104,10 +104,18 @@ export class MaterialLibrary {
     this.roofShingle = this._std('roofShingle', S('roofShingle'), { roughness: 0.9 });
 
     const glassTex = T('glassFacade', { size: 512 });
+    // A glass tower in PBR is almost entirely reflected sky: its own albedo map is
+    // nearly black, and envMapIntensity 2.2 plus a clearcoat lobe supplied the
+    // rest. Minimal has no environment probe and no specular, so multiplying that
+    // dark map by white left a black slab in the middle of a sunlit street.
+    // Dropping the map and giving it a flat sky tint is both the fix and the
+    // honest version of the look — the emissive night-window map is untouched, so
+    // the towers still come alive after dark.
+    const minimalGlass = isMinimal();
     this.glassFacade = this._mkPhys({
       name: 'glassFacade',
-      map: cfg(glassTex, 1, A),
-      color: 0xffffff,
+      map: minimalGlass ? null : cfg(glassTex, 1, A),
+      color: minimalGlass ? 0x7fa6c8 : 0xffffff,
       roughness: 0.08, metalness: 0.25,
       envMapIntensity: 2.2,
       clearcoat: 0.6, clearcoatRoughness: 0.06,
@@ -128,8 +136,10 @@ export class MaterialLibrary {
     });
 
     // ---------------- vehicles ----------------
+    // Same story, smaller: car glass was a near-black tint that only read as glass
+    // because it reflected the sky. Flat, it has to carry its own colour.
     this.carGlass = this._mkPhys({
-      name: 'carGlass', color: 0x121820, roughness: 0.05, metalness: 0.1,
+      name: 'carGlass', color: isMinimal() ? 0x5b7488 : 0x121820, roughness: 0.05, metalness: 0.1,
       transparent: true, opacity: 0.62, envMapIntensity: 2.4,
       clearcoat: 1, clearcoatRoughness: 0.03, side: THREE.DoubleSide, depthWrite: false,
     });
