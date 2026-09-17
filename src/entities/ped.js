@@ -827,6 +827,11 @@ export class Ped {
     this.body.enabled = false;
     this.body.dead = true;
     this.despawnTimer = 0;
+    const swears = ['Shit!', 'Fuck!', 'Damn it!', 'Oh shit!', 'Motherfucker!', 'Jesus Christ!', 'Holy shit!', 'Goddamn!'];
+    if (opts.source && opts.source.isVehicle) {
+      this.barkText = this.rng.pick(swears);
+      this.ctx.bus.emit('ped:bark', { ped: this, text: this.barkText, kind: 'death' });
+    }
     this.ragdoll = new Ragdoll(this.ctx.physics, this.height, this.build);
     const v = opts.velocity || { x: 0, y: 0, z: 0 };
     this.ragdoll.activate(this.body.position.x, this.body.position.y, this.body.position.z, this.yaw,

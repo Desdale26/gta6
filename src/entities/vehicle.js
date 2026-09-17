@@ -179,6 +179,7 @@ export class Vehicle {
       sim.position.y = Math.max(sim.position.y, ctx.physics.groundHeight(sim.position.x, sim.position.z) + this.def.height * 0.35);
     }
 
+    this._checkPedestrianCollisions(dt);
     this._distToCam = this.group.position.distanceTo(ctx.camera.position);
     this.syncMesh(dt);
     this.updateLights(dt);
@@ -203,6 +204,25 @@ export class Vehicle {
     this.ctx.audio?.playAt(heavy ? 'carCrashHeavy' : 'carCrashLight',
       { x: im.x, y: im.y, z: im.z },
       { volume: Math.min(1, 0.28 + speed * 0.05), maxDistance: heavy ? 220 : 140 });
+  }
+
+  _checkPedestrianCollisions(dt) {
+    if (!this.ctx.peds) return;
+    const speed = this.sim.speed;
+    if (speed < 3) return;
+    const hitRadius = this.def.width * 0.6 + this.def.length * 0.4;
+    const peds = this.ctx.peds.peds;
+    for (const ped of peds) {
+      if (ped.dead || ped.inVehicle) continue;
+      const dx = ped.body.position.x - this.sim.position.x;
+      const dz = ped.body.position.z - this.sim.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < hitRadius) {
+        const vel = { x: this.sim.velocity.x * 0.8, y: 2.4, z: this.sim.velocity.z * 0.8 };
+        ped.kill({ velocity: vel, source: this });
+        this.ctx.particles?.spawnBlood(ped.body.position.x, ped.body.position.y + 0.6, ped.body.position.z, vel.x, vel.y, vel.z, 2);
+      }
+    }
   }
 
   /**
