@@ -125,6 +125,12 @@ export class PoliceSystem {
     }
     if (s !== this.stars) {
       const up = s > this.stars;
+      // Earning a star buys a guaranteed head start, however it was earned.
+      // Units spawn out of sight and have to drive in; without this the level
+      // can expire while the only car sent is still two streets away, and the
+      // player sees nothing happen at all. Once a unit is close enough to see
+      // you the decay stops on its own, so this only has to cover the approach.
+      if (up) this.decayGrace = Math.max(this.decayGrace, 14);
       this.stars = s;
       this.maxStarsSeen = Math.max(this.maxStarsSeen, s);
       this.ctx.player.wanted = s;
@@ -179,8 +185,13 @@ export class PoliceSystem {
     // --- heat decay ---
     this.decayGrace = Math.max(0, this.decayGrace - dt);
     if (this.stars > 0 && this.decayGrace <= 0 && !visible) {
-      // Higher stars take longer to shake.
-      const rate = lerp(12, 4.5, (this.stars - 1) / 4);
+      // Higher stars take longer to shake -- but one star used to decay FASTEST,
+      // at 12 heat a second, and one star is also where you land barely over the
+      // 40 threshold. A single crime therefore bought about two seconds of
+      // wanted level, which a car spawning out of sight could not possibly
+      // survive: it was dismissed by _prune before it had driven a block. That
+      // is the whole of "the police never come when you get a star".
+      const rate = lerp(5, 3.5, (this.stars - 1) / 4);
       this.heat = Math.max(0, this.heat - rate * dt);
       this._recalcStars();
       if (this.stars === 0) this._dismissAll();
@@ -246,7 +257,7 @@ export class PoliceSystem {
       const u = this.units[i];
       if (u.dead || u.sim.exploded) { if (!u.dead) u.dispose(); this.units.splice(i, 1); continue; }
       const d = Math.hypot(u.sim.position.x - this.ctx.player.position.x, u.sim.position.z - this.ctx.player.position.z);
-      if (d > 340 || this.stars === 0) { u.dispose(); this.units.splice(i, 1); }
+      if (d > 340 || this.stars === 0 || u._giveUpOnChase) { u.dispose(); this.units.splice(i, 1); }
     }
     for (let i = this.officers.length - 1; i >= 0; i--) {
       const o = this.officers[i];
@@ -286,8 +297,11 @@ export class PoliceSystem {
     const def = this.stars >= 4 ? rng.pick(pool) : pool[Math.min(this.stars - 1, pool.length - 1)] || pool[0];
 
     for (let attempt = 0; attempt < 8; attempt++) {
+      // Close enough to be a threat. From 95-175 m the first car took about
+      // twenty seconds to reach the player even when it drove straight at them,
+      // which reads as nothing happening at all. Just out of sight is the point.
       const a = rng.range(0, Math.PI * 2);
-      const r = rng.range(95, 175);
+      const r = rng.range(60, 120);
       const x = player.position.x + Math.cos(a) * r;
       const z = player.position.z + Math.sin(a) * r;
       const near = graph.nearestEdge(x, z, 45);
@@ -296,7 +310,7 @@ export class PoliceSystem {
       const dir = rng.bool() ? 1 : -1;
       e.lanePoint(dir, 0, clamp(near.t, 0.1, 0.9), _v1);
       const y = ctx.physics.groundHeight(_v1.x, _v1.z);
-      if (Math.hypot(_v1.x - ctx.camera.position.x, _v1.z - ctx.camera.position.z) < 60) continue;
+      if (Math.hypot(_v1.x - ctx.camera.position.x, _v1.z - ctx.camera.position.z) < 42) continue;
 
       const v = ctx.traffic.spawnAt(def, _v1.x, _v1.z, Math.atan2(e.dx * dir, e.dz * dir), { ai: false });
       if (!v) continue;
@@ -400,6 +414,18 @@ export class PoliceSystem {
     const player = ctx.player;
     for (const u of this.units) {
       if (u.dead) continue;
+      // A unit that never closes is not a chase. Cars spawn out of sight and
+      // drive in, and one that wedges itself on geometry or picks a route that
+      // never arrives keeps its slot in wave.cars for the whole wanted level.
+      // At one star that is the ONLY slot, so a single stuck car is the
+      // difference between a pursuit and "the police never come" -- measured at
+      // three stars, two of three units sat at 124 m and 176 m for a solid
+      // minute. Write it off and let a fresh one spawn in closer.
+      const d = Math.hypot(u.sim.position.x - player.position.x, u.sim.position.z - player.position.z);
+      if (d < (u._closestApproach ?? Infinity) - 3) { u._closestApproach = d; u._stalledFor = 0; }
+      else u._stalledFor = (u._stalledFor ?? 0) + dt;
+      u._giveUpOnChase = u._stalledFor > 8 && d > 85;
+
       if (u.aiDriver) {
         u.aiDriver.chaseTarget = this.searching
           ? { position: _v1.set(this.lastSeen.x, 0, this.lastSeen.z), dead: false }

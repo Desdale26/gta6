@@ -433,25 +433,15 @@ export class Vehicle {
       ctx.particles.spawnSplash(sim.position.x, ctx.physics.waterLevel, sim.position.z, sim.speed * 0.2);
     }
     // engine fire and smoke
+    // Engine fire, flame only. No smoke comes off a car any more — not the
+    // column off a burning bonnet, not the wisp off a failing engine, not the
+    // exhaust puff under throttle. All three sat directly between the driver and
+    // the road ahead, and the one moment a burning car most needs to be driven
+    // is the moment it was hardest to see out of. The flame still says the car
+    // is on fire, which is the part worth knowing.
     if (sim.onFire > 0 && near) {
       this.localPoint(0, this.def.height * 0.15, this.def.length * 0.34, _v1);
       ctx.particles.spawnFire(_v1.x, _v1.y, _v1.z, 1);
-      // The flame is cheap and reads well every frame; the smoke above it does
-      // not — sixty column puffs a second off your own bonnet is a blindfold in
-      // exactly the situation where you are trying to drive out of trouble.
-      this._fireSmokeTimer = (this._fireSmokeTimer ?? 0) - dt;
-      if (this._fireSmokeTimer <= 0) {
-        this._fireSmokeTimer = 0.14;
-        ctx.particles.spawnSmoke(_v1.x, _v1.y + 0.4, _v1.z, 0.9, 0x222222, 0.55);
-      }
-    } else if (sim.engineHealth < 0.55 && near && Math.random() < 0.12) {
-      this.localPoint(0, this.def.height * 0.18, this.def.length * 0.36, _v1);
-      ctx.particles.spawnSmoke(_v1.x, _v1.y, _v1.z, 0.7, 0x3a3a3a, 0.32 * (1 - sim.engineHealth));
-    }
-    // exhaust puff on hard throttle
-    if (near && sim.throttle > 0.7 && sim.rpmNormalized > 0.8 && Math.random() < 0.2) {
-      this.localPoint(0, -this.def.height * 0.3, -this.def.length * 0.5, _v1);
-      ctx.particles.spawnSmoke(_v1.x, _v1.y, _v1.z, 0.22, 0x666666, 0.16);
     }
   }
 

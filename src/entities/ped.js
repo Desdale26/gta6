@@ -20,6 +20,21 @@ const _pv = new THREE.Vector3();
 
 let _pid = 1;
 
+// Getting shot is not the moment for the polite line in the archetype's bark
+// table. One shared pool rather than per-archetype ones, because pain sounds
+// much the same coming from a banker as from a surfer.
+const HURT_SWEARS = [
+  'Fuck! I\'m hit!', 'Shit, shit, shit!', 'Argh — you fucking shot me!',
+  'Jesus Christ, my leg!', 'You bastard!', 'Fucking hell!',
+  'Ow — fuck!', 'What the fuck is wrong with you!', 'You piece of shit!',
+  'Somebody help me, fuck!', 'God damn it, that hurts!', 'You fucking prick!',
+  'Shit! I\'m bleeding!', 'Arghhh — you crazy bastard!',
+];
+const DEATH_SWEARS = [
+  'Fuck—', 'Oh shit—', 'You fucking—', 'Shit!', 'Jesus—',
+  'Fucking hell—', 'Bastard—', 'God damn—', 'No — no, fuck—',
+];
+
 export const PED_STATE = {
   WANDER: 'wander', IDLE: 'idle', FLEE: 'flee', PANIC: 'panic', COMBAT: 'combat',
   COWER: 'cower', CHASE: 'chase', DRIVE: 'drive', DEAD: 'dead', TALK: 'talk', WATCH: 'watch',
@@ -596,6 +611,20 @@ export class Ped {
     this.ctx.bus.emit('ped:bark', { ped: this, text: this.barkText, kind });
   }
 
+  /**
+   * Same channel as _bark, but from a fixed pool rather than the archetype's,
+   * and audible from further off — someone screaming because they have just
+   * been shot carries further than someone muttering about the printer.
+   */
+  _swear(lines, kind, cooldown) {
+    const now = this.ctx.time.elapsed;
+    if (now - this.lastBark < cooldown) return;
+    if (this.distToCam > 30) return;
+    this.lastBark = now;
+    this.barkText = this.rng.pick(lines);
+    this.ctx.bus.emit('ped:bark', { ped: this, text: this.barkText, kind });
+  }
+
   // ---- movement -----------------------------------------------------------
   _move(dt) {
     if (this._fireCooldown > 0) this._fireCooldown -= dt;
@@ -812,7 +841,7 @@ export class Ped {
     this.anger = Math.min(1.5, this.anger + 0.5);
     this.fear = Math.min(1.6, this.fear + 0.8);
     if (opts.source) this.threat = opts.source;
-    this._bark('hurt', 2);
+    this._swear(HURT_SWEARS, 'hurt', 1.1);
     this.ctx.bus.emit('ped:damaged', { ped: this, amount, source: opts.source });
     if (this.health <= 0) { this.kill(opts); return true; }
     if (this.stats.bravery > 0.65 && (this.armed || this.isCop)) this._setState(PED_STATE.COMBAT);
@@ -827,11 +856,9 @@ export class Ped {
     this.body.enabled = false;
     this.body.dead = true;
     this.despawnTimer = 0;
-    const swears = ['Shit!', 'Fuck!', 'Damn it!', 'Oh shit!', 'Motherfucker!', 'Jesus Christ!', 'Holy shit!', 'Goddamn!'];
-    if (opts.source && opts.source.isVehicle) {
-      this.barkText = this.rng.pick(swears);
-      this.ctx.bus.emit('ped:bark', { ped: this, text: this.barkText, kind: 'death' });
-    }
+    // Whatever killed them. This used to fire only for a car, so being shot --
+    // by far the commonest way anyone in this city dies -- was silent.
+    this._swear(DEATH_SWEARS, 'death', 0);
     this.ragdoll = new Ragdoll(this.ctx.physics, this.height, this.build);
     const v = opts.velocity || { x: 0, y: 0, z: 0 };
     this.ragdoll.activate(this.body.position.x, this.body.position.y, this.body.position.z, this.yaw,

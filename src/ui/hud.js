@@ -88,7 +88,16 @@ export class HUD {
     bus.on('money:changed', (e) => this._onMoney(e));
     bus.on('combat:hit', (e) => { if (e.source === this.ctx.player) this.hitmarker(e.killed); });
     bus.on('player:damaged', (e) => { this.damageFlash = Math.min(1, this.damageFlash + e.amount / 45); });
-    bus.on('ped:bark', (e) => { if (e.kind === 'panic' || e.kind === 'angry') this.subtitle(null, e.text, 2.2, true); });
+    // 'hurt' and 'death' were being dropped here, which is why shooting someone
+    // produced nothing on screen: the lines were emitted, nothing displayed
+    // them. They also outrank the ambient ones -- what the man you just shot has
+    // to say is more interesting than a passer-by panicking.
+    bus.on('ped:bark', (e) => {
+      const loud = e.kind === 'hurt' || e.kind === 'death';
+      if (loud || e.kind === 'panic' || e.kind === 'angry') {
+        this.subtitle(null, e.text, loud ? 2.6 : 2.2, !loud);
+      }
+    });
     bus.on('weather:changed', (e) => this.toast('Weather', e.label, 'info'));
     bus.on('wanted:changed', (e) => { if (e.up) this.toast('Wanted', `${e.stars} star${e.stars > 1 ? 's' : ''}`, 'bad'); });
   }
