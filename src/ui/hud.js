@@ -93,10 +93,15 @@ export class HUD {
     // them. They also outrank the ambient ones -- what the man you just shot has
     // to say is more interesting than a passer-by panicking.
     bus.on('ped:bark', (e) => {
-      const loud = e.kind === 'hurt' || e.kind === 'death';
-      if (loud || e.kind === 'panic' || e.kind === 'angry') {
-        this.subtitle(null, e.text, loud ? 2.6 : 2.2, !loud);
-      }
+      const k = e.kind;
+      if (k !== 'panic' && k !== 'angry' && k !== 'hurt' && k !== 'death') return;
+      // 'hurt' and 'death' were being dropped here entirely, which is why
+      // shooting someone put nothing on screen: the lines were emitted and
+      // nothing displayed them. They also outrank ambient chatter -- what the
+      // man you just shot has to say beats a passer-by panicking -- but still
+      // yield to story dialogue, so a firefight cannot talk over a mission.
+      const loud = (k === 'hurt' || k === 'death') && !this.ctx.dialogs?.current;
+      this.subtitle(null, e.text, loud ? 2.6 : 2.2, !loud);
     });
     bus.on('weather:changed', (e) => this.toast('Weather', e.label, 'info'));
     bus.on('wanted:changed', (e) => { if (e.up) this.toast('Wanted', `${e.stars} star${e.stars > 1 ? 's' : ''}`, 'bad'); });
