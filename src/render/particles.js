@@ -185,7 +185,7 @@ export class ParticleSystem {
       x, y, z,
       vx: (Math.random() - 0.5) * 0.9, vy: 0.5 + Math.random() * 0.8, vz: (Math.random() - 0.5) * 0.9,
       size: size * 26, grow: size * 22, rot: Math.random() * 6.28, rotVel: (Math.random() - 0.5) * 1.1,
-      r: c.r, g: c.g, b: c.b, a: clamp(0.24 * strength, 0, 0.45),
+      r: c.r, g: c.g, b: c.b, a: clamp(0.06 * strength, 0, 0.12),
       life: 1.1 + Math.random() * 1.3, drag: 0.9, gravity: 0.35, frame: 0, fadeIn: 0.15,
     });
   }
