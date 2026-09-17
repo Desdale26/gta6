@@ -256,7 +256,14 @@ for (const m of modes) {
 const daylight = !want('daylight') ? null : await page.evaluate(() => {
   const ctx = window.__VC.ctx;
   const gl = ctx.renderer.renderer;
-  ctx.settings.set('quality', 'medium');
+  // Measure the preset the player actually gets, not a hardcoded one.
+  //
+  // This used to force 'medium'. That was fine while every session could reach
+  // medium, and wrong the moment the minimal mode existed: a minimal session is
+  // latched to the minimal/potato/low ladder and never renders medium in play, so
+  // the check was reporting on a combination — flat Lambert materials through the
+  // full post chain — that no player will ever see. It reads 10 luma darker than
+  // any preset the session can actually reach.
   ctx.settings.data.autoQuality = false;
   ctx.game.applyQuality();
   ctx.time.hour = 12.5;
@@ -299,12 +306,12 @@ const daylight = !want('daylight') ? null : await page.evaluate(() => {
   const n = px2.length / 4;
   return { mean: sum / n, darkFrac: dark / n, blownFrac: blown / n, sat: sat / n,
     sun: +ctx.sky.sun.intensity.toFixed(2), hemi: +ctx.sky.hemi.intensity.toFixed(2),
-    env: ctx.scene.environmentIntensity };
+    env: ctx.scene.environmentIntensity, quality: ctx.settings.data.quality };
 });
 if (daylight) note(`  daylight pass done at ${((Date.now() - T0) / 1000).toFixed(0)} s`);
 if (daylight) {
   note('');
-  note('daylight: half past twelve, clear sky, standing on the widest road');
+  note(`daylight: half past twelve, clear sky, standing on the widest road (${daylight.quality})`);
   const d = daylight;
   note(`  mean luma ${d.mean.toFixed(1)}, ${(d.darkFrac * 100).toFixed(0)}% near-black, `
     + `${(d.blownFrac * 100).toFixed(0)}% blown, mean saturation ${(d.sat * 100).toFixed(0)}%`);

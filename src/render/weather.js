@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { clamp, lerp, damp, smoothstep } from '../core/mathx.js';
 import { fbm2D } from '../core/rng.js';
 import { tex } from './proctex.js';
+import { isMinimal } from './matmode.js';
 
 export const WEATHER_TYPES = {
   // Leonida is a sunny coast, and the weights say so now. They used to give
@@ -185,7 +186,15 @@ export class Weather {
       ctx.renderer.setGrade({
         // Under a storm the eye adapts up, not down — cutting exposure as well
         // as the light was the third place the same weather dimmed the scene.
-        exposure: ctx.sky.exposure * 0.85 * (1 + this.storm * 0.04) * (1 + night * 0.5),
+        // Flat shading needs a little more exposure to land in the same place.
+        // A PBR surface collected light from the sun, a specular lobe and an
+        // environment probe; a Lambert one has the sun and the sky fill and
+        // nothing else, so the same scene reads darker even with the fill raised
+        // to stand in for the probe. Measured at the widest road at half twelve:
+        // 88 in the full mode against 48 flat. This is the last of the three
+        // places that gap is closed, after the sky fill and the probe itself.
+        exposure: ctx.sky.exposure * 0.85 * (isMinimal() ? 1.34 : 1)
+          * (1 + this.storm * 0.04) * (1 + night * 0.5),
         // A touch more contrast than before. With the light budget corrected the
         // midtones carry the whole image, and 1.04 left a bright street flat.
         contrast: lerp(1.11, 1.18, this.storm) - this.fog * 0.06,

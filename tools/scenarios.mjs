@@ -544,7 +544,11 @@ const SCENARIOS = [
     assert: (c) => {
       const bad = [];
       if (!Number.isFinite(c.sky.sunDir.y)) bad.push('sun direction went non-finite');
-      if (!c.sky.envRT) bad.push('environment probe was never built');
+      // A minimal session has no probe on purpose — it was the single largest
+      // saving in that mode, and Lambert materials never sample one. Asserting it
+      // exists would be asserting the mode is off.
+      if (!c.settings.minimal && !c.sky.envRT) bad.push('environment probe was never built');
+      if (c.settings.minimal && c.scene.environment) bad.push('the minimal mode built an environment probe anyway');
       return bad;
     },
   },

@@ -14,6 +14,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { clamp, RollingAverage } from '../core/mathx.js';
+import { isMinimal } from '../render/matmode.js';
 
 // One tone curve, used by both renderers.
 //
@@ -486,7 +487,13 @@ export class Renderer {
       // three.js swaps to them without touching the compiler.
     }
     this._syncPasses();
-    this.renderer.shadowMap.enabled = !!p.shadows;
+    // Shadows are latched off for a whole minimal session, not read per preset.
+    // The ladder lets a minimal session climb to potato and low, and both of those
+    // ask for shadows — which put the 85-draw-call shadow pass back and, measured
+    // at this viewpoint, took the frame from 7% near-black to 36%, because a flat
+    // Lambert city has no specular or image-based light to lift what the shadow
+    // map darkens. Minimal means minimal at every rung it can reach.
+    this.renderer.shadowMap.enabled = !!p.shadows && !isMinimal();
     this.grade.uGrain.value = this.settings.get('filmGrain');
     this.grade.uChroma.value = this.settings.get('chromaticAberration');
     this.grade.uVignette.value = this.settings.get('vignette');
