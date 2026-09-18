@@ -519,7 +519,13 @@ export class Ped {
 
     this.group.position.copy(this.body.position);
     this.group.rotation.y = this.yaw;
-    if (this.lodLevel < 2) this._animate(dt);
+    // Anyone in a firefight animates whatever the distance. The pose that raises
+    // the arm and lays the barrel along it lives in _animate, and _animate was
+    // skipped outright past 95 m — so an officer shooting at you from further
+    // out than that stood in a resting pose with the gun aimed at the pavement.
+    // There are only ever a handful of people actually fighting.
+    const fighting = this.state === PED_STATE.COMBAT && this.armed;
+    if (this.lodLevel < 2 || fighting) this._animate(dt);
   }
 
   // ---- brain --------------------------------------------------------------
