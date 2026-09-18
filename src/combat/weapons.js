@@ -105,22 +105,68 @@ export function buildWeaponModel(def, materials) {
       break;
     }
     default: {
-      // Firearms share a chassis: receiver, barrel, grip, plus optional stock/mag/scope.
+      // Firearms share a chassis. Every part below is merged into one of three
+      // meshes by material at the end, so hardware detail costs triangles and
+      // not draw calls — which is why it is worth actually modelling the trigger
+      // guard, the ejection port and the sights rather than implying them with
+      // one slab.
       const barrel = m.barrel ?? L * 0.55;
-      bodyParts.push(box(0.045, 0.075, L * 0.62, 0, 0, L * 0.06));
-      accentParts.push(cyl(0.011, 0.011, barrel, 7, 0, 0.012, L * 0.34 + barrel * 0.5, Math.PI / 2));
+      const bore = 0.012;                 // the axis everything is hung off
+      const rz0 = L * 0.06;               // receiver centre
+
+      // Receiver as an upper and a lower with a step between them. That step is
+      // the line that reads as "gun" from across a street.
+      bodyParts.push(box(0.045, 0.048, L * 0.62, 0, bore + 0.006, rz0));
+      bodyParts.push(box(0.039, 0.032, L * 0.50, 0, bore - 0.032, rz0 - L * 0.02));
+      bodyParts.push(box(0.049, 0.010, L * 0.30, 0, bore + 0.030, rz0 - L * 0.06));
+      // Ejection port and charging handle, both on the right.
+      bodyParts.push(box(0.009, 0.020, L * 0.11, 0.021, bore + 0.010, rz0 + L * 0.10));
+      accentParts.push(box(0.011, 0.011, 0.028, 0.025, bore + 0.020, rz0 - L * 0.23));
+
+      // Barrel, handguard and a front sight block.
+      accentParts.push(cyl(0.011, 0.011, barrel, 8, 0, bore, L * 0.34 + barrel * 0.5, Math.PI / 2));
+      if (barrel > 0.16) {
+        bodyParts.push(cyl(0.019, 0.017, barrel * 0.54, 9, 0, bore, L * 0.34 + barrel * 0.30, Math.PI / 2));
+        for (let i = 0; i < 3; i++) {   // vent slots
+          bodyParts.push(box(0.040, 0.005, 0.011, 0, bore + 0.017, L * 0.34 + barrel * (0.16 + i * 0.13)));
+        }
+      }
+      accentParts.push(box(0.015, 0.019, 0.017, 0, bore + 0.017, L * 0.34 + barrel * 0.90));
+
+      // Grip: a backstrap, a web where the thumb sits, and a baseplate.
       gripParts.push(box(0.034, 0.11, 0.05, 0, -0.085, -L * 0.13, 0.22));
-      if (m.mag !== false) gripParts.push(box(0.03, m.drum ? 0.1 : 0.12, m.drum ? 0.1 : 0.042, 0, -0.085, L * 0.02));
+      gripParts.push(box(0.037, 0.018, 0.046, 0, -0.140, -L * 0.13 - 0.024, 0.22));
+      gripParts.push(box(0.030, 0.032, 0.028, 0, -0.038, -L * 0.10, 0.22));
+
+      // Trigger, and a squared guard around it.
+      accentParts.push(box(0.007, 0.022, 0.007, 0, -0.030, -L * 0.05));
+      gripParts.push(box(0.024, 0.006, 0.050, 0, -0.050, -L * 0.03));
+      gripParts.push(box(0.024, 0.024, 0.006, 0, -0.036, -L * 0.005));
+
+      if (m.mag !== false) {
+        gripParts.push(box(0.03, m.drum ? 0.1 : 0.12, m.drum ? 0.1 : 0.042, 0, -0.085, L * 0.02));
+        if (!m.drum) gripParts.push(box(0.034, 0.008, 0.048, 0, -0.146, L * 0.02));   // floor plate
+      }
       if (m.drum) gripParts.push(cyl(0.06, 0.06, 0.04, 10, 0, -0.11, L * 0.02, 0, Math.PI / 2));
-      if (m.stock) bodyParts.push(box(0.038, 0.075, L * 0.42, 0, -0.012, -L * 0.42));
-      if (m.supp) accentParts.push(cyl(0.02, 0.02, 0.16, 8, 0, 0.012, L * 0.34 + barrel + 0.08, Math.PI / 2));
+      if (m.stock) {
+        bodyParts.push(box(0.038, 0.075, L * 0.42, 0, -0.012, -L * 0.42));
+        bodyParts.push(box(0.030, 0.026, L * 0.24, 0, 0.032, -L * 0.36));             // cheek rest
+        gripParts.push(box(0.042, 0.086, 0.016, 0, -0.014, -L * 0.63));               // butt pad
+      }
+      if (m.supp) accentParts.push(cyl(0.02, 0.02, 0.16, 8, 0, bore, L * 0.34 + barrel + 0.08, Math.PI / 2));
       if (m.scopeLen) {
         accentParts.push(cyl(0.019, 0.019, m.scopeLen, 8, 0, 0.055, L * 0.1, Math.PI / 2));
         accentParts.push(box(0.012, 0.03, 0.02, 0, 0.038, L * 0.1 - m.scopeLen * 0.3));
         accentParts.push(box(0.012, 0.03, 0.02, 0, 0.038, L * 0.1 + m.scopeLen * 0.3));
       } else {
-        accentParts.push(box(0.008, 0.014, 0.01, 0, 0.048, L * 0.32));
-        accentParts.push(box(0.018, 0.012, 0.012, 0, 0.048, -L * 0.12));
+        // Front post between two protective wings, rear aperture with a notch —
+        // the shape you actually look down, rather than two loose blocks.
+        accentParts.push(box(0.005, 0.017, 0.008, 0, 0.050, L * 0.32));
+        accentParts.push(box(0.004, 0.013, 0.007, -0.010, 0.048, L * 0.32));
+        accentParts.push(box(0.004, 0.013, 0.007, 0.010, 0.048, L * 0.32));
+        accentParts.push(box(0.020, 0.005, 0.010, 0, 0.054, -L * 0.12));
+        accentParts.push(box(0.005, 0.014, 0.010, -0.008, 0.047, -L * 0.12));
+        accentParts.push(box(0.005, 0.014, 0.010, 0.008, 0.047, -L * 0.12));
       }
       muzzleZ = L * 0.34 + barrel + (m.supp ? 0.16 : 0) + 0.02;
       break;

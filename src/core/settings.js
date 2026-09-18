@@ -125,6 +125,9 @@ const DEFAULTS = {
   // half minute clawing its way down, stalling on every step. Start where a
   // laptop can actually live and let a fast machine earn its way up.
   quality: 'minimal',
+  // How surfaces are shaded, chosen for the NEXT session rather than this one —
+  // see `shadingMode` below for why it cannot be changed in place.
+  shading: 'minimal',
   autoQuality: true,
   // Render scale multiplies the preset's resolution; pixelBudget is the ceiling
   // on the frame the GPU is actually asked to draw. One 4K frame by default.
@@ -162,8 +165,34 @@ export class Settings {
     // Latched here and never written again. Everything that bakes a decision into
     // a GPU resource — material type, light pool size, whether the environment
     // probe exists at all — reads this once while it is being built.
-    this.shadingMode = this.data.quality === 'minimal' ? 'minimal' : 'full';
+    // Saves written before `shading` existed encoded the same choice in
+    // `quality`, so read it the old way for those rather than silently moving a
+    // returning player onto the other renderer.
+    if (!this.hadShadingKey) {
+      this.data.shading = this.data.quality === 'minimal' ? 'minimal' : 'full';
+    }
+    this.shadingMode = this.data.shading === 'full' ? 'full' : 'minimal';
   }
+
+  /**
+   * Choose the shading for the NEXT session, and move `quality` onto a preset
+   * that mode can actually reach — the two ladders do not overlap, so leaving
+   * quality on 'minimal' while asking for full shading would boot into a preset
+   * the session is not allowed to be on.
+   *
+   * This deliberately does not touch `shadingMode`: that is latched for the life
+   * of the session and the caller is expected to offer a reload.
+   */
+  setShading(mode) {
+    const m = mode === 'full' ? 'full' : 'minimal';
+    this.set('shading', m);
+    const allowed = m === 'minimal' ? ['minimal', 'potato', 'low'] : ['potato', 'low', 'medium', 'high', 'ultra'];
+    if (!allowed.includes(this.data.quality)) this.set('quality', m === 'minimal' ? 'minimal' : 'medium');
+    return m;
+  }
+
+  /** True once the stored choice no longer matches what this session is running. */
+  get shadingNeedsReload() { return this.data.shading !== this.shadingMode; }
 
   /** True when this session is drawing the cheap way. Constant for the session. */
   get minimal() { return this.shadingMode === 'minimal'; }
@@ -182,9 +211,15 @@ export class Settings {
     // preference is a choice and must survive; the device probe only gets to
     // pick the opening preset for somebody who has never played before.
     this.wasLoaded = false;
+    this.hadShadingKey = false;
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { Object.assign(this.data, JSON.parse(raw)); this.wasLoaded = true; }
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.hadShadingKey = parsed.shading === 'minimal' || parsed.shading === 'full';
+        Object.assign(this.data, parsed);
+        this.wasLoaded = true;
+      }
     } catch (e) { /* storage may be blocked — defaults are fine */ }
   }
   save() {

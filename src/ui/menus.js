@@ -165,6 +165,10 @@ export class Menus {
       return [
         { id: 'back', label: '‹ Back' },
         { id: 'h1', label: 'Graphics', header: true },
+        { id: 'shading', label: 'Surface detail',
+          value: (s.get('shading') === 'full' ? 'Full — lit, reflective' : 'Flat — fastest')
+            + (s.shadingNeedsReload ? '  (restart to apply)' : ''),
+          cycle: ['minimal', 'full'], get: () => s.get('shading'), apply: (v) => s.setShading(v) },
         { id: 'quality', label: 'Quality preset', value: QUALITY_PRESETS[s.get('quality')].label, cycle: q, get: () => s.get('quality') },
         { id: 'autoQuality', label: 'Adaptive quality', value: s.get('autoQuality') ? 'On' : 'Off', toggle: true },
         { id: 'targetFps', label: 'Target frame rate', value: `${s.get('targetFps')} fps`,
@@ -228,6 +232,7 @@ export class Menus {
       save: 'Progress is also saved automatically after every mission.',
       restart: 'Start over from the bus station. This cannot be undone.',
       abandon: 'Give up the current mission. You can retry it from its marker.',
+      shading: 'Flat is the fast path: every surface is lit by a single dot product, with no shadows, no reflections and no surface texture beyond its colour. Full turns on proper lighting — normal and roughness detail, specular highlights and environment reflections — and costs a large part of your frame rate. This one takes effect when you reload the page, because a surface\'s type is fixed when it is built and swapping every material in the city mid-game would stall far worse than it is worth.',
       quality: 'Minimal draws the whole city with flat shading, no shadows and no reflections — it looks simpler and runs several times faster. The richer presets are only offered if the session started on one, because how surfaces are shaded is decided when the game loads.',
       targetFps: 'What the adaptive system aims for. It scales the render resolution, and drops a quality level if that is not enough, to hold this number.',
       renderScale: 'Multiplies the rendered resolution. Above 100% the frame is drawn larger than the window and downsampled, which is the cleanest image the game can produce.',
@@ -313,7 +318,10 @@ export class Menus {
       s.set(item.id, clamp(Math.round((s.get(item.id) + dir * stepSize) / stepSize) * stepSize, min, max));
     } else if (item.cycle) {
       const cur = item.cycle.indexOf(item.get());
-      s.set(item.id, item.cycle[(cur + dir + item.cycle.length) % item.cycle.length]);
+      const next = item.cycle[(cur + dir + item.cycle.length) % item.cycle.length];
+      // A row can own how its value is stored — the shading row has to move the
+      // quality preset with it, because the two ladders do not overlap.
+      if (item.apply) item.apply(next); else s.set(item.id, next);
       this.ctx.game.applyQuality();
     }
     this.ctx.audio?.play('uiClick', { ui: true, volume: 0.25 });

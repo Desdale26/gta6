@@ -51,7 +51,12 @@ function buildGeometry() {
   // cost no matter how many are on screen. Capsules and spheres could never be
   // more than a blocked-out figure; lathed profiles give real anatomy — a chest
   // that tapers to a waist, calves, a heel — at a resolution worth looking at.
-  const RAD = 16;
+  //
+  // Everything below that is merged into head/torso/hand/foot is free in draw
+  // calls, because a ped draws those as one mesh each however many shapes went
+  // into them. Only a part needing its OWN material costs a call, times the
+  // pedestrian budget, so those are spent deliberately and counted.
+  const RAD = 20;
 
   /** A solid of revolution from [radius, y] pairs, capped at both ends. */
   const lathe = (profile, seg = RAD) => {
@@ -102,10 +107,32 @@ function buildGeometry() {
   const chin = new THREE.SphereGeometry(0.045, 8, 6);
   chin.scale(1.25, 0.85, 1.0);
   chin.translate(0, -0.072, 0.038);
-  const earL = new THREE.SphereGeometry(0.021, 6, 5); earL.scale(0.5, 1.25, 1);
+  const earL = new THREE.SphereGeometry(0.021, 8, 6); earL.scale(0.5, 1.25, 1);
   earL.translate(-0.086, 0.0, 0.004);
   const earR = earL.clone(); earR.translate(0.172, 0, 0);
-  const head = merge([skull, brow, nose, chin, earL, earR]);
+  // Cheekbones, lips and a browline. Under flat shading a face has no specular
+  // to describe it, so what little it reads by is the angle each small plane
+  // turns to the light — which means the planes have to be there.
+  const cheekL = new THREE.SphereGeometry(0.030, 8, 6); cheekL.scale(1.0, 0.72, 0.62);
+  cheekL.translate(-0.050, -0.022, 0.062);
+  const cheekR = cheekL.clone(); cheekR.translate(0.100, 0, 0);
+  const lipTop = new THREE.BoxGeometry(0.042, 0.009, 0.014); lipTop.translate(0, -0.046, 0.074);
+  const lipBot = new THREE.BoxGeometry(0.038, 0.011, 0.013); lipBot.translate(0, -0.057, 0.072);
+  const browL = new THREE.BoxGeometry(0.048, 0.011, 0.020);
+  browL.rotateZ(0.10); browL.translate(-0.030, 0.026, 0.070);
+  const browR = browL.clone(); browR.rotateZ(-0.20); browR.translate(0.060, 0, 0);
+  const jaw = new THREE.BoxGeometry(0.104, 0.038, 0.070);
+  jaw.rotateX(0.16); jaw.translate(0, -0.058, 0.014);
+  const head = merge([skull, brow, nose, chin, earL, earR,
+    cheekL, cheekR, lipTop, lipBot, browL, browR, jaw]);
+
+  // Eyes are the one facial part worth its own material — skin-coloured eyes
+  // are no eyes at all, and a face with none reads as a mannequin at any
+  // distance you can make out a head. One extra mesh per ped.
+  const eyeL = new THREE.SphereGeometry(0.0125, 8, 6); eyeL.scale(1.15, 1, 0.75);
+  eyeL.translate(-0.031, 0.006, 0.075);
+  const eyeR = eyeL.clone(); eyeR.translate(0.062, 0, 0);
+  const eyes = merge([eyeL, eyeR]);
 
   // ---- torso: shoulders down to a waist, plus collarbones ----
   const chest = lathe([
@@ -113,42 +140,76 @@ function buildGeometry() {
     [0.150, 0.04], [0.163, 0.14], [0.150, 0.215], [0.09, 0.255], [0, 0.26],
   ], RAD);
   chest.scale(1.06, 1, 0.70);
-  const deltoidL = new THREE.SphereGeometry(0.072, 10, 8); deltoidL.scale(1, 0.9, 0.85);
+  const deltoidL = new THREE.SphereGeometry(0.072, 12, 9); deltoidL.scale(1, 0.9, 0.85);
   deltoidL.translate(-0.165, 0.175, 0);
   const deltoidR = deltoidL.clone(); deltoidR.translate(0.33, 0, 0);
-  const torso = merge([chest, deltoidL, deltoidR]);
+  // Collarbones, a chest plane and a collar. All the same cloth colour as the
+  // torso, so they cost nothing but give the upper body somewhere for the light
+  // to change — without them a shirt is one smooth barrel.
+  const clavL = new THREE.BoxGeometry(0.115, 0.017, 0.030);
+  clavL.rotateZ(-0.16); clavL.translate(-0.068, 0.196, 0.048);
+  const clavR = clavL.clone(); clavR.rotateZ(0.32); clavR.translate(0.136, 0, 0);
+  const pecL = new THREE.SphereGeometry(0.070, 10, 8); pecL.scale(1.0, 0.62, 0.42);
+  pecL.translate(-0.062, 0.088, 0.072);
+  const pecR = pecL.clone(); pecR.translate(0.124, 0, 0);
+  const collar = new THREE.TorusGeometry(0.083, 0.016, 6, 16);
+  collar.rotateX(Math.PI / 2); collar.scale(1.0, 1, 0.74); collar.translate(0, 0.236, 0.004);
+  const torso = merge([chest, deltoidL, deltoidR, clavL, clavR, pecL, pecR, collar]);
 
   // ---- pelvis ----
-  const hips = lathe([
+  const hipsBase = lathe([
     [0, -0.13], [0.09, -0.126], [0.122, -0.08], [0.138, 0.0],
     [0.132, 0.075], [0.10, 0.122], [0, 0.13],
   ], RAD);
-  hips.scale(1.08, 1, 0.78);
+  hipsBase.scale(1.08, 1, 0.78);
+  // A waistband, in the trouser colour. It only has to catch the light along an
+  // edge to separate the top half of a figure from the bottom half.
+  const waist = new THREE.TorusGeometry(0.139, 0.015, 6, 18);
+  waist.rotateX(Math.PI / 2); waist.scale(1.08, 1, 0.80); waist.translate(0, 0.104, 0);
+  const hips = merge([hipsBase, waist]);
 
   // ---- hand: palm plus a thumb and a fused finger block ----
   const palm = new THREE.SphereGeometry(0.042, 10, 8);
   palm.scale(0.78, 1.25, 1.12);
-  const fingers = new THREE.BoxGeometry(0.052, 0.062, 0.030);
-  fingers.translate(0, -0.055, 0.002);
-  const thumb = new THREE.BoxGeometry(0.020, 0.040, 0.020);
-  thumb.translate(0.031, -0.020, 0.010);
-  const hand = merge([palm, fingers, thumb]);
+  // Four fingers rather than one fused block. At arm's length the difference is
+  // a hand instead of a mitten, and it merges into the same mesh, so it is free.
+  const fingerParts = [];
+  for (let i = 0; i < 4; i++) {
+    const len = 0.062 - Math.abs(i - 1.2) * 0.008;
+    const f = new THREE.BoxGeometry(0.0115, len, 0.026);
+    f.translate(-0.019 + i * 0.0128, -0.028 - len * 0.5, 0.002);
+    fingerParts.push(f);
+  }
+  const knuckles = new THREE.BoxGeometry(0.052, 0.016, 0.028);
+  knuckles.translate(0, -0.026, 0.002);
+  const thumb = new THREE.BoxGeometry(0.018, 0.038, 0.019);
+  thumb.rotateZ(-0.35); thumb.translate(0.031, -0.020, 0.010);
+  const hand = merge([palm, knuckles, ...fingerParts, thumb]);
 
   // ---- foot: heel, arch and toe rather than a shoebox ----
   const sole = new THREE.BoxGeometry(0.098, 0.035, 0.255);
   sole.translate(0, -0.020, 0.048);
   const upper = new THREE.BoxGeometry(0.094, 0.062, 0.145);
   upper.translate(0, 0.012, -0.005);
-  const toe = new THREE.SphereGeometry(0.049, 10, 6);
+  const toe = new THREE.SphereGeometry(0.049, 12, 8);
   toe.scale(1.0, 0.62, 1.35);
   toe.translate(0, -0.004, 0.136);
-  const heel = new THREE.SphereGeometry(0.047, 10, 6);
+  const heel = new THREE.SphereGeometry(0.047, 12, 8);
   heel.scale(1.0, 0.78, 0.9);
   heel.translate(0, 0.004, -0.058);
-  const foot = merge([sole, upper, toe, heel]);
+  // A welt around the sole, a heel block and a tongue, so a shoe has a shoe's
+  // edges instead of reading as a rounded lump of the trouser colour.
+  const welt = new THREE.BoxGeometry(0.106, 0.012, 0.262);
+  welt.translate(0, -0.034, 0.046);
+  const heelBlock = new THREE.BoxGeometry(0.092, 0.024, 0.070);
+  heelBlock.translate(0, -0.042, -0.048);
+  const tongue = new THREE.BoxGeometry(0.058, 0.040, 0.044);
+  tongue.rotateX(-0.30); tongue.translate(0, 0.036, 0.034);
+  const foot = merge([sole, upper, toe, heel, welt, heelBlock, tongue]);
 
   GEO = {
     head,
+    eyes,
     hair: (() => {
       const g = lathe([
         [0, -0.02], [0.062, -0.018], [0.090, 0.020], [0.098, 0.058],
@@ -324,6 +385,8 @@ export class Ped {
     root.add(this.neck);
     this.head = mk(g.head, skinM, 0, 0.06, 0, true);
     this.neck.add(this.head);
+    this.eyes = mk(g.eyes, bodyMat(mats.plasticBlack, 0x15161a), 0, 0.06, 0);
+    this.neck.add(this.eyes);
     const hair = mk(g.hair, hairM, 0, 0.06, 0);
     this.neck.add(hair);
     if (this.hasHat) {
@@ -552,6 +615,11 @@ export class Ped {
     this.state = s;
     this.stateTime = 0;
     if (s === PED_STATE.FLEE || s === PED_STATE.PANIC) this.hasTarget = false;
+    // Draw the weapon on entering the fight, not on the first frame that
+    // happens to animate. _animate is skipped entirely past 95 m, so an armed
+    // ped who opened fire from further out than that stood there shooting with
+    // empty hands until they closed the distance.
+    if (s === PED_STATE.COMBAT && this.armed) this._ensureWeaponModel();
   }
 
   _pickWanderTarget(random = false) {
@@ -790,7 +858,10 @@ export class Ped {
     }
     if (this._blink > 0) {
       this._blink -= dt;
-      this.head.scale.y = this._blink > 0 ? 0.86 : 1;
+      // Squash the eyes, not the skull. Blinking used to shorten the whole head
+      // by a seventh, which at close range is a head pulsing rather than a
+      // face blinking.
+      if (this.eyes) this.eyes.scale.y = this._blink > 0 ? 0.12 : 1;
     }
   }
 
