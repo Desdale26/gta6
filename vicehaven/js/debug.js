@@ -169,10 +169,11 @@
         downtown: [0, -250],
         palm: [-150, 250],
         harbor: [300, 150],
+        yard: g.world.courses && g.world.courses.yard_run ? [g.world.courses.yard_run.marker.x + 3, g.world.courses.yard_run.marker.z] : [-102, 28],
       };
       switch ((cmd || '').toLowerCase()) {
         case 'help':
-          this.print('tp <x> <z> | tp <plaza|park|tower|pier|boardwalk|market|downtown|palm|harbor|roof>');
+          this.print('tp <x> <z> | tp <plaza|park|tower|pier|boardwalk|market|downtown|palm|harbor|yard|roof>');
           this.print('noclip · god · heal · hurt <n> · money <n> · armor <n>');
           this.print('time <0-24> · clouds <0-1> · fov <deg> · quality <low|medium|high|ultra>');
           this.print('colliders · pos · respawn · clear · complete (missions: Phase 9)');

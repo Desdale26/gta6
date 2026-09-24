@@ -160,6 +160,7 @@
   /** Named places. The city generator builds these on the listed blocks. */
   VH.Data.landmarks = [
     { id: 'civic_plaza', name: 'Civic Plaza', block: [3, 4], kind: 'plaza' },
+    { id: 'meridian_yard', name: 'Meridian Yard', block: [2, 4], kind: 'construction' },
     { id: 'founders_park', name: 'Founders Park', block: [1, 5], kind: 'park' },
     { id: 'vicehaven_tower', name: 'Vicehaven Tower', block: [4, 2], kind: 'tower' },
     { id: 'oceanview_pier', name: 'Oceanview Pier', kind: 'pier', x: 420, z: 0 },

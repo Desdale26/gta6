@@ -73,6 +73,7 @@
       this.props = new VH.PropSystem(materials, physics, settings);
       this.interactables = [];
       this.beacons = [];
+      this.lawns = []; // rectangles of grass (for footstep sounds)
       this.layout = null;
       this.stats = { buildings: 0, lots: 0, tallest: 0, triangles: 0, meshes: 0 };
       this._signalTimer = 0;
@@ -120,6 +121,7 @@
         addProp: (type, px, pz, yaw, scale, y) => this.addProp(type, px, y === undefined ? KERB : y, pz, yaw, scale),
         addBeacon: (bx, by, bz) => this.beacons.push({ x: bx, y: by, z: bz }),
         addInteractable: (def) => this.interactables.push(def),
+        addLawn: (x0, z0, x1, z1) => this.addLawn(x0, z0, x1, z1),
       };
       Object.defineProperties(ctx, {
         b: lazy('building'),
@@ -142,6 +144,39 @@
       });
       chunk.ctx = ctx;
       return ctx;
+    }
+
+    addLawn(minX, minZ, maxX, maxZ) {
+      this.lawns.push({ minX, minZ, maxX, maxZ });
+    }
+
+    /** Surface name for footsteps, from the collider underfoot and the lawn map. */
+    surfaceAt(x, z, col) {
+      const tag = col ? col.tag : 'ground';
+      switch (tag) {
+        case 'road':
+          return 'asphalt';
+        case 'boardwalk':
+        case 'pier':
+        case 'crate':
+        case 'plank':
+        case 'scaffold':
+          return 'wood';
+        case 'container':
+        case 'beam':
+        case 'metal':
+          return 'metal';
+        case 'dirt':
+          return 'gravel';
+        case 'ground':
+          return x > -391 && x < 391 && z > -391 && z < 391 ? 'asphalt' : 'grass';
+        default:
+          break;
+      }
+      for (const r of this.lawns) {
+        if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return 'grass';
+      }
+      return 'concrete';
     }
 
     addProp(type, x, y, z, yaw, scale, group) {
@@ -339,6 +374,7 @@
           const r = World._roadRect(road, m0, m1, -M / 2, M / 2);
           ctx.concrete.box(r[0], 0, r[1], r[2], KERB, r[3], VH.col(0xc9c4b8), { skip: { top: true } });
           ctx.grass.topRect(r[0], r[1], r[2], r[3], KERB, VH.col(0xffffff), 6);
+          this.addLawn(r[0], r[1], r[2], r[3]);
           this.physics.addBox(r[0], -0.5, r[1], r[2], KERB, r[3], 'kerb');
           const spacing = road.coord === 0 ? 16 : 20;
           for (let p = m0 + spacing / 2; p < m1 - 2; p += spacing) {
@@ -401,6 +437,7 @@
       if (block.kind === 'plaza') VH.Landmarks.buildPlaza(this, block);
       else if (block.kind === 'park') VH.Landmarks.buildPark(this, block);
       else if (block.kind === 'tower') VH.Landmarks.buildTowerBlock(this, block);
+      else if (block.kind === 'construction') VH.Construction.build(this, block);
       else {
         if (block.alley) this._buildAlley(ctx, block);
         for (const lot of block.lots) {
@@ -447,7 +484,7 @@
       const treeType = d === 'palmcrescent' ? 'palm' : d === 'oldmarket' ? 'tree' : d === 'harborpoint' ? 'palmTall' : 'palm';
       const treeSpacing = d === 'palmcrescent' ? 18 : 30;
       const treeChance = d === 'oldmarket' ? 0.45 : d === 'downtown' ? 0.75 : 0.9;
-      const noTrees = block.kind === 'plaza' || block.kind === 'tower';
+      const noTrees = block.kind === 'plaza' || block.kind === 'tower' || block.kind === 'construction';
       edges.forEach((e, ei) => {
         const pos = (along, inset) => (e.alongX ? [along, e.fixed + e.inward * inset] : [e.fixed + e.inward * inset, along]);
         const start = e.a0 + 8 + (ei % 2) * 15;

@@ -115,7 +115,118 @@
       this.knockout.append(el('h2', '', 'Knocked out'), el('p', '', 'You come to a few moments later…'));
       this.fade = el('div', 'hud-fade');
 
-      r.append(tr, bl, this.crosshair, this.prompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints, this.knockout, this.fade);
+      // Challenge HUD: timer, checkpoint count, splits, countdown, objective marker, results.
+      this.chal = el('div', 'hud-challenge');
+      this.chalName = el('div', 'chal-name');
+      this.chalTimer = el('div', 'chal-timer', '0:00.00');
+      this.chalInfo = el('div', 'chal-info');
+      this.chalPop = el('div', 'chal-pop');
+      this.chal.append(this.chalName, this.chalTimer, this.chalInfo, this.chalPop);
+      this.big = el('div', 'hud-bigtext');
+      this.cbanner = el('div', 'hud-center-banner');
+      this.cbannerTitle = el('div', 'cb-title');
+      this.cbannerSub = el('div', 'cb-sub');
+      this.cbanner.append(this.cbannerTitle, this.cbannerSub);
+      this.objective = el('div', 'hud-objective');
+      this.objArrow = el('div', 'obj-arrow');
+      this.objDiamond = el('div', 'obj-diamond');
+      this.objDist = el('div', 'obj-dist');
+      this.objective.append(this.objArrow, this.objDiamond, this.objDist);
+      this.resultsEl = el('div', 'hud-results');
+
+      r.append(tr, bl, this.crosshair, this.prompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
+        this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.knockout, this.fade);
+    }
+
+    // ------------------------------------------------------- challenge HUD
+    showChallenge(on, def) {
+      this.chal.classList.toggle('visible', !!on);
+      document.body.classList.toggle('in-challenge', !!on);
+      if (on) {
+        this.chalName.textContent = def.name;
+        this.chal.classList.toggle('countdown', def.kind === 'countdown');
+        this._cache.chalTimer = null;
+      }
+    }
+
+    setChallengeTimer(text, tone) {
+      this._set('chalTimer', text, (v) => {
+        this.chalTimer.textContent = v;
+      });
+      this._set('chalTone', tone, (v) => {
+        this.chalTimer.className = 'chal-timer' + (v ? ' ' + v : '');
+      });
+    }
+
+    setChallengeInfo(text) {
+      this._set('chalInfo', text, (v) => {
+        this.chalInfo.textContent = v;
+      });
+    }
+
+    popText(text, tone) {
+      this.chalPop.textContent = text;
+      this.chalPop.className = 'chal-pop';
+      void this.chalPop.offsetWidth;
+      this.chalPop.className = 'chal-pop show ' + (tone || '');
+    }
+
+    bigText(text, go) {
+      this.big.textContent = text;
+      this.big.className = 'hud-bigtext';
+      void this.big.offsetWidth;
+      this.big.className = 'hud-bigtext show' + (go ? ' go' : '');
+    }
+
+    centerBanner(title, sub) {
+      this.cbannerTitle.textContent = title;
+      this.cbannerSub.textContent = sub || '';
+      this.cbanner.classList.remove('show');
+      void this.cbanner.offsetWidth;
+      this.cbanner.classList.add('show');
+    }
+
+    /** o = { x%, y%, onScreen, angle, dist, finish } or null to hide. */
+    setObjective(o) {
+      if (!o) {
+        this.objective.classList.remove('visible');
+        return;
+      }
+      this.objective.classList.add('visible');
+      this.objective.classList.toggle('edge', !o.onScreen);
+      this.objective.classList.toggle('finish', !!o.finish);
+      this.objective.style.left = o.x.toFixed(2) + '%';
+      this.objective.style.top = o.y.toFixed(2) + '%';
+      this.objArrow.style.transform = 'rotate(' + o.angle.toFixed(3) + 'rad)';
+      this._set('objDist', Math.round(o.dist), (v) => {
+        this.objDist.textContent = v + ' m';
+      });
+    }
+
+    /** view = { title, name, medal, main, lines, reward, retry } or null. */
+    showResults(view) {
+      const r = this.resultsEl;
+      if (!view) {
+        r.classList.remove('visible');
+        return;
+      }
+      r.innerHTML = '';
+      const medal = el('div', 'res-medal ' + (view.medal || 'none'));
+      medal.append(el('span', '', view.medal ? '★' : view.title === 'FINISHED' ? '✓' : '✕'));
+      const body = el('div', 'res-body');
+      body.append(el('div', 'res-name', view.name), el('div', 'res-title', view.title), el('div', 'res-main', view.main));
+      for (const line of view.lines || []) body.append(el('div', 'res-line', line));
+      if (view.reward) body.append(el('div', 'res-reward', '+' + VH.util.formatMoney(view.reward)));
+      if (view.retry) {
+        const hint = el('div', 'res-hint');
+        const k = el('kbd', '', this.input.labelFor('interact'));
+        hint.append(k, document.createTextNode(' try again   ·   walk away to leave'));
+        body.append(hint);
+      }
+      r.append(medal, body);
+      r.classList.remove('visible');
+      void r.offsetWidth;
+      r.classList.add('visible');
     }
 
     _buildChecklist() {

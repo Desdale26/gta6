@@ -21,8 +21,8 @@
 
   // Sun elevation (sin of altitude) → colours. Hex values are sRGB.
   const KEYS = [
-    { s: -0.4, zenith: 0x02040a, horizon: 0x080d1c, light: 0x8ea8ff, intensity: 0.32, env: 0.22, exposure: 1.55 },
-    { s: -0.12, zenith: 0x060c20, horizon: 0x1a1d38, light: 0x8ea8ff, intensity: 0.22, env: 0.3, exposure: 1.45 },
+    { s: -0.4, zenith: 0x03060f, horizon: 0x0d1428, light: 0x8ea8ff, intensity: 0.55, env: 0.5, exposure: 1.7 },
+    { s: -0.12, zenith: 0x08102a, horizon: 0x1d2140, light: 0x8ea8ff, intensity: 0.4, env: 0.5, exposure: 1.55 },
     { s: -0.03, zenith: 0x18244a, horizon: 0x6a4a5c, light: 0xff7a4a, intensity: 0.0, env: 0.45, exposure: 1.25 },
     { s: 0.03, zenith: 0x2a4378, horizon: 0xf09a62, light: 0xff9050, intensity: 1.0, env: 0.55, exposure: 1.05 },
     { s: 0.14, zenith: 0x3563a6, horizon: 0xf2c796, light: 0xffc890, intensity: 2.0, env: 0.65, exposure: 1.0 },
@@ -179,7 +179,7 @@
       this.vhRenderer = vhRenderer;
       this.settings = settings;
       this.shared = shared;
-      this.hours = 16.6;
+      this.hours = 16.3;
       this.cloudCover = 0.38;
       this.clockRunning = false; // Phase 12 turns this on
       this._envDirty = true;
@@ -234,6 +234,7 @@
       VH.events.on('settings:changed', (e) => {
         if (e.path === 'graphics' || e.path.startsWith('graphics.') || e.path === '*') this.applySettings();
       });
+      VH.events.on('postfx:changed', () => this._applyKeys(this.sunDir.y));
       this.setTime(this.hours);
     }
 
@@ -323,8 +324,9 @@
 
       this.hemi.color.copy(zenith).lerp(horizon, 0.3);
       this.hemi.groundColor.setRGB(0.18, 0.16, 0.13).multiplyScalar(envIntensity);
-      this.hemi.intensity = 0.25 + envIntensity * 0.15;
-      this.scene.environmentIntensity = envIntensity * 0.9;
+      this.hemi.intensity = 0.3 + envIntensity * 0.25;
+      // Sky light fills shadows: keep shaded streets readable, not black.
+      this.scene.environmentIntensity = envIntensity * 1.15;
       this.vhRenderer.renderer.toneMappingExposure = exposure;
       this.exposure = exposure;
 
@@ -333,6 +335,16 @@
       this.shared.uWindowGlow.value = smoothstep(0.1, -0.08, s);
       this.nightFactor = night;
 
+      const post = this.vhRenderer.postEnabled;
+      if (this.vhRenderer.post) this.vhRenderer.post.bloomStrength = 0.55 + night * 0.75;
+      if (post) {
+        // Post-processing tone-maps everything together at the end, so fog and
+        // sky meet in linear HDR: the fog is simply the horizon colour.
+        this.skyUniforms.uFogDisplay.value.copy(horizon);
+        this.skyUniforms.uFogLinear.value.copy(horizon);
+        this.scene.fog.color.copy(horizon);
+        return;
+      }
       // Fog = the horizon colour as it will appear on screen after tone mapping.
       const hLin = [horizon.r, horizon.g, horizon.b];
       const mapped = acesFilmic(hLin, exposure);
@@ -385,6 +397,10 @@
       const da = Math.round(a / texel) * texel - a;
       const db = Math.round(b / texel) * texel - b;
       const center = this._focus.copy(focus).addScaledVector(right, da).addScaledVector(upL, db);
+      // A low sun grazes the ground, which needs more bias to keep shadow acne away.
+      const low = VH.math.clamp((0.55 - L.y) / 0.45, 0, 1);
+      this.sun.shadow.bias = -0.0002 - 0.0009 * low;
+      this.sun.shadow.normalBias = texel * (0.9 + 2.2 * low);
       this.sun.target.position.copy(center);
       this.sun.position.copy(center).addScaledVector(L, 450);
       this.sun.target.updateMatrixWorld();

@@ -449,3 +449,8 @@ select {
     font-size: 3.4rem;
   }
 }
+
+.btn-warn {
+  border-color: rgba(255, 138, 122, 0.45);
+  color: #ffb4a8;
+}

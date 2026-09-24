@@ -173,6 +173,8 @@
       Loading.set(0.89, 'Jay Mercer is on his way');
       this.player = new VH.Player(scene, this.physics, this.input, settings);
       this.player.spawn(this.layout.spawn);
+      this.player.surfaceResolver = (x, z, col) => this.world.surfaceAt(x, z, col);
+      this.audio = new VH.AudioEngine(settings);
       this.cameraRig = new VH.CameraRig(this.renderer.camera, this.physics, settings, this.input);
       this.cameraRig.snapBehind(this.player);
       this.interaction = new VH.InteractionSystem(this.player, this.input);
@@ -188,11 +190,18 @@
           resume: () => this.resume(),
           quitToTitle: () => this.quitToTitle(),
           getStats: () => this.statsList(),
+          abandonChallenge: () => {
+            this.challenges.abandon();
+            this.resume();
+          },
+          challengeActive: () => this.challenges && this.challenges.active,
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
         },
       });
       this.debug = new VH.DebugOverlay(this);
+      this.challenges = new VH.ChallengeSystem(this);
+      this.challenges.init();
 
       // Warm up: reflections, then compile every shader before the first frame.
       Loading.set(0.93, 'Mixing the sunset');
@@ -234,6 +243,17 @@
     },
 
     _bindEvents() {
+      // Sound effects follow gameplay events.
+      const audio = this.audio;
+      VH.events.on('player:step', (e) => audio.footstep(e.surface, e.speed));
+      VH.events.on('player:jump', () => audio.jump());
+      VH.events.on('player:land', (e) => audio.land(e.impact, e.surface));
+      VH.events.on('player:climb', () => audio.climb());
+      VH.events.on('interaction:used', (e) => {
+        if (e.item.kind === 'vending') audio.purchase();
+        else audio.click();
+      });
+      VH.events.on('ui:click', () => audio.click());
       VH.events.on('input:lockchange', (e) => {
         if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus')) this.pause();
       });
@@ -307,6 +327,8 @@
 
     newGame() {
       this.input.requestLock();
+      this.audio.unlock();
+      this.audio.setPaused(false);
       this.environment.setShadowExtent(null);
       this.ui.hideAll();
       document.body.classList.remove('in-menu');
@@ -340,6 +362,7 @@
       if (this.state !== 'playing' && this.state !== 'dialog') return;
       if (this.ui.dialogOpen) this.ui.closeDialog();
       this.state = 'paused';
+      this.audio.setPaused(true);
       this._statePausedAt = performance.now();
       this.input.enabled = false;
       this.input.releaseAll();
@@ -347,6 +370,7 @@
       const d = this._district || this.world.districtAt(this.player.pos.x, this.player.pos.z);
       this.ui.setPauseMeta(this.player.name + ' · ' + VH.util.formatMoney(this.player.money) + ' · ' + (this._place || d.name));
       this.ui.hideAll();
+      this.ui.setChallengeActive(this.challenges.active);
       this.ui.show('pause');
       document.body.classList.add('in-menu');
       this._needsRender = true;
@@ -355,6 +379,7 @@
     resume() {
       if (this.state !== 'paused') return;
       this.input.requestLock();
+      this.audio.setPaused(false);
       this.ui.hideAll();
       document.body.classList.remove('in-menu');
       this.state = 'playing';
@@ -365,7 +390,10 @@
     },
 
     quitToTitle() {
+      this.challenges.abandon(true);
       this.input.exitLock();
+      this.audio.setPaused(false);
+      this.audio.stopMusic(0.2);
       this.toTitle();
     },
 
@@ -396,6 +424,7 @@
         ['Walls vaulted', String(s.vaults)],
         ['Longest fall', s.longestFall.toFixed(1) + ' m'],
         ['Times knocked out', String(s.deaths)],
+        ['Challenges finished', String(s.challengesCompleted || 0)],
         ['Money', VH.util.formatMoney(this.player.money)],
       ];
     },
@@ -420,6 +449,7 @@
           this._introTime += FIXED_DT;
           if (this._introTime > 2.2) this._startPlaying();
         }
+        if (this.state === 'playing') this.challenges.update(FIXED_DT);
         this._acc = 0;
         this._simulate(FIXED_DT, this.state === 'playing');
         this.player.updateVisual(FIXED_DT, 1, this.cameraRig.pitch);
@@ -443,7 +473,8 @@
       }
       this.world.update(1, this.renderer.camera.position);
       this.environment.update(0, this.state === 'title' ? new THREE.Vector3(40, 0, -150) : this.player.renderPos);
-      this.renderer.render(this.scene);
+      if (this.renderer.post) this.renderer.post.flash = 0; // stills shouldn't catch a flash mid-fade
+      this.renderer.render(this.scene, 1 / 60);
     },
 
     // -------------------------------------------------------------- loop
@@ -496,7 +527,8 @@
           env.update(dt, focus);
           this.world.update(dt, this.renderer.camera.position);
           this.player.updateVisual(dt, 1, 0);
-          this.renderer.render(this.scene);
+          this.audio.update(dt, { playing: false, height: 0, speed: 0, sea: 0 });
+          this.renderer.render(this.scene, dt);
           break;
         }
         case 'intro': {
@@ -512,6 +544,7 @@
           if (this.state === 'playing') {
             this.cameraRig.handleInput(dt, this.player.aiming);
             this._laterFeatureHints();
+            this.challenges.update(dt);
           } else input.takeMouseDelta();
           this._simulate(dt, true);
           this._drawGameplay(dt, false);
@@ -520,7 +553,7 @@
         case 'paused': {
           // Nothing moves; redraw only when something (settings, window size) changed.
           if (this._needsRender) {
-            this.renderer.render(this.scene);
+            this.renderer.render(this.scene, dt);
             this._needsRender = false;
           }
           break;
@@ -564,7 +597,7 @@
 
       if (live) {
         // Knocked out: respawn after a pause.
-        if (this.player.isDead && this.player.deadTime > 4.5) {
+        if (this.player.isDead && !this.challenges.active && this.player.deadTime > 4.5) {
           this.hud.setFade(1, 400);
           if (this.player.deadTime > 5.1) {
             this.player.respawn();
@@ -616,7 +649,16 @@
         playing: this.state === 'playing',
         lookedAround: this._lookedAround > 1.2,
       });
-      this.renderer.render(this.scene);
+      const px = player.pos.x;
+      const pier = this.layout.waterfront.pier;
+      const onPier = px > pier.x0 && Math.abs(player.pos.z) < 30 ? 1 : 0;
+      this.audio.update(dt, {
+        playing: this.state === 'playing',
+        height: player.pos.y,
+        speed: player.speed,
+        sea: Math.max(onPier, VH.math.smoothstep(250, 420, px)),
+      });
+      this.renderer.render(this.scene, dt);
     },
   };
 

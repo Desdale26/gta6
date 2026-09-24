@@ -7,10 +7,12 @@
  * the city builds, New Game starts, W moves Jay the way the camera faces,
  * walls stop him, sprint is faster than running, jumping leaves the ground,
  * crates can be climbed, low walls vaulted, the camera doesn't end up
- * inside a building, pause/resume work and settings apply.
+ * inside a building, pause/resume work and settings apply, and a bot can
+ * finish both challenges.
  *
- *   node vicehaven/tools/smoke.mjs            (uses the global Playwright)
- *   SHOTS=1 node vicehaven/tools/smoke.mjs    (also writes screenshots to /tmp/vicehaven-shots)
+ *   node vicehaven/tools/smoke.mjs              (uses the global Playwright)
+ *   SHOTS=1 node vicehaven/tools/smoke.mjs      (also writes screenshots to /tmp/vicehaven-shots)
+ *   TARGET=dist node vicehaven/tools/smoke.mjs  (tests dist/vicehaven.html instead; run tools/bundle.mjs first)
  */
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
@@ -28,7 +30,12 @@ try {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const indexUrl = pathToFileURL(path.join(here, '..', 'index.html')).href;
+const targetFile = process.env.TARGET === 'dist' ? path.join(here, '..', 'dist', 'vicehaven.html') : path.join(here, '..', 'index.html');
+if (!fs.existsSync(targetFile)) {
+  console.log('[smoke] ' + targetFile + ' does not exist' + (process.env.TARGET === 'dist' ? ' (run node vicehaven/tools/bundle.mjs first)' : ''));
+  process.exit(1);
+}
+const indexUrl = pathToFileURL(targetFile).href;
 const shotsDir = process.env.SHOTS_DIR || '/tmp/vicehaven-shots';
 const takeShots = !!process.env.SHOTS;
 if (takeShots) fs.mkdirSync(shotsDir, { recursive: true });
@@ -422,6 +429,113 @@ await game(() => VH.game.debug.run('time 16.6'));
 await game(() => VH.game.world.setNightFactor(VH.game.environment.shared.uWindowGlow.value));
 await tap('F8', 0.1);
 
+// ------------------------------------------------------------ challenges
+// A bot plays each challenge: it steers at the next checkpoint (via optional
+// waypoints around buildings), sprints, and jumps at gaps and ledges.
+const botRun = (id, waypoints) => game(({ id, waypoints }) => {
+  const g = VH.game, inp = g.input, P = g.player, ph = g.physics;
+  g.challenges._closeResults();
+  g.challenges.start(id);
+  g.advance(3.5);
+  const log = [];
+  inp.codesDown.add('KeyW');
+  inp.codesDown.add('ShiftLeft');
+  let wpi = 0, lastIndex = -1, stuck = 0, last = { x: P.pos.x, z: P.pos.z };
+  for (let step = 0; step < 60 * 240; step++) {
+    const run = g.challenges.run;
+    if (!run) break;
+    if (run.index !== lastIndex) { lastIndex = run.index; wpi = 0; }
+    const cp = run.def.checkpoints[run.index];
+    const wps = (waypoints && waypoints[run.index]) || [];
+    while (wpi < wps.length && Math.hypot(wps[wpi][0] - P.pos.x, wps[wpi][1] - P.pos.z) < (wps[wpi][2] || 2)) wpi++;
+    const target = wpi < wps.length ? { x: wps[wpi][0], z: wps[wpi][1] } : cp;
+    const yaw = Math.atan2(target.x - P.pos.x, target.z - P.pos.z);
+    g.cameraRig.yaw = yaw;
+    const dx = Math.sin(yaw), dz = Math.cos(yaw), feet = P.pos.y;
+    if (P.grounded && P.state === 'ground') {
+      const near = ph.groundHeight(P.pos.x + dx * 0.9, P.pos.z + dz * 0.9, feet + 0.3);
+      const far = ph.groundHeight(P.pos.x + dx * 3.2, P.pos.z + dz * 3.2, feet + 0.3);
+      const ledge = ph.groundHeight(P.pos.x + dx * 0.75, P.pos.z + dz * 0.75, feet + 1.8);
+      if ((near < feet - 0.6 && far > feet - 0.4) || ledge > feet + 0.44) inp._queuePress('jump');
+    }
+    g.advance(1 / 60);
+    if (step % 60 === 0) {
+      if (Math.hypot(P.pos.x - last.x, P.pos.z - last.z) < 0.3 && ++stuck > 5) { log.push('stuck at ' + P.pos.x.toFixed(1) + ',' + P.pos.z.toFixed(1)); break; }
+      if (Math.hypot(P.pos.x - last.x, P.pos.z - last.z) >= 0.3) stuck = 0;
+      last = { x: P.pos.x, z: P.pos.z };
+    }
+  }
+  inp.codesDown.clear();
+  const res = g.challenges.results;
+  return { log, view: res ? g.challenges._resultView(res.data) : null, failed: res ? res.data.failed : null, record: g.challenges.records[id] || null };
+}, { id, waypoints });
+
+const course = await game(() => VH.game.world.courses && VH.game.world.courses.yard_run ? VH.game.world.courses.yard_run.checkpoints.length : 0);
+check(course === 10, 'Meridian Yard builds the Yard Run course (' + course + ' checkpoints)');
+await game(() => { localStorage.removeItem('vicehaven.records.v1'); VH.game.challenges.records = {}; });
+const money2 = await game(() => VH.game.player.money);
+const yard = await botRun('yard_run', { 6: [[-153.5, 52, 0.5], [-151, 52, 0.5]] });
+check(yard.view && !yard.failed && yard.view.medal === 'gold', 'a clean Yard Run finishes with gold (' + (yard.view ? yard.view.main : yard.log.join(' ')) + ')');
+check(yard.record && yard.record.ghost && yard.record.ghost.length > 100, 'the best run is recorded for the ghost (' + (yard.record && yard.record.ghost ? yard.record.ghost.length : 0) + ' samples)');
+check((await game(() => VH.game.player.money)) === money2 + 500, 'gold pays the $500 reward once');
+// Second attempt: the ghost runs alongside.
+await game(() => { VH.game.challenges._closeResults(); VH.game.challenges.start('yard_run'); VH.game.advance(3.5); });
+await hold(['KeyW'], 1.5);
+check(await game(() => VH.game.challenges.ghost.root.visible), 'the ghost of your best run appears on a retry');
+// Falling off the course sends you back to the last checkpoint with a penalty.
+const slip = await game(() => {
+  const g = VH.game;
+  const run = g.challenges.run;
+  run.index = 6; // heading for the frame, across the beam
+  const t0 = run.time;
+  g.player.teleport(-146, 52, Math.PI / 2, 9.3);
+  g.player.pos.x = -146; g.player.pos.y = 5; g.player.grounded = false; g.player.state = 'air';
+  g.advance(0.2);
+  return { falls: run.falls, dt: run.time - t0, y: g.player.pos.y, z: g.player.pos.z };
+});
+check(slip.falls === 1 && slip.dt > 2.9 && slip.y > 9, 'slipping off the beam returns you to the checkpoint with +3 s (y ' + slip.y.toFixed(2) + ')');
+await game(() => VH.game.pause());
+check(await game(() => document.querySelector('#screen-pause .btn-warn').style.display !== 'none'), 'the pause menu offers "Abandon challenge" during a run');
+await game(() => VH.game.ui.actions.abandonChallenge());
+check(await game(() => !VH.game.challenges.active && VH.game.state === 'playing'), 'abandoning ends the run and resumes play');
+
+const courier = await botRun('courier_rush', {
+  0: [[-70, 70], [-79, 36]], 1: [[-66, 18], [-54, 18], [-46, 16.9]], 2: [[-20, 0], [-5, -20], [-5, -36.4]],
+  3: [[-5, -96], [59, -99]], 4: [[88, -104]], 6: [[100, -5], [284, -5]], 7: [[292, -5], [380, -5], [400, 0]],
+});
+check(courier.view && !courier.failed && courier.view.medal, 'Courier Rush can be finished in time (' + (courier.view ? courier.view.main + ', ' + courier.view.title : courier.log.join(' ')) + ')');
+const outOfTime = await game(() => {
+  const g = VH.game;
+  g.challenges._closeResults();
+  g.challenges.start('courier_rush');
+  g.advance(3.5);
+  g.challenges.run.remaining = 0.4;
+  g.advance(1);
+  const r = g.challenges.results;
+  return r ? { failed: r.data.failed, reason: r.data.reason } : null;
+});
+check(outOfTime && outOfTime.failed && outOfTime.reason === 'Out of time', 'running out of the clock fails the Courier Rush');
+await game(() => VH.game.challenges._closeResults());
+await shotNow('19-challenge-results');
+
+// Sound and post-processing.
+const steps = await game(() => {
+  let n = 0;
+  const off = VH.events.on('player:step', () => n++);
+  VH.game.player.teleport(-51, 60, Math.PI);
+  VH.game.input.codesDown.add('KeyW');
+  VH.game.advance(2);
+  VH.game.input.codesDown.clear();
+  off();
+  return { n, audio: !!VH.game.audio.ctx };
+});
+check(steps.audio && steps.n >= 3, 'the audio engine is running and footsteps fire while walking (' + steps.n + ' in 2 s)');
+check(await game(() => VH.game.renderer.postEnabled), 'post-processing (bloom and grading) is on at High');
+await game(() => VH.settings.set('graphics.effects', 'low'));
+check(!(await game(() => VH.game.renderer.postEnabled)), 'Effects Off renders directly without post-processing');
+await game(() => VH.settings.set('graphics.effects', 'high'));
+await advance(0.5);
+
 // A look around town.
 if (takeShots) {
   const views = [
@@ -432,6 +546,7 @@ if (takeShots) {
     ['16-park', -240, 150, Math.PI / 2 + 0.3, -0.1],
     ['17-tower', 51, -95, Math.PI, 0.45],
     ['18-plaza-course', -40, 50, Math.PI, -0.25],
+    ['20-meridian-yard', -96, 34, -Math.PI / 2 - 0.35, 0.18],
   ];
   for (const [name, x, z, yaw, pitch] of views) {
     await game(([x, z, yaw, pitch]) => {

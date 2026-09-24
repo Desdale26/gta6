@@ -32,7 +32,11 @@
         { path: 'graphics.drawDistance', label: 'Draw distance', type: 'range', min: 400, max: 1600, step: 50, format: (v) => v + ' m' },
         { path: 'graphics.propDensity', label: 'Detail distance', type: 'range', min: 0.5, max: 1.5, step: 0.05, format: pct,
           help: 'How far away benches, lamps and trees are still drawn.' },
-        { path: 'graphics.antialias', label: 'Anti-aliasing', type: 'toggle', restart: true },
+        { path: 'graphics.effects', label: 'Post-processing', type: 'select',
+          options: [['low', 'Off (fastest)'], ['medium', 'Medium: bloom and colour grading'], ['high', 'High: plus film grain, full-res bloom']],
+          help: 'The glow on lamps, neon, lit windows and the sun, and the Vicehaven colour grade.' },
+        { path: 'graphics.antialias', label: 'Anti-aliasing', type: 'toggle',
+          help: 'Smooths jagged edges. With post-processing Off it applies after reloading the page.' },
         { path: 'graphics.fov', label: 'Field of view', type: 'range', min: 50, max: 90, step: 1, format: (v) => v + '°' },
         { path: 'graphics.showFps', label: 'Show FPS counter', type: 'toggle' },
       ],
@@ -54,7 +58,7 @@
     },
     audio: {
       label: 'Audio',
-      note: 'Sound arrives in Phase 19. Your levels are saved now and will be used then.',
+      note: 'Everything you hear is synthesised live: footsteps, wind, the city and the sea, and the challenge music. Radio stations arrive in Phase 19.',
       items: [
         { path: 'audio.master', label: 'Master', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
         { path: 'audio.music', label: 'Music & radio', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
@@ -143,7 +147,10 @@
         b.append(el('span', 'soon-badge', opts.soon));
         b.title = 'Arrives in ' + opts.soon;
       }
-      if (onClick) b.addEventListener('click', (e) => onClick(e));
+      if (onClick) b.addEventListener('click', (e) => {
+        VH.events.emit('ui:click', {});
+        onClick(e);
+      });
       return b;
     }
 
@@ -208,9 +215,16 @@
         this._button('Load Game', null, { soon: 'Phase 15' }),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
       );
+      this.abandonBtn = this._button('Abandon challenge', () => this.actions.abandonChallenge());
+      this.abandonBtn.classList.add('btn-warn');
+      menu.insertBefore(this.abandonBtn, menu.children[1]);
       const hint = el('div', 'pause-hint', 'Click Resume or press Enter to return to Vicehaven');
       panel.append(head, menu, hint);
       s.append(panel);
+    }
+
+    setChallengeActive(on) {
+      this.abandonBtn.style.display = on ? '' : 'none';
     }
 
     setPauseMeta(text) {

@@ -64,10 +64,11 @@
     }
 
     _mesh(geo, mat, parent, x, y, z) {
-      const m = new THREE.Mesh(geo, mat);
+      const ghost = this.look.ghost;
+      const m = new THREE.Mesh(geo, ghost ? Humanoid.ghostMaterial() : mat);
       m.position.set(x || 0, y || 0, z || 0);
-      m.castShadow = true;
-      m.receiveShadow = true;
+      m.castShadow = !ghost;
+      m.receiveShadow = !ghost;
       parent.add(m);
       this.meshes.push(m);
       return m;
@@ -203,6 +204,12 @@
       const dir = s.backwards ? -1 : 1;
       this.phase += dir * (speed / stride) * Math.PI * 2 * dt;
       const p = this.phase;
+      // A footfall every half cycle (used for footstep sounds).
+      const stepIndex = Math.floor(p / Math.PI);
+      if (stepIndex !== this._lastStep) {
+        this._lastStep = stepIndex;
+        if (this.onStep && s.grounded && s.climb < 0 && speed > 0.6) this.onStep(speed);
+      }
       const sinP = Math.sin(p);
       const cosP = Math.cos(p);
 
@@ -343,6 +350,17 @@
       J.neck.rotation.x = ease('headPitch', T.headPitch, 10) - P.lean * 0.5;
     }
   }
+
+  /** Shared see-through material for the challenge ghost. */
+  Humanoid.ghostMaterial = function ghostMaterial() {
+    if (!Humanoid._ghostMat) {
+      Humanoid._ghostMat = new THREE.MeshStandardMaterial({
+        color: 0x7fe8ff, emissive: new THREE.Color(0.15, 0.7, 0.9), roughness: 0.4, metalness: 0,
+        transparent: true, opacity: 0.36, depthWrite: false,
+      });
+    }
+    return Humanoid._ghostMat;
+  };
 
   Humanoid.JAY_LOOK = JAY_LOOK;
   Humanoid.material = material;

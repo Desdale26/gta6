@@ -96,6 +96,8 @@
 
       this.model = new VH.Humanoid(VH.Humanoid.JAY_LOOK);
       scene.add(this.model.root);
+      this.model.onStep = (speed) => VH.events.emit('player:step', { speed, surface: this.surface() });
+      this.surfaceResolver = null; // set by main.js: (x, z, collider) → surface name
 
       this._resolveOut = { x: 0, z: 0, hit: false };
       this._next = { x: 0, z: 0 };
@@ -146,6 +148,15 @@
       return g;
     }
 
+    /** What Jay is standing on: concrete, asphalt, wood, metal, grass or gravel. */
+    surface() {
+      const ph = this.physics;
+      ph.groundHeight(this.pos.x, this.pos.z, this.pos.y + 0.05);
+      const col = ph.lastGround;
+      if (this.surfaceResolver) return this.surfaceResolver(this.pos.x, this.pos.z, col);
+      return 'concrete';
+    }
+
     canStand() {
       return !this.physics.overlaps(this.pos.x, this.pos.z, P.radius * 0.95, this.pos.y + P.crouchHeight - 0.05, this.pos.y + P.height);
     }
@@ -162,6 +173,13 @@
       }
       if (this.noclip) {
         this._noclipStep(dt, camYaw);
+        return;
+      }
+      if (this.frozen) {
+        // Held in place (a challenge countdown): no movement, presses are dropped.
+        this.vel.set(0, 0, 0);
+        this.input.discard('jump');
+        this.input.discard('crouch');
         return;
       }
       if (this.state === 'climb') {
@@ -349,7 +367,7 @@
         const dmg = (impact - P.safeFallSpeed) * P.fallDamagePerMs;
         this.damage(dmg, 'fall');
       }
-      VH.events.emit('player:land', { impact, fall });
+      VH.events.emit('player:land', { impact, fall, surface: this.surface() });
     }
 
     /**
@@ -370,7 +388,7 @@
         const pz = this.pos.z + dir.z * dist;
         const top = ph.groundHeight(px, pz, feet + reach + 0.01);
         const rise = top - feet;
-        const minRise = airborne ? 0.25 : P.stepHeight + 0.05;
+        const minRise = airborne ? 0.25 : P.stepHeight;
         if (rise <= minRise || rise > reach) continue;
         // A ledge, not a ramp: somewhere between Jay and the probe the ground must step up sharply.
         if (!this._stepBetween(dir, dist, feet + reach + 0.01)) continue;

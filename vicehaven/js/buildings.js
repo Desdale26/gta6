@@ -485,6 +485,7 @@
       else { gx0 = r.x1; gx1 = lot.maxX; gz0 = lot.minZ; gz1 = lot.maxZ; }
       if (gx1 - gx0 < 1 || gz1 - gz0 < 1) continue;
       ctx.grassTop.topRect(gx0, gz0, gx1, gz1, KERB, VH.col(0xffffff), 6);
+      if (ctx.addLawn) ctx.addLawn(gx0, gz0, gx1, gz1);
       // Wall along the lot edge with a gate gap in the middle.
       const horizontal = side === 'n' || side === 's';
       const edge = side === 'n' ? lot.minZ : side === 's' ? lot.maxZ - t : side === 'w' ? lot.minX : lot.maxX - t;
@@ -579,6 +580,7 @@
 
   function courtyard(ctx, lot, rng) {
     ctx.grassTop.topRect(lot.minX, lot.minZ, lot.maxX, lot.maxZ, KERB, VH.col(0xffffff), 6);
+    if (ctx.addLawn) ctx.addLawn(lot.minX, lot.minZ, lot.maxX, lot.maxZ);
     const n = rng.int(1, 3);
     for (let i = 0; i < n; i++) {
       ctx.addProp('tree', rng.range(lot.minX + 3, lot.maxX - 3), rng.range(lot.minZ + 3, lot.maxZ - 3),

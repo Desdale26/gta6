@@ -22,6 +22,7 @@
       this.current = null;
       this.handlers = {};
       this.cooldowns = new Map();
+      this.enabled = true; // challenges switch interaction off while a run is on
       this.registerDefaultHandlers();
     }
 
@@ -41,6 +42,13 @@
       const p = this.player;
       let best = null;
       let bestScore = Infinity;
+      if (!this.enabled) {
+        if (this.current) {
+          this.current = null;
+          VH.events.emit('interaction:focus', { item: null });
+        }
+        return;
+      }
       if (p.state === 'ground' && !p.noclip) {
         const fx = Math.sin(p.heading);
         const fz = Math.cos(p.heading);

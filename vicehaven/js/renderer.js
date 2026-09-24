@@ -31,7 +31,8 @@
       try {
         renderer = new THREE.WebGLRenderer({
           canvas: this.canvas,
-          antialias: !!g.antialias,
+          // With post-processing on, anti-aliasing happens in the HDR target instead.
+          antialias: !!g.antialias && g.effects === 'low',
           powerPreference: 'high-performance',
           stencil: false,
           alpha: false,
@@ -48,11 +49,14 @@
       renderer.toneMappingExposure = 1.0;
       renderer.shadowMap.type = THREE.PCFShadowMap;
       renderer.shadowMap.enabled = this.settings.shadowTier().enabled;
-      renderer.info.autoReset = true;
+      // Reset by hand once per frame, so the counters cover the scene, its
+      // shadows and every post-processing pass rather than just the last one.
+      renderer.info.autoReset = false;
       this.renderer = renderer;
       this.maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
       this.camera = new THREE.PerspectiveCamera(g.fov, 1, 0.1, g.drawDistance + 200);
+      this.post = new VH.PostFX(this, this.settings);
 
       this.canvas.addEventListener('webglcontextlost', (e) => {
         e.preventDefault();
@@ -94,14 +98,24 @@
       this.height = Math.max(1, window.innerHeight);
       this.renderer.setPixelRatio(this.pixelRatio());
       this.renderer.setSize(this.width, this.height, false);
+      if (this.post) {
+        const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+        this.post.setSize(size.x, size.y);
+      }
       this.camera.aspect = this.width / this.height;
       this.camera.updateProjectionMatrix();
       VH.events.emit('renderer:resize', { width: this.width, height: this.height });
     }
 
-    render(scene) {
+    render(scene, dt) {
       if (this.contextLost) return;
-      this.renderer.render(scene, this.camera);
+      this.renderer.info.reset();
+      if (this.post && this.post.enabled) this.post.render(scene, this.camera, dt);
+      else this.renderer.render(scene, this.camera);
+    }
+
+    get postEnabled() {
+      return !!(this.post && this.post.enabled);
     }
 
     /** Compile every shader in the scene up front so the first frames don't hitch. */

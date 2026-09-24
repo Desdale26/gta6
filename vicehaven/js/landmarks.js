@@ -261,7 +261,10 @@
       lawn = VH.World.subtractRect(lawn, p);
       ctx.plazaTop.topRect(p.minX, p.minZ, p.maxX, p.maxZ, KERB, VH.col(0xe8e0d0), 4);
     }
-    for (const r of lawn) ctx.grassTop.topRect(r.minX, r.minZ, r.maxX, r.maxZ, KERB, white, 6);
+    for (const r of lawn) {
+      ctx.grassTop.topRect(r.minX, r.minZ, r.maxX, r.maxZ, KERB, white, 6);
+      world.addLawn(r.minX, r.minZ, r.maxX, r.maxZ);
+    }
 
     // Fountain: a solid stone basin with the water at its brim, a column and a bowl.
     const stone = VH.col(0xcfc6b6);

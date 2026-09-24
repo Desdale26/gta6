@@ -139,7 +139,7 @@
         vhLit = step(h1, chance) * m;
         vhLitColor = mix(vec3(1.0, 0.70, 0.40), vec3(0.72, 0.86, 1.0), step(0.72, h2)) * (0.55 + h1 * 0.9);
         if (style > 3.5) {
-          vhLitColor = vec3(1.0, 0.86, 0.66) * 1.4;
+          vhLitColor = vec3(1.0, 0.86, 0.66) * 0.9;
           // Shops are lit inside during the day too: brighter under the ceiling
           // lights, falling off towards the floor, with faint shelf lines.
           float ceiling = smoothstep(0.1, 0.78, f.y);
@@ -177,7 +177,7 @@
         )
         .replace(
           '#include <emissivemap_fragment>',
-          '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vhLitColor * (vhLit * uWindowGlow * 1.5 + vhShop * 0.07);'
+          '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vhLitColor * (vhLit * uWindowGlow * 1.5 + vhShop * 0.11);'
         );
     };
     mat.customProgramCacheKey = () => 'vh-building-v1';
