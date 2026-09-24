@@ -1,5 +1,10 @@
 # Vice Coast: Leonida
 
+> **Also in this repository: [Vicehaven](vicehaven/README.md)**, a separate,
+> from-scratch open-world game that runs by double-clicking
+> `vicehaven/index.html` in Microsoft Edge (no install, no server).
+> It is being built in phases; see `vicehaven/README.md`.
+
 An open-world action game that runs entirely in a browser tab. No build step, no
 asset downloads, no network at runtime — the city, its textures, its music and
 its sound effects are all generated procedurally from code when you press Start.

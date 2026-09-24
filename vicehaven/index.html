@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Vicehaven — an original open-world action game that runs in the browser.">
+  <title>Vicehaven</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ffb347'/%3E%3Cstop offset='1' stop-color='%23ff4f8b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230b0f1e'/%3E%3Cpath d='M14 14h9l9 26 9-26h9L37 50h-10z' fill='url(%23g)'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/hud.css">
+  <link rel="stylesheet" href="css/menus.css">
+
+  <!--
+    Boot guard. This runs before any game file so that a missing file, an
+    unsupported browser or a crash always ends in a readable message instead
+    of a black page.
+  -->
+  <script>
+    (function () {
+      'use strict';
+      var boot = {
+        started: performance.now(),
+        fatalShown: false,
+        threeMissing: false,
+        missingFiles: [],
+        // The game registers a handler here once it is running, so errors
+        // during play are reported without tearing the whole page down.
+        runtimeErrorHandler: null,
+
+        escape: function (text) {
+          return String(text).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+          });
+        },
+
+        fatal: function (title, message, helpHtml, details) {
+          if (boot.fatalShown) {
+            var more = document.getElementById('fatal-details');
+            if (more && details) more.textContent += '\n\n' + details;
+            return;
+          }
+          boot.fatalShown = true;
+          var show = function () {
+            var box = document.getElementById('fatal');
+            if (!box) { alert(title + '\n\n' + message); return; }
+            document.getElementById('fatal-title').textContent = title;
+            document.getElementById('fatal-message').textContent = message;
+            document.getElementById('fatal-help').innerHTML = helpHtml || '';
+            document.getElementById('fatal-details').textContent = details || '(no further details)';
+            box.classList.add('visible');
+            var loading = document.getElementById('screen-loading');
+            if (loading) loading.classList.remove('visible');
+          };
+          if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show);
+          else show();
+        },
+
+        missing: function (el) {
+          var src = el.getAttribute('src');
+          if (/three\.min\.js$/.test(src)) {
+            // Not fatal yet: main.js will try the CDN copy of three.js instead.
+            boot.threeMissing = true;
+            return;
+          }
+          boot.missingFiles.push(src);
+          boot.fatal(
+            'A game file is missing',
+            'The browser could not load "' + src + '".',
+            '<p>Make sure the whole <b>vicehaven</b> folder was copied or extracted, including the ' +
+            '<code>js</code> and <code>css</code> folders, then reload the page.</p>',
+            'Missing: ' + boot.missingFiles.join(', ')
+          );
+        },
+
+        crash: function (err) {
+          var message = (err && err.message) ? err.message : String(err);
+          var stack = (err && err.stack) ? err.stack : message;
+          if (boot.runtimeErrorHandler) { boot.runtimeErrorHandler(err, message, stack); return; }
+          boot.fatal(
+            'Something went wrong while starting',
+            message,
+            '<p>Try reloading the page. If this keeps happening, open the browser console ' +
+            '(<b>F12</b> → Console) and include the details below when reporting it.</p>',
+            stack
+          );
+        }
+      };
+
+      window.VHBoot = boot;
+
+      window.addEventListener('error', function (e) {
+        // Script tags that fail to load report through their own onerror attribute.
+        if (e.target && e.target !== window && e.target.tagName) return;
+        boot.crash(e.error || e.message || 'Unknown error');
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (e) {
+        boot.crash(e.reason || 'Unhandled promise rejection');
+      });
+    })();
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas" tabindex="0" aria-label="Vicehaven game view"></canvas>
+
+  <!-- Loading screen: visible from the first paint, before any script runs. -->
+  <div id="screen-loading" class="screen screen-loading visible" role="status" aria-live="polite">
+    <div class="loading-backdrop"></div>
+    <div class="loading-inner">
+      <div class="logo" aria-label="Vicehaven">
+        <span class="logo-word">VICEHAVEN</span>
+        <span class="logo-sub">A city that owes you nothing</span>
+      </div>
+      <p class="loading-status" id="loading-status">Loading city...</p>
+      <div class="progress" aria-hidden="true"><div class="progress-fill" id="loading-bar"></div></div>
+      <p class="loading-step" id="loading-step">Starting engine</p>
+      <p class="loading-tip" id="loading-tip">Tip: Hold Shift to sprint. Press Space beside a low wall to climb it.</p>
+    </div>
+  </div>
+
+  <!-- Fatal error overlay. Filled in by VHBoot.fatal(). -->
+  <div id="fatal" class="fatal" role="alertdialog" aria-labelledby="fatal-title">
+    <div class="fatal-box">
+      <div class="fatal-badge">VICEHAVEN</div>
+      <h2 id="fatal-title">Vicehaven couldn't start</h2>
+      <p id="fatal-message" class="fatal-message"></p>
+      <div id="fatal-help" class="fatal-help"></div>
+      <details class="fatal-details">
+        <summary>Technical details</summary>
+        <pre id="fatal-details"></pre>
+      </details>
+      <div class="fatal-actions">
+        <button type="button" class="btn btn-primary" onclick="location.reload()">Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="fatal visible">
+      <div class="fatal-box">
+        <h2>JavaScript is turned off</h2>
+        <p>Vicehaven is a browser game and needs JavaScript. Turn it on in your browser settings and reload.</p>
+      </div>
+    </div>
+  </noscript>
+
+  <!--
+    Game scripts. These are classic scripts (not ES modules) on purpose: Edge
+    blocks ES module imports on file:// pages, and classic scripts let the game
+    run by double-clicking index.html. Every file adds itself to the single
+    global namespace `VH`, and the order below is the dependency order.
+  -->
+  <script src="js/lib/three.min.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/core.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/settings.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/input.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/renderer.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/geometry.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/textures.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/materials.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/environment.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/physics.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/data/districts.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/citygen.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/buildings.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/props.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/signs.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/landmarks.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/world.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/humanoid.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/player.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/camera.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/interaction.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/hud.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/ui.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/debug.js" onerror="VHBoot.missing(this)"></script>
+  <script src="js/main.js" onerror="VHBoot.missing(this)"></script>
+</body>
+</html>
