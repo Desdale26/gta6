@@ -1,0 +1,356 @@
+/*
+ * map.css — the radar (bottom left, just above the location and health
+ * panel) and the full-screen city map. Both are drawn on canvases by
+ * js/minimap.js; this file styles their frames, the overlay and its panels.
+ * Sizes are in rem so the "Interface text size" setting scales them too.
+ */
+
+/* ------------------------------------------------------------------ radar */
+.vh-radar {
+  position: absolute;
+  left: 1.6rem;
+  bottom: 8.6rem;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease, bottom 0.25s ease;
+  transform-origin: 50% 100%;
+}
+
+.vh-radar.is-hidden {
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+/* The canvas overhangs the disc a little so the rim can glow. js/minimap.js sets its box. */
+.vh-radar-canvas {
+  position: absolute;
+  display: block;
+}
+
+body.map-open .vh-radar {
+  opacity: 0;
+}
+
+/* -------------------------------------------------------------- full map */
+.vh-map {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  cursor: grab;
+  touch-action: none;
+  font-family: var(--vh-font-display);
+  color: var(--vh-text);
+  background:
+    radial-gradient(90% 70% at 50% 45%, rgba(18, 22, 46, 0.55) 0%, rgba(5, 7, 16, 0.86) 100%),
+    radial-gradient(60% 40% at 50% 110%, rgba(255, 79, 139, 0.14) 0%, transparent 70%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  transition: opacity 0.28s ease, visibility 0s linear 0.28s;
+}
+
+.vh-map.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.28s ease, visibility 0s;
+}
+
+.vh-map.is-dragging {
+  cursor: grabbing;
+}
+
+.vh-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  transform: scale(1.025);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.vh-map.is-open .vh-map-canvas {
+  transform: none;
+}
+
+/* Panels over the map never take the mouse (drags and the wheel go to the map). */
+.vh-map-head,
+.vh-map-compass,
+.vh-map-legend,
+.vh-map-scale,
+.vh-map-foot {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------- header */
+.vh-map-head {
+  top: 1.5rem;
+  left: 2rem;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
+  transform: translateY(-6px);
+  opacity: 0;
+  transition: transform 0.4s ease 0.05s, opacity 0.4s ease 0.05s;
+}
+
+.vh-map.is-open .vh-map-head {
+  transform: none;
+  opacity: 1;
+}
+
+.vh-map-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  background: var(--vh-sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.vh-map-title {
+  font-size: 2.3rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vh-map-where {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+  min-height: 1.2em;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  color: rgba(241, 244, 255, 0.8);
+}
+
+.vh-map-where::before {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--vh-accent);
+  box-shadow: 0 0 10px var(--vh-accent);
+}
+
+.vh-map-where:empty::before {
+  display: none;
+}
+
+/* ------------------------------------------------------------- compass */
+.vh-map-compass {
+  top: 1.6rem;
+  right: 2rem;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 50%;
+  background: rgba(8, 11, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.vh-map-compass-needle {
+  position: absolute;
+  left: 50%;
+  top: 0.32rem;
+  width: 0;
+  height: 0;
+  margin-left: -0.28rem;
+  border-left: 0.28rem solid transparent;
+  border-right: 0.28rem solid transparent;
+  border-bottom: 0.55rem solid var(--vh-accent);
+  filter: drop-shadow(0 0 4px rgba(255, 79, 139, 0.8));
+}
+
+.vh-map-compass-n {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* -------------------------------------------------------------- legend */
+.vh-map-legend {
+  right: 2rem;
+  top: 50%;
+  width: 12.4rem;
+  padding: 0.95rem 1rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(8, 11, 24, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+  transform: translate(10px, -50%);
+  opacity: 0;
+  transition: transform 0.4s ease 0.08s, opacity 0.4s ease 0.08s;
+}
+
+.vh-map.is-open .vh-map-legend {
+  transform: translate(0, -50%);
+  opacity: 1;
+}
+
+.vh-map-legend::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--vh-sunset);
+}
+
+.vh-map-legend-title {
+  margin-bottom: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.vh-map-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vh-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.14rem 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  color: rgba(241, 244, 255, 0.92);
+  transition: opacity 0.3s;
+}
+
+.vh-map-legend-item.is-dim {
+  opacity: 0.42;
+}
+
+.vh-map-legend-icon {
+  flex: none;
+  width: 30px;
+  height: 22px;
+}
+
+/* ------------------------------------------------------ zoom controls */
+.vh-map-zoom {
+  position: absolute;
+  right: 2rem;
+  bottom: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vh-map-btn {
+  appearance: none;
+  width: 2.3rem;
+  height: 2.3rem;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 11, 24, 0.74);
+  color: var(--vh-text);
+  font-family: var(--vh-font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.vh-map-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 122, 89, 0.7);
+}
+
+.vh-map-btn:active {
+  transform: translateY(1px);
+}
+
+.vh-map-btn:focus {
+  outline: none;
+}
+
+/* ----------------------------------------------------------- scale bar */
+.vh-map-scale {
+  left: 2rem;
+  bottom: 1.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.vh-map-scale-bar {
+  height: 0.45rem;
+  border: 2px solid rgba(241, 244, 255, 0.85);
+  border-top: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.vh-map-scale-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(241, 244, 255, 0.85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* -------------------------------------------------------------- footer */
+.vh-map-foot {
+  left: 50%;
+  bottom: 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.vh-map-hint {
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(8, 11, 24, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  color: rgba(241, 244, 255, 0.8);
+}
+
+.vh-map-hint kbd {
+  font-size: 0.72rem;
+  margin-right: 0.15rem;
+}
+
+@media (max-width: 900px) {
+  .vh-map-legend {
+    display: none;
+  }
+
+  .vh-map-foot .vh-map-hint:nth-child(n + 3) {
+    display: none;
+  }
+}

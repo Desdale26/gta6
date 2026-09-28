@@ -24,6 +24,13 @@
     { id: 'first', label: 'First person', distance: 0, height: 0 },
   ];
 
+  // Vehicle cameras (V cycles): chase, far chase, bonnet.
+  const CAR_MODES = [
+    { id: 'chase', label: 'Chase', dist: 1.0, height: 1.0 },
+    { id: 'farchase', label: 'Far chase', dist: 1.55, height: 1.35 },
+    { id: 'bonnet', label: 'Bonnet', dist: 0, height: 0 },
+  ];
+
   class CameraRig {
     constructor(camera, physics, settings, input) {
       this.camera = camera;
@@ -41,6 +48,12 @@
       this._dip = 0;
       this._shake = 0;
       this._initialised = false;
+      this.carModeIndex = 0;
+      this._lookIdle = 0;
+      this._carYaw = 0;
+      this._carPivot = new THREE.Vector3();
+      this._carInit = false;
+      this._speedShake = 0;
       this._fwd = new THREE.Vector3();
       this._right = new THREE.Vector3();
       this._shoulder = new THREE.Vector3();
@@ -75,6 +88,11 @@
     }
 
     cycleMode() {
+      if (this._inCar) {
+        this.carModeIndex = (this.carModeIndex + 1) % CAR_MODES.length;
+        VH.events.emit('camera:mode', { mode: CAR_MODES[this.carModeIndex] });
+        return;
+      }
       this.modeIndex = (this.modeIndex + 1) % MODES.length;
       this.zoom = 0;
       VH.events.emit('camera:mode', { mode: this.mode });
@@ -84,12 +102,14 @@
     handleInput(dt, aiming) {
       const inp = this.input;
       const md = inp.takeMouseDelta();
+      if (md.x || md.y) this._lookIdle = 0;
       const sens = 0.0022 * this.settings.get('gameplay.mouseSensitivity') * (aiming ? 0.62 : 1);
       const invert = this.settings.get('gameplay.invertY') ? -1 : 1;
       this.yaw -= md.x * sens;
       this.pitch -= md.y * sens * invert;
       const look = inp.lookVector();
       if (look.x || look.y) {
+        this._lookIdle = 0;
         const ps = this.settings.get('gameplay.gamepadSensitivity') * (aiming ? 0.55 : 1);
         this.yaw -= look.x * Math.abs(look.x) * 3.4 * ps * dt;
         this.pitch -= look.y * Math.abs(look.y) * 2.3 * ps * dt * invert;
@@ -97,6 +117,7 @@
       this.yaw = VH.math.wrapAngle(this.yaw);
       const first = this.isFirstPerson;
       this.pitch = clamp(this.pitch, first ? -1.45 : -1.2, first ? 1.45 : 0.95);
+      this._lookIdle += dt;
 
       const wheel = inp.takeWheel();
       if (wheel && !first) this.zoom = clamp(this.zoom + wheel * 0.55, -1.6, 3.5);
@@ -105,6 +126,18 @@
 
     /** Place the camera for this frame. `player` is drawn at player.renderPos. */
     update(dt, player) {
+      if (player.inVehicle) {
+        this._inCar = true;
+        this._aimingInCar = player.aiming;
+        this._updateCar(dt, player.vehicle);
+        return;
+      }
+      if (this._inCar) {
+        // Just got out: face the way the car was going.
+        this._inCar = false;
+        this._carInit = false;
+        this._initialised = false;
+      }
       const cam = this.camera;
       const settings = this.settings;
       const first = this.isFirstPerson;
@@ -191,6 +224,105 @@
       cam.updateMatrixWorld();
     }
 
+    /** On entering a car: look the way it faces. */
+    snapToCar(v) {
+      this.yaw = v.yaw;
+      this.pitch = -0.14;
+      this._carInit = false;
+    }
+
+    /**
+     * Chase camera: trails the car with a little lag, swings toward the
+     * direction of travel in a drift, pulls back and widens with speed,
+     * and hands control to the mouse until it's left alone for a moment.
+     */
+    _updateCar(dt, v) {
+      const cam = this.camera;
+      const settings = this.settings;
+      const mode = CAR_MODES[this.carModeIndex];
+      const speed = v.speed;
+      const pos = v.renderPos;
+      // Where "behind" is: the heading, leaning toward the velocity in a slide.
+      let base = v.renderYaw;
+      if (speed > 4 && v.vF > -1) {
+        const velYaw = Math.atan2(v.vel.x, v.vel.z);
+        base = VH.math.lerpAngle(base, velYaw, v.grounded ? 0.45 : 0.8);
+      }
+      if (!this._carInit) {
+        this._carYaw = base;
+        this._carPivot.set(pos.x, pos.y + v.height * 0.8, pos.z);
+        this._carInit = true;
+        this._carDist = 6;
+      }
+      // Mouse look overrides; after a moment of no input, drift back behind (not while aiming a drive-by).
+      if (this._lookIdle > 1.1 && !this._aimingInCar) {
+        this.yaw = VH.math.dampAngle(this.yaw, base, speed > 2 ? 3.2 : 1.2, dt);
+        this.pitch = damp(this.pitch, -0.12 - smoothstepLocal(8, 40, speed) * 0.04, 2.5, dt);
+      } else if (speed > 3) {
+        // Even while looking around, the view is carried round with the car.
+        this.yaw += VH.math.angleDelta(this._carYaw, base);
+      }
+      this._carYaw = base;
+      const behind = this._behind = damp(this._behind, this.input.down('lookBehind') ? 1 : 0, 12, dt);
+      const yaw = this.yaw + Math.PI * behind;
+      const pitch = clamp(this.pitch, -0.9, 0.45) * (1 - behind * 0.7);
+
+      // Pivot follows the car with a soft vertical spring (jumps feel big).
+      const pv = this._carPivot;
+      pv.x = damp(pv.x, pos.x, 18, dt);
+      pv.z = damp(pv.z, pos.z, 18, dt);
+      pv.y = damp(pv.y, pos.y + v.height * 0.8, v.grounded ? 9 : 3.5, dt);
+
+      const cp = Math.cos(pitch);
+      const fwd = this._fwd.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+      const sp = smoothstepLocal(0, 45, speed);
+      let targetFov = settings.get('graphics.fov') + sp * 13 + v.boostFx * 9;
+
+      if (mode.id === 'bonnet') {
+        const f = Math.sin(v.renderYaw);
+        const g = Math.cos(v.renderYaw);
+        cam.near = 0.1;
+        cam.position.set(pos.x + f * (v.hz * 0.35), pos.y + v.height * 0.82, pos.z + g * (v.hz * 0.35));
+        cam.rotation.set(pitch * 0.5 + v._visPitch * 0.5, yaw + Math.PI, -v._visRoll * 0.4, 'YXZ');
+        targetFov += 4;
+      } else {
+        cam.near = 0.15;
+        const baseDist = (4.2 + v.hz * 0.95) * mode.dist + this.zoom * 0.8;
+        const dist = baseDist + sp * 1.6 + v.boostFx * 0.8;
+        const up = (0.55 + v.height * 0.35) * mode.height;
+        const origin = this._shoulder.copy(pv);
+        origin.y += up;
+        const hit = this.physics.raycast(origin.x, origin.y, origin.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
+          { inflate: 0.25, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
+        const allowed = hit ? Math.max(1.2, hit.t - 0.2) : dist;
+        if (allowed < this._carDist) this._carDist = allowed;
+        else this._carDist = damp(this._carDist, allowed, 3, dt);
+        cam.position.copy(origin).addScaledVector(fwd, -this._carDist);
+        // Look slightly ahead of the car.
+        cam.rotation.set(pitch - 0.06, yaw + Math.PI, 0, 'YXZ');
+      }
+
+      // Shake: impacts (addShake) and a fine rumble at speed.
+      this._speedShake = damp(this._speedShake, v.grounded ? smoothstepLocal(25, 55, speed) * 0.35 + v.boostFx * 0.35 : 0, 4, dt);
+      const shake = this._shake + this._speedShake * 0.25;
+      if (shake > 0.001 && settings.get('gameplay.cameraShake')) {
+        const t = performance.now() / 1000;
+        const s = shake * 0.09;
+        cam.position.x += Math.sin(t * 37.1) * s;
+        cam.position.y += Math.sin(t * 43.7 + 1.3) * s;
+        cam.position.z += Math.sin(t * 29.3 + 2.1) * s;
+      }
+      this._shake = damp(this._shake, 0, 5, dt);
+
+      this.fov = damp(this.fov, targetFov, 5, dt);
+      if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
+        cam.fov = this.fov;
+        cam.updateProjectionMatrix();
+        this._lastNear = cam.near;
+      }
+      cam.updateMatrixWorld();
+    }
+
     /**
      * Title-screen shot: a slow orbit around downtown, with the ocean
      * swinging through the frame.
@@ -214,6 +346,11 @@
     }
   }
 
+  function smoothstepLocal(a, b, x) {
+    return VH.math.smoothstep(a, b, x);
+  }
+
   CameraRig.MODES = MODES;
+  CameraRig.CAR_MODES = CAR_MODES;
   VH.CameraRig = CameraRig;
 })();

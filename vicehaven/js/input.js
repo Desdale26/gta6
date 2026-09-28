@@ -269,6 +269,7 @@
       if (!gp) {
         pad.connected = false;
         pad.move.x = pad.move.y = pad.look.x = pad.look.y = 0;
+        pad.lt = pad.rt = 0;
         pad.down.clear();
         return;
       }
@@ -278,6 +279,14 @@
       pad.move.y = -applyDeadzone(gp.axes[1] || 0);
       pad.look.x = applyDeadzone(gp.axes[2] || 0);
       pad.look.y = applyDeadzone(gp.axes[3] || 0);
+      // Analogue triggers (throttle and brake when driving).
+      const trig = (i) => {
+        const btn = gp.buttons[i];
+        if (!btn) return 0;
+        return typeof btn === 'object' ? btn.value || (btn.pressed ? 1 : 0) : btn;
+      };
+      pad.lt = trig(6);
+      pad.rt = trig(7);
 
       const now = new Set();
       gp.buttons.forEach((b, i) => {

@@ -53,8 +53,16 @@
       this.moneyDelta = el('span', 'money-delta');
       this.moneyEl.append(this.moneyValue, this.moneyDelta);
       this.wantedEl = el('div', 'hud-wanted');
-      this.wantedEl.hidden = true;
-      tr.append(this.moneyEl, this.wantedEl);
+      this.heatPips = [];
+      for (let i = 0; i < 5; i++) {
+        const pip = el('span', 'heat-pip');
+        this.wantedEl.append(pip);
+        this.heatPips.push(pip);
+      }
+      this.bustBar = el('div', 'hud-bust');
+      this.bustFill = el('div', 'fill');
+      this.bustBar.append(el('span', '', 'BUSTED'), this.bustFill);
+      tr.append(this.moneyEl, this.wantedEl, this.bustBar);
 
       // Bottom left: location and vitals.
       const bl = el('div', 'hud-bottom-left');
@@ -134,8 +142,31 @@
       this.objective.append(this.objArrow, this.objDiamond, this.objDist);
       this.resultsEl = el('div', 'hud-results');
 
-      r.append(tr, bl, this.crosshair, this.prompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
-        this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.knockout, this.fade);
+      // Driving: speedometer with gear, nitro and damage, the car's name, score pops.
+      this.speedo = el('div', 'hud-speedo');
+      this.speedValue = el('div', 'speedo-value', '0');
+      this.speedUnit = el('div', 'speedo-unit', 'km/h');
+      this.speedGear = el('div', 'speedo-gear', '1');
+      const nitro = el('div', 'speedo-bar speedo-nitro');
+      this.nitroFill = el('div', 'fill');
+      nitro.append(el('span', 'bar-label', 'NITRO'), this.nitroFill);
+      const dmg = el('div', 'speedo-bar speedo-damage');
+      this.damageFill = el('div', 'fill');
+      dmg.append(el('span', 'bar-label', 'BODY'), this.damageFill);
+      this.speedArc = el('div', 'speedo-arc');
+      this.speedo.append(this.speedArc, this.speedValue, this.speedUnit, this.speedGear, nitro, dmg);
+      this.vehicleName = el('div', 'hud-vehicle-name');
+      this.vehicleMake = el('div', 'vn-make');
+      this.vehicleModel = el('div', 'vn-model');
+      this.vehicleName.append(this.vehicleMake, this.vehicleModel);
+      this.scorePop = el('div', 'hud-score-pop');
+      this.carPrompt = el('div', 'hud-prompt hud-car-prompt');
+      this.carPromptKey = el('kbd', '', 'F');
+      this.carPromptLabel = el('span', 'prompt-label');
+      this.carPrompt.append(this.carPromptKey, this.carPromptLabel);
+
+      r.append(tr, bl, this.crosshair, this.prompt, this.carPrompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
+        this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.speedo, this.vehicleName, this.scorePop, this.knockout, this.fade);
     }
 
     // ------------------------------------------------------- challenge HUD
@@ -229,6 +260,76 @@
       r.classList.add('visible');
     }
 
+    /** Police heat: 5 pips, flashing while they've lost sight of you; a bust meter. */
+    setHeat(level, flashing, bust) {
+      this._set('heat', level, (v) => {
+        this.wantedEl.classList.toggle('visible', v > 0);
+        this.heatPips.forEach((p, i) => p.classList.toggle('on', i < v));
+        if (v > 0) {
+          this.wantedEl.classList.remove('bump');
+          void this.wantedEl.offsetWidth;
+          this.wantedEl.classList.add('bump');
+        }
+      });
+      this._set('heatFlash', !!flashing, (v) => this.wantedEl.classList.toggle('flashing', v));
+      const b = Math.round((bust || 0) * 20);
+      this._set('bust', b, (v) => {
+        this.bustBar.classList.toggle('visible', v > 0);
+        this.bustFill.style.width = v * 5 + '%';
+      });
+    }
+
+    // ------------------------------------------------------------ driving
+    setVehiclePrompt(text, key) {
+      this._set('carPrompt', text, (v) => {
+        this.carPrompt.classList.toggle('visible', !!v);
+        if (v) {
+          this.carPromptKey.textContent = key;
+          this.carPromptLabel.textContent = v;
+        }
+      });
+    }
+
+    /** Show the car's name as Jay gets in (null hides the driving HUD). */
+    showVehicle(v) {
+      this.speedo.classList.toggle('visible', !!v);
+      document.body.classList.toggle('driving', !!v);
+      if (!v) return;
+      this.vehicleMake.textContent = v.spec.make || '';
+      this.vehicleModel.textContent = v.name;
+      this.vehicleName.classList.remove('show');
+      void this.vehicleName.offsetWidth;
+      this.vehicleName.classList.add('show');
+    }
+
+    /** A quick "+$25 NEAR MISS" style pop. */
+    popScore(text, money) {
+      this.scorePop.textContent = text + (money ? '  +' + VH.util.formatMoney(money) : '');
+      this.scorePop.classList.remove('show');
+      void this.scorePop.offsetWidth;
+      this.scorePop.classList.add('show');
+    }
+
+    _updateDriving(v, nitro) {
+      const kmh = Math.round(Math.abs(v.vF) * 3.6);
+      this._set('speed', kmh, (x) => {
+        this.speedValue.textContent = String(x);
+        this.speedArc.style.setProperty('--speed', Math.min(1, x / 260).toFixed(3));
+      });
+      this._set('gear', v.reversing && v.vF < -0.5 ? 'R' : String(v.gear), (x) => {
+        this.speedGear.textContent = x;
+      });
+      this._set('nitro', Math.round(nitro * 100), (x) => {
+        this.nitroFill.style.width = x + '%';
+        this.speedo.classList.toggle('nitro-ready', x > 20);
+      });
+      this._set('carHealth', Math.round(v.health / 10), (x) => {
+        this.damageFill.style.width = x + '%';
+        this.speedo.classList.toggle('damaged', x < 35);
+      });
+      this._set('boosting', v.boostFx > 0.5, (x) => this.speedo.classList.toggle('boosting', x));
+    }
+
     _buildChecklist() {
       this.hintsList.innerHTML = '';
       this.hintItems = {};
@@ -304,6 +405,8 @@
         this.fpsEl.classList.toggle('warn', v < 45);
         this.fpsEl.classList.toggle('bad', v < 25);
       });
+
+      if (p.vehicle) this._updateDriving(p.vehicle, s.nitro || 0);
 
       // Checklist items that are detected by polling.
       if (p.speed > 0.5 && p.grounded) this.tick('move');

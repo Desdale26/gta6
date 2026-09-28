@@ -340,6 +340,7 @@
       this.pending = new Map(); // chunkKey → type → [instances]
       this.meshes = []; // { mesh, type, center, radius }
       this.signalLamps = []; // { mesh, entries: [{index, group, color}] }
+      this.batches = new Map(); // "chunk|type" → the InstancedMeshes drawing it
       this.count = 0;
       this._cullTimer = 0;
     }
@@ -365,9 +366,32 @@
       const c = def.collider;
       if (c) {
         const flags = c.camera ? F().ALL : F().SOLID | F().SHOTS;
-        if (c.r) this.physics.addOrientedBox(x, z, c.r * s, c.r * s, yaw || 0, y - 0.2, y + c.h * s, 'prop', flags);
-        else this.physics.addOrientedBox(x, z, c.hx * s, c.hz * s, yaw || 0, y - 0.2, y + c.h * s, 'prop', flags);
+        let col;
+        if (c.r) col = this.physics.addOrientedBox(x, z, c.r * s, c.r * s, yaw || 0, y - 0.2, y + c.h * s, 'prop', flags);
+        else col = this.physics.addOrientedBox(x, z, c.hx * s, c.hz * s, yaw || 0, y - 0.2, y + c.h * s, 'prop', flags);
+        // Remember which instance this is, so a car can knock it over (vehicles.js).
+        col.propType = type;
+        col.propKey = chunk + '|' + type;
+        col.propIndex = list.length - 1;
+        col.propItem = list[list.length - 1];
       }
+    }
+
+    /**
+     * A car hit this prop: hide its instance(s) and hand it to the effects
+     * system as tumbling debris. `col` is the prop's collider.
+     */
+    smash(col, vehicle) {
+      const meshes = this.batches.get(col.propKey);
+      if (!meshes) return;
+      const it = col.propItem;
+      const def = this.defs[col.propType];
+      const hidden = PropSystem._zero || (PropSystem._zero = new THREE.Matrix4().makeScale(0, 0, 0));
+      for (const mesh of meshes) {
+        mesh.setMatrixAt(col.propIndex, hidden);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      if (VH.game && VH.game.fx) VH.game.fx.propDebris(def.parts, it, vehicle, col.propType);
     }
 
     /** Turn everything placed so far into instanced meshes, added to each chunk's group. */
@@ -408,6 +432,9 @@
             mesh.computeBoundingSphere();
             mesh.name = 'props:' + type;
             group.add(mesh);
+            const key = chunk + '|' + type;
+            if (!this.batches.has(key)) this.batches.set(key, []);
+            this.batches.get(key).push(mesh);
             this.meshes.push({ mesh, def, cx, cz, radius: radius + 15 });
           }
           if (def.lamps) this._buildSignalLamps(group, def, list, cx, cz, radius + 15);

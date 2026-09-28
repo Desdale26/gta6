@@ -168,6 +168,7 @@
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
+      this.roadnet = new VH.RoadNet(this.layout);
 
       // Jay, the camera and the systems around him.
       Loading.set(0.89, 'Jay Mercer is on his way');
@@ -175,6 +176,25 @@
       this.player.spawn(this.layout.spawn);
       this.player.surfaceResolver = (x, z, col) => this.world.surfaceAt(x, z, col);
       this.audio = new VH.AudioEngine(settings);
+      this.time = 0;
+      this.timeScale = 1;
+      this._slowT = 0;
+      this._frustum = new THREE.Frustum();
+      this._projScreen = new THREE.Matrix4();
+      this._sphere = new THREE.Sphere();
+
+      // Cars, traffic, people and the effects that go with them.
+      Loading.set(0.9, 'Filling up the tanks');
+      this.fx = new VH.FX(this);
+      this.fx.buildLampPools(this.world.lamps);
+      this.vehicles = new VH.VehicleSystem(this);
+      this.traffic = new VH.TrafficSystem(this);
+      this.crowd = new VH.Crowd(this);
+      this.player.dynamicResolver = (pos, r, y0, y1, out) => {
+        this.crowd.resolvePlayer(pos, r, y0);
+        return this.vehicles.resolvePlayer(pos, r, y0, y1, out);
+      };
+      this.player.extraGround = (x, z, maxY) => this.vehicles.roofHeight(x, z, maxY);
       this.cameraRig = new VH.CameraRig(this.renderer.camera, this.physics, settings, this.input);
       this.cameraRig.snapBehind(this.player);
       this.interaction = new VH.InteractionSystem(this.player, this.input);
@@ -202,6 +222,12 @@
       this.debug = new VH.DebugOverlay(this);
       this.challenges = new VH.ChallengeSystem(this);
       this.challenges.init();
+      this.vehicleFeedback = new VH.VehicleFeedback(this);
+      this.dialogue = new VH.Dialogue(this);
+      this.police = new VH.Police(this);
+      this.combat = new VH.Combat(this);
+      if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root);
+      if (VH.Radio) this.radio = new VH.Radio(this.audio);
 
       // Warm up: reflections, then compile every shader before the first frame.
       Loading.set(0.93, 'Mixing the sunset');
@@ -232,7 +258,10 @@
     _setupScheduler() {
       const s = (this.scheduler = new Scheduler());
       s.every(15, () => {
-        if (this.state === 'playing') this.interaction.update();
+        if (this.state === 'playing') {
+          this.interaction.update();
+          this._vehiclePrompt();
+        }
       });
       s.every(4, () => {
         const p = this.player.pos;
@@ -265,6 +294,18 @@
       });
       VH.events.on('player:died', () => {
         this.hud.notify({ title: 'Knocked out', text: 'Take it easy on those drops.', icon: '✕', tone: 'bad' });
+      });
+      VH.events.on('vehicle:enter', (e) => {
+        this.cameraRig.snapToCar(e.v);
+        this.vehicles.lastPlayerCar = e.v;
+        if (e.jacked) this.player.stats.carsStolen++;
+        else if (e.v.role !== 'mission') this.player.stats.carsStolen++;
+        this.hud.showVehicle(e.v);
+        if (this.radio) this.radio.setActive(true);
+      });
+      VH.events.on('vehicle:exit', () => {
+        this.hud.showVehicle(null);
+        if (this.radio) this.radio.setActive(false);
       });
       VH.events.on('ui:dialogopen', () => {
         document.body.classList.add('dialog-open');
@@ -444,7 +485,11 @@
       for (let i = 0; i < steps; i++) {
         this.input.pollGamepad();
         if (this.input.consume('debug')) this.debug.toggle();
-        if (this.state === 'playing') this.cameraRig.handleInput(FIXED_DT, this.player.aiming);
+        if (this.state === 'playing') {
+          if (!(this.combat && this.combat.wheelOpen)) this.cameraRig.handleInput(FIXED_DT, this.player.aiming);
+          this._vehicleInput();
+          if (this.combat) this.combat.update(FIXED_DT);
+        }
         if (this.state === 'intro') {
           this._introTime += FIXED_DT;
           if (this._introTime > 2.2) this._startPlaying();
@@ -452,10 +497,19 @@
         if (this.state === 'playing') this.challenges.update(FIXED_DT);
         this._acc = 0;
         this._simulate(FIXED_DT, this.state === 'playing');
+        this.vehicles.update(FIXED_DT, 1, this.player.pos);
         this.player.updateVisual(FIXED_DT, 1, this.cameraRig.pitch);
         this.cameraRig.update(FIXED_DT, this.player);
+        this._updateFrustum();
         this.world.update(FIXED_DT, this.renderer.camera.position);
         this.environment.update(FIXED_DT, this.player.renderPos);
+        this.traffic.update(FIXED_DT, this.player.pos);
+        this.crowd.update(FIXED_DT, this.player.pos);
+        if (this.state === 'playing') this.police.update(FIXED_DT);
+        this.dialogue.update();
+        this.vehicleFeedback.update(FIXED_DT);
+        this.fx.setNight(this.environment.shared.uWindowGlow.value);
+        this.fx.update(FIXED_DT, this.renderer.camera, 720);
       }
     },
 
@@ -542,7 +596,9 @@
         case 'dialog': {
           this.playTime += dt;
           if (this.state === 'playing') {
-            this.cameraRig.handleInput(dt, this.player.aiming);
+            if (!(this.combat && this.combat.wheelOpen)) this.cameraRig.handleInput(dt, this.player.aiming);
+            this._vehicleInput();
+            if (this.combat) this.combat.update(dt);
             this._laterFeatureHints();
             this.challenges.update(dt);
           } else input.takeMouseDelta();
@@ -564,30 +620,134 @@
       this.debug.update(dt);
     },
 
+    /** F: get in (or pull the driver out of) the nearest car; F again: get out. */
+    _vehicleInput() {
+      const inp = this.input;
+      const p = this.player;
+      if (inp.consume('vehicle')) {
+        if (p.inVehicle) this.vehicles.exitVehicle();
+        else if (!this.vehicles.entering && (p.state === 'ground' || p.state === 'air') && !p.frozen) {
+          const t = this.vehicles.findEnterable(p.pos.x, p.pos.z, 3.2);
+          if (t) this.vehicles.beginEnter(t);
+        }
+      }
+      if (p.inVehicle) {
+        if (inp.consume('reload') && this.radio) {
+          this.radio.next();
+          this.hud.showToast(this.radio.station.name);
+        }
+      }
+      if (inp.consume('map') && this.minimap) {
+        if (this.minimap.isFullOpen) this.minimap.closeFull();
+        else this.minimap.openFull();
+      }
+    },
+
+    /** "F  Get in" prompt next to an enterable car. */
+    _vehiclePrompt() {
+      const p = this.player;
+      let text = null;
+      if (!p.inVehicle && p.state === 'ground' && !this.vehicles.entering && !this.interaction.current) {
+        const t = this.vehicles.findEnterable(p.pos.x, p.pos.z, 3.2);
+        if (t) text = (t.v.driver === 'ai' ? 'Steal the ' : 'Get in the ') + t.v.name;
+      }
+      this.hud.setVehiclePrompt(text, this.input.labelFor('vehicle'));
+    },
+
+    /** Is a point (roughly) on screen? Used to avoid popping things in under the player's nose. */
+    isVisible(x, y, z, r) {
+      this._sphere.center.set(x, y, z);
+      this._sphere.radius = r || 1;
+      return this._frustum.intersectsSphere(this._sphere);
+    },
+
+    _updateFrustum() {
+      const cam = this.renderer.camera;
+      this._projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      this._frustum.setFromProjectionMatrix(this._projScreen);
+    },
+
+    /** A slow-motion beat: `seconds` of real time at `scale` speed. */
+    slowmo(seconds, scale) {
+      if (!this.settings.get('gameplay.slowMotion')) return;
+      this._slowT = Math.max(this._slowT, seconds);
+      this.timeScale = Math.min(this.timeScale, scale);
+    },
+
+    /** Everything the minimap shows. */
+    blips() {
+      const out = this._blipList || (this._blipList = []);
+      out.length = 0;
+      for (const v of this.police.units) {
+        if (v.removed || v.wrecked) continue;
+        out.push({ x: v.pos.x, z: v.pos.z, type: 'police', heading: v.yaw, flash: true });
+      }
+      if (this.police.heli) out.push({ x: this.police.heli.pos.x, z: this.police.heli.pos.z, type: 'police', flash: true, label: 'Air unit' });
+      if (this.missions && this.missions.blips) this.missions.blips(out);
+      return out;
+    },
+
+    /** Caught: the arrest sequence, a fine, and release outside the precinct. */
+    arrested() {
+      if (this._arresting) return;
+      this._arresting = true;
+      const p = this.player;
+      VH.events.emit('player:arrested', {});
+      this.slowmo(1.6, 0.3);
+      this.hud.bigText('ARRESTED');
+      if (this.audio.bustedSting) this.audio.bustedSting();
+      this.police._dispatch('arrest');
+      p.stats.timesArrested = (p.stats.timesArrested || 0) + 1;
+      setTimeout(() => this.hud.setFade(1, 700), 1400);
+      setTimeout(() => {
+        if (p.inVehicle) this.vehicles.exitVehicle();
+        const fine = Math.min(2500, Math.max(100, Math.round(p.money * 0.08)));
+        p.money = Math.max(0, p.money - fine);
+        this.police.reset();
+        const sp = (this.places && this.places.get('police_station')) || this.layout.spawn;
+        p.teleport(sp.x, sp.z, sp.yaw || 0);
+        p.state = 'ground';
+        p.health = Math.max(p.health, 60);
+        this.cameraRig.snapBehind(p);
+        if (this.combat) this.combat.onArrested();
+        this.hud.setFade(0, 900);
+        this.hud.notify({ title: 'Released on bail', text: 'Vicehaven Central Precinct took ' + VH.util.formatMoney(fine) + ' off you.', icon: '⚖', tone: 'bad', duration: 6000 });
+        VH.events.emit('money:changed', { delta: -fine, reason: 'bail' });
+        this._arresting = false;
+      }, 2300);
+    },
+
+    giveMoney(amount, reason, quiet) {
+      this.player.money += amount;
+      VH.events.emit('money:changed', { delta: amount, reason, quiet });
+    },
+
     /** Keys for systems that arrive in later phases say so, instead of doing nothing. */
     _laterFeatureHints() {
       const LATER = {
-        map: 'The map arrives in Phase 14',
-        phone: 'The phone arrives in Phase 16',
-        weaponWheel: 'Weapons arrive in Phase 7',
-        reload: 'Weapons arrive in Phase 7',
-        vehicle: 'Vehicles arrive in Phase 4',
-        horn: 'Vehicles arrive in Phase 4',
-        lights: 'Vehicles arrive in Phase 4',
+        phone: 'The phone arrives in a later update',
       };
       for (const action of Object.keys(LATER)) {
         if (this.input.consume(action)) this.hud.showToast(LATER[action]);
       }
-      for (let i = 1; i <= 6; i++) this.input.discard('weapon' + i);
-      this.input.discard('fire');
+
     },
 
     /** Fixed-step simulation plus the scheduled tasks. */
     _simulate(dt, live) {
+      // Slow motion: scaled simulation time, easing back to normal.
+      if (this._slowT > 0) {
+        this._slowT -= dt;
+        if (this._slowT <= 0) this._slowT = 0;
+      }
+      this.timeScale = this._slowT > 0 ? this.timeScale : Math.min(1, this.timeScale + dt * 2.5);
+      dt *= this.timeScale;
       this._acc += dt;
+      this.time += dt;
       let steps = 0;
       while (this._acc >= FIXED_DT && steps < 5) {
         this.player._camPitch = this.cameraRig.pitch;
+        this.vehicles.fixedUpdate(FIXED_DT);
         this.player.fixedUpdate(FIXED_DT, this.cameraRig.yaw);
         this._acc -= FIXED_DT;
         steps++;
@@ -600,10 +760,17 @@
         if (this.player.isDead && !this.challenges.active && this.player.deadTime > 4.5) {
           this.hud.setFade(1, 400);
           if (this.player.deadTime > 5.1) {
-            this.player.respawn();
-            this.cameraRig.snapBehind(this.player);
+            const p = this.player;
+            this.police.reset();
+            const hosp = this.places && this.places.get('hospital');
+            p.respawn();
+            if (hosp) p.teleport(hosp.x, hosp.z, hosp.yaw || 0);
+            const fee = Math.min(p.money, 300);
+            p.money -= fee;
+            if (this.combat) this.combat.onHospital();
+            this.cameraRig.snapBehind(p);
             this.hud.setFade(0, 900);
-            this.hud.notify({ title: 'Back on your feet', text: 'You come to in ' + (this.world.placeAt(this.player.pos.x, this.player.pos.z) || 'the city') + '.', icon: '✚' });
+            this.hud.notify({ title: 'Patched up', text: (hosp ? 'Harbor General' : 'The paramedics') + ' sent you home ' + VH.util.formatMoney(fee) + ' lighter.', icon: '✚', duration: 6000 });
           }
         }
         // "Look around" counts as done after a little mouse movement.
@@ -615,7 +782,9 @@
     _drawGameplay(dt, intro) {
       const alpha = this._acc / FIXED_DT;
       const player = this.player;
-      player.updateVisual(dt, alpha, this.cameraRig.pitch);
+      const sdt = dt * this.timeScale;
+      this.vehicles.update(sdt, alpha, player.pos);
+      player.updateVisual(sdt, alpha, this.cameraRig.pitch);
       if (intro) {
         // Settle from a high establishing shot down behind Jay.
         const t = VH.math.smoothstep(0, 2.2, this._introTime);
@@ -635,9 +804,29 @@
       } else {
         this.cameraRig.update(dt, player);
       }
-      this.world.update(dt, this.renderer.camera.position);
-      this.environment.update(dt, player.renderPos);
-      if (this.environment.clockRunning) this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
+      this._updateFrustum();
+      this.world.update(sdt, this.renderer.camera.position);
+      this.environment.update(sdt, player.renderPos);
+      const glow = this.environment.shared.uWindowGlow.value;
+      if (this.environment.clockRunning) this.world.setNightFactor(glow);
+      this.traffic.update(sdt, player.pos);
+      this.crowd.update(sdt, player.pos);
+      if (this.state === 'playing' || this.state === 'dialog') this.police.update(sdt);
+      this.dialogue.update();
+      this.hud.setHeat(this.police.level, !this.police.seen && this.police.level > 0, this.police.bust);
+      this.vehicleFeedback.update(sdt);
+      this.fx.setNight(glow);
+      this.fx.update(sdt, this.renderer.camera, this.renderer.height || window.innerHeight);
+      if (this.minimap) {
+        const pv = player.vehicle;
+        const state = {
+          x: player.pos.x, z: player.pos.z, heading: pv ? pv.yaw : player.heading, camYaw: this.cameraRig.yaw,
+          speed: pv ? pv.speed : player.speed, blips: this.blips ? this.blips() : [], searchArea: this.police ? this.police.searchArea : null,
+          route: this.route || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
+        };
+        this.minimap.update(dt, state);
+        if (this.minimap.isFullOpen) this.minimap.updateFull(state);
+      }
       const d = this._district || this.world.districtAt(player.pos.x, player.pos.z);
       this.hud.update(dt, {
         player,
@@ -648,6 +837,7 @@
         locked: this.input.locked,
         playing: this.state === 'playing',
         lookedAround: this._lookedAround > 1.2,
+        nitro: this.vehicles.nitro,
       });
       const px = player.pos.x;
       const pier = this.layout.waterfront.pier;

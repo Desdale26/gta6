@@ -91,8 +91,16 @@
       this._fallStartY = 0;
       this.climb = null;
       this.spawnPoint = { x: 0, y: 0.2, z: 0, yaw: Math.PI };
+      this.vehicle = null; // the car Jay is driving (vehicles.js), or null
+      this.enteringVehicle = false;
+      this._knockT = 0;
+      this.dynamicResolver = null; // set by main.js: pushes Jay out of cars, reports being run over
+      this.extraGround = null; // set by main.js: car roofs to stand on
 
-      this.stats = { distanceOnFoot: 0, sprintDistance: 0, jumps: 0, climbs: 0, vaults: 0, deaths: 0, longestFall: 0 };
+      this.stats = {
+        distanceOnFoot: 0, sprintDistance: 0, jumps: 0, climbs: 0, vaults: 0, deaths: 0, longestFall: 0,
+        distanceDriven: 0, carsStolen: 0, topSpeed: 0, longestJump: 0, nearMisses: 0, timesArrested: 0,
+      };
 
       this.model = new VH.Humanoid(VH.Humanoid.JAY_LOOK);
       scene.add(this.model.root);
@@ -141,6 +149,7 @@
       const ph = this.physics;
       const o = P.radius * 0.6;
       let g = ph.groundHeight(x, z, maxY);
+      if (this.extraGround) g = Math.max(g, this.extraGround(x, z, maxY));
       g = Math.max(g, ph.groundHeight(x + o, z, maxY));
       g = Math.max(g, ph.groundHeight(x - o, z, maxY));
       g = Math.max(g, ph.groundHeight(x, z + o, maxY));
@@ -169,6 +178,22 @@
 
       if (this.state === 'dead') {
         this._deadTimer += dt;
+        return;
+      }
+      if (this.state === 'vehicle' && this.vehicle) {
+        // Riding along: the car carries Jay.
+        const v = this.vehicle;
+        this.pos.copy(v.pos);
+        this.prevPos.copy(v.prevPos);
+        this.vel.copy(v.vel);
+        this.heading = v.yaw;
+        this.prevHeading = v.prevYaw;
+        this.grounded = true;
+        this.sprinting = false;
+        return;
+      }
+      if (this.state === 'knocked') {
+        this._knockStep(dt);
         return;
       }
       if (this.noclip) {
@@ -292,6 +317,19 @@
       const h = this.currentHeight();
       const step = this.grounded ? P.stepHeight : 0.12;
       const res = this.physics.resolveCircle(next, P.radius, this.pos.y, this.pos.y + h, step, this._resolveOut);
+      if (this.dynamicResolver) {
+        const hit = this.dynamicResolver(next, P.radius, this.pos.y, this.pos.y + h, res);
+        if (hit) {
+          this.vel.x = hit.v.vel.x * 0.75 + hit.nx * 3;
+          this.vel.z = hit.v.vel.z * 0.75 + hit.nz * 3;
+          this.vel.y = 2 + hit.speed * 0.25;
+          this.pos.x = next.x;
+          this.pos.z = next.z;
+          this.knock(8 + hit.speed * 3.2, 'car');
+          VH.events.emit('player:hitByCar', { v: hit.v, speed: hit.speed });
+          return;
+        }
+      }
       if (res.hit) {
         const vn = this.vel.x * res.x + this.vel.z * res.z;
         if (vn < 0) {
@@ -552,11 +590,60 @@
       if (this.health <= 0) this._die(source);
     }
 
+    /** Knocked off his feet (hit by a car, an explosion, bailing out): falls, then gets up. */
+    knock(damage, source) {
+      if (this.state === 'dead' || this.noclip) return;
+      this.state = 'knocked';
+      this._knockT = 0;
+      this.grounded = false;
+      this.climb = null;
+      this.damage(damage, source);
+    }
+
+    _knockStep(dt) {
+      this._knockT += dt;
+      if (!this.grounded) this.vel.y = Math.max(-40, this.vel.y - P.gravity * dt);
+      const next = this._next;
+      next.x = this.pos.x + this.vel.x * dt;
+      next.z = this.pos.z + this.vel.z * dt;
+      const res = this.physics.resolveCircle(next, P.radius, this.pos.y + 0.2, this.pos.y + 1.0, 0.3, this._resolveOut);
+      if (res.hit) {
+        const vn = this.vel.x * res.x + this.vel.z * res.z;
+        if (vn < 0) {
+          this.vel.x -= 1.4 * vn * res.x;
+          this.vel.z -= 1.4 * vn * res.z;
+        }
+      }
+      this.pos.x = next.x;
+      this.pos.z = next.z;
+      const prevY = this.pos.y;
+      this.pos.y += this.vel.y * dt;
+      const g = this._groundFootprint(this.pos.x, this.pos.z, Math.max(prevY, this.pos.y) + 0.3);
+      if (this.pos.y <= g) {
+        this.pos.y = g;
+        if (this.vel.y < -4) this.vel.y *= -0.25;
+        else {
+          this.vel.y = 0;
+          this.grounded = true;
+        }
+        const f = Math.exp(-5.5 * dt);
+        this.vel.x *= f;
+        this.vel.z *= f;
+      } else this.grounded = false;
+      if (this.state === 'dead') return;
+      if (this._knockT > 1.9 && this.grounded && Math.hypot(this.vel.x, this.vel.z) < 0.6) {
+        this.state = 'ground';
+        this.vel.set(0, 0, 0);
+        this._land = 0.6;
+      }
+    }
+
     heal(amount) {
       this.health = Math.min(this.maxHealth, this.health + amount);
     }
 
     _die(source) {
+      if (this.vehicle) this.vehicle = null;
       this.state = 'dead';
       this._deadTimer = 0;
       this.vel.set(0, 0, 0);
@@ -587,6 +674,19 @@
 
       const root = this.model.root;
       root.position.set(rp.x, rp.y + this._stepOffset, rp.z);
+      if (this.state === 'vehicle') {
+        root.visible = false;
+        return rp;
+      }
+      if (this.state === 'knocked') {
+        // Thrown down, then back up.
+        const t = this._knockT;
+        const down = smoothstep(0, 0.35, t) * (1 - smoothstep(1.6, 2.1, t));
+        root.rotation.set(-1.45 * down, this.heading, 0);
+        root.position.y += 0.15 * down;
+        this.model.animate(dt, { speed: 0, grounded: false, vy: -4, crouch: 0, aim: 0, climb: -1, sprint: false, backwards: false, land: 0, lookPitch: 0 });
+        return rp;
+      }
       if (this.state === 'dead') {
         // Collapse backwards.
         const t = smoothstep(0, 0.8, this._deadTimer);
@@ -611,13 +711,22 @@
         backwards,
         land: this._land,
         lookPitch,
+        weaponPose: this.weaponPose,
+        recoil: this._recoil || 0,
+        swing: this._meleeSwing || 0,
       });
+      if (this._recoil > 0) this._recoil = Math.max(0, this._recoil - dt * 9);
+      if (this._meleeSwing > 0) this._meleeSwing = Math.max(0, this._meleeSwing - dt * 3.2);
       return rp;
     }
 
     /** Where the camera should orbit around (interpolated feet + eye height). */
     focusPoint(out) {
       return out.set(this.renderPos.x, this.renderPos.y + this._stepOffset * 0.5, this.renderPos.z);
+    }
+
+    get inVehicle() {
+      return this.state === 'vehicle' && !!this.vehicle;
     }
 
     get isDead() {

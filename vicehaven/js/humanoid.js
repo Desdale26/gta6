@@ -48,7 +48,14 @@
   };
 
   class Humanoid {
-    constructor(look) {
+    /**
+     * opts.rigOnly: build the joints but no meshes. The crowd renderer draws
+     * rig-only humanoids with instancing and reads their joint matrices; the
+     * body parts are recorded in this.parts (joint name, geometry, colour slot).
+     */
+    constructor(look, opts) {
+      this.rigOnly = !!(opts && opts.rigOnly);
+      this.parts = this.rigOnly ? [] : null;
       this.look = Object.assign({}, JAY_LOOK, look || {});
       this.root = new THREE.Group();
       this.root.name = 'humanoid';
@@ -64,6 +71,14 @@
     }
 
     _mesh(geo, mat, parent, x, y, z) {
+      if (this.rigOnly) {
+        // Record the part; the returned stand-in lets callers set a rotation as usual.
+        const stand = new THREE.Object3D();
+        stand.position.set(x || 0, y || 0, z || 0);
+        parent.add(stand);
+        this.parts.push({ geo, slot: mat, stand, parent });
+        return stand;
+      }
       const ghost = this.look.ghost;
       const m = new THREE.Mesh(geo, ghost ? Humanoid.ghostMaterial() : mat);
       m.position.set(x || 0, y || 0, z || 0);
@@ -85,16 +100,20 @@
 
     _build() {
       const L = this.look;
-      const skin = material(L.skin, 0.62);
-      const hair = material(L.hair, 0.9);
-      const jacket = material(L.jacket, 0.78);
-      const trim = material(L.jacketTrim, 0.85);
-      const shirt = material(L.shirt, 0.85);
-      const pants = material(L.pants, 0.88);
-      const shoes = material(L.shoes, 0.6);
-      const sole = material(L.sole, 0.8);
-      const belt = material(L.belt, 0.6);
-      const dark = material(0x15110e, 0.5);
+      const R = this.rigOnly;
+      // In rig-only mode "materials" are colour slots for the crowd shader.
+      const skin = R ? 'skin' : material(L.skin, 0.62);
+      const hair = R ? 'hair' : material(L.hair, 0.9);
+      const jacket = R ? 'top' : material(L.jacket, 0.78);
+      const trim = R ? 'trim' : material(L.jacketTrim, 0.85);
+      const shirt = R ? 'shirt' : material(L.shirt, 0.85);
+      const pants = R ? 'bottom' : material(L.pants, 0.88);
+      const shoes = R ? 'shoes' : material(L.shoes, 0.6);
+      const sole = R ? 'sole' : material(L.sole, 0.8);
+      const belt = R ? 'belt' : material(L.belt, 0.6);
+      const dark = R ? 'dark' : material(0x15110e, 0.5);
+      const stubble = R ? 'stubble' : material(0x94704f, 0.85);
+      const watch = R ? 'metal' : material(L.watch, 0.3);
 
       const pelvis = this._joint('pelvis', this.root, 0, 0.97, 0);
       // Hips and belt.
@@ -131,7 +150,7 @@
       // Jaw with a hint of stubble.
       const jaw = new THREE.SphereGeometry(0.104, 14, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5);
       jaw.scale(0.93, 0.85, 1.07);
-      this._mesh(jaw, material(0x94704f, 0.85), head, 0, 0.06, 0.012);
+      this._mesh(jaw, stubble, head, 0, 0.06, 0.012);
       // Short hair: a cap over the top and back of the head.
       const hairGeo = new THREE.SphereGeometry(0.12, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.52);
       hairGeo.scale(0.93, 1.02, 1.04);
@@ -159,7 +178,7 @@
         const handGeo = new THREE.SphereGeometry(0.045, 10, 8);
         handGeo.scale(0.75, 1.3, 0.95);
         this._mesh(handGeo, skin, elbow, 0, -0.3, 0.005);
-        if (side === 'L') this._mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.025, 10), material(L.watch, 0.3), elbow, 0, -0.245, 0);
+        if (side === 'L') this._mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.025, 10), watch, elbow, 0, -0.245, 0);
       }
 
       // Legs.
@@ -319,6 +338,86 @@
         T.splay = VH.math.lerp(T.splay, 0.28, aim);
         T.headPitch = -(s.lookPitch || 0) * 0.5 * aim;
         T.lean += 0.08 * aim;
+      }
+
+      // Gestures while talking.
+      const talk = s.talk || 0;
+      if (talk > 0) {
+        const t = this.time;
+        T.shoulderR = VH.math.lerp(T.shoulderR, 0.45 + 0.3 * Math.sin(t * 2.3), talk);
+        T.elbowR = VH.math.lerp(T.elbowR, 1.05 + 0.35 * Math.sin(t * 3.7 + 1), talk);
+        T.shoulderL = VH.math.lerp(T.shoulderL, 0.15 + 0.2 * Math.sin(t * 1.9 + 2), talk * 0.7);
+        T.elbowL = VH.math.lerp(T.elbowL, 0.5 + 0.3 * Math.sin(t * 2.9), talk * 0.7);
+        T.headYaw += 0.12 * Math.sin(t * 0.9) * talk;
+        T.headPitch += 0.06 * Math.sin(t * 2.2) * talk;
+      }
+      // On the phone: right hand at the ear, head tilted.
+      const phone = s.phone || 0;
+      if (phone > 0) {
+        T.shoulderR = VH.math.lerp(T.shoulderR, 0.35, phone);
+        T.elbowR = VH.math.lerp(T.elbowR, 2.55, phone);
+        T.headPitch += 0.15 * phone;
+      }
+      // Hands up (surrender, a hold-up).
+      const hands = s.handsUp || 0;
+      if (hands > 0) {
+        T.shoulderL = VH.math.lerp(T.shoulderL, 2.85, hands);
+        T.shoulderR = VH.math.lerp(T.shoulderR, 2.85, hands);
+        T.elbowL = VH.math.lerp(T.elbowL, 0.55, hands);
+        T.elbowR = VH.math.lerp(T.elbowR, 0.55, hands);
+        T.splay = VH.math.lerp(T.splay, 0.4, hands);
+      }
+      // Cowering: arms over the head.
+      const cower = s.cower || 0;
+      if (cower > 0) {
+        T.shoulderL = VH.math.lerp(T.shoulderL, 2.3, cower);
+        T.shoulderR = VH.math.lerp(T.shoulderR, 2.3, cower);
+        T.elbowL = VH.math.lerp(T.elbowL, 2.2, cower);
+        T.elbowR = VH.math.lerp(T.elbowR, 2.2, cower);
+        T.lean += 0.35 * cower;
+        T.headPitch += 0.3 * cower;
+      }
+      // Limp.
+      if (s.dead) {
+        T.hipL = 0.1;
+        T.hipR = -0.05;
+        T.kneeL = 0.2;
+        T.kneeR = 0.35;
+        T.shoulderL = 0.35;
+        T.shoulderR = -0.2;
+        T.elbowL = 0.3;
+        T.elbowR = 0.6;
+        T.splay = 0.6;
+        T.lean = 0;
+        T.headYaw = 0.6;
+      }
+      // Weapon stances (combat): a pistol held out, or a long gun at the shoulder.
+      if (s.weaponPose && aim > 0) {
+        if (s.weaponPose === 'rifle') {
+          T.shoulderR = VH.math.lerp(T.shoulderR, 1.25, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 1.35, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 1.45, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 0.55, aim);
+          T.splay = VH.math.lerp(T.splay, 0.12, aim);
+        } else if (s.weaponPose === 'pistol') {
+          T.shoulderR = VH.math.lerp(T.shoulderR, 1.55 + (s.lookPitch || 0) * 0.8, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 0.08, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 1.35 + (s.lookPitch || 0) * 0.8, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 0.5, aim);
+          T.splay = VH.math.lerp(T.splay, 0.05, aim);
+        }
+      }
+      if (s.swing > 0) {
+        // A swing: wind up, then strike across the body.
+        const k = Math.sin((1 - s.swing) * Math.PI);
+        T.shoulderR = VH.math.lerp(T.shoulderR, 2.1 - 1.6 * (1 - s.swing), k);
+        T.elbowR = VH.math.lerp(T.elbowR, 0.35, k);
+        T.twist += 0.5 * k * (s.swing > 0.5 ? -1 : 1);
+        T.lean += 0.12 * k;
+      }
+      if (s.recoil) {
+        T.shoulderR -= s.recoil * 0.25;
+        T.elbowR += s.recoil * 0.2;
       }
 
       // Smoothly move every joint toward its target.

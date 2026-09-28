@@ -74,6 +74,7 @@
       this.interactables = [];
       this.beacons = [];
       this.lawns = []; // rectangles of grass (for footstep sounds)
+      this.lamps = []; // street lamps (for the night-time light pools in fx.js)
       this.layout = null;
       this.stats = { buildings: 0, lots: 0, tallest: 0, triangles: 0, meshes: 0 };
       this._signalTimer = 0;
@@ -180,6 +181,7 @@
     }
 
     addProp(type, x, y, z, yaw, scale, group) {
+      if (type === 'streetlight') this.lamps.push({ x, z, yaw: yaw || 0 });
       const chunk = this.chunkAt(x, z);
       this.props.add(chunk.key, type, x, y, z, yaw, scale, group);
     }
@@ -443,6 +445,7 @@
         for (const lot of block.lots) {
           const lctx = this.ctxAt(lot.cx, lot.cz);
           const top = VH.Buildings.buildLot(lctx, lot);
+          lot.top = top || 0;
           if (top > 0) this.stats.buildings++;
           this.stats.tallest = Math.max(this.stats.tallest, top || 0);
         }

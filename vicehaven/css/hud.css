@@ -68,10 +68,89 @@ body.dialog-open .hud .hud-prompt {
   color: var(--vh-danger);
 }
 
+/* Police heat: five shield-shaped pips. */
 .hud-wanted {
-  font-size: 1.4rem;
-  letter-spacing: 0.12em;
-  color: var(--vh-accent-2);
+  display: flex;
+  gap: 0.32rem;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.hud-wanted.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.heat-pip {
+  width: 1.35rem;
+  height: 1.55rem;
+  clip-path: polygon(50% 0, 100% 18%, 92% 70%, 50% 100%, 8% 70%, 0 18%);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
+
+.heat-pip.on {
+  background: linear-gradient(180deg, #ff5a5a, #b3122e);
+  animation: heat-siren 0.9s steps(1) infinite;
+}
+
+.heat-pip.on:nth-child(2n) {
+  animation-delay: 0.45s;
+}
+
+@keyframes heat-siren {
+  0% { background: linear-gradient(180deg, #ff5a5a, #b3122e); filter: drop-shadow(0 0 6px rgba(255, 60, 60, 0.9)); }
+  50% { background: linear-gradient(180deg, #5aa8ff, #1b3fb3); filter: drop-shadow(0 0 6px rgba(80, 150, 255, 0.9)); }
+}
+
+.hud-wanted.flashing .heat-pip.on {
+  animation: heat-evade 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes heat-evade {
+  from { opacity: 1; }
+  to { opacity: 0.2; }
+}
+
+.hud-wanted.bump {
+  animation: heat-bump 0.5s ease;
+}
+
+@keyframes heat-bump {
+  30% { transform: scale(1.25); }
+}
+
+.hud-bust {
+  position: relative;
+  width: 8.2rem;
+  height: 0.5rem;
+  margin-top: 0.25rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.hud-bust.visible {
+  opacity: 1;
+}
+
+.hud-bust span {
+  position: absolute;
+  right: 0;
+  top: -1.05rem;
+  font-family: var(--vh-font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  color: #ff8a8a;
+}
+
+.hud-bust .fill {
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #ff9f1c, #ff3b3b);
 }
 
 /* ----------------------------------------------------------- bottom left */
@@ -876,4 +955,205 @@ body.reduced-flashing .chal-timer.critical {
   margin-top: 0.6rem;
   font-size: 0.8rem;
   color: var(--vh-muted);
+}
+
+/* --------------------------------------------------------------- driving */
+.hud-speedo {
+  position: absolute;
+  right: 2rem;
+  bottom: 1.8rem;
+  width: 13.5rem;
+  padding: 0.9rem 1.1rem 0.8rem;
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(10, 14, 30, 0.82), rgba(6, 8, 18, 0.66));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  font-family: var(--vh-font-display);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  overflow: hidden;
+}
+
+.hud-speedo.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.speedo-arc {
+  --speed: 0;
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: calc(var(--speed) * 100%);
+  background: var(--vh-sunset);
+  box-shadow: 0 0 12px rgba(255, 79, 139, 0.8);
+  transition: width 0.12s linear;
+}
+
+.speedo-value {
+  font-size: 3.2rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px rgba(255, 122, 89, 0.35);
+}
+
+.speedo-unit {
+  position: absolute;
+  left: 1.15rem;
+  top: 4.15rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  color: var(--vh-muted);
+  text-transform: uppercase;
+}
+
+.speedo-gear {
+  position: absolute;
+  right: 1.1rem;
+  top: 0.95rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--vh-accent-2);
+}
+
+.speedo-bar {
+  position: relative;
+  margin-top: 0.55rem;
+  height: 0.5rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: visible;
+}
+
+.speedo-bar:first-of-type {
+  margin-top: 1.5rem;
+}
+
+.speedo-bar .fill {
+  height: 100%;
+  width: 50%;
+  border-radius: 99px;
+  transition: width 0.15s linear;
+}
+
+.speedo-bar .bar-label {
+  position: absolute;
+  right: 0;
+  top: -1.05rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: var(--vh-muted);
+}
+
+.speedo-nitro .fill {
+  background: linear-gradient(90deg, #35e0d0, #4aa3ff 60%, #b04ae0);
+  box-shadow: 0 0 10px rgba(74, 163, 255, 0.6);
+}
+
+.hud-speedo.boosting .speedo-nitro .fill {
+  animation: nitro-pulse 0.25s ease-in-out infinite alternate;
+}
+
+@keyframes nitro-pulse {
+  to { filter: brightness(1.7); }
+}
+
+.speedo-damage .fill {
+  background: linear-gradient(90deg, #5ee08a, #ffd166);
+}
+
+.hud-speedo.damaged .speedo-damage .fill {
+  background: linear-gradient(90deg, #ff5a5a, #ff9f1c);
+  animation: damage-blink 0.8s steps(2) infinite;
+}
+
+@keyframes damage-blink {
+  50% { opacity: 0.45; }
+}
+
+.hud-vehicle-name {
+  position: absolute;
+  right: 2.2rem;
+  bottom: 13.5rem;
+  text-align: right;
+  font-family: var(--vh-font-display);
+  opacity: 0;
+  pointer-events: none;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+}
+
+.hud-vehicle-name.show {
+  animation: vehicle-name 3.2s ease forwards;
+}
+
+.vn-make {
+  font-size: 0.8rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.vn-model {
+  font-size: 2.1rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  background: var(--vh-sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes vehicle-name {
+  0% { opacity: 0; transform: translateX(30px); }
+  12% { opacity: 1; transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateX(-10px); }
+}
+
+.hud-score-pop {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  font-family: var(--vh-font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(53, 224, 208, 0.9), 0 3px 8px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.hud-score-pop.show {
+  animation: score-pop 1.3s ease-out forwards;
+}
+
+@keyframes score-pop {
+  0% { opacity: 0; transform: translate(-50%, 12px) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
+  30% { transform: translate(-50%, 0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -18px); }
+}
+
+.hud-car-prompt {
+  bottom: 26%;
+}
+
+body.driving .hud .hud-hints {
+  opacity: 0;
 }
