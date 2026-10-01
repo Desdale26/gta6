@@ -25,7 +25,7 @@
   const COURSES = [
     { id: 'race_heron', name: 'Heron Corner Sprint', start: { x: -89, z: 292, yaw: Math.PI / 2 }, cps: [[0, 292], [96, 292], [99, 150], [99, 3], [240, 3], [384, 3], [381, 150], [381, 292], [192, 292]] },
     { id: 'race_grand', name: 'The Grand Loop', start: { x: -4, z: -40, yaw: Math.PI }, cps: [[-4, -192], [-4, -380], [96, -384], [192, -384], [195, -240], [195, -96], [96, -93], [-96, -93], [-93, -3], [0, 3]] },
-    { id: 'race_market', name: 'Market Scramble', start: { x: -288, z: -60, yaw: Math.PI }, cps: [[-291, -192], [-291, -288], [-192, -291], [-189, -192], [-288, -189], [-384, -189], [-381, -96], [-381, 0], [-288, 3]] },
+    { id: 'race_market', name: 'Boardwalk Burn', start: { x: 387, z: 250, yaw: Math.PI }, cps: [[387, 150], [387, 3], [387, -150], [387, -285], [291, -291], [285, -150], [285, 3], [285, 150], [285, 288], [384, 291]] },
     { id: 'race_docks', name: 'Saltmarsh Run', start: { x: 291, z: 400, yaw: 0 }, cps: [[291, 470], [150, 473], [3, 470], [3, 580], [150, 583], [285, 580], [291, 470], [400, 473]] },
     { id: 'race_crest', name: 'Crestline Hill Climb', start: { x: -400, z: 3, yaw: -Math.PI / 2 }, cps: [[-510, 3], [-513, -150], [-513, -288], [-384, -291], [-381, -96], [-381, 96], [-381, 288], [-510, 291], [-507, 150], [-510, 3]] },
     { id: 'race_tour', name: 'The Vicehaven Grand Tour', start: { x: 3, z: 360, yaw: Math.PI }, cps: [[3, 192], [3, 0], [3, -192], [3, -380], [192, -384], [384, -384], [381, 0], [381, 384], [192, 381], [-192, 381], [-384, 381], [-381, 0], [-381, -384], [-192, -384], [-96, -381]] },
@@ -79,84 +79,122 @@
         if (!m.requires) m.requires = [];
         eng.all.set(m.id, m);
         (this.jobs || (this.jobs = [])).push(m);
+        return m;
       };
       const d = this.data;
+      const carName = (type) => (VH.Vehicle.typeSpec(type) || {}).name || type;
+      const lineList = (list) => (list || []).map((l) => (Array.isArray(l) ? l : ['caption', l]));
+
+      // Street races.
       const races = d.races || [];
       COURSES.forEach((c, i) => {
         const info = races[i] || {};
         const rivals = (info.rivals || DEFAULT_RIVALS[i % 2]).slice(0, 3).map((r, k) => ({ name: r.name || r, car: r.car || ['vireo', 'drifter', 'ironclad'][k], skill: 0.85 + i * 0.03 + k * 0.03, color: r.color }));
         const placeId = c.id + '_start';
-        this.game.places.add(placeId, { name: (info.name || c.name) + ' (race)', x: c.start.x, z: c.start.z, yaw: c.start.yaw, kind: 'street' });
-        const talk = (info.lines || info.trashTalk || []).slice(0, 4).map((l) => (Array.isArray(l) ? l : ['caption', l]));
+        const name = info.name || c.name;
+        this.game.places.add(placeId, { name: name + ' (race)', x: c.start.x, z: c.start.z, yaw: c.start.yaw, kind: 'street' });
+        const talk = lineList(info.lines || info.trashTalk).slice(0, 5);
+        const req = info.requires ? [].concat(info.requires) : i === 0 ? ['m06_tick_tock'] : [COURSES[i - 1].id];
         addJob({
-          id: c.id, title: info.name || c.name, giver: 'race', start: placeId, repeatable: true, estMinutes: 4,
-          summary: 'Street race: ' + (info.name || c.name), requires: info.requires ? [].concat(info.requires) : ['m06_tick_tock'],
+          id: c.id, title: name, giver: 'race', start: placeId, repeatable: true, estMinutes: 4,
+          summary: 'Street race: ' + name + ' · ' + rivals.map((r) => r.name).join(', '), requires: req,
           reward: { money: info.prize || 1200 + i * 400 },
           steps: [
             { getIn: 'any', objective: 'Get a car for the race' },
-            { goto: placeId, vehicle: true, radius: 9, objective: 'Line up at the start' },
+            { goto: placeId, vehicle: true, radius: 9, objective: 'Line up at the start of ' + name },
             talk.length ? { say: talk } : { wait: 0.1 },
             { race: { checkpoints: c.cps.map(([x, z]) => ({ x, z })), rivals } },
           ],
         });
       });
-      // Dex's list: find the car, bring it in.
-      const list = d.carList || d.dexList || [];
+      if (d.raceWinAll) {
+        VH.events.on('mission:pass', (e) => {
+          if (!/^race_/.test(e.m.id) || eng.flags[d.raceWinAll.flag]) return;
+          if (!COURSES.every((c) => eng.completed[c.id])) return;
+          eng.flags[d.raceWinAll.flag] = true;
+          setTimeout(() => {
+            this.game.dialogue.play([d.raceWinAll.text], { mode: 'phone', from: d.raceWinAll.text[0] });
+            this.game.hud.centerBanner('KING OF THE ROAD', 'All six races won · a gold ' + carName(d.raceWinAll.car) + ' is waiting at Heron Corner');
+            this.game.vehicles.spawn(d.raceWinAll.car, -89, 296, Math.PI / 2, { color: d.raceWinAll.color, role: 'parked', persistent: true });
+            eng.save();
+          }, 6000);
+        });
+      }
+
+      // Dex's list: find the car, bring it in. After m22 the list changes hands;
+      // after m23 the garage is gone and cars go to Kostas Salvage.
+      const list = d.carList || [];
       const DEFAULT_LIST = ['zephyr', 'lowrider', 'sovereign', 'drifter', 'ironclad', 'tern', 'vireo', 'bulwark', 'mesa', 'medic'];
-      for (let i = 0; i < 10; i++) {
+      const listCount = Math.max(10, list.length);
+      for (let i = 0; i < listCount; i++) {
         const info = list[i] || {};
-        const type = info.type || info.car || DEFAULT_LIST[i];
+        const type = info.type || DEFAULT_LIST[i % DEFAULT_LIST.length];
         const id = 'list_' + (i + 1);
-        const where = ['old_market', 'downtown', 'harbor_point', 'palm_crescent', 'saltmarsh_docks', 'crestline_estates'][i % 6];
-        addJob({
-          id, title: info.title || 'Dex\'s list: ' + ((VH.Vehicle.typeSpec(type) || {}).name || type), giver: 'dex', start: 'dex_garage', estMinutes: 5,
-          summary: info.reason || 'A buyer wants one. Undamaged.', requires: [info.requires || 'm05_the_toolbox'],
-          reward: { money: info.pay || 1500 + i * 250 },
-          steps: [
-            { phone: 'dex', say: info.lines || [['dex', info.reason || 'Got a buyer for a ' + ((VH.Vehicle.typeSpec(type) || {}).name || type) + '. Somewhere around ' + VH.Places.titleFromId(where) + '. Not a scratch on it, Jay.']] },
+        const where = info.place || ['old_market', 'downtown', 'harbor_point', 'palm_crescent', 'crane_row', 'pruitt_house'][i % 6];
+        const pitch = info.lines || [['dex', info.reason || 'Got a buyer for a ' + carName(type) + '. Not a scratch on it, Jay.']];
+        const brief = { if: 'm22_lugnut', then: [
+          { if: 'dex_to_calder',
+            then: [{ phone: 'rhea', say: info.rhea || [['rhea', 'Calloway\'s list is mine now. A ' + carName(type) + '. Bring it to the salvage yard.']] }],
+            else: [{ text: 'birdie', message: info.birdie || 'Daddy says the next car is a ' + carName(type) + '.' }] },
+        ], else: [{ phone: 'dex', say: pitch }] };
+        const deliver = (to) => ({ deliver: 'target', to, maxDamage: 0.4, objective: 'Bring the ' + carName(type) + ' in. Not a scratch.' });
+        const job = addJob({
+          id, title: 'Dex\'s list: ' + carName(type), giver: 'dex', estMinutes: 5,
+          summary: info.reason || 'A buyer wants one. Undamaged.', requires: [].concat(info.requires || 'm05_the_toolbox'),
+          reward: { money: info.pay !== undefined ? info.pay : 1500 + i * 250 },
+          steps: info.steps || [
+            brief,
             { spawnCar: 'target', type, at: where, color: info.color },
-            { getIn: 'target', objective: 'Steal the ' + ((VH.Vehicle.typeSpec(type) || {}).name || type) },
-            { deliver: 'target', to: 'dex_garage', maxDamage: 0.4, objective: 'Take it to Calloway Auto' },
+            { getIn: 'target', objective: 'Steal the ' + carName(type) + (info.place ? ' at ' + VH.Places.titleFromId(info.place) : '') },
+            { if: 'm23_ashes', then: [deliver('kostas_salvage')], else: [deliver('dex_garage')] },
           ],
         });
-        if (i > 0) this.game.missions.all.get(id).requires.push('list_' + i);
+        Object.defineProperty(job, 'start', { get: () => (eng.completed.m23_ashes ? 'kostas_salvage' : 'dex_garage'), enumerable: true });
+        if (i > 0) job.requires.push('list_' + i);
       }
-      // Bounties.
+
+      // Bounties for Honor Blackwood.
       const bounties = d.bounties || [];
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < Math.max(8, bounties.length); i++) {
         const b = bounties[i] || {};
         const id = 'bounty_' + (i + 1);
-        const where = b.place || ['lantern_alley', 'market_scrapyard', 'grand_parkade', 'harbor_beach', 'crane_row', 'drydock_slip', 'tannery_row', 'crestline_overlook'][i];
+        const where = b.place || ['lantern_alley', 'market_scrapyard', 'grand_parkade', 'harbor_beach', 'crane_row', 'drydock_slip', 'tannery_row', 'crestline_overlook'][i % 8];
         addJob({
-          id, title: b.name ? 'Bounty: ' + b.name : 'Bounty ' + (i + 1), giver: 'calder', start: 'heron_corner', estMinutes: 6,
-          summary: b.dossier || 'Someone skipped bail. Bring them down.', requires: [b.requires || 'm13_pension'].concat(i > 0 ? ['bounty_' + i] : []),
-          reward: { money: b.reward || 1000 + i * 350 },
-          steps: [
-            { text: 'caption', message: b.dossier || 'Target spotted near ' + VH.Places.titleFromId(where) + '. Armed. Paid on proof.' },
+          id, title: b.name ? 'Bounty: ' + b.name : 'Bounty ' + (i + 1), giver: 'blackwood', start: d.bountyStart || 'heron_corner', estMinutes: 7,
+          summary: b.dossier || 'Someone skipped bail. Bring them in.', requires: [b.requires || d.bountyRequires || 'm10_sons'].concat(i > 0 ? ['bounty_' + i] : []),
+          reward: { money: b.reward !== undefined ? b.reward : 1000 + i * 350 },
+          steps: b.steps || [
+            { text: 'blackwood', message: b.dossier || 'Target spotted near ' + VH.Places.titleFromId(where) + '. Armed. Paid on proof.' },
             { goto: where, radius: 30, objective: 'Find ' + (b.name || 'the target') },
             { spawn: [{ id: 'mark', at: where, faction: 'halberd', weapon: b.weapon || 'pistol', behavior: 'attack', health: 180, group: 'mark' }, { at: where, faction: 'halberd', weapon: 'pistol', count: 1 + (i % 3), behavior: 'guard', group: 'mark' }] },
             { kill: 'group:mark', objective: 'Take down ' + (b.name || 'the target') },
           ],
         });
       }
-      // Turf wars.
-      const turf = d.turf || d.turfWars || [];
-      for (let i = 0; i < 5; i++) {
+
+      // Turf wars: hold the spot against waves.
+      const turf = d.turf || [];
+      for (let i = 0; i < Math.max(5, turf.length); i++) {
         const t = turf[i] || {};
         const id = 'turf_' + (i + 1);
-        const where = t.place || ['lantern_alley', 'tannery_row', 'casa_palma', 'crane_row', 'grand_parkade'][i];
-        const foe = t.faction || (i < 3 ? 'halberd' : 'halberd');
+        const where = t.place || ['lantern_alley', 'tannery_row', 'heron_corner', 'crane_row', 'the_boardwalk'][i % 5];
+        const foe = t.faction || 'halberd';
+        const hold = t.survive || 75 + i * 10;
         addJob({
           id, title: t.name || 'Turf war: ' + VH.Places.titleFromId(where), giver: 'teo', start: where, estMinutes: 5, repeatable: false,
           summary: t.desc || 'Hold the corner.', requires: [t.requires || 'm10_sons'],
-          reward: { money: t.reward || 900 + i * 300 },
+          reward: { money: t.reward || 900 + i * 300, armor: 50 },
           steps: [
-            { say: t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']] },
-            { survive: 75 + i * 10, objective: 'Hold the corner', waves: [
+            { say: lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]) },
+            { music: 'action' },
+            { survive: hold, objective: 'Hold ' + VH.Places.titleFromId(where), waves: t.waves || [
               { at: where, count: 3, weapon: 'pistol', faction: foe, delay: 2 },
-              { at: where, count: 3, weapon: 'smg', faction: foe, delay: 25 },
-              { at: where, count: 4, weapon: i > 2 ? 'rifle' : 'smg', faction: foe, delay: 50 },
+              { at: where, count: 3, weapon: 'smg', faction: foe, delay: Math.round(hold * 0.3) },
+              { at: where, count: 4, weapon: i > 2 ? 'rifle' : 'smg', faction: foe, delay: Math.round(hold * 0.55) },
+              { at: where, count: 3, weapon: i > 1 ? 'shotgun' : 'smg', faction: foe, delay: Math.round(hold * 0.75) },
             ] },
+            { music: 'triumph' },
+            t.win ? { say: lineList(t.win) } : { wait: 0.1 },
           ],
         });
       }
@@ -283,7 +321,12 @@
       const v = p.vehicle;
       const T = this.taxi;
       const inCab = v && (v.type === 'cab');
+      const taxiOpen = !this.data.taxiRequires || g.missions.completed[this.data.taxiRequires];
       if (inCab && g.input.consume('phone') && !g.missions.run) {
+        if (!taxiOpen) {
+          g.hud.showToast('The dispatcher doesn\'t know you yet. (Taxi jobs open later in the story.)');
+          return;
+        }
         T.on = !T.on;
         g.hud.showToast(T.on ? 'Taxi: on duty' : 'Taxi: off duty');
         if (!T.on) this._endFare(false);
@@ -344,11 +387,21 @@
       const to = dests[Math.floor(Math.random() * dests.length)];
       if (!to) return;
       const who = 'passenger';
-      const v = vig.length ? vig[Math.floor(Math.random() * vig.length)] : null;
-      const lines = v ? (v.lines || v).map((l) => (Array.isArray(l) ? [l[0] === 'jay' ? 'jay' : who, l[1]] : [who, l])) : [[who, 'Just drive, yeah? I\'ve had a day.']];
+      // Fares unlock with the story; the ones you haven't heard yet come first.
+      const done = g.missions.completed;
+      const open = vig.filter((f) => !f.after || done[f.after]);
+      this.heardFares = this.heardFares || {};
+      const fresh = open.filter((f) => !this.heardFares[f.name]);
+      const pool = fresh.length ? fresh : open;
+      const v = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+      if (v) this.heardFares[v.name] = true;
+      const ids = { fare: who, fare2: 'passenger2' };
+      const lines = v ? (v.lines || v).map((l) => (Array.isArray(l) ? [l[0] === 'jay' || l[0] === 'caption' ? l[0] : ids[l[0]] || l[0], l[1]] : [who, l])) : [[who, 'Just drive, yeah? I\'ve had a day.']];
       const gender = Math.random() < 0.5 ? 'female' : 'male';
       g.dialogue.cast[who] = { name: (v && v.name) || 'Fare', color: '#c9d3ff', voice: { gender, pitch: 0.9 + Math.random() * 0.3, rate: 0.95 + Math.random() * 0.15 } };
+      g.dialogue.cast.passenger2 = { name: 'Fare', color: '#ffc9e0', voice: { gender: gender === 'male' ? 'female' : 'male', pitch: 1.0 + Math.random() * 0.2, rate: 1.05 } };
       g.dialogue._voiceMap.delete(who);
+      g.dialogue._voiceMap.delete('passenger2');
       const agent = g.crowd.spawn(best.x, best.z, { persistent: true });
       agent.brain = { update: (a) => { a.moveSpeed = 0; a.anim.handsUp = Math.sin(g.time * 3) > 0.6 ? 0.4 : 0; } };
       const dist = Math.hypot(to.x - best.x, to.z - best.z);
@@ -402,11 +455,12 @@
       this.taxi = { on: false, fare: null, done: 0, earned: 0 };
       this.jumpsDone = {};
       this.lanternsFound = {};
+      this.heardFares = {};
       for (const L of this.lanterns) L.m.visible = true;
     }
 
     serialize() {
-      return { taxi: { done: this.taxi.done, earned: this.taxi.earned }, jumps: this.jumpsDone, lanterns: this.lanternsFound };
+      return { taxi: { done: this.taxi.done, earned: this.taxi.earned }, jumps: this.jumpsDone, lanterns: this.lanternsFound, heardFares: this.heardFares || {} };
     }
 
     load(d) {
@@ -416,6 +470,7 @@
       this.taxi.earned = (d.taxi && d.taxi.earned) || 0;
       this.jumpsDone = d.jumps || {};
       this.lanternsFound = d.lanterns || {};
+      this.heardFares = d.heardFares || {};
       for (const L of this.lanterns) L.m.visible = !this.lanternsFound[L.id];
     }
 

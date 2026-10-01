@@ -268,8 +268,15 @@
 
     update() {
       const job = this.current;
-      if (!job || job.i >= job.lines.length) return;
       const now = performance.now();
+      // Time spent paused (no updates) doesn't count against the line.
+      const gap = this._lastUpdate ? now - this._lastUpdate : 0;
+      this._lastUpdate = now;
+      if (!job || job.i >= job.lines.length) return;
+      if (gap > 250) {
+        job.until += gap;
+        if (job.hardUntil) job.hardUntil += gap;
+      }
       const timeUp = now >= job.until && (job.speechDone || now >= job.hardUntil);
       if (timeUp) {
         job.i++;

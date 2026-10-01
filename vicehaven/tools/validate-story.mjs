@@ -110,7 +110,7 @@ function steps(where, list, st) {
     switch (kind) {
       case 'say': lines(w, s.say); break;
       case 'scene':
-        if (s.scene.at && !placeOk(s.scene.at) && !st.actors.has(s.scene.at)) bad(w, 'scene place "' + s.scene.at + '" not defined');
+        if (s.scene.at && !placeOk(s.scene.at) && !st.actors.has(s.scene.at) && !st.cars.has(s.scene.at)) bad(w, 'scene place "' + s.scene.at + '" not defined');
         for (const c of s.scene.cast || []) {
           const id = typeof c === 'string' ? c : c.id;
           if (id !== 'jay' && !chars[id]) bad(w, 'cast member "' + id + '" is not a character');
@@ -137,7 +137,7 @@ function steps(where, list, st) {
         for (const e of [].concat(s.spawn)) {
           if (e.char && !chars[e.char]) bad(w, 'spawn char "' + e.char + '" is not a character');
           if (e.faction && !FACTIONS.has(e.faction)) bad(w, 'unknown faction "' + e.faction + '"');
-          if (e.at && !placeOk(e.at) && !st.actors.has(e.at)) bad(w, 'spawn place "' + e.at + '" not defined');
+          if (e.at && !placeOk(e.at) && !st.actors.has(e.at) && !st.cars.has(e.at)) bad(w, 'spawn place "' + e.at + '" not defined');
           if (e.weapon && !WEAPONS.has(e.weapon)) bad(w, 'unknown weapon "' + e.weapon + '"');
           if (e.behavior && !BEHAVIORS.has(e.behavior)) bad(w, 'unknown behavior "' + e.behavior + '"');
           if (e.car && !st.cars.has(e.car)) bad(w, 'spawn car "' + e.car + '" was never spawned');
@@ -231,7 +231,29 @@ for (const ch of story.side || []) {
   for (const m of ch.missions || []) mission(m, false);
 }
 for (const [w, f] of flagsUsed) if (!flagsSet.has(f) && !/^unlocked:/.test(f) && !allMissions.has(f)) soft(w, 'flag "' + f + '" is tested but never set');
-for (const t of story.texts || []) if (t.after && !allMissions.has(t.after)) bad('text', 'after unknown mission "' + t.after + '"');
+for (const t of story.texts || []) {
+  if (t.after && !allMissions.has(t.after)) bad('text', 'after unknown mission "' + t.after + '"');
+  if (!speakers.has(t.from)) bad('text', 'unknown sender "' + t.from + '"');
+}
+// Activities: flavour lines, plus full step lists where an activity overrides the default.
+const act = story.activities || {};
+for (const [i, f] of (act.taxi || []).entries()) {
+  lines('taxi ' + (i + 1), f.lines || []);
+  if (f.after && !allMissions.has(f.after)) bad('taxi ' + (i + 1), 'after unknown mission "' + f.after + '"');
+}
+for (const key of ['races', 'carList', 'bounties', 'turf']) {
+  for (const [i, a] of (act[key] || []).entries()) {
+    const where = key + ' ' + (i + 1);
+    if (a.lines) lines(where, a.lines);
+    if (a.place && !placeOk(a.place)) bad(where, 'place "' + a.place + '" not defined');
+    if (a.type && !CARS.has(a.type)) bad(where, 'unknown car type "' + a.type + '"');
+    if (a.faction && !FACTIONS.has(a.faction)) bad(where, 'unknown faction "' + a.faction + '"');
+    for (const r of [].concat(a.requires || [])) if (!allMissions.has(r) && !/^(race_|list_|bounty_|turf_)/.test(r)) bad(where, 'requires unknown mission "' + r + '"');
+    for (const r of a.rivals || []) if (r.car && !CARS.has(r.car)) bad(where, 'unknown rival car "' + r.car + '"');
+    if (a.steps) steps(where, a.steps, { cars: new Set(), actors: new Set(), groups: new Set() });
+  }
+}
+for (const st of Object.values(act.radio || {})) for (const l of st.lines || []) if (typeof (l.text || l) !== 'string') bad('radio', 'bad radio line');
 
 for (const p of problems) console.log('✗ ' + p);
 for (const p of warn) console.log('· ' + p);

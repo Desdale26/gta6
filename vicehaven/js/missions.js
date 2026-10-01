@@ -186,10 +186,10 @@
 
   /** Runs, then cowers. */
   class FleeBrain {
-    constructor(engine, from) {
+    constructor(engine, from, seconds) {
       this.engine = engine;
       this.from = from;
-      this.t = 6 + Math.random() * 3;
+      this.t = seconds || 6 + Math.random() * 3;
     }
 
     update(a, dt) {
@@ -202,6 +202,32 @@
       } else {
         a.moveSpeed = 0;
         a.anim.cower = 1;
+      }
+    }
+  }
+
+  /** Someone who has left the crew: they walk off and fade out of the scene. */
+  class LeaveBrain {
+    constructor(engine) {
+      this.engine = engine;
+      this.t = 0;
+    }
+
+    update(a, dt) {
+      const game = this.engine.game;
+      this.t += dt;
+      a.anim.talk = game.dialogue.speaker === a.charId ? 1 : Math.max(0, a.anim.talk - dt * 2);
+      if (this.t < 1.2) {
+        a.moveSpeed = 0;
+        return;
+      }
+      const p = game.player.pos;
+      a.heading = dampAngle(a.heading, Math.atan2(a.pos.x - p.x, a.pos.z - p.z), 2, dt);
+      a.moveSpeed = 1.4;
+      const d = Math.hypot(a.pos.x - p.x, a.pos.z - p.z);
+      if ((d > 35 && !game.isVisible(a.pos.x, a.pos.y + 1, a.pos.z, 1)) || d > 70 || this.t > 40) {
+        a.hidden = true;
+        a.moveSpeed = 0;
       }
     }
   }
@@ -592,7 +618,7 @@
         case 'choice':
           return this._choice(step, run);
         case 'if': {
-          const ok = MissionEngine.testFlag(this.flags, step.if);
+          const ok = MissionEngine.testFlag(Object.assign({}, this.completed, this.flags), step.if); // mission ids count as flags once passed
           const branch = ok ? step.then : step.else;
           if (branch) {
             run.depth = (run.depth || 0) + 1;
@@ -758,7 +784,7 @@
             if (hostile) run.targets.push(a);
           } else {
             a = game.crowd.spawn(x, z, opts);
-            a.brain = behavior === 'flee' ? new FleeBrain(this) : behavior === 'cower' ? { update: (ag) => { ag.moveSpeed = 0; ag.anim.cower = 1; } } : behavior === 'wander' ? null : new IdleBrain(this);
+            a.brain = behavior === 'flee' ? new FleeBrain(this, null, e.flee) : behavior === 'cower' ? { update: (ag) => { ag.moveSpeed = 0; ag.anim.cower = 1; } } : behavior === 'wander' ? null : new IdleBrain(this);
             if (behavior === 'follow') a.brain = new CrewBrain(this, e.weapon);
           }
           a.charId = e.char || null;
@@ -812,7 +838,7 @@
         const car = a.inCar;
         a.brain._getOut && a.brain._getOut(a, car);
       }
-      a.brain = new IdleBrain(this);
+      a.brain = new LeaveBrain(this);
       a.faction = 'story';
       a.leaving = true;
     }
@@ -836,6 +862,15 @@
       if (step.offset) {
         x += step.offset[0];
         z += step.offset[1];
+      }
+      // Don't stack cars: slide along the kerb until the spot is free.
+      if (!step.exact) {
+        for (let k = 0; k < 6; k++) {
+          const blocked = game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < 5.6);
+          if (!blocked) break;
+          x += Math.sin(heading) * 6.6;
+          z += Math.cos(heading) * 6.6;
+        }
       }
       const type = VH.Vehicle.typeSpec(step.type) ? step.type : 'halcyon';
       const v = game.vehicles.spawn(type, x, z, heading, { color: step.color, role: 'mission', persistent: true });
@@ -946,15 +981,29 @@
         game.hud.setFade(0, 500);
       }
       const place = this._place(sc.at) || p.pos;
+      // A scene somewhere else: cut there.
+      if (Math.hypot(place.x - p.pos.x, place.z - p.pos.z) > 40) {
+        game.hud.setFade(1, 400);
+        await this._sleep(0.45, run);
+        p.teleport(place.x - Math.sin(place.yaw || 0) * 3, place.z - Math.cos(place.yaw || 0) * 3, place.yaw || 0);
+        game.hud.setFade(0, 500);
+      }
       const cast = [];
       (sc.cast || []).forEach((c, i) => {
         const id = typeof c === 'string' ? c : c.id;
         if (id === 'jay') return;
         let a = run.actors.get(id);
+        const ang = Math.PI * 0.6 + i * 0.9;
+        const cx = place.x + Math.sin((place.yaw || 0) + ang) * 2.2;
+        const cz = place.z + Math.cos((place.yaw || 0) + ang) * 2.2;
+        // Someone who walked off earlier, or is across town: they're here now.
+        if (a && !a.dead && !a.inCar && (a.hidden || a.leaving || Math.hypot(a.pos.x - place.x, a.pos.z - place.z) > 30)) {
+          a.hidden = false;
+          a.leaving = false;
+          a.pos.set(cx, game.physics.groundHeight(cx, cz, a.pos.y + 20), cz);
+          if (!run.crew.includes(id)) a.brain = new IdleBrain(this);
+        }
         if (!a || a.dead) {
-          const ang = Math.PI * 0.6 + i * 0.9;
-          const cx = place.x + Math.sin((place.yaw || 0) + ang) * 2.2;
-          const cz = place.z + Math.cos((place.yaw || 0) + ang) * 2.2;
           a = game.crowd.spawn(cx, cz, { look: this.lookFor(id) || VH.Crowd.randomLook(), faction: 'story', role: 'story', persistent: true, health: 200, name: (this.story.characters[id] || {}).name });
           a.charId = id;
           a.brain = new IdleBrain(this);
@@ -1443,7 +1492,10 @@
       if (next) setTimeout(() => this.start(next), 4200);
       // Ambient texts after this mission.
       for (const t of this.story.texts || []) {
-        if (t.after === m.id) setTimeout(() => game.dialogue.text(t.from, t.message), (t.delay || 20) * 1000);
+        if (t.after !== m.id || (t.requiresFlag && !MissionEngine.testFlag(Object.assign({}, this.completed, this.flags), t.requiresFlag))) continue;
+        setTimeout(() => {
+          if (!this.run || !this.run.m._main) game.dialogue.text(t.from, t.message);
+        }, (t.delay || 20) * 1000);
       }
     }
 

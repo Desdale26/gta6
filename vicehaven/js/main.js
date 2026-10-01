@@ -252,7 +252,9 @@
       if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
       if (this.radio) this.radio.onSongChange = (e) => {
-        if (this.player.inVehicle) this.hud.nowPlaying(e.station, e.title, e.artist);
+        if (!this.player.inVehicle) return;
+        this.hud.nowPlaying(e.station, e.title, e.artist);
+        this._djLink(e.index);
       };
 
       // Warm up: reflections, then compile every shader before the first frame.
@@ -311,7 +313,7 @@
       });
       VH.events.on('ui:click', () => audio.click());
       VH.events.on('input:lockchange', (e) => {
-        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus')) this.pause();
+        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice)) this.pause(); // a choice frees the mouse on purpose
       });
       VH.events.on('input:lockerror', () => {
         if (this.state === 'playing') this.hud.showToast('Click the game to capture the mouse');
@@ -784,6 +786,30 @@
         if (t) text = (t.v.driver === 'ai' ? 'Steal the ' : 'Get in the ') + t.v.name;
       }
       this.hud.setVehiclePrompt(text, this.input.labelFor('vehicle'));
+    },
+
+    /** Between songs the station's host sometimes says something. */
+    _djLink(index) {
+      const stations = (VH.Data.story && VH.Data.story.activities && VH.Data.story.activities.radio) || [];
+      const st = stations[index];
+      if (!st || !this.dialogue || this.dialogue.active || Math.random() > 0.55) return;
+      const m = this.missions;
+      const unlocked = (l) => (!l.after || (m && m.completed[l.after])) && (!l.flag || (m && m.flags[l.flag]));
+      const open = st.lines.filter(unlocked);
+      // Topical lines (ones that follow a story beat) get first go.
+      this._djHeard = this._djHeard || {};
+      const fresh = open.filter((l) => !this._djHeard[l.text]);
+      const topical = fresh.filter((l) => l.after || l.flag);
+      const pool = topical.length ? topical : fresh.length ? fresh : open;
+      const line = pool[Math.floor(Math.random() * pool.length)];
+      if (!line) return;
+      this._djHeard[line.text] = true;
+      const c = (VH.Data.story.characters || {})[st.dj] || { name: 'Radio' };
+      setTimeout(() => {
+        if (!this.player.inVehicle || this.dialogue.active || (this.radio && this.radio.station.index !== index)) return;
+        this.dialogue.radio(c.name, line.text, false);
+        if (this.settings.get('gameplay.voicedDialogue')) this.dialogue._speak(st.dj, line.text);
+      }, 1800);
     },
 
     /** Is a point (roughly) on screen? Used to avoid popping things in under the player's nose. */
