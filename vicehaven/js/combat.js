@@ -435,8 +435,9 @@
       const m = VH.WeaponModels.build(w.id);
       if (!m) return;
       // The hand sits at the end of the forearm (y ≈ -0.3), fingers toward +Z.
+      // Barrel (+Z) along the forearm (-Y of the hand), top of the gun facing forward.
       m.position.set(0, -0.31, 0.03);
-      m.rotation.set(-Math.PI / 2, 0, 0);
+      m.rotation.set(Math.PI / 2, 0, 0);
       m.traverse((o) => {
         if (o.isMesh) o.castShadow = true;
       });
@@ -752,10 +753,10 @@
         const hy = oy + ray.d.y * hit.t;
         const hz = oz + ray.d.z * hit.t;
         if (w.tracer !== false && (i === 0 || Math.random() < 0.3)) g.fx.tracer(muzzle.x, muzzle.y, muzzle.z, hx, hy, hz);
-        const fall = w.falloff ? clamp(1 - Math.max(0, hit.t - w.falloff) / range, 0.35, 1) : 1;
+        const dmgAt = (head) => (VH.Data.weaponDamage ? VH.Data.weaponDamage(w, hit.t, head) : (w.damage || 25) * (head ? w.headshotMult || 2.5 : 1));
         if (hit.type === 'agent') {
           const a = hit.agent;
-          const dmg = (w.damage || 25) * (hit.head ? w.headshotMult || 2.5 : 1) * fall;
+          const dmg = dmgAt(hit.head);
           a.damage(dmg, 'player', 'bullet');
           if (a.brain && a.brain.setAlert) a.brain.setAlert(a);
           g.fx.impact(hx, hy, hz, -ray.d.x, -ray.d.y, -ray.d.z, 'flesh');
@@ -768,7 +769,7 @@
           }
           hitSomething = true;
         } else if (hit.type === 'car') {
-          hit.v.damage((w.damage || 25) * 0.45 * fall, 'player', 'bullet');
+          hit.v.damage(dmgAt(false) * 0.45, 'player', 'bullet');
           hit.v.wake();
           g.fx.impact(hx, hy, hz, -ray.d.x, 0, -ray.d.z, 'car');
           if (g.audio.bulletImpact) g.audio.bulletImpact('car', this.pan(hx, hz), this.gain(hx, hz, 8));
@@ -938,7 +939,8 @@
       // Did the shot reach Jay (not a wall in between)?
       if (hit && (tr.type === 'none' || tr.t >= len - 0.6 || (tr.type === 'car' && target.driver === 'player' && tr.v === target))) {
         endT = len;
-        const dmg = (w.damage || 20) * 0.55 * (w.pellets ? Math.min(w.pellets, 4) * 0.55 : 1);
+        const base = VH.Data.weaponDamage ? VH.Data.weaponDamage(w, len, false) : w.damage || 20;
+        const dmg = base * 0.55 * (w.pellets ? Math.min(w.pellets, 4) * 0.55 : 1);
         if (target === p) {
           p.damage(dmg, 'bullet');
           VH.events.emit('player:shot', { from: a, x: mx, z: mz, damage: dmg });

@@ -454,3 +454,31 @@ select {
   border-color: rgba(255, 138, 122, 0.45);
   color: #ffb4a8;
 }
+
+.continue-info {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+.dialog-list.joblog li {
+  margin-bottom: 0.45rem;
+}
+
+.dialog-list.joblog li.done {
+  opacity: 0.55;
+}
+
+.dialog-list.joblog li.done b::before {
+  content: '✓ ';
+  color: var(--vh-health);
+}
+
+.dialog-list.joblog li.next b {
+  color: var(--vh-accent-2);
+}
+
+.dialog-list.joblog li.locked {
+  opacity: 0.35;
+}

@@ -862,9 +862,17 @@
       for (let i = 0; i < spikes * 2; i++) {
         const a = (i / (spikes * 2)) * Math.PI * 2;
         const r = i % 2 === 0 ? opts.star : opts.star * 0.38;
-        ring.push(b.vertex(Math.cos(a) * r, Math.sin(a) * r, opts.starZ || 0, 0, 0, 1, col(i % 2 === 0 ? 0 : 0.35)));
+        ring.push(b.vertex(Math.cos(a) * r, Math.sin(a) * r, opts.starZ || 0, 0, 0, 1, col(i % 2 === 0 ? 0 : 0.07)));
       }
       for (let i = 0; i < ring.length; i++) push(centre, ring[i], ring[(i + 1) % ring.length]);
+      // A faint round halo so the flash has a soft glow even before bloom.
+      const hc = b.vertex(0, 0, (opts.starZ || 0) - 0.001, 0, 0, 1, col(0.1));
+      const halo = [];
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        halo.push(b.vertex(Math.cos(a) * opts.star * 1.5, Math.sin(a) * opts.star * 1.5, (opts.starZ || 0) - 0.001, 0, 0, 1, col(0)));
+      }
+      for (let i = 0; i < 16; i++) push(hc, halo[i], halo[(i + 1) % 16]);
     }
     // Petals along +Z (rotated to +Y for flames by the caller).
     const L = opts.length;
@@ -874,13 +882,13 @@
       const ca = Math.cos(a), sa = Math.sin(a);
       const P = (w, z) => [ca * w, sa * w, z];
       const core = P(0, L * 0.28);
-      const v0 = b.vertex(0, 0, 0, n[0], n[1], n[2], col(0.55));
+      const v0 = b.vertex(0, 0, 0, n[0], n[1], n[2], col(0.3));
       const v1 = b.vertex(...P(-W, L * 0.3), 0, 0, 1, col(0));
       const v2 = b.vertex(...core, 0, 0, 1, col(1));
       const v3 = b.vertex(...P(W, L * 0.3), 0, 0, 1, col(0));
       const v4 = b.vertex(0, 0, L, 0, 0, 1, col(0));
-      const v5 = b.vertex(...P(-W * 0.55, L * 0.66), 0, 0, 1, col(0.12));
-      const v6 = b.vertex(...P(W * 0.55, L * 0.66), 0, 0, 1, col(0.12));
+      const v5 = b.vertex(...P(-W * 0.55, L * 0.66), 0, 0, 1, col(0.04));
+      const v6 = b.vertex(...P(W * 0.55, L * 0.66), 0, 0, 1, col(0.04));
       push(v0, v1, v2); push(v0, v2, v3);
       push(v2, v1, v5); push(v2, v6, v3);
       push(v2, v5, v4); push(v2, v4, v6);

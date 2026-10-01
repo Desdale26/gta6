@@ -224,6 +224,12 @@
       progress(0.82, 'Building the waterfront');
       VH.Landmarks.buildWaterfront(this, layout);
       await slicer.tick();
+      progress(0.84, 'Stacking containers in Saltmarsh');
+      if (VH.Docks) this.docks = VH.Docks.build(this, layout);
+      await slicer.tick();
+      progress(0.85, 'Watering the lawns in Crestline');
+      if (VH.Estates) this.estates = VH.Estates.build(this, layout);
+      await slicer.tick();
 
       progress(0.86, 'Planting palms and street lights');
       this._buildBoundary(layout);
@@ -580,6 +586,15 @@
         const fx = Math.sin(spec.yaw);
         const fz = Math.cos(spec.yaw);
         const depth = 0.1;
+        if (spec.flat) {
+          // Painted on the ground (a helipad, a bay number).
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), mat);
+          mesh.rotation.set(-Math.PI / 2, 0, spec.yaw || 0);
+          mesh.position.set(spec.x, spec.y, spec.z);
+          mesh.receiveShadow = true;
+          ctx.chunk.group.add(mesh);
+          continue;
+        }
         const faces = spec.twoSided || spec.posts ? [1, -1] : [1];
         for (const side of faces) {
           const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), mat);

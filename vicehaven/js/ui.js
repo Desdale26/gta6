@@ -177,10 +177,16 @@
       const logo = el('div', 'logo logo-title');
       logo.append(el('span', 'logo-word', 'VICEHAVEN'), el('span', 'logo-sub', 'A city that owes you nothing'));
       const menu = el('nav', 'menu title-menu');
+      this.continueBtn = this._button('Continue', () => this.actions.continueGame(), { primary: true });
+      this.continueInfo = el('span', 'continue-info');
+      this.continueBtn.append(this.continueInfo);
+      this.newGameBtn = this._button('New Game', () => {
+        if (this.actions.hasSave && this.actions.hasSave() && !confirm('Start a new story? Your saved progress will be replaced when the game next saves.')) return;
+        this.actions.newGame();
+      });
       menu.append(
-        this._button('New Game', () => this.actions.newGame(), { primary: true }),
-        this._button('Continue', null, { soon: 'Phase 15' }),
-        this._button('Load Game', null, { soon: 'Phase 15' }),
+        this.continueBtn,
+        this.newGameBtn,
         this._button('Settings', () => this.show('settings', true)),
         this._button('Credits', () => this.show('credits', true)),
         this._button('Quit', () => this.show('quit', true))
@@ -195,6 +201,13 @@
       s.append(left, foot);
     }
 
+    /** Show or hide Continue (info: "Act 2 · 34% · $12,400" or null). */
+    setContinue(info) {
+      this.continueBtn.style.display = info ? '' : 'none';
+      this.continueInfo.textContent = info || '';
+      this.newGameBtn.classList.toggle('btn-primary', !info);
+    }
+
     // ------------------------------------------------------------ pause
     _buildPause() {
       const s = this._screen('pause', 'screen-pause');
@@ -206,16 +219,14 @@
       const menu = el('nav', 'menu pause-menu');
       menu.append(
         this._button('Resume', () => this.actions.resume(), { primary: true }),
-        this._button('Map', null, { soon: 'Phase 14' }),
-        this._button('Missions', null, { soon: 'Phase 9' }),
-        this._button('Inventory', null, { soon: 'Phase 7' }),
+        this._button('City map', () => this.actions.openMap()),
+        this._button('Job log', () => this.openDialog('jobLog')),
         this._button('Settings', () => this.show('settings', true)),
         this._button('Statistics', () => this.show('stats', true)),
-        this._button('Save Game', null, { soon: 'Phase 15' }),
-        this._button('Load Game', null, { soon: 'Phase 15' }),
+        this._button('Save game', () => this.actions.save()),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
       );
-      this.abandonBtn = this._button('Abandon challenge', () => this.actions.abandonChallenge());
+      this.abandonBtn = this._button('Abandon', () => this.actions.abandonChallenge());
       this.abandonBtn.classList.add('btn-warn');
       menu.insertBefore(this.abandonBtn, menu.children[1]);
       const hint = el('div', 'pause-hint', 'Click Resume or press Enter to return to Vicehaven');
@@ -223,8 +234,9 @@
       s.append(panel);
     }
 
-    setChallengeActive(on) {
+    setChallengeActive(on, label) {
       this.abandonBtn.style.display = on ? '' : 'none';
+      this.abandonBtn.querySelector('.btn-label').textContent = label || 'Abandon challenge';
     }
 
     setPauseMeta(text) {
@@ -510,7 +522,17 @@
         kb('interact', 'interact');
         kb('developer overlay', 'debug');
         box.append(keys);
-        p('Cars, traffic, crowds, police and jobs are on their way. For now the city is yours to explore on foot.');
+        p('Press ' + k('vehicle') + ' next to a car to get in. Hold ' + k('weaponWheel') + ' for the weapon wheel, and ' + k('map') + ' opens the city map.');
+      } else if (id === 'jobLog' && this.actions.jobLog) {
+        const log = this.actions.jobLog();
+        box.append(el('div', 'dialog-kicker', log.kicker), el('h2', '', 'Job log'));
+        const ul = el('ul', 'dialog-list joblog');
+        for (const row of log.rows) {
+          const li = el('li', row.state);
+          li.append(el('b', '', row.title), document.createTextNode(' ' + row.text));
+          ul.append(li);
+        }
+        box.append(ul);
       }
       box.append(el('div', 'dialog-close', 'Press E, Enter or Space to close'));
       this.dialog.classList.add('visible');

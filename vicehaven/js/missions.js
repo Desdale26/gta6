@@ -366,7 +366,7 @@
 
     // --------------------------------------------------------- progress
     isAvailable(m) {
-      if (this.completed[m.id]) return false;
+      if (this.completed[m.id] && !m.repeatable) return false;
       for (const r of m.requires || []) if (!this.completed[r]) return false;
       if (m.requiresFlag && !this.flags[m.requiresFlag]) return false;
       return true;
@@ -700,7 +700,7 @@
         skin: L.skin || 0xc68c64, hair: L.hair || 0x1a1410, top: L.top || 0x33415c, trim: L.trim || L.top || 0x33415c,
         shirt: L.shirt || L.top || 0xe9e7e1, bottom: L.bottom || 0x2e3f5c, shoes: L.shoes || 0x202020,
         cap: !!L.hat, longHair: L.longHair !== undefined ? !!L.longHair : (c.voice && c.voice.gender === 'female'), bag: !!L.bag,
-        height: build === 'tall' ? 1.07 : build === 'slim' ? 0.98 : build === 'heavy' ? 1.0 : 1.0,
+        height: L.height || (build === 'tall' ? 1.07 : build === 'slim' ? 0.98 : 1.0),
         build: build === 'heavy' ? 1.16 : build === 'slim' ? 0.9 : 1.0,
       };
     }
@@ -1465,7 +1465,8 @@
       game.frozenControls = false;
       this._cleanup(run, true);
       game.hud.missionResult(false, run.m.title, reason, 'Press ' + game.input.labelFor('interact') + ' to retry' + (run.checkpoint ? ' from the checkpoint' : ''));
-      if (game.audio.fail) game.audio.fail();
+      if (game.audio.missionFailedSting) game.audio.missionFailedSting();
+      else if (game.audio.fail) game.audio.fail();
       this._music('off');
       VH.events.emit('mission:fail', { m: run.m, reason });
       this._retry = { m: run.m, checkpoint: run.checkpoint, pos: this._checkpointPos, until: game.time + 14 };

@@ -459,8 +459,8 @@
       this.soft.emit({
         x: x + (Math.random() - 0.5) * 0.3, y: y + 0.15, z: z + (Math.random() - 0.5) * 0.3,
         vx: vx * 0.2 + (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.7, vz: vz * 0.2 + (Math.random() - 0.5) * 1.2,
-        life: 1.3 + Math.random() * 1.4, size: 0.7, size1: 3.2 + strength * 2,
-        r: c[0], g: c[1], b: c[2], a: 0.32 * strength + 0.08, drag: 1.6, grav: -0.25,
+        life: 1.1 + Math.random() * 1.2, size: 0.5, size1: 1.9 + strength * 1.5,
+        r: c[0] * 0.85, g: c[1] * 0.85, b: c[2] * 0.85, a: 0.14 * strength + 0.04, drag: 1.8, grav: -0.2,
       });
     }
 

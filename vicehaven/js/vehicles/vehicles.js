@@ -99,6 +99,24 @@
       return this.player.vehicle || null;
     }
 
+    onGearShift(v) {
+      if (v.driver === 'player' && this.game.audio.gearShift) this.game.audio.gearShift(0);
+    }
+
+    onLand(v, impact, airTime) {
+      VH.events.emit('vehicle:land', { v, impact, airTime });
+    }
+
+    onExplode(v) {
+      if (v.driver === 'player') {
+        // Jay was inside: that's it.
+        const p = this.player;
+        this.exitVehicle();
+        p.knock(1000, 'explosion');
+      }
+      VH.events.emit('vehicle:explode', { v });
+    }
+
     boostAvailable(v) {
       return v.driver === 'player' && this.nitro > 0.02;
     }

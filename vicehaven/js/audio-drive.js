@@ -1180,6 +1180,130 @@
     this._tone({ t: t + 0.15, freq: 2637, peak: 0.05, decay: 0.45, bus: dest });
   };
 
+  /** Mission failed: a falling minor line over a C minor chord that closes down. */
+  AE.missionFailedSting = function () {
+    if (!this.ready || !this._drvLimit('mfail', 0.5)) return;
+    const t = this.ctx.currentTime + 0.01;
+    const dest = this.ui;
+    chordStab(this, t, [48, 55, 60, 63], 1.3, { dest, level: 0.03, cut0: 2400, cut: 2600, cutEnd: 380, close: 0.6, attack: 0.01, sustain: 0.8, release: 0.3, detunes: [-9, 9] });
+    [[67, 0, 0.2], [63, 0.24, 0.2], [60, 0.48, 0.9]].forEach(([m, d, len], i) => {
+      chordStab(this, t + d, [m + 12], len, { dest, level: 0.05, cut0: 1800, cut: 3200, cutEnd: 900, detunes: [-6, 6], release: 0.2, bend: i === 2 ? -120 : 0 });
+    });
+    this._tone({ t, freq: 90, freqEnd: 45, peak: 0.3, decay: 0.5, bus: dest });
+    this._tone({ t: t + 0.48, freq: 80, freqEnd: 40, peak: 0.35, decay: 0.7, bus: dest });
+  };
+
+  const MOODS = {
+    // A minor (sad) and D major (hope), with a slow top line wandering over chord tones.
+    sad: { notes: [45, 52, 57, 60, 64], top: [71, 72, 76, 69, 72, 67], cut: 850 },
+    hope: { notes: [50, 57, 62, 66, 69], top: [76, 78, 81, 74, 78, 73], cut: 1400 },
+  };
+
+  /**
+   * A quiet ambient pad for story scenes: moodPad('sad'), moodPad('hope'),
+   * moodPad(null) to fade it out. Changing mood crossfades.
+   */
+  AE.moodPad = function (mood) {
+    if (!this.ready) return;
+    const want = MOODS[mood] ? mood : null;
+    const cur = this._moodPad;
+    if (cur && cur.mood === want) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (cur) {
+      this._moodPad = null;
+      clearInterval(cur.timer);
+      cur.out.gain.cancelScheduledValues(t);
+      cur.out.gain.setValueAtTime(cur.out.gain.value, t);
+      cur.out.gain.linearRampToValueAtTime(0, t + 2.5);
+      for (const s of cur.srcs) s.stop(t + 2.7);
+      setTimeout(() => {
+        for (const n of cur.nodes) {
+          try {
+            n.disconnect();
+          } catch (_) {
+            /* gone */
+          }
+        }
+      }, 3200);
+    }
+    if (!want) return;
+    const M = MOODS[want];
+    const nodes = [];
+    const srcs = [];
+    const node = (x) => {
+      nodes.push(x);
+      return x;
+    };
+    const osc = (type, f, det) => {
+      const o = node(ctx.createOscillator());
+      o.type = type;
+      o.frequency.value = f;
+      o.detune.value = det || 0;
+      srcs.push(o);
+      return o;
+    };
+    const gain = (v) => {
+      const g = node(ctx.createGain());
+      g.gain.value = v;
+      return g;
+    };
+    const out = gain(0);
+    out.connect(this.musicBus);
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(1, t + 3.5);
+    const lp = node(ctx.createBiquadFilter());
+    lp.type = 'lowpass';
+    lp.frequency.value = M.cut;
+    lp.Q.value = 0.5;
+    lp.connect(out);
+    // The filter drifts open and closed over about twenty seconds.
+    const fl = osc('sine', 0.047);
+    const flg = gain(M.cut * 0.35);
+    fl.connect(flg);
+    flg.connect(lp.frequency);
+    // Each chord tone breathes at its own slow rate.
+    M.notes.forEach((m, i) => {
+      const vg = gain(0.022);
+      vg.connect(lp);
+      for (const [type, det, lvl] of [['triangle', -6, 1], ['sawtooth', 7, 0.35]]) {
+        const o = osc(type, mtof(m), det);
+        const g = gain(lvl);
+        o.connect(g);
+        g.connect(vg);
+      }
+      const l = osc('sine', 0.06 + i * 0.017);
+      const lg = gain(0.012);
+      l.connect(lg);
+      lg.connect(vg.gain);
+    });
+    // A soft top line that glides to a new chord tone every few seconds.
+    const top = osc('triangle', mtof(M.top[0]));
+    const tg = gain(0.014);
+    top.connect(tg);
+    tg.connect(out);
+    const air = node(ctx.createBufferSource());
+    air.buffer = this.white;
+    air.loop = true;
+    srcs.push(air);
+    const abp = node(ctx.createBiquadFilter());
+    abp.type = 'bandpass';
+    abp.frequency.value = 3200;
+    abp.Q.value = 0.4;
+    const ag = gain(0.006);
+    air.connect(abp);
+    abp.connect(ag);
+    ag.connect(out);
+    for (const s of srcs) s.start(t);
+    const state = { mood: want, out, nodes, srcs, step: 0, timer: null };
+    state.timer = setInterval(() => {
+      if (!this.ctx || this.ctx.state !== 'running') return;
+      state.step = (state.step + 1) % M.top.length;
+      top.frequency.setTargetAtTime(mtof(M.top[state.step]), this.ctx.currentTime, 0.6);
+    }, 5200);
+    this._moodPad = state;
+  };
+
   // ================================================================= radio
   // ------------------------------------------------------------ theory
   const SCALES = {
@@ -1240,7 +1364,19 @@
         }
       }
     }
-    return best;
+    return best && unCluster(best, lo, hi);
+  }
+
+  /** Move one note of a semitone pair by an octave (maj7 chords end up in root position). */
+  function unCluster(v, lo, hi) {
+    for (let k = 1; k < v.length; k++) {
+      if (v[k] - v[k - 1] !== 1) continue;
+      if (v[k - 1] + 12 <= hi + 2) v[k - 1] += 12;
+      else if (v[k] - 12 >= lo - 2) v[k] -= 12;
+      v.sort((a, b) => a - b);
+      break;
+    }
+    return v;
   }
 
   const isChordTone = (deg, root) => {

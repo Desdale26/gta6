@@ -175,6 +175,7 @@
         case 'help':
           this.print('tp <x> <z> | tp <plaza|park|tower|pier|boardwalk|market|downtown|palm|harbor|yard|roof>');
           this.print('noclip · god · heal · hurt <n> · money <n> · armor <n>');
+          this.print('car <type> · heat <0-5> · give <weapon|all> · job <id> · pass <id> · flag <name>');
           this.print('time <0-24> · clouds <0-1> · fov <deg> · quality <low|medium|high|ultra>');
           this.print('colliders · pos · respawn · clear · complete (missions: Phase 9)');
           break;
@@ -204,6 +205,49 @@
         }
         case 'pos':
           this.print(p.pos.x.toFixed(2) + ' ' + p.pos.y.toFixed(2) + ' ' + p.pos.z.toFixed(2));
+          break;
+        case 'car': {
+          // car [type]: a car beside Jay.
+          const type = args[0] && VH.Vehicle.typeSpec(args[0]) ? args[0] : 'vireo';
+          const v = g.vehicles.spawn(type, p.pos.x + Math.cos(p.heading) * 3.5, p.pos.z - Math.sin(p.heading) * 3.5, p.heading, { persistent: true });
+          this.print('Spawned a ' + v.name + ' (types: ' + VH.CarModels.list().join(', ') + ')');
+          break;
+        }
+        case 'heat':
+          g.police.setLevel(num(0, 3), 'debug');
+          g.police._sawPlayer();
+          this.print('Heat ' + g.police.level);
+          break;
+        case 'give': {
+          const id = args[0] || 'all';
+          const ids = id === 'all' ? VH.Data.weapons.map((w) => w.id) : [id];
+          for (const w of ids) g.combat.giveWeapon(w, 999, true);
+          this.print('Gave ' + ids.join(', '));
+          break;
+        }
+        case 'job': {
+          const m = g.missions.all.get(args[0]);
+          if (!m) {
+            this.print('Jobs: ' + Array.from(g.missions.all.keys()).join(', '), 'bad');
+            break;
+          }
+          g.police.reset();
+          g.missions.start(m);
+          this.print('Started ' + m.title);
+          break;
+        }
+        case 'pass': {
+          // pass <jobId>: mark jobs up to and including this one as done.
+          const ids = Array.from(g.missions.all.keys());
+          const upto = ids.indexOf(args[0]);
+          for (let i = 0; i <= upto; i++) g.missions.completed[ids[i]] = true;
+          g.missions.refreshMarkers();
+          this.print('Marked ' + (upto + 1) + ' jobs done');
+          break;
+        }
+        case 'flag':
+          g.missions.flags[args[0]] = true;
+          this.print('Flag ' + args[0]);
           break;
         case 'noclip':
           p.noclip = !p.noclip;

@@ -54,9 +54,20 @@
       return p;
     }
 
+    /** Make `id` another name for `target` (story ids for built-in spots). */
+    alias(id, target) {
+      this.aliases = this.aliases || {};
+      this.aliases[id] = target;
+    }
+
     get(id) {
       if (!id) return null;
       if (typeof id === 'object') return id;
+      if (this.aliases && this.aliases[id] && !this.map.has(id)) {
+        const t = this.get(this.aliases[id]);
+        if (t) this.map.set(id, t);
+        return t;
+      }
       let p = this.map.get(id);
       if (!p && this.defs[id]) p = this._resolve(id, this.defs[id]);
       return p || null;
@@ -92,16 +103,15 @@
 
     /** Places that need the city to be fully built (docks, estates, the precinct, the hospital). */
     finish() {
+      // Story ids that are really the built-in docks and estates spots.
+      this.alias('tidewater_lot', 'pier9_gate');
+      this.alias('crane_row', 'the_quay');
+      this.alias('police_station', 'vpd_central');
+      this.alias('hospital', 'mercy_general');
       if (this.extra.saltmarsh.length && !this.map.has('saltmarsh_docks')) this.add('saltmarsh_docks', Object.assign({ name: 'Saltmarsh Docks' }, this.extra.saltmarsh[0]));
       if (this.extra.crestline.length && !this.map.has('crestline_estates')) this.add('crestline_estates', Object.assign({ name: 'Crestline Estates' }, this.extra.crestline[0]));
-      if (!this.map.has('police_station')) {
-        const p = this._resolve('police_station', { district: 'downtown', kind: 'police_station_front', name: 'Vicehaven Central Precinct' });
-        if (p) this.map.set('police_station', p);
-      }
-      if (!this.map.has('hospital')) {
-        const p = this._resolve('hospital', { district: 'harborpoint', kind: 'hospital_front', name: 'Harbor General Hospital' });
-        if (p) this.map.set('hospital', p);
-      }
+      if (!this.defs.vpd_central) this.defs.vpd_central = { district: 'downtown', kind: 'police_station_front', name: 'VPD Central Precinct' };
+      if (!this.defs.mercy_general) this.defs.mercy_general = { district: 'palmcrescent', kind: 'hospital_front', name: 'St. Agnes Mercy General' };
     }
 
     // ---------------------------------------------------------- resolving

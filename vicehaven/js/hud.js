@@ -165,8 +165,31 @@
       this.carPromptLabel = el('span', 'prompt-label');
       this.carPrompt.append(this.carPromptKey, this.carPromptLabel);
 
+      // Missions: objective line, timer, suspicion meter, title card, result card.
+      this.objText = el('div', 'hud-objtext');
+      this.mTimer = el('div', 'hud-mtimer');
+      this.suspicion = el('div', 'hud-suspicion');
+      this.suspicionFill = el('div', 'fill');
+      this.suspicion.append(el('span', '', 'SUSPICION'), this.suspicionFill);
+      this.mTitle = el('div', 'hud-mtitle');
+      this.mTitleSub = el('div', 'mt-sub');
+      this.mTitleMain = el('div', 'mt-main');
+      this.mTitle.append(this.mTitleSub, this.mTitleMain);
+      this.mResult = el('div', 'hud-mresult');
+      // Combat: current weapon and ammo, hit marker, damage direction.
+      this.weaponBox = el('div', 'hud-weapon');
+      this.weaponIcon = el('div', 'hw-icon');
+      this.weaponName = el('div', 'hw-name');
+      this.weaponAmmo = el('div', 'hw-ammo');
+      this.weaponBox.append(this.weaponIcon, this.weaponName, this.weaponAmmo);
+      this.hitMarker = el('div', 'hud-hitmarker');
+      this.hitMarker.append(el('i'), el('i'), el('i'), el('i'));
+      this.damageArc = el('div', 'hud-damage-arc');
+      this.lowHealth = el('div', 'hud-lowhealth');
+
       r.append(tr, bl, this.crosshair, this.prompt, this.carPrompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
-        this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.speedo, this.vehicleName, this.scorePop, this.knockout, this.fade);
+        this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.speedo, this.vehicleName, this.scorePop,
+        this.objText, this.mTimer, this.suspicion, this.mTitle, this.mResult, this.weaponBox, this.hitMarker, this.damageArc, this.lowHealth, this.knockout, this.fade);
     }
 
     // ------------------------------------------------------- challenge HUD
@@ -279,6 +302,128 @@
       });
     }
 
+    // ----------------------------------------------------------- missions
+    setObjectiveText(text) {
+      this._set('objText', text || '', (v) => {
+        this.objText.textContent = v;
+        this.objText.classList.toggle('visible', !!v);
+        if (v) {
+          this.objText.classList.remove('flash');
+          void this.objText.offsetWidth;
+          this.objText.classList.add('flash');
+        }
+      });
+    }
+
+    setMissionTimer(seconds) {
+      if (seconds === null || seconds === undefined) {
+        this._set('mTimer', '', () => this.mTimer.classList.remove('visible'));
+        return;
+      }
+      const s = Math.max(0, seconds);
+      const txt = Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+      this._set('mTimer', txt, (v) => {
+        this.mTimer.textContent = v;
+        this.mTimer.classList.add('visible');
+        this.mTimer.classList.toggle('critical', s < 10);
+      });
+    }
+
+    setSuspicion(k) {
+      const v = k === null || k === undefined ? -1 : Math.round(Math.min(1, k) * 20);
+      this._set('susp', v, (x) => {
+        this.suspicion.classList.toggle('visible', x >= 0);
+        if (x >= 0) this.suspicionFill.style.width = x * 5 + '%';
+        this.suspicion.classList.toggle('high', x > 12);
+      });
+    }
+
+    missionTitle(title, sub) {
+      this.mTitleMain.textContent = title;
+      this.mTitleSub.textContent = sub || '';
+      this.mTitle.classList.remove('show');
+      void this.mTitle.offsetWidth;
+      this.mTitle.classList.add('show');
+    }
+
+    /** ok: true (job complete), false (failed), null (hide). */
+    missionResult(ok, title, line1, line2) {
+      const r = this.mResult;
+      if (ok === null) {
+        r.classList.remove('show');
+        return;
+      }
+      r.innerHTML = '';
+      r.className = 'hud-mresult ' + (ok ? 'pass' : 'fail');
+      r.append(el('div', 'mr-head', ok ? 'JOB COMPLETE' : 'JOB FAILED'), el('div', 'mr-title', title || ''));
+      if (line1) r.append(el('div', 'mr-line1', line1));
+      if (line2) r.append(el('div', 'mr-line2', line2));
+      void r.offsetWidth;
+      r.classList.add('show');
+      clearTimeout(this._mrTimer);
+      this._mrTimer = setTimeout(() => r.classList.remove('show'), ok ? 6500 : 12000);
+    }
+
+    /** Project the objective marker onto the screen (arrow at the edge when off-screen). */
+    trackObjective(pos, camera) {
+      if (!pos) {
+        this.setObjective(null);
+        return;
+      }
+      const v = this._projV || (this._projV = new THREE.Vector3());
+      v.set(pos.x, (pos.y || 0) + 1.6, pos.z);
+      const camPos = camera.position;
+      const dist = Math.hypot(pos.x - camPos.x, pos.z - camPos.z);
+      v.project(camera);
+      const behind = v.z > 1;
+      let x = v.x;
+      let y = v.y;
+      if (behind) {
+        x = -x;
+        y = -y;
+      }
+      const onScreen = !behind && Math.abs(x) < 0.92 && Math.abs(y) < 0.88;
+      let angle = 0;
+      if (!onScreen) {
+        const m = Math.max(Math.abs(x) / 0.9, Math.abs(y) / 0.85, 1e-3);
+        x /= m;
+        y /= m;
+        angle = Math.atan2(x, y);
+      }
+      this.setObjective({ x: (x * 0.5 + 0.5) * 100, y: (-y * 0.5 + 0.5) * 100, onScreen, angle, dist });
+    }
+
+    // ------------------------------------------------------------- combat
+    setWeapon(w, inv, reloading) {
+      const key = w ? w.id + ':' + (inv ? inv.mag + '/' + inv.ammo : '') + (reloading ? 'r' : '') : '';
+      this._set('weapon', key, () => {
+        const armed = w && w.slot !== 'unarmed';
+        this.weaponBox.classList.toggle('visible', !!armed);
+        if (!armed) return;
+        if (this._weaponIconFor !== w.slot && VH.WeaponWheel && VH.WeaponWheel.icon) {
+          this.weaponIcon.innerHTML = VH.WeaponWheel.icon(w.slot);
+          this._weaponIconFor = w.slot;
+        }
+        this.weaponName.textContent = w.name;
+        this.weaponAmmo.textContent = w.kind === 'melee' ? '' : reloading ? 'RELOADING' : inv ? (w.kind === 'thrown' ? String(inv.mag + inv.ammo) : inv.mag + ' / ' + inv.ammo) : '';
+        this.weaponAmmo.classList.toggle('empty', !!inv && inv.mag === 0 && w.kind !== 'melee');
+      });
+    }
+
+    flashHit() {
+      this.hitMarker.classList.remove('show');
+      void this.hitMarker.offsetWidth;
+      this.hitMarker.classList.add('show');
+    }
+
+    /** Red arc toward whoever just hurt Jay (angle in screen space, 0 = ahead). */
+    damageFrom(angle) {
+      this.damageArc.style.transform = 'translate(-50%, -50%) rotate(' + angle.toFixed(3) + 'rad)';
+      this.damageArc.classList.remove('show');
+      void this.damageArc.offsetWidth;
+      this.damageArc.classList.add('show');
+    }
+
     // ------------------------------------------------------------ driving
     setVehiclePrompt(text, key) {
       this._set('carPrompt', text, (v) => {
@@ -297,6 +442,16 @@
       if (!v) return;
       this.vehicleMake.textContent = v.spec.make || '';
       this.vehicleModel.textContent = v.name;
+      this.vehicleName.classList.remove('show');
+      void this.vehicleName.offsetWidth;
+      this.vehicleName.classList.add('show');
+    }
+
+    /** The radio's now-playing card. */
+    nowPlaying(station, title, artist) {
+      const name = station && station.name ? station.name : station;
+      this.vehicleMake.textContent = name || '';
+      this.vehicleModel.textContent = title ? title + (artist ? ' · ' + artist : '') : 'Radio off';
       this.vehicleName.classList.remove('show');
       void this.vehicleName.offsetWidth;
       this.vehicleName.classList.add('show');
@@ -384,6 +539,7 @@
       this._set('crosshair', p.aimAmount > 0.6 && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
       this._set('lockHint', s.playing && !s.locked && VH.features.pointerLock, (v) => this.lockHint.classList.toggle('visible', v));
       this._set('knockout', p.isDead, (v) => this.knockout.classList.toggle('visible', v));
+      this._set('lowHealth', p.health < 30 && !p.isDead, (v) => this.lowHealth.classList.toggle('visible', v));
 
       const placeLine = s.place || (s.road ? s.road : s.district.name);
       const subLine = s.place ? [s.road, s.district.name].filter(Boolean).join(' · ') : s.road ? s.district.name : s.district.tagline;

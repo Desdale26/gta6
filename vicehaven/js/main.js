@@ -211,10 +211,23 @@
           quitToTitle: () => this.quitToTitle(),
           getStats: () => this.statsList(),
           abandonChallenge: () => {
-            this.challenges.abandon();
+            if (this.missions && this.missions.run) this.missions.fail('You abandoned the job.');
+            else this.challenges.abandon();
             this.resume();
           },
           challengeActive: () => this.challenges && this.challenges.active,
+          continueGame: () => this.continueGame(),
+          hasSave: () => !!VH.MissionEngine.loadSave(),
+          save: () => {
+            if (this.missions.run) this.hud.notify({ title: 'Can\'t save during a job', text: 'Finish or abandon it first.', icon: '✕', tone: 'bad' });
+            else if (this.police.level > 0) this.hud.notify({ title: 'Can\'t save with the police after you', text: 'Lose them first.', icon: '✕', tone: 'bad' });
+            else if (this.missions.save()) this.ui.setPauseMeta('Saved · ' + new Date().toLocaleTimeString());
+          },
+          openMap: () => {
+            this.resume();
+            setTimeout(() => this.minimap && this.minimap.openFull(), 50);
+          },
+          jobLog: () => this.jobLog(),
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
         },
@@ -226,8 +239,21 @@
       this.dialogue = new VH.Dialogue(this);
       this.police = new VH.Police(this);
       this.combat = new VH.Combat(this);
-      if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root);
+      this.places = new VH.Places(this);
+      if (VH.Docks && this.world.docks) VH.Docks.registerPlaces(this.world.docks, this.places);
+      if (VH.Estates && this.world.estates) VH.Estates.registerPlaces(this.world.estates, this.places);
+      this.places.finish();
+      this.missions = new VH.MissionEngine(this);
+      this.interaction.on('mission', (item) => {
+        this.missions.start(item.mission);
+        return 1.5;
+      });
+      if (VH.Activities) this.activities = new VH.Activities(this);
+      if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
+      if (this.radio) this.radio.onSongChange = (e) => {
+        if (this.player.inVehicle) this.hud.nowPlaying(e.station, e.title, e.artist);
+      };
 
       // Warm up: reflections, then compile every shader before the first frame.
       Loading.set(0.93, 'Mixing the sunset');
@@ -246,6 +272,7 @@
       Loading.done();
       this.toTitle();
       this._last = performance.now();
+      this.ui.setContinue(this._saveInfo());
       requestAnimationFrame((t) => this._frame(t));
       console.info('[Vicehaven] ready in ' + ((performance.now() - VHBoot.started) / 1000).toFixed(1) + ' s —',
         this.world.stats.buildings, 'buildings,', this.world.stats.props, 'props,', this.world.stats.colliders, 'colliders');
@@ -302,6 +329,15 @@
         else if (e.v.role !== 'mission') this.player.stats.carsStolen++;
         this.hud.showVehicle(e.v);
         if (this.radio) this.radio.setActive(true);
+      });
+      VH.events.on('player:shot', (e) => {
+        // Which way did it come from, relative to the camera?
+        const cam = this.renderer.camera;
+        const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+        const a = Math.atan2(e.x - this.player.pos.x, e.z - this.player.pos.z) - Math.atan2(fwd.x, fwd.z);
+        this.hud.damageFrom(-a);
+        if (this.renderer.post) this.renderer.post.pulse(0.25, [1, 0.05, 0.05]);
+        this.cameraRig.addShake(0.12);
       });
       VH.events.on('vehicle:exit', () => {
         this.hud.showVehicle(null);
@@ -366,6 +402,59 @@
       document.body.classList.add('in-menu');
     },
 
+    /** A fresh world: no leftovers from a previous session. */
+    _resetWorld() {
+      if (this.missions) this.missions.reset();
+      this.dialogue.stop();
+      this.police.reset();
+      this.vehicles.clear(true);
+      this.crowd.clear();
+      this.fx.clearDebris();
+      this.combat.load(null);
+      if (this.activities) this.activities.reset();
+      this.player.state = 'ground';
+      this.player.vehicle = null;
+      this.player.model.setVisible(true);
+      this.hud.showVehicle(null);
+      this.hud.missionResult(null);
+      if (this.radio) this.radio.setActive(false);
+      document.body.classList.remove('cutscene');
+    },
+
+    _saveInfo() {
+      const d = VH.MissionEngine.loadSave();
+      if (!d) return null;
+      const done = Object.keys(d.completed || {}).length;
+      const total = this.missions ? this.missions.all.size : 0;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      const t = Math.floor(d.playTime || 0);
+      return pct + '% · ' + Math.floor(t / 3600) + 'h ' + String(Math.floor((t % 3600) / 60)).padStart(2, '0') + 'm · ' + VH.util.formatMoney(d.money || 0);
+    },
+
+    continueGame() {
+      const data = VH.MissionEngine.loadSave();
+      if (!data) return this.newGame();
+      this.input.requestLock();
+      this.audio.unlock();
+      this.audio.setPaused(false);
+      this.environment.setShadowExtent(null);
+      this.ui.hideAll();
+      document.body.classList.remove('in-menu');
+      this._resetWorld();
+      this.player.respawn();
+      this.missions.load(data);
+      this.cameraRig.snapBehind(this.player);
+      this.hud.resetChecklist();
+      this.hud.show(true);
+      this.hud.setFade(1, 0);
+      this.state = 'intro';
+      this._introTime = 0;
+      this._continuing = true;
+      const d = this.world.districtAt(this.player.pos.x, this.player.pos.z);
+      this.ui.showIntro((this.world.placeAt(this.player.pos.x, this.player.pos.z) || d.name) + ' · ' + this.environment.clockText(), 'Welcome back.');
+      requestAnimationFrame(() => this.hud.setFade(0, 1400));
+    },
+
     newGame() {
       this.input.requestLock();
       this.audio.unlock();
@@ -373,8 +462,13 @@
       this.environment.setShadowExtent(null);
       this.ui.hideAll();
       document.body.classList.remove('in-menu');
-      this.player.money = 2500;
+      this._resetWorld();
+      this._continuing = false;
+      this.environment.setTime(17.2);
+      this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
+      this.player.money = 340;
       this.player.armor = 0;
+      for (const k of Object.keys(this.player.stats)) this.player.stats[k] = 0;
       this.player.respawn();
       this.cameraRig.snapBehind(this.player);
       this.cameraRig.modeIndex = 0;
@@ -396,7 +490,36 @@
       this.input.takeMouseDelta();
       this._acc = 0;
       if (!this.input.locked) this.input.requestLock();
-      this.hud.notify({ title: 'Welcome back, Jay', text: 'Try the checklist on the right. Press ' + this.input.labelFor('interact') + ' at the city guide for directions.', icon: '☀', duration: 6500 });
+      this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
+      this.missions.refreshMarkers();
+      if (this._continuing) return;
+      // A new story: the first job starts by itself.
+      const first = this.missions.nextMain;
+      if (first && (first.start === 'auto' || first.start === 'intro')) setTimeout(() => this.missions.start(first), 600);
+      else this.hud.notify({ title: 'Welcome back, Jay', text: 'Look for the glowing markers on the map (' + this.input.labelFor('map') + ') to find work.', icon: '☀', duration: 6500 });
+    },
+
+    /** Rows for the pause menu's job log. */
+    jobLog() {
+      const m = this.missions;
+      const rows = [];
+      const pr = m.progress;
+      for (const job of m.main) {
+        const done = !!m.completed[job.id];
+        const avail = m.isAvailable(job);
+        if (!done && !avail) {
+          rows.push({ title: 'Act ' + (job.act || 1) + ' · ???', text: '', state: 'locked' });
+          break;
+        }
+        rows.push({ title: job.title, text: done ? job.summary || '' : 'Next: ' + (job.summary || '') + ' (' + ((this.places.get(job.start) || {}).name || 'see the map') + ')', state: done ? 'done' : 'next' });
+      }
+      for (const chain of m.side) {
+        const next = chain.missions.find((j) => !m.completed[j.id]);
+        const doneN = chain.missions.filter((j) => m.completed[j.id]).length;
+        if (!next && doneN) rows.push({ title: chain.title, text: 'Complete', state: 'done' });
+        else if (next && m.isAvailable(next)) rows.push({ title: chain.title + ' (' + doneN + '/' + chain.missions.length + ')', text: next.title + ' at ' + ((this.places.get(next.start) || {}).name || '?'), state: 'next' });
+      }
+      return { kicker: pr.done + ' of ' + pr.total + ' jobs · ' + Math.round(pr.pct * 100) + '% complete', rows };
     },
 
     pause() {
@@ -432,6 +555,11 @@
 
     quitToTitle() {
       this.challenges.abandon(true);
+      if (this.missions.run) this.missions.fail('You quit the job.');
+      this.dialogue.stop();
+      this.police.reset();
+      this.hud.missionResult(null);
+      this.ui.setContinue(this._saveInfo());
       this.input.exitLock();
       this.audio.setPaused(false);
       this.audio.stopMusic(0.2);
@@ -505,7 +633,11 @@
         this.environment.update(FIXED_DT, this.player.renderPos);
         this.traffic.update(FIXED_DT, this.player.pos);
         this.crowd.update(FIXED_DT, this.player.pos);
-        if (this.state === 'playing') this.police.update(FIXED_DT);
+        if (this.state === 'playing') {
+          this.police.update(FIXED_DT);
+          this.missions.update(FIXED_DT);
+          if (this.activities) this.activities.update(FIXED_DT);
+        }
         this.dialogue.update();
         this.vehicleFeedback.update(FIXED_DT);
         this.fx.setNight(this.environment.shared.uWindowGlow.value);
@@ -801,7 +933,7 @@
           cam.quaternion.slerpQuaternions(q0, q1, t * t);
         }
         cam.updateMatrixWorld();
-      } else {
+      } else if (!(this.missions && this.missions.updateCamera(dt, this.renderer.camera))) {
         this.cameraRig.update(dt, player);
       }
       this._updateFrustum();
@@ -811,8 +943,15 @@
       if (this.environment.clockRunning) this.world.setNightFactor(glow);
       this.traffic.update(sdt, player.pos);
       this.crowd.update(sdt, player.pos);
-      if (this.state === 'playing' || this.state === 'dialog') this.police.update(sdt);
+      if (this.state === 'playing' || this.state === 'dialog') {
+        this.police.update(sdt);
+        this.missions.update(sdt);
+        if (this.activities) this.activities.update(sdt);
+      }
       this.dialogue.update();
+      const cw = this.combat.weapon;
+      this.hud.setWeapon(cw, this.combat.inventory[cw.id], this.combat.reloading);
+      if (this.combat.hitMarkerT > 0.17) this.hud.flashHit();
       this.hud.setHeat(this.police.level, !this.police.seen && this.police.level > 0, this.police.bust);
       this.vehicleFeedback.update(sdt);
       this.fx.setNight(glow);

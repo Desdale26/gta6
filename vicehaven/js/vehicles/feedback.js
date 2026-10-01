@@ -155,7 +155,7 @@
             const wx = v.renderPos.x + wheels[i].x * c + wheels[i].z * s;
             const wz = v.renderPos.z - wheels[i].x * s + wheels[i].z * c;
             fx.skids.add(v.id * 4 + i, wx, v.renderPos.y, wz, 0, 0, k, 0.24, false);
-            if (k > 0.3 && Math.random() < k * (v.surface === 'asphalt' ? 0.55 : 0.8) * dt * 60 * 0.5) {
+            if (k > 0.3 && Math.random() < k * (v.surface === 'asphalt' ? 0.3 : 0.6) * dt * 60 * 0.5) {
               fx.tyreSmoke(wx, v.renderPos.y, wz, k, v.vel.x, v.vel.z, v.surface);
             }
           }

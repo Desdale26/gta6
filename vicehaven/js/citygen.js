@@ -18,6 +18,13 @@
   const SIDEWALK = 4;
   const LANE = 3.5;
 
+  /** Roads outside the downtown grid (the docks and the estates). */
+  const EXTRA_ROADS = [
+    { id: 'crestline', kind: 'avenue', axis: 'z', coord: -510, width: 14, name: 'Crestline Drive', from: -380, to: 380 },
+    { id: 'harbor_rd', kind: 'street', axis: 'x', coord: 470, width: 16, name: 'Harbor Road', from: 0, to: 410 },
+    { id: 'quay_st', kind: 'street', axis: 'x', coord: 580, width: 14, name: 'Quay Street', from: 0, to: 410 },
+  ];
+
   const CONFIG = {
     lines: LINES,
     sidewalk: SIDEWALK,
@@ -110,7 +117,16 @@
         name: names.streets[String(z)] || 'Street', from: minLine, to: maxLine,
       };
       if (z === 0) road.from = -620; // Meridian Boulevard leads west out of town
+      // Anchor and Heron Streets run west to Crestline Estates.
+      if (z === -288 || z === 288) road.from = -620;
       layout.roads.push(road);
+    }
+    // Pelican Avenue carries on south into Saltmarsh Docks.
+    const pelican = layout.roads.find((r) => r.axis === 'z' && r.coord === 288);
+    if (pelican) pelican.to = 620;
+    // Crestline Drive, through the estates; Harbor Road and Quay Street across the port.
+    for (const extra of EXTRA_ROADS) {
+      layout.roads.push(Object.assign({ median: 0 }, extra));
     }
     for (const r of layout.roads) {
       const perDir = Math.max(1, Math.floor((r.width - r.median - 1) / 2 / LANE));
@@ -124,12 +140,13 @@
       for (const s of streets) {
         if (s.coord < a.from || s.coord > a.to || a.coord < s.from || a.coord > s.to) continue;
         const corner = (a.coord === minLine || a.coord === maxLine) && (s.coord === minLine || s.coord === maxLine);
+        const inGrid = a.coord >= minLine && a.coord <= maxLine && s.coord >= minLine && s.coord <= maxLine;
         layout.intersections.push({
           id: 'x' + a.coord + '_' + s.coord,
           x: a.coord, z: s.coord,
           halfX: a.width / 2, halfZ: s.width / 2,
           avenue: a, street: s,
-          signal: !corner,
+          signal: !corner && inGrid,
           // Cross-walks on every leg that has road beyond the junction.
           legs: {
             n: s.coord > a.from, s: s.coord < a.to,
@@ -300,5 +317,5 @@
     return best ? best.name : null;
   }
 
-  VH.CityGen = { CONFIG, generate, districtAt, roadNameAt };
+  VH.CityGen = { CONFIG, EXTRA_ROADS, generate, districtAt, roadNameAt };
 })();
