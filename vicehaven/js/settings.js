@@ -110,7 +110,7 @@
     horn: { label: 'Horn', group: 'Vehicles' },
     lights: { label: 'Headlights / siren', group: 'Vehicles' },
     map: { label: 'City map', group: 'Interface' },
-    phone: { label: 'Phone', group: 'Interface', later: 'Phase 16' },
+    phone: { label: 'Taxi duty on / off (in a cab)', group: 'Vehicles' },
     pause: { label: 'Pause', group: 'Interface', fixed: true },
     debug: { label: 'Developer overlay', group: 'Interface' },
   };

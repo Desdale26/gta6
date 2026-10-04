@@ -125,7 +125,7 @@
         '',
         'World      ' + g.world.stats.buildings + ' buildings · ' + g.world.stats.props + ' props · ' + g.world.stats.colliders + ' colliders',
         'Chunks     ' + g.world.chunks.size + ' · prop batches visible ' + g.world.props.visibleBatches + '/' + g.world.props.meshes.length,
-        'Time       ' + g.environment.clockText() + (g.environment.clockRunning ? '' : ' (clock stopped until Phase 12)'),
+        'Time       ' + g.environment.clockText() + (g.environment.clockRunning ? '' : ' (clock stopped)'),
         'Active NPCs 0 · vehicles 0 · wanted 0   (Phases 4–8)',
       ];
       this.stats.textContent = lines.join('\n');

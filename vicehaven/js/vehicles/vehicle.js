@@ -553,6 +553,7 @@
     // ------------------------------------------------------------- damage
     damage(amount, source, kind) {
       if (this.wrecked || amount <= 0) return;
+      if (this.damageScale) amount *= this.damageScale; // story cars that must survive are tougher
       this.health -= amount;
       if (source) this.lastHitBy = source;
       if (this.health < 150 && this.burning === 0) this.burning = 0.001;

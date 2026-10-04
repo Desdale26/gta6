@@ -21,8 +21,8 @@
   'use strict';
 
   const VH = (window.VH = window.VH || {});
-  VH.VERSION = '0.1.0';
-  VH.BUILD_NAME = 'Phase 1 — Foundation';
+  VH.VERSION = '1.0.0';
+  VH.BUILD_NAME = 'Ten and Two';
 
   // ---------------------------------------------------------------- events
   class EventBus {

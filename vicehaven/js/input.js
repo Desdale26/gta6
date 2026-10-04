@@ -29,7 +29,7 @@
     0: 'jump', //        A / Cross
     1: 'crouch', //      B / Circle
     2: 'reload', //      X / Square
-    3: 'interact', //    Y / Triangle
+    3: ['interact', 'vehicle'], // Y / Triangle: talk, use, get in or out
     4: 'weaponWheel', // LB / L1
     5: 'camera', //      RB / R1
     6: 'aim', //         LT / L2
@@ -38,7 +38,9 @@
     9: 'pause', //       Menu / Options
     10: 'sprint', //     Left stick press
     11: 'lookBehind', // Right stick press
-    12: 'phone', //      D-pad up
+    12: 'phone', //      D-pad up (taxi duty)
+    13: 'horn', //       D-pad down
+    14: 'lights', //     D-pad left
   };
 
   const STICK_DEADZONE = 0.18;
@@ -291,7 +293,7 @@
       const now = new Set();
       gp.buttons.forEach((b, i) => {
         const pressed = typeof b === 'object' ? b.pressed || b.value > 0.5 : b > 0.5;
-        if (pressed && PAD_BUTTONS[i]) now.add(PAD_BUTTONS[i]);
+        if (pressed && PAD_BUTTONS[i]) for (const act of [].concat(PAD_BUTTONS[i])) now.add(act);
       });
       for (const action of now) {
         if (!this._padPrev.has(action) && (this.enabled || action === 'pause')) this._queuePress(action);

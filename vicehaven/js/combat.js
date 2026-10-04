@@ -664,6 +664,7 @@
     _aimRay(spread) {
       const cam = this.game.renderer.camera;
       const dir = this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion);
+      this._aimAssist(dir, cam.position);
       if (spread > 0) {
         const r = Math.sqrt(Math.random()) * spread;
         const a = Math.random() * Math.PI * 2;
@@ -672,6 +673,35 @@
         dir.addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
       }
       return { o: cam.position, d: dir };
+    }
+
+    /**
+     * Aim assist (Settings → Gameplay): a shot that only just misses a hostile
+     * is bent onto their chest. The cone is wider on a controller.
+     */
+    _aimAssist(dir, origin) {
+      const g = this.game;
+      if (!g.settings.get('gameplay.aimAssist')) return;
+      const pad = g.input.lastDevice === 'gamepad';
+      let cone = pad ? 0.1 : 0.04;
+      let best = null;
+      for (const a of g.crowd.agents) {
+        if (a.dead || a.hidden || !a.brain || !a.brain.hostile) continue;
+        const tx = a.pos.x - origin.x;
+        const ty = a.pos.y + 1.2 - origin.y;
+        const tz = a.pos.z - origin.z;
+        const d = Math.hypot(tx, ty, tz);
+        if (d < 2 || d > 70) continue;
+        const ang = Math.acos(clamp((tx * dir.x + ty * dir.y + tz * dir.z) / d, -1, 1));
+        if (ang < cone) {
+          cone = ang;
+          best = [tx / d, ty / d, tz / d];
+        }
+      }
+      if (best) {
+        const k = pad ? 0.85 : 0.6;
+        dir.set(dir.x + (best[0] - dir.x) * k, dir.y + (best[1] - dir.y) * k, dir.z + (best[2] - dir.z) * k).normalize();
+      }
     }
 
     /** First thing a ray hits: a person, a car, or the city. */

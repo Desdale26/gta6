@@ -45,11 +45,11 @@
       label: 'Gameplay',
       items: [
         { path: 'gameplay.difficulty', label: 'Difficulty', type: 'select', options: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']],
-          later: 'Takes effect once combat and police arrive (Phases 7–8).' },
+          help: 'How well enemies and police shoot.' },
         { path: 'gameplay.mouseSensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.2, max: 3, step: 0.05, format: (v) => v.toFixed(2) + '×' },
         { path: 'gameplay.invertY', label: 'Invert vertical look', type: 'toggle' },
         { path: 'gameplay.gamepadSensitivity', label: 'Controller look speed', type: 'range', min: 0.3, max: 2.5, step: 0.05, format: (v) => v.toFixed(2) + '×' },
-        { path: 'gameplay.aimAssist', label: 'Aim assist', type: 'toggle', later: 'Phase 7' },
+        { path: 'gameplay.aimAssist', label: 'Aim assist', type: 'toggle', help: 'Near misses on enemies are pulled onto target (more on a controller).' },
         { path: 'gameplay.cameraShake', label: 'Camera shake', type: 'toggle' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
@@ -58,7 +58,7 @@
     },
     audio: {
       label: 'Audio',
-      note: 'Everything you hear is synthesised live: footsteps, wind, the city and the sea, and the challenge music. Radio stations arrive in Phase 19.',
+      note: 'Everything you hear is synthesised live: engines, gunfire, sirens, the city and the sea, the score and all three radio stations. Dialogue is read by your browser\'s built-in voices (Gameplay → Voiced dialogue).',
       items: [
         { path: 'audio.master', label: 'Master', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
         { path: 'audio.music', label: 'Music & radio', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
@@ -458,7 +458,7 @@
       para('three.js r186 — © 2010–2026 three.js authors, MIT licence.');
       para('Fonts: whatever your system provides (Bahnschrift and Segoe UI on Windows).');
       body.append(el('h3', '', 'This build'));
-      para(VH.BUILD_NAME + ' (v' + VH.VERSION + '): the engine, the downtown test city, Jay on foot, the camera, HUD and menus. Vehicles, traffic, pedestrians, combat, police and missions follow in later phases.');
+      para(VH.BUILD_NAME + ' (v' + VH.VERSION + '): the full city from Crestline Estates to the Saltmarsh docks, 18 cars, 11 weapons, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, body, foot);

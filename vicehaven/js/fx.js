@@ -298,6 +298,9 @@
     }
   `;
 
+  // How much light each kind of pool adds (linear HDR, before tone mapping).
+  const POOL_GAIN = { lamp: 0.2, flood: 0.26, car: 0.16 };
+
   /** Instanced ground-light decals. Each instance is a quad in its own local frame. */
   class LightPools {
     constructor(max, quad, color, name) {
@@ -312,9 +315,11 @@
         fragmentShader: POOL_FRAG,
         transparent: true,
         depthWrite: false,
+        // Additive light: a pool has to show on dark night asphalt, where
+        // multiplying what's already there would leave it black.
         blending: THREE.CustomBlending,
         blendEquation: THREE.AddEquation,
-        blendSrc: THREE.DstColorFactor,
+        blendSrc: THREE.OneFactor,
         blendDst: THREE.OneFactor,
         polygonOffset: true,
         polygonOffsetFactor: -3,
@@ -424,13 +429,31 @@
       this.scene.add(this.carPools.mesh);
     }
 
+    /** Floodlight masts (the docks): big round pools of cold light. */
+    buildFloodPools(floods) {
+      if (!floods || !floods.length) return;
+      this.floodPools = new LightPools(floods.length, { w: 2, d: 2 }, 0xdfe8ff, 'floodlight pools');
+      const m = new THREE.Matrix4();
+      floods.forEach((f, i) => {
+        m.compose(new THREE.Vector3(f.x, f.y || 0.02, f.z), new THREE.Quaternion(), new THREE.Vector3(f.r, 1, f.r));
+        this.floodPools.set(i, m, 0, 0, 1, f.strength || 1, f.tint || null);
+      });
+      this.floodPools.commit();
+      this.floodPools.mesh.visible = false;
+      this.scene.add(this.floodPools.mesh);
+    }
+
     /** Street lamps and headlights fade in at dusk. */
     setNight(n) {
       const k = clamp((n - 0.15) / 0.6, 0, 1);
       if (this.roadPools) {
-        this.roadPools.material.uniforms.uIntensity.value = k * 2.4;
-        this.walkPools.material.uniforms.uIntensity.value = k * 2.4;
+        this.roadPools.material.uniforms.uIntensity.value = k * POOL_GAIN.lamp;
+        this.walkPools.material.uniforms.uIntensity.value = k * POOL_GAIN.lamp;
         this.roadPools.mesh.visible = this.walkPools.mesh.visible = k > 0.01;
+      }
+      if (this.floodPools) {
+        this.floodPools.material.uniforms.uIntensity.value = k * POOL_GAIN.flood;
+        this.floodPools.mesh.visible = k > 0.01;
       }
       this.night = k;
     }
@@ -448,7 +471,7 @@
     endCarPools() {
       if (!this.carPools) return;
       this.carPools.mesh.count = this._carPoolCount;
-      this.carPools.material.uniforms.uIntensity.value = 1;
+      this.carPools.material.uniforms.uIntensity.value = POOL_GAIN.car;
       this.carPools.commit();
     }
 

@@ -225,6 +225,16 @@
     }
   }
 
+  /** A 14 m floodlight mast with a lamp head that glows, and its pool of light. */
+  function floodMast(world, x, z, radius) {
+    const ctx = world.ctxAt(x, z);
+    ctx.prop.box(x - 0.18, 0, z - 0.18, x + 0.18, 14, z + 0.18, VH.col(0x8a9099));
+    ctx.prop.box(x - 1.3, 13.6, z - 0.35, x + 1.3, 14.4, z + 0.35, VH.col(0x2b2f36));
+    ctx.screen.box(x - 1.15, 13.45, z - 0.25, x + 1.15, 13.62, z + 0.25, VH.col(0xf4f7ff, 2.4));
+    world.physics.addBox(x - 0.2, 0, z - 0.2, x + 0.2, 14, z + 0.2, 'pole', F().ALL);
+    (world.floodlights || (world.floodlights = [])).push({ x, z, r: radius, y: 0.03 });
+  }
+
   // ------------------------------------------------------------- docks
   function buildDocks(world, layout) {
     const rng = new VH.RNG('saltmarsh');
@@ -238,6 +248,7 @@
       [13, 391, 281, 462], [295, 391, sea - 0.4, 462], [13, 478, 281, 573], [295, 478, sea - 0.4, 573], [13, 587, 281, 630], [295, 587, sea - 0.4, 630],
     ];
     for (const [x0, z0, x1, z1] of yards) apron(world, x0, z0, x1, z1, 0xb0aea8);
+    for (const [fx, fz] of [[60, 448], [136, 448], [212, 448], [145, 500], [145, 552]]) floodMast(world, fx, fz, 26);
     // Kerbside lamps along the dock roads.
     for (let x = 20; x < 405; x += 32) {
       world.addProp('streetlight', x, 0, 461.3, Math.PI, 1);
@@ -300,6 +311,8 @@
     fence(world, 296, 572, sea - 1, 572, [[340, 352]]);
     spot(344, 486, 0, ['dock', 'street', 'parking'], 'Pier 9 gate');
     for (let x = 322; x < 400; x += 26) world.addProp('streetlight', x, 0, 520, Math.PI / 2, 1.1);
+    // Floodlight masts over the yard: bay 14 is never dark.
+    for (const [fx, fz] of [[326, 496], [326, 548], [366, 496], [366, 548], [384, 536]]) floodMast(world, fx, fz, 24);
 
     // The quay: gantry cranes and a freighter at the berth.
     gantry(world, sea - 12, 500, 0x2b6cb0);

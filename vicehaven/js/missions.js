@@ -36,6 +36,16 @@
 
   // ------------------------------------------------------------ brains
   /** A story character standing about: faces Jay, gestures when speaking. */
+  // Story cars with names of their own ("Lulu", "Constance") don't take "the".
+  const CAR_NAMES = {
+    lulu: 'Lulu', medic12: 'Medic 12', constance: 'Constance', foxes_car: 'the Foxes\' car', dex_tow: 'Dex\'s tow truck',
+    calder_car: 'Calder\'s car', horne_cruiser: 'Horne\'s cruiser', voss_car: 'Voss\'s Sovereign', solace_van: 'Solace\'s van', teo_ride: 'Teo\'s lowrider',
+  };
+  function carRef(v, capital) {
+    const n = v.storyName || 'the ' + v.name;
+    return capital ? n.charAt(0).toUpperCase() + n.slice(1) : n;
+  }
+
   class IdleBrain {
     constructor(engine) {
       this.engine = engine;
@@ -880,6 +890,8 @@
       if (step.locked) v.noEnter = true;
       if (step.police) v.isPolice = true;
       run.cars.set(step.spawnCar, v);
+      if (step.name || CAR_NAMES[step.spawnCar]) v.storyName = step.name || CAR_NAMES[step.spawnCar];
+      if (run.failIf.includes('wrecked:' + step.spawnCar)) v.damageScale = 0.4;
       if (step.watch !== false) run.watchCars.push(v);
       return v;
     }
@@ -925,9 +937,9 @@
         }
         if (carId) {
           const car = run.cars.get(carId);
-          if (car && car.wrecked) throw new MissionFailed('The ' + car.name + ' was wrecked.');
+          if (car && car.wrecked) throw new MissionFailed(carRef(car, true) + ' was wrecked.');
           if (car && v !== car) {
-            this._objective('Get back in the ' + car.name);
+            this._objective('Get back in ' + carRef(car));
             return false;
           }
         }
@@ -957,9 +969,9 @@
       }
       const car = run.cars.get(id);
       if (!car) return;
-      this._objective(step.objective || 'Get in the ' + car.name);
+      this._objective(step.objective || 'Get in ' + carRef(car));
       await this._until(() => {
-        if (car.wrecked) throw new MissionFailed('The ' + car.name + ' was wrecked.');
+        if (car.wrecked) throw new MissionFailed(carRef(car, true) + ' was wrecked.');
         this._setMarker(car.pos, { r: 3, noRing: true });
         return game.player.vehicle === car;
       }, run);
@@ -1197,7 +1209,7 @@
       car.noEnter = true;
       run.targetCars = [car];
       const mode = step.mode || 'wreck';
-      this._objective(step.objective || (mode === 'catch' ? 'Stop the ' + car.name : 'Take out the ' + car.name));
+      this._objective(step.objective || (mode === 'catch' ? 'Stop ' + carRef(car) : 'Take out ' + carRef(car)));
       this._setMarker(null);
       let lostT = 0;
       let boxT = 0;
@@ -1238,7 +1250,7 @@
       const max = step.max || 110;
       let close = 0;
       let far = 0;
-      this._objective(step.objective || 'Follow the ' + car.name + ' — not too close');
+      this._objective(step.objective || 'Follow ' + carRef(car) + ' — not too close');
       this._setMarker(null);
       await this._until(() => {
         const p = game.player;
@@ -1342,12 +1354,12 @@
       this._setMarker(place, { r: 7 });
       if (step.timeLimit) run.pendingTimer = step.timeLimit;
       await this._until(() => {
-        if (car.wrecked || car.health < minHealth) throw new MissionFailed('The ' + car.name + ' is too damaged.');
+        if (car.wrecked || car.health < minHealth) throw new MissionFailed(carRef(car, true) + ' is too damaged.');
         if (game.player.vehicle !== car) {
-          this._objective('Get back in the ' + car.name);
+          this._objective('Get back in ' + carRef(car));
           return false;
         }
-        this._objective(step.objective || 'Deliver the ' + car.name + ' (' + Math.round(car.health / 10) + '% condition)');
+        this._objective(step.objective || 'Deliver ' + carRef(car) + ' (' + Math.round(car.health / 10) + '% condition)');
         return Math.hypot(car.pos.x - place.x, car.pos.z - place.z) < 7 && car.speed < 2;
       }, run);
       this._setMarker(null);
@@ -1687,7 +1699,7 @@
           if (a && a.dead) throw new MissionFailed((a.name || id) + ' died.');
         } else if (kind === 'wrecked') {
           const v = run.cars.get(id);
-          if (v && v.wrecked) throw new MissionFailed('The ' + v.name + ' was destroyed.');
+          if (v && v.wrecked) throw new MissionFailed(carRef(v, true) + ' was destroyed.');
         } else if (kind === 'left') {
           const a = run.actors.get(id);
           if (a && !a.inCar && Math.hypot(a.pos.x - this.game.player.pos.x, a.pos.z - this.game.player.pos.z) > 160) throw new MissionFailed('You left ' + (a.name || id) + ' behind.');

@@ -440,8 +440,9 @@
       this.speedo.classList.toggle('visible', !!v);
       document.body.classList.toggle('driving', !!v);
       if (!v) return;
-      this.vehicleMake.textContent = v.spec.make || '';
-      this.vehicleModel.textContent = v.name;
+      // A story car shows its own name ("Lulu") over the make and model.
+      this.vehicleMake.textContent = v.storyName ? (v.spec.make || '') + ' ' + v.name : v.spec.make || '';
+      this.vehicleModel.textContent = v.storyName ? v.storyName.replace(/^the /, '') : v.name;
       this.vehicleName.classList.remove('show');
       void this.vehicleName.offsetWidth;
       this.vehicleName.classList.add('show');

@@ -21,8 +21,8 @@
 
   // Sun elevation (sin of altitude) → colours. Hex values are sRGB.
   const KEYS = [
-    { s: -0.4, zenith: 0x03060f, horizon: 0x0d1428, light: 0x8ea8ff, intensity: 0.55, env: 0.5, exposure: 1.7 },
-    { s: -0.12, zenith: 0x08102a, horizon: 0x1d2140, light: 0x8ea8ff, intensity: 0.4, env: 0.5, exposure: 1.55 },
+    { s: -0.4, zenith: 0x03060f, horizon: 0x111a32, light: 0x8ea8ff, intensity: 0.8, env: 0.6, exposure: 1.85 },
+    { s: -0.12, zenith: 0x08102a, horizon: 0x222748, light: 0x8ea8ff, intensity: 0.6, env: 0.55, exposure: 1.65 },
     { s: -0.03, zenith: 0x18244a, horizon: 0x6a4a5c, light: 0xff7a4a, intensity: 0.0, env: 0.45, exposure: 1.25 },
     { s: 0.03, zenith: 0x2a4378, horizon: 0xf09a62, light: 0xff9050, intensity: 1.0, env: 0.55, exposure: 1.05 },
     { s: 0.14, zenith: 0x3563a6, horizon: 0xf2c796, light: 0xffc890, intensity: 2.0, env: 0.65, exposure: 1.0 },

@@ -1,224 +1,240 @@
-# VICEHAVEN
+# VICEHAVEN — *Ten and Two*
 
-An original open-world action game built to run straight in **Microsoft
-Edge**: no install, no server and no build step. Everything you see (the
-city, its textures, its signs, even Jay Mercer) is generated from code when
-the page loads.
+An original open-world crime game that runs straight in **Microsoft Edge**:
+no install, no server and no build step. Everything you see and hear (the
+city, its cars and people, the guns, the radio, every voice line) is
+generated from code when the page loads.
 
-This is **Phase 1 — Foundation**: the engine, a playable downtown test city
-and Jay on foot, plus a first *fun pass*: a cinematic look (HDR bloom and
-colour grading), fully synthesised sound and music, and two timed
-challenges with medals, rewards and a ghost of your best run. Vehicles,
-traffic, crowds, combat, police and missions are built on top of it in later
-phases.
+Three years ago Jay Mercer, the best getaway driver Vicehaven ever had,
+drove away from a job that left his girlfriend's little brother dead in
+bay 14 at Pier 9. He has come home to bury his grandmother. Her house is
+padlocked, his mentor is about to walk out of prison, and a developer is
+buying the city block by block with money Jay once helped steal.
+
+- **The story:** 31 main jobs in four acts, four side stories of four jobs
+  each, five big choices that change who lives, who leaves and how it ends,
+  and three endings. About 5½ hours of story and 2 hours of side stories.
+- **Between jobs:** 25 taxi fares, 6 street races, 10 cars on Dex's list,
+  8 bounties, 5 turf wars, 12 stunt jumps and 30 hidden lanterns.
+- **The city:** downtown towers, Old Market alleys, Palm Crescent's pastel
+  streets, the Harbor Point boardwalk and pier, the Saltmarsh container port
+  and the walled mansions of Crestline Estates, with a running day and night.
+- **18 cars, 11 weapons, police with five heat levels and a helicopter,
+  traffic that obeys the lights, crowds that run, three radio stations.**
 
 ---
 
 ## Running it in Microsoft Edge
 
 **Easiest: the single file.** `vicehaven/dist/vicehaven.html` is the whole
-game in one 1.2 MB HTML file (every script, stylesheet and three.js inlined).
-Download it anywhere, for example your Downloads folder or a USB stick, and
-double-click it. It needs nothing else and works offline.
+game in one HTML file (every script, stylesheet and three.js inlined).
+Download it anywhere (your Downloads folder, a USB stick) and double-click
+it. It needs nothing else and works offline.
 
 **Or run the source folder** (this is what you edit):
 
 1. Download or clone this repository and find the **`vicehaven`** folder.
-2. **Double-click `vicehaven/index.html`.** If Windows opens it in a different
-   browser, right-click it → **Open with** → **Microsoft Edge** (or drag the
-   file onto an Edge window).
-3. Wait a couple of seconds while the city is built (the loading bar shows
-   each step), then click **New Game**.
-4. Click inside the game once if the mouse isn't captured. **Esc** releases
-   the mouse and pauses.
+2. **Double-click `vicehaven/index.html`.** If Windows opens it in a
+   different browser, right-click it → **Open with** → **Microsoft Edge**.
+3. Wait a few seconds while the city is built, then click **New Game**.
+4. Click inside the game if the mouse isn't captured. **Esc** releases the
+   mouse and pauses.
 
-That's it. The game works fully offline: three.js is bundled in
-`js/lib/three.min.js`.
+**Saving.** The game saves after every job (and from the pause menu) in the
+browser's storage for that file. **Continue** on the title screen picks up
+where you left off. Opening the same file in the same browser keeps your
+save; a different browser or a private window starts fresh.
 
-**Optional (a local web server).** The game doesn't need one, but it runs
-just the same from any static server, for example
-`npx http-server vicehaven` or `python -m http.server` inside the folder.
+**Voices.** Dialogue is read aloud by the browser's built-in speech voices.
+Edge has natural-sounding voices on Windows 10 and 11. Turn voices off under
+**Settings → Gameplay → Voiced dialogue**; subtitles are always available.
+**Settings → Accessibility → Strong language** bleeps the swearing.
 
 **If you see "Your browser can't run 3D graphics right now":** open
-`edge://settings/system`, turn on *Use graphics acceleration when available*,
-restart Edge, and check `edge://gpu` says WebGL2 is hardware accelerated.
+`edge://settings/system`, turn on *Use graphics acceleration when
+available*, restart Edge, and check `edge://gpu` says WebGL2 is hardware
+accelerated.
 
 ### Quality and performance
 
 On first launch the game picks a preset from your graphics hardware: *High*
-for dedicated GPUs, *Medium* for integrated graphics such as Intel UHD or
-Iris Xe. Change it under **Settings → Graphics**:
+for dedicated GPUs, *Medium* for integrated graphics such as Intel Iris Xe.
+Change it under **Settings → Graphics**:
 
-| Preset | Resolution | Shadows | Draw distance | Anti-aliasing | Post-processing | Good for |
-|--------|-----------:|---------|--------------:|---------------|-----------------|----------|
-| Low    | 75 %       | off     | 520 m         | off           | off             | older laptops |
-| Medium | 90 %       | 1024², 55 m | 720 m     | off           | bloom + grade   | integrated graphics |
-| High   | 100 %      | 2048², 85 m | 950 m     | on (4× MSAA)  | full + grain    | most gaming PCs |
-| Ultra  | 100 % (up to 2× HiDPI) | 4096², 120 m | 1400 m | on  | full + grain    | fast dedicated GPUs |
+| Preset | Resolution | Shadows | Draw distance | Traffic | Post-processing | Good for |
+|--------|-----------:|---------|--------------:|--------:|-----------------|----------|
+| Low    | 75 %       | off     | 520 m         | 10 cars | off             | older laptops |
+| Medium | 90 %       | 1024², 55 m | 720 m     | 15 cars | bloom + grade   | integrated graphics |
+| High   | 100 %      | 2048², 85 m | 950 m     | 20 cars | full + grain    | most gaming PCs |
+| Ultra  | 100 % (up to 2× HiDPI) | 4096², 120 m | 1400 m | 26 cars | full + grain | fast GPUs |
 
-**Resolution scale** is the biggest single lever if the frame rate is low;
-**Post-processing → Off** is the next.
-The FPS counter sits in the top-left (toggle it in Settings).
+**Resolution scale** is the biggest lever if the frame rate is low;
+**Post-processing → Off** is the next. The FPS counter can be switched on
+in Settings.
 
 ---
 
 ## Controls
 
+**On foot**
+
 | Key | Action |
 |-----|--------|
-| **W A S D** | Move (relative to the camera) |
-| **Mouse** | Look around |
+| **W A S D** | Move |
+| **Mouse** | Look |
 | **Shift** (hold) | Sprint |
-| **Space** | Jump. Next to a ledge up to 1.7 m it **climbs**; running at a low wall it **vaults** |
+| **Space** | Jump; climbs ledges up to 1.7 m and vaults low walls |
 | **Ctrl** or **C** | Crouch (toggle) |
 | **Caps Lock** | Walk (toggle) |
-| **Right mouse** (hold) | Aim: tight over-the-shoulder camera, crosshair, guard up |
-| **V** | Camera: close → far → first person |
-| **Mouse wheel** | Camera distance |
-| **B** (hold) | Look behind |
-| **E** | Interact: vending machines, the city guide kiosk, challenge start markers. On a results card, **E** retries |
-| **Esc** | Pause menu (resume with the button or **Enter**) |
-| **F8** | Developer overlay and console |
+| **E** | Talk, start a job (walk into the glowing marker), use things. On a failed job, **E** retries |
+| **F** | Get in a car (or drag the driver out) / get out |
+| **V** · **mouse wheel** · **B** | Camera mode · distance · look behind |
 
-Keys for later systems (F, R, Tab, M, P, H, G, 1–6) are already bound, and
-pressing them now tells you which phase adds that feature. Every key can be
-rebound under **Settings → Controls** (right-click a key there to clear it).
+**Fighting**
 
-**Controllers.** Xbox, PlayStation and most other gamepads work
-automatically through the browser Gamepad API: left stick moves, right stick
-looks, A/Cross jumps, B/Circle crouches, L3 sprints, LT aims, RB changes the
-camera, Y/Triangle interacts, Menu/Options pauses.
+| Key | Action |
+|-----|--------|
+| **Right mouse** (hold) | Aim |
+| **Left mouse** | Fire, swing or throw |
+| **R** | Reload |
+| **Tab** (hold) | **Weapon wheel**: the world slows down; point at a weapon and let go |
+| **1 – 8** | Pick a weapon slot directly |
 
-**About Ctrl.** Browsers reserve Ctrl+W to close the tab, and a web page
-can't block that. That's why crouch is a *toggle* (tap Ctrl, then walk), why
-**C** also crouches, and why the game asks before the tab closes while you're
-playing. Fullscreen mode (Settings → *Toggle fullscreen*) lets Edge hand those
-keys to the game.
+**Driving**
+
+| Key | Action |
+|-----|--------|
+| **W / S** | Accelerate / brake and reverse |
+| **A / D** | Steer |
+| **Space** | Handbrake (hold it into a corner to drift) |
+| **Shift** | Nitro |
+| **F** | Get out (at speed Jay bails out and rolls) |
+| **H** · **G** | Horn · headlights (siren in a police car) |
+| **R** | Next radio station |
+| **Right mouse + left mouse** | Shoot out of the window |
+| **P** | In a cab: taxi duty on or off |
+| **V** | Chase camera · far chase · bonnet |
+
+**Anywhere:** **M** opens the city map (jobs, places, the GPS route),
+**Space** or **Enter** skips a line in a cutscene, **1 / 2 / 3** answer a
+choice, **Esc** pauses (map, job log, save, settings).
+
+Every key can be rebound under **Settings → Controls**. **Controllers**
+(Xbox, PlayStation and most others) work automatically: sticks move and
+look, RT accelerates and LT brakes in a car, RT fires and LT aims on foot,
+A jumps, Y talks and gets in and out of cars, the D-pad does taxi duty
+(up), horn (down) and lights (left), and Menu pauses. **Aim assist** (on by default,
+stronger on a controller) pulls near misses onto an enemy.
 
 ---
 
-## What's in Phase 1
+## The story
 
-**The city.** Nine avenues by nine streets of downtown Vicehaven, with 430
-procedurally generated buildings in four districts that each look different:
+*Ten and Two* is told across four acts over seven weeks at the end of
+hurricane season. The first job starts by itself right after **New Game**.
+After that, jobs appear as glowing markers and icons on the map. Walk into
+one and press **E**. **Esc → Job log** lists what's open, what's done, and
+what each job is about.
 
-- **Downtown / Grand Avenue.** Glass towers on podiums with setbacks, crowns
-  and masts, and the 300 m **Vicehaven Tower**.
-- **Old Market.** Brick shophouses with striped awnings, water tanks and
-  service alleys with dumpsters.
-- **Palm Crescent.** Pastel apartments with balconies, villas with gable
-  roofs and garden walls, and **Founders Park** with a fountain and gazebo.
-- **Harbor Point.** Art-deco style hotels, the timber **boardwalk**, the
-  seawall and **Oceanview Pier** reaching out into the bay.
+| Act | Jobs | What it's about |
+|-----|-----:|-----------------|
+| **1 · Homecoming** | 8 | The funeral, the padlocked house, a new crew, the toolbox with the old cut in it |
+| **2 · Old Engines** | 8 | Augie gets out, the vault in the churchyard, the councilman's pool, the Starlite booth |
+| **3 · The Tally** | 8 | A canary trap, the top of the Crown, the first letter, two-ten, LUGNUT |
+| **4 · Tidewater** | 7 | Jay plans a job for the first time. One night, one convoy, one pier at dawn |
 
-Roads are properly marked (double yellow centre lines, dashed lane dividers,
-stop lines and zebra crossings), with working traffic signals that cycle.
-Kerbs are real 15 cm steps, and there are street lights, palms, trees,
-benches, bins, hydrants, bollards, car parks and alleys. Windows are drawn by
-a shader, so they stay crisp at any distance and light up at night.
+**Side stories** unlock as the main story goes on: *Night Shift* (riding
+nights with Mae on Medic 12), *The Silver Foxes* (three robbers in their
+seventies and one last job), *Dead Air* (a pirate DJ and the city's voice)
+and *The Wedding Car* (a chauffeur, his late wife's car, and his
+granddaughter's wedding). Each one changes something about the endings.
 
-**Civic Plaza** is where Jay starts, and it doubles as a movement test
-ground: stairs and a ramp up to a terrace, crates of 0.5–2 m to climb, vault
-walls of 0.6/1.0/1.4 m, a 3.4 m wall you can only reach from the top crate,
-two Sunfizz vending machines (−$2, +15 health) and a city guide kiosk.
+**Choices.** Five decisions are remembered for the rest of the game: what
+Jay does with the money in the toolbox, whether he trusts the detective,
+who he saves at the top of the Crown, what happens to Dex, and what he asks
+Mae. They change scenes, who turns up when it counts, and which of the
+three endings you can reach.
 
-**Jay Mercer.** A jointed, procedurally animated character with walk, run,
-sprint, crouch, jump, fall, land, climb, vault and a guard pose. Movement
-builds up and slows down instead of snapping. It also has coyote time and
-jump buffering, step-up over kerbs and stairs, mid-air ledge grabs, fall
-damage, a knock-out and respawn, and slow health regeneration up to 50 %.
+**Failing.** If a job fails (Jay is arrested or knocked out, someone who
+matters dies, the cops notice a quiet job), press **E** to retry, from the
+last checkpoint if there was one.
 
-**Camera.** Smoothed third-person orbit with collision, so it slides in
-front of walls rather than through them. Also an over-the-shoulder aim
-camera, close/far/first-person modes, zoom, look-behind, sprint FOV kick and
-landing shake (can be turned off).
+### Between jobs
 
-**Light and sky.** A physically based renderer. It has a procedural sky
-with drifting clouds, a late-afternoon sun with shadows that follow Jay
-(their bias adapts as the sun gets low, so long shadows stay clean), sky
-reflections on glass and water, height-matched fog so distant buildings melt
-into the horizon, and an animated water shader for the bay. Shop fronts glow
-warm from inside. The clock is held at 16:18 for this phase (see *Known
-limitations*).
+- **Taxi fares** (after *Ten and Two*). Get in any cab and press **P**.
+  Pick up a fare, get them there before the meter runs out, and hear their
+  story. 25 passengers, some of whom only turn up later in the story.
+- **Street races** (after *Tick Tock*). Six races from Heron Corner to
+  Crestline. Win all six for a gold Drifter.
+- **Dex's list** (after *The Toolbox*). Ten cars somebody wants. Steal them
+  and bring them in without a scratch.
+- **Bounties** (after *Sons*). Honor Blackwood of Blackwood Bail Bonds has
+  eight people who skipped bail. Each one is a story of its own.
+- **Turf wars** (after *Sons*). Hold a street against Halberd's crews.
+  Winning changes the street (and what the radio says about it).
+- **Stunt jumps.** Twelve ramps around the docks, building sites and the
+  outskirts. Hit one fast for a slow-motion jump.
+- **Lanterns.** Thirty red paper lanterns hidden around the city.
 
-**The look (post-processing).** The scene is rendered in HDR and finished
-in `postfx.js`: a five-level bloom so the sun, lamps, lit windows and glints
-on the water glow instead of clipping; ACES filmic tone mapping; a colour
-grade with cool shadows and warm highlights; a vignette; and fine film grain
-at High. Checkpoint gates and medals flash the screen briefly (turned down
-by *Reduce flashing*).
+---
 
-**Sound.** Everything is synthesised live with Web Audio; there isn't a
-single audio file. There's a city hum, wind that rises when you're high up
-or sprinting, surf and gulls near the bay and the odd distant horn.
-Footsteps change with what's underfoot: concrete, asphalt, grass, wood,
-metal and gravel. Jumps, landings (heavier for bigger drops), climbs and
-purchases have their own sounds. During challenges a tension track plays
-whose drums, bass and arpeggio build as time runs out. The volume sliders
-(master, music, effects, ambience) work live.
+## What's in the city
 
-**Meridian Yard.** A construction site just west of Civic Plaza, with
-shipping containers, scaffolding, a half-built steel frame, a tower crane
-on its own foundations, floodlights, cones and barriers.
+**Vehicles.** 18 cars, from the Pipit hatchback to the Bulwark armoured van
+and Nana Lu's long teal Duchess. Each has its own handling: a tyre model
+with grip, slip and drift, weight transfer, gears, and suspension that
+leaves the ground on ramps. Cars dent, smoke, catch fire and explode.
+Street lights, hydrants, bollards, benches, bins and barriers break when
+you hit them. Nitro,
+skid marks and tyre smoke come with every car.
 
-**Challenges.** Walk into a glowing start marker and press **E**. The screen
-fades, you're placed on the line, and after *3-2-1-GO* the clock runs. Each
-run has checkpoint gates with split times and a direction marker on the HUD
-that shows the distance to the next gate, even through walls.
+**Traffic and people.** Traffic drives on the right, keeps its lane, stops
+at red lights, queues, overtakes parked cars and honks at you. Pedestrians
+walk the blocks, wait at crossings, and scatter from gunfire and
+pavement-driving.
 
-- **Yard Run** (Meridian Yard, free-run, clock counts up). Vault the
-  barriers, leap the gap between containers, climb the scaffold, cross a
-  steel beam half a metre wide nine metres up, then sprint-jump a 3 m gap
-  between the frame's top floors. Fall and you go back to the last
-  checkpoint with +3 s. Gold under 0:36, silver under 0:46, bronze under
-  1:02.
-- **Courier Rush** (Civic Plaza → the end of Oceanview Pier, countdown).
-  You start with 32 seconds, and every checkpoint adds a few more. The
-  route runs over the terrace wall, past Vicehaven Tower, along the avenues
-  and down the pier. Under ten seconds the clock turns amber and starts
-  ticking; under five it goes red and the ticks get sharper. Gold with 18 s left, silver with 10, bronze for just making it.
+**Police.** Crimes that someone sees raise your heat (1–5). Patrol cars
+chase and try to box you in, officers shoot from heat 3, roadblocks go up,
+and from heat 4 a helicopter's searchlight follows you. Break line of sight
+and get out of the search area to lose them. Getting caught costs a fine
+and your ammo; getting knocked out costs a hospital bill.
 
-Medals pay out $100 / $250 / $500 (Courier Rush $150 / $400 / $750). Each
-reward pays once: beating silver after bronze pays the difference. Your
-best time, medal and splits are saved in the browser. The best run is
-recorded and races you as a **translucent ghost** on every retry. The
-results card shows your time, your medal, the next medal's target, the
-splits against your best and falls or time left. **Esc → Abandon challenge**
-quits a run.
+**Weapons.** Fists, a baseball bat, a combat knife, the Kestrel 9 pistol,
+the Hammerhead .44, the Wasp SMG, the Gator 12 shotgun, the Mantis AC-7
+rifle, the Heron LR sniper rifle, frag grenades and molotovs. Guns have
+recoil, spread that grows as you fire, damage that falls off with range,
+and headshots. Enemies take cover, flank and shoot back.
 
-**Interface.** Loading screen, title screen (a slow orbit over the city),
-intro title card, HUD (money, health and armour, location readout with place
-· street · district, district banners, notifications, interaction prompts,
-crosshair, FPS), a *Getting started* checklist that ticks off as you try
-each move, pause menu, statistics, credits, and a full settings screen.
-Settings covers graphics, gameplay, audio levels, accessibility (text size,
-colour-blind friendly HUD, reduced flashing, camera shake, subtitle options)
-and key rebinding. Settings save automatically in the browser.
+**The radio.** Three stations of original, procedurally composed music:
+**VHR 88.1 Sunset Drive** (synthwave, with Del Starr), **Pulse 96.4**
+(house, with Benji Blue) and **Harbor Heat 103.7** (dark beats, with Sable).
+Between songs the hosts talk, and they react to what you've done.
+
+**Time and light.** The clock runs (a full day is about 24 minutes) unless
+you fix the time in Settings. Night brings street-light pools, headlights,
+lit windows and neon. Jobs set their own hour.
 
 ---
 
 ## Developer overlay (F8)
 
-Shows FPS and a frame-time graph, draw calls, triangles, GPU memory
-counters, the JS heap, Jay's position, speed and state, district and street,
-and world counts. While playing, press **Enter** to type a command:
+Shows FPS, draw calls, memory, Jay's position and state. Press **Enter** to
+type a command:
 
 | Command | Does |
 |---------|------|
-| `help` | list commands |
-| `tp <x> <z>` or `tp plaza\|park\|tower\|pier\|boardwalk\|market\|downtown\|palm\|harbor\|yard\|roof` | teleport. It lands on the highest surface, so `tp` into a building puts you on its roof; `tp roof` picks the nearest low one |
-| `noclip` | fly (WASD, Space up, Ctrl down, Shift fast) |
-| `god` | no damage |
-| `heal` / `hurt <n>` / `armor <n>` | health and armour |
-| `money <n>` | add money |
-| `time <0-24>` | set the time of day (try `time 21`) |
-| `clouds <0-1>` | cloud cover |
-| `fov <deg>` / `quality <low\|medium\|high\|ultra>` | graphics |
-| `colliders` | draw nearby collision boxes |
-| `respawn`, `pos`, `clear` | |
+| `help` | List commands |
+| `tp <x> <z>` or `tp plaza\|park\|tower\|pier\|boardwalk\|market\|downtown\|palm\|harbor\|yard\|roof` | Teleport |
+| `car <type>` | A car beside Jay (`car` alone lists the types) |
+| `give <weapon\|all>` | Weapons and ammo |
+| `heat <0-5>` | Set the police heat |
+| `job <id>` · `pass <id>` · `complete` | Start a job · mark jobs up to that one done · pass the current job |
+| `flag <name>` | Set a story flag (for example `flag saved_teo`) |
+| `spawn <faction>` | An enemy in front of Jay |
+| `noclip` · `god` · `heal` · `money <n>` · `armor <n>` | The usual |
+| `time <0-24>` · `clouds <0-1>` · `fov <deg>` · `quality <preset>` | World and graphics |
 
-The console only works while the overlay is open, so it never affects normal
-play. `VH.game` is also available from the browser's own console (F12).
+`VH.game` is also available from the browser's own console (F12).
 
 ---
 
@@ -226,166 +242,93 @@ play. `VH.game` is also available from the browser's own console (F12).
 
 ```
 vicehaven/
-├── index.html            page shell, loading screen, error overlay, script order
-├── css/
-│   ├── style.css         design tokens, loading/error screens, buttons, dialogs, debug overlay
-│   ├── hud.css           heads-up display
-│   └── menus.css         title, pause, settings, statistics, credits
+├── index.html              page shell, loading and error screens, script order
+├── css/                    style, hud, menus, map, dialogue, weapon wheel
 ├── js/
-│   ├── lib/three.min.js  three.js r186 as a classic script (MIT; see tools/build-three.md)
-│   ├── core.js           VH namespace, event bus, maths, seeded RNG + noise, time slicing, feature detection
-│   ├── settings.js       all options, quality presets, key bindings, localStorage
-│   ├── input.js          keyboard, mouse, pointer lock, gamepad → named actions
-│   ├── postfx.js         HDR target, bloom, tone mapping, colour grade, vignette, grain
-│   ├── renderer.js       WebGL2 renderer, camera, resolution scaling, context loss
-│   ├── geometry.js       GeometryBuilder: merges thousands of boxes into one mesh per material
-│   ├── textures.js       procedural canvas textures (asphalt, paving, grass, wood, grime…)
-│   ├── materials.js      shared materials: the window-drawing building shader, foliage sway, water
-│   ├── environment.js    time-of-day sky, sun/moon, fog, reflections, shadow placement
-│   ├── physics.js        collision world: boxes and ramps in a spatial hash, raycasts
-│   ├── data/districts.js districts, street names and landmarks, as data
-│   ├── data/challenges.js the challenges: names, medal times, rewards, penalties
-│   ├── citygen.js        lays out roads, junctions, blocks, lots and the waterfront (pure data)
-│   ├── buildings.js      building archetypes: tower, office, shophouse, apartment, hotel, villa
-│   ├── props.js          instanced street furniture and trees, traffic-signal lamps
-│   ├── signs.js          paints sign faces onto canvases
-│   ├── landmarks.js      Civic Plaza, Founders Park, Vicehaven Tower, waterfront and pier
-│   ├── construction.js   Meridian Yard and the Yard Run course
-│   ├── world.js          turns the layout into chunked meshes, colliders and props
-│   ├── humanoid.js       the jointed character model and its procedural animation
-│   ├── player.js         Jay's character controller
-│   ├── camera.js         the camera rig
-│   ├── interaction.js    the universal [E] interaction system
-│   ├── audio.js          synthesised ambience, footsteps, cues and challenge music
-│   ├── challenges.js     challenge runs: markers, checkpoints, medals, records, ghost
-│   ├── hud.js            the HUD
-│   ├── ui.js             menus, settings screen, dialogs, intro card
-│   ├── debug.js          the F8 developer overlay
-│   └── main.js           boot sequence, game states, main loop, scheduler
-├── assets/               (empty for now; see assets/README.md)
-├── dist/vicehaven.html   the single-file build (generated; don't edit it)
+│   ├── lib/three.min.js    three.js r186 as a classic script (MIT)
+│   ├── core.js · settings.js · input.js        namespace, events, maths; options; keyboard/mouse/pad
+│   ├── renderer.js · postfx.js · environment.js   WebGL2, HDR bloom and grade, sky, sun, clock
+│   ├── geometry.js · textures.js · materials.js    merged meshes, procedural textures, shaders
+│   ├── physics.js · roadnet.js                     collision world; lanes, junctions and signals
+│   ├── citygen.js · buildings.js · props.js · signs.js · landmarks.js · construction.js
+│   ├── outskirts.js        Saltmarsh docks (Pier 9, the cranes, the freighter) and Crestline Estates
+│   ├── world.js            turns the layout into chunked meshes, colliders and props
+│   ├── humanoid.js · player.js · camera.js · crowd.js    people, Jay, the camera, the crowds
+│   ├── vehicles/           carmodels (18 cars), vehicle (physics), vehicles (spawning, collisions),
+│   │                       traffic (lane AI), feedback (smoke, skids, lights, sound)
+│   ├── weapons-data.js · weapons-models.js · combat.js · ui-wheel.js   guns, fighting, the wheel
+│   ├── police.js · fx.js   heat, pursuit, helicopter; particles, explosions, light pools
+│   ├── audio.js · audio-drive.js · audio-weapons.js    synthesised sound, engines, the radio
+│   ├── dialogue.js · places.js · missions.js · activities.js   voices and subtitles; story places;
+│   │                       the mission engine and save system; the jobs between jobs
+│   ├── data/               districts, challenges, weapons, the story (story.js = cast, places,
+│   │                       factions; story-act1…4.js = the jobs; story-extras.js = fares, races,
+│   │                       bounties, turf wars, texts, radio hosts)
+│   ├── minimap.js · hud.js · ui.js · debug.js · main.js
+├── docs/STORY_BIBLE.md     the whole story: characters, timeline, every job, choices, endings
+├── docs/mission-format.md  the data format the story is written in
+├── dist/vicehaven.html     the single-file build (generated; don't edit it)
 └── tools/
-    ├── bundle.mjs        builds dist/vicehaven.html (plain Node, no packages)
-    ├── smoke.mjs         optional automated test (Node + Playwright), not needed to play
-    └── build-three.md    how to rebuild js/lib/three.min.js
+    ├── bundle.mjs          builds dist/vicehaven.html (plain Node, no packages)
+    ├── validate-story.mjs  checks the story data (ids, places, cars, flags) and counts it
+    └── smoke.mjs           optional automated test (Node + Playwright)
 ```
 
-**The single-file build.** `node vicehaven/tools/bundle.mjs` reads
-`index.html` and inlines every local stylesheet and script in order, into
-`dist/vicehaven.html`. Each script keeps a `//# sourceURL`, so errors still
-name the original file. Run it after changing any source file.
+**The single-file build.** `node vicehaven/tools/bundle.mjs` inlines every
+local stylesheet and script into `dist/vicehaven.html`. Run it after
+changing any source file.
 
 **Why classic scripts and not ES modules?** Edge blocks `import` on pages
-opened from `file://`. Each file is therefore an IIFE that adds one thing to
-the single global `VH` namespace, and `index.html` loads them in dependency
-order. No file touches `THREE` at load time, which is what lets `main.js`
-fall back to a CDN copy of three.js if the bundled one is missing.
+opened from `file://`. Each file is an IIFE that adds one thing to the
+global `VH` namespace, and `index.html` loads them in order.
 
-**How the systems talk to each other.**
-
-- **Events.** `VH.events` is a small publish/subscribe bus, so systems don't
-  hold references to each other. Examples: `settings:changed` (renderer,
-  environment and HUD react), `notify` (anyone can post a HUD
-  notification), `money:changed`, `interaction:focus`/`interaction:used`,
-  `player:step`/`jump`/`land`/`climb`/`damaged`/`died` (the audio engine
-  listens to these), `camera:mode`, `ui:dialog`, `ui:click`,
-  `input:lockchange`, `challenge:start`/`finish`.
-- **Actions, not keys.** Game code asks `input.down('sprint')` or
-  `input.consume('jump')`. Presses queue until the fixed-rate simulation
-  consumes them, so a quick tap is never lost between steps.
-- **Data first.** Districts, street names, landmarks, key bindings, quality
-  presets, prop definitions and the settings screen itself are data objects.
-  Adding a district or a setting doesn't touch the systems that use them.
-- **Update rates.** `main.js` runs Jay's physics at a fixed 60 Hz,
-  interpolated when drawn. The camera, animation and rendering run every
-  frame; interaction checks run at 15 Hz; location lookups and prop culling
-  at 4 Hz. Traffic, pedestrians and world events will join the same
-  scheduler at their own rates.
-
-**Performance techniques already in place.** The city is cut into 192 m
-chunks and each chunk becomes one mesh per material, so the whole city is
-around 250 meshes. Props are instanced per chunk and hidden beyond a
-per-type draw distance. Colour variation travels in vertex colours so meshes
-share materials. Three.js frustum-culls whole chunks. The shadow map covers
-only the area around Jay and is snapped to its texel grid so it doesn't
-shimmer. Windows are procedural, which costs no texture memory. World
-generation is time-sliced so the tab never freezes, and shaders are compiled
-before the first frame so it doesn't hitch.
+**The story is data.** Every job is a list of steps (`scene`, `goto`,
+`chase`, `choice`, `blackout`, `survive`…) in `js/data/story-act*.js`. The
+mission engine turns them into gameplay, objectives, cutscenes, phone calls
+and checkpoints. `node vicehaven/tools/validate-story.mjs --summary` checks
+it all and counts the lines. See `docs/mission-format.md`.
 
 World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 
 ---
 
-## Testing checklist (Phase 1)
+## Testing checklist
 
-- [ ] `dist/vicehaven.html` opens by double-click, from any folder, with no other files next to it
+- [ ] `dist/vicehaven.html` opens by double-click with no other files beside it
+- [ ] New Game: the cold open plays, then Jay is in Civic Plaza and Dex is on the phone
+- [ ] Steal a car (F next to it; F again by an occupied car drags the driver out)
+- [ ] Drive: accelerate, brake, reverse, handbrake drift, nitro (Shift), crash, smoke, fire
+- [ ] The radio plays in a car; R changes station; a host talks between songs
+- [ ] Traffic stops at red lights; pedestrians wait at crossings and run from gunfire
+- [ ] Get to St. Brigid's for the funeral; cutscenes letterbox; Space skips a line
+- [ ] Shoot (aim with right mouse); hold Tab for the weapon wheel; R reloads
+- [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
+- [ ] Fail a job (die or get caught) and retry with E
+- [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done
+- [ ] M opens the map with job icons and the route
+- [ ] In a cab, P starts taxi duty and a fare tells you their story
+- [ ] Night falls: street-light pools, headlights, lit windows, the helicopter's searchlight
+- [ ] Settings change live and persist (quality presets, voices, strong language)
 
-- [ ] Game loads from a double-clicked `index.html` (loading bar → title screen)
-- [ ] New Game → intro card → Jay standing in Civic Plaza facing the towers
-- [ ] Clicking captures the mouse and the mouse turns the camera
-- [ ] W/A/S/D move relative to the camera, speeding up and slowing down smoothly
-- [ ] Shift sprints, Space jumps, Ctrl/C toggles crouch, Caps Lock toggles walking
-- [ ] Space at the plaza crates climbs them; running at the low walls vaults them
-- [ ] Stairs and the ramp lead up to the terrace; kerbs are stepped over automatically
-- [ ] Buildings, walls and poles are solid, and Jay slides along walls
-- [ ] With Jay's back to a wall, the camera slides in front of it instead of through it
-- [ ] Right mouse gives the aim camera and crosshair; V cycles cameras; the wheel zooms
-- [ ] E at a vending machine costs $2 and heals; E at the kiosk opens the city guide
-- [ ] A big drop hurts (in the F8 console, `tp roof` puts you on the nearest low rooftop; walk off the edge)
-- [ ] Esc pauses; Resume and Enter return to the game; Quit to Menu works
-- [ ] Settings change live (try the quality presets) and persist after a refresh
-- [ ] F8 opens the overlay; `tp pier`, `time 21` and `noclip` work
-- [ ] Districts announce themselves as you walk between them
-- [ ] Sound starts on the first click: footsteps change between the plaza (concrete), the park (grass) and the boardwalk (wood); wind rises on a rooftop
-- [ ] Lamps, lit windows and the sun glow (bloom); Settings → Post-processing → Off removes it
-- [ ] Walk west from the plaza into Meridian Yard; E at the cyan marker starts the Yard Run with 3-2-1-GO
-- [ ] Gates tick off with split times; the HUD arrow points to the next gate; falling off the beam puts you back with +3 s
-- [ ] Finishing shows the results card with a medal and pays the reward; E retries and a ghost of your best run races you
-- [ ] E at the orange marker in Civic Plaza starts Courier Rush; the clock ticks under 10 s and turns red under 5 s
-- [ ] Esc → Abandon challenge ends a run
-
-For developers there's also an automated check. It is optional and needs
-Node.js with Playwright:
+For developers, the automated checks need Node.js and Playwright:
 
 ```bash
-node vicehaven/tools/smoke.mjs                # ~60 assertions, fails on any console error
-SHOTS=1 node vicehaven/tools/smoke.mjs        # plus screenshots in /tmp/vicehaven-shots
+node vicehaven/tools/validate-story.mjs --summary   # story data: 0 problems expected
+node vicehaven/tools/smoke.mjs                      # boots the game from file:// and plays it
 node vicehaven/tools/bundle.mjs && TARGET=dist node vicehaven/tools/smoke.mjs   # test the single file
 ```
 
-It boots the game from its `file://` URL in headless Chromium, the engine
-inside Edge. It then checks, among other things: the city builds; W moves
-Jay away from the camera and D to the right of the screen; buildings stop
-him and he slides along them; the camera stays out of walls; sprint, jump,
-climb, ledge-grab, vault, stairs, ramp and crouch behave; the vending
-machine and kiosk work; falls hurt and knock-outs recover; presets apply;
-and rebound keys work. A bot then plays both challenges start to finish
-(gold on the Yard Run, in time on Courier Rush), and the suite checks the
-reward, the saved ghost, the slip penalty, running out of time,
-abandoning, footsteps and switching post-processing off.
-
 ---
 
-## Known limitations of this phase
+## Known limitations
 
-- **The clock is stopped at 16:18.** Lighting already follows the time of
-  day (try `time 21`), but the running day/night cycle, street-light pools
-  and night traffic arrive in Phase 12.
-- **No vehicles, traffic, pedestrians, combat, police, missions, shops,
-  interiors, weather, map, phone, voice acting or saving yet.** Each has its
-  own phase. Only settings and challenge records are saved for now.
-- **Sound needs one click or key press first.** Browsers don't allow a page
-  to play audio before that.
-- **The bay isn't swimmable yet.** The seawall and pier railings keep Jay
-  out of the water until swimming and boats arrive.
-- **Browser rules.** Pointer lock can only be re-acquired from a click or a
-  key such as Enter, never from Esc, so the pause menu resumes that way.
-  Ctrl+W can't be blocked outside fullscreen (see *About Ctrl*).
+- **No interiors, swimming, boats, motorbikes or aircraft for Jay.** Indoor
+  moments in the story are told on a black screen with text and voices.
+- **Voices depend on the browser.** Edge on Windows sounds best. Without
+  installed voices the game shows subtitles only.
+- **Sound needs one click or key press first.** Browsers don't allow a
+  page to play audio before that.
+- **Ctrl+W can't be blocked outside fullscreen** (it closes the tab). The
+  game asks before closing while you're playing.
 - **Software rendering.** If Edge falls back to software WebGL (no working
   GPU driver) the game runs, but at a few frames per second.
-
-## Next: Phase 2
-
-Phase 2 deepens the third-person camera: a cinematic camera, interior-aware
-framing, camera presets per activity and smoother collision against props.
-It builds on `camera.js` without changing how the other systems use it.

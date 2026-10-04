@@ -187,6 +187,7 @@
       Loading.set(0.9, 'Filling up the tanks');
       this.fx = new VH.FX(this);
       this.fx.buildLampPools(this.world.lamps);
+      this.fx.buildFloodPools(this.world.floodlights);
       this.vehicles = new VH.VehicleSystem(this);
       this.traffic = new VH.TrafficSystem(this);
       this.crowd = new VH.Crowd(this);
@@ -760,7 +761,11 @@
       const inp = this.input;
       const p = this.player;
       if (inp.consume('vehicle')) {
-        if (p.inVehicle) this.vehicles.exitVehicle();
+        // On a controller Y also talks and uses things; a prompt wins over the nearest car.
+        const padUse = inp.lastDevice === 'gamepad' && !p.inVehicle && this.interaction.current;
+        if (padUse) {
+          // handled by the interaction system
+        } else if (p.inVehicle) this.vehicles.exitVehicle();
         else if (!this.vehicles.entering && (p.state === 'ground' || p.state === 'air') && !p.frozen) {
           const t = this.vehicles.findEnterable(p.pos.x, p.pos.z, 3.2);
           if (t) this.vehicles.beginEnter(t);
@@ -784,7 +789,7 @@
       let text = null;
       if (!p.inVehicle && p.state === 'ground' && !this.vehicles.entering && !this.interaction.current) {
         const t = this.vehicles.findEnterable(p.pos.x, p.pos.z, 3.2);
-        if (t) text = (t.v.driver === 'ai' ? 'Steal the ' : 'Get in the ') + t.v.name;
+        if (t) text = (t.v.driver === 'ai' ? 'Steal ' : 'Get in ') + (t.v.storyName || 'the ' + t.v.name);
       }
       this.hud.setVehiclePrompt(text, this.input.labelFor('vehicle'));
     },
@@ -883,8 +888,10 @@
 
     /** Keys for systems that arrive in later phases say so, instead of doing nothing. */
     _laterFeatureHints() {
+      const v = this.player.vehicle;
+      if (v && v.type === 'cab') return; // P is taxi duty there (activities.js)
       const LATER = {
-        phone: 'The phone arrives in a later update',
+        phone: 'P puts you on taxi duty — get in a cab first',
       };
       for (const action of Object.keys(LATER)) {
         if (this.input.consume(action)) this.hud.showToast(LATER[action]);
