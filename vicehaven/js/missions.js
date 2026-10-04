@@ -1695,10 +1695,10 @@
           if (this.game.police.level > 0) throw new MissionFailed('You drew the cops.');
         }
       }
-      // Crew members dying always fails the job.
+      // Named crew dying always fails the job (extras who tag along don't).
       for (const id of run.crew) {
         const a = run.actors.get(id);
-        if (a && a.dead) throw new MissionFailed((a.name || id) + ' died.');
+        if (a && a.dead && a.charId) throw new MissionFailed((a.name || id) + ' died.');
       }
     }
 

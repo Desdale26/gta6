@@ -177,7 +177,7 @@
           this.print('noclip · god · heal · hurt <n> · money <n> · armor <n>');
           this.print('car <type> · heat <0-5> · give <weapon|all> · job <id> · pass <id> · flag <name>');
           this.print('time <0-24> · clouds <0-1> · fov <deg> · quality <low|medium|high|ultra>');
-          this.print('colliders · pos · respawn · clear · complete (missions: Phase 9)');
+          this.print('colliders · pos · respawn · clear · complete (pass the current job) · spawn <faction> (an enemy)');
           break;
         case 'tp': {
           let x;
@@ -310,10 +310,33 @@
           g.cameraRig.snapBehind(p);
           this.print('Respawned');
           break;
-        case 'complete':
-        case 'spawn':
+        case 'complete': {
+          const run = g.missions.run;
+          if (!run) {
+            this.print('No job running', 'bad');
+            break;
+          }
+          g.missions._abort = null; // stops the step runner
+          g.missions.cinematic = null;
+          g.dialogue.stop();
+          document.body.classList.remove('cutscene');
+          p.frozen = false;
+          g.frozenControls = false;
+          g.missions._clearWaiters(run);
+          g.missions._pass(run);
+          this.print('Passed ' + run.m.title);
+          break;
+        }
+        case 'spawn': {
+          const fac = args[0] || 'halberd';
+          g.combat.spawnEnemy(p.pos.x + Math.sin(p.heading) * 8, p.pos.z + Math.cos(p.heading) * 8, { faction: fac, weapon: args[1] || 'pistol', alert: true, hostile: true, look: g.missions.factionLook(fac, 0) });
+          this.print('Spawned a ' + fac + ' enemy');
+          break;
+        }
         case 'wanted':
-          this.print('"' + cmd + '" needs systems from later phases (vehicles, police, missions).', 'bad');
+          g.police.setLevel(num(0, 3), 'debug');
+          g.police._sawPlayer();
+          this.print('Heat ' + g.police.level);
           break;
         case 'clear':
           this.log.innerHTML = '';

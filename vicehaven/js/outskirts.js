@@ -34,7 +34,7 @@
         const xb = Math.min(x1, x + 96);
         const zb = Math.min(z1, z + 96);
         const ctx = world.ctxAt((xa + xb) / 2, (za + zb) / 2);
-        ctx.asphaltTop.topRect(xa, za, xb, zb, 0.012, VH.col(tone || 0xb8b6b0), 6);
+        ctx.concrete.topRect(xa, za, xb, zb, 0.012, VH.col(tone || 0xb8b6b0), 6); // pale dock concrete, not road asphalt
         world.physics.addBox(xa, -1, za, xb, 0, zb, 'road', F().SOLID);
       }
     }

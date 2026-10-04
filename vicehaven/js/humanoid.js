@@ -34,14 +34,16 @@
   }
 
   /** Jay Mercer's default outfit. Colours are sRGB hex. */
+  // Jay: a worn brown leather driving jacket over a grey tee, dark jeans,
+  // off-white sneakers scuffed on the right toe from the pedal.
   const JAY_LOOK = {
-    skin: 0xb07e5e,
-    hair: 0x241a13,
-    jacket: 0x4b5a3c,
-    jacketTrim: 0x2a2f26,
-    shirt: 0xe9e7e1,
-    pants: 0x28344b,
-    shoes: 0xe6e4df,
+    skin: 0xa86b4c,
+    hair: 0x1b1512,
+    jacket: 0x6b4a32,
+    jacketTrim: 0x3a2718,
+    shirt: 0x8d9094,
+    pants: 0x2c3440,
+    shoes: 0xe6e1d6,
     sole: 0xb08a5c,
     belt: 0x2a2320,
     watch: 0x9aa3ab,

@@ -653,6 +653,7 @@
       else {
         this.player.updateVisual(0, 1, this.cameraRig.pitch);
         this.cameraRig.update(1 / 60, this.player);
+        if (this.missions) this.missions.updateCamera(0, this.renderer.camera); // cutscene shots
         this.hud.update(0, {
           player: this.player, district: this.world.districtAt(this.player.pos.x, this.player.pos.z),
           road: this.world.roadNameAt(this.player.pos.x, this.player.pos.z), place: this.world.placeAt(this.player.pos.x, this.player.pos.z),
