@@ -1502,3 +1502,11 @@ body.driving .hud .hud-hints {
   from { opacity: 0.55; }
   to { opacity: 1; }
 }
+
+/* The getting-started checklist steps aside during jobs, cutscenes and driving. */
+body.on-mission .hud-hints,
+body.cutscene .hud-hints,
+body.driving .hud-hints {
+  opacity: 0;
+  pointer-events: none;
+}

@@ -504,6 +504,7 @@
         stepIndex: 0, started: game.time, token: {}, money: game.player.money,
       });
       this._abort = run.token;
+      document.body.classList.add('on-mission');
       this.refreshMarkers();
       game.hud.missionTitle(m.title, m._main ? 'Act ' + (m.act || 1) : (m._chain ? m._chain.title : 'Side job'));
       if (game.audio.missionStart) game.audio.missionStart();
@@ -1225,6 +1226,9 @@
             car.driver = null;
             car.input.accel = 0;
             car.input.handbrake = 1;
+            // Caught, not wrecked: it's often the car Jay has to drive next.
+            car.health = Math.max(car.health, 550);
+            car.burning = 0;
             return true;
           }
         }
@@ -1485,6 +1489,7 @@
     _pass(run) {
       const game = this.game;
       const m = run.m;
+      document.body.classList.remove('on-mission');
       this._clearWaiters(run);
       this.run = null;
       this._cleanup(run, false);
@@ -1519,6 +1524,7 @@
 
     _failNow(run, reason) {
       const game = this.game;
+      document.body.classList.remove('on-mission');
       this._clearWaiters(run, reason);
       this.run = null;
       this._abort = null;
@@ -1783,6 +1789,7 @@
         this._cleanup(run, true);
       }
       this.cinematic = null;
+      document.body.classList.remove('on-mission');
       this.completed = {};
       this.flags = {};
       this.stats = { missions: 0, side: 0 };

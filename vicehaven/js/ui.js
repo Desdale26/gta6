@@ -175,7 +175,7 @@
     _buildTitle() {
       const s = this._screen('title', 'screen-title');
       const logo = el('div', 'logo logo-title');
-      logo.append(el('span', 'logo-word', 'VICEHAVEN'), el('span', 'logo-sub', 'A city that owes you nothing'));
+      logo.append(el('span', 'logo-word', 'VICEHAVEN'), el('span', 'logo-sub', 'Ten and Two'));
       const menu = el('nav', 'menu title-menu');
       this.continueBtn = this._button('Continue', () => this.actions.continueGame(), { primary: true });
       this.continueInfo = el('span', 'continue-info');
@@ -193,7 +193,7 @@
       );
       const foot = el('div', 'title-footer');
       foot.append(
-        el('span', '', VH.BUILD_NAME + ' · v' + VH.VERSION),
+        el('span', '', 'v' + VH.VERSION),
         el('span', 'title-footer-hint', VH.features.isEdge ? 'Running in Microsoft Edge ✓' : 'Built for Microsoft Edge')
       );
       const left = el('div', 'title-left');

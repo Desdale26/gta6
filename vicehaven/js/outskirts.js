@@ -235,6 +235,61 @@
     (world.floodlights || (world.floodlights = [])).push({ x, z, r: radius, y: 0.03 });
   }
 
+  /** A knee-high garden lantern and its warm pool of light. */
+  function gardenLamp(world, ctx, x, z, radius) {
+    ctx.prop.box(x - 0.07, 0, z - 0.07, x + 0.07, 1.0, z + 0.07, VH.col(0x2b2f36));
+    ctx.screen.box(x - 0.16, 1.0, z - 0.16, x + 0.16, 1.32, z + 0.16, VH.col(0xffd9a0, 2.2));
+    ctx.prop.box(x - 0.2, 1.32, z - 0.2, x + 0.2, 1.4, z + 0.2, VH.col(0x2b2f36));
+    (world.floodlights || (world.floodlights = [])).push({ x, z, r: radius, y: 0.03, strength: 0.75, tint: [1.35, 0.95, 0.62] });
+  }
+
+  /**
+   * Belvedere's front: a two-storey portico of white columns under a
+   * pediment, steps, and topiary cones flanking the door.
+   */
+  function portico(world, ctx, lot, dir) {
+    const white = VH.col(0xf4f1ea);
+    const trim = VH.col(0xd9d2c4);
+    const face = dir > 0 ? lot.maxX : lot.minX; // the gate side of the lot
+    const xIn = face - dir * 7; // hidden inside the house
+    const xOut = face - dir * 1.2; // the portico's front edge
+    const cz = lot.cz;
+    const half = 9;
+    const yTop = KERB + 6.0;
+    // Steps and the porch floor.
+    for (let i = 0; i < 3; i++) {
+      const xo = xOut + dir * (0.9 - i * 0.45);
+      ctx.concrete.box(Math.min(xIn, xo), 0, cz - half - 0.6 + i * 0.2, Math.max(xIn, xo), KERB * 0.4 * (i + 1), cz + half + 0.6 - i * 0.2, white);
+    }
+    world.physics.addBox(Math.min(xIn, xOut), -0.5, cz - half, Math.max(xIn, xOut), KERB * 1.2, cz + half, 'kerb');
+    // Six columns with bases and capitals.
+    for (let k = 0; k < 6; k++) {
+      const z = cz - half + 1.2 + k * ((half * 2 - 2.4) / 5);
+      const x = xOut - dir * 0.6;
+      ctx.concrete.box(x - 0.55, KERB * 1.2, z - 0.55, x + 0.55, KERB * 1.2 + 0.35, z + 0.55, trim);
+      ctx.concrete.box(x - 0.36, KERB * 1.2 + 0.35, z - 0.36, x + 0.36, yTop - 0.4, z + 0.36, white);
+      ctx.concrete.box(x - 0.5, yTop - 0.4, z - 0.5, x + 0.5, yTop, z + 0.5, trim);
+      solid(world, x - 0.38, 0, z - 0.38, x + 0.38, yTop, z + 0.38, 'pole');
+    }
+    // Entablature and pediment.
+    ctx.concrete.box(Math.min(xIn, xOut - dir * 1.4), yTop, cz - half - 0.4, Math.max(xIn, xOut - dir * 1.4) + 0.001, yTop + 0.9, cz + half + 0.4, white);
+    const xp = xOut - dir * 1.35;
+    const yp = yTop + 0.9;
+    ctx.concrete.polygon([[xp, yp, cz - half - 0.4], [xp, yp, cz + half + 0.4], [xp, yp + 2.6, cz]].map((v) => v), white);
+    ctx.concrete.polygon([[xp, yp, cz + half + 0.4], [xp, yp, cz - half - 0.4], [xp, yp + 2.6, cz]].map((v) => v), white);
+    // Uplights under the portico.
+    for (const zz of [cz - half + 1, cz, cz + half - 1]) (world.floodlights || (world.floodlights = [])).push({ x: xOut - dir * 0.8, z: zz, r: 7, y: KERB * 1.2 + 0.03, strength: 0.9, tint: [1.4, 1.0, 0.7] });
+    // Topiary: clipped cones in planters either side of the steps and along the drive.
+    for (const zz of [cz - half - 2.2, cz + half + 2.2, cz - 4.2, cz + 4.2]) {
+      const x = face + dir * (zz === cz - 4.2 || zz === cz + 4.2 ? 6 : 0.6);
+      ctx.concrete.box(x - 0.7, 0, zz - 0.7, x + 0.7, 0.7, zz + 0.7, trim);
+      ctx.hedge.box(x - 0.55, 0.7, zz - 0.55, x + 0.55, 1.9, zz + 0.55, VH.col(0x2e6b34));
+      ctx.hedge.box(x - 0.38, 1.9, zz - 0.38, x + 0.38, 2.9, zz + 0.38, VH.col(0x2f7036));
+      ctx.hedge.box(x - 0.2, 2.9, zz - 0.2, x + 0.2, 3.5, zz + 0.2, VH.col(0x317538));
+      solid(world, x - 0.7, 0, zz - 0.7, x + 0.7, 2, zz + 0.7, 'prop');
+    }
+  }
+
   // ------------------------------------------------------------- docks
   function buildDocks(world, layout) {
     const rng = new VH.RNG('saltmarsh');
@@ -422,7 +477,7 @@
       minX: hx - houseD / 2, maxX: hx + houseD / 2, minZ: gz - houseW / 2, maxZ: gz + houseW / 2,
       cx: hx, cz: gz, district: dist, kind: 'building', interior: false,
       front: { n: false, s: false, e: L.gate === 'e', w: L.gate === 'w' }, back: {},
-      archetype: isVoss ? 'hotel' : rng.chance(0.5) ? 'apartment' : 'villa', floorRange: isVoss ? [4, 4] : [3, 3], seed: rng.int(1, 1e9),
+      archetype: 'villa', floorRange: [2, 2], seed: rng.int(1, 1e9),
     };
     const hctx = world.ctxAt(lot.cx, lot.cz);
     // The house sits on a low plinth (buildings start at kerb height).
@@ -430,6 +485,7 @@
     world.physics.addBox(lot.minX - 0.6, -0.5, lot.minZ - 0.6, lot.maxX + 0.6, KERB, lot.maxZ + 0.6, 'kerb');
     // Keep the generated house low and wide: clamp the archetype's height by giving it a small floor range.
     const top = VH.Buildings.buildLot(hctx, lot);
+    if (isVoss) portico(world, hctx, lot, L.gate === 'e' ? 1 : -1);
     // Driveway and forecourt.
     const dx0 = Math.min(gateX, lot.front.e ? lot.maxX : lot.minX);
     const dx1 = Math.max(gateX, lot.front.e ? lot.maxX : lot.minX);
@@ -448,6 +504,10 @@
     for (let z = L.z0 + 8; z < L.z1 - 6; z += 14) world.addProp('palmTall', (L.x0 + L.x1) / 2 + (L.gate === 'e' ? 12 : -12), 0, z, z, 0.9 + rng.range(0, 0.2));
     // Hedges along the drive.
     for (const s of [-1, 1]) ctx.hedge.box(dx0 + 2, 0, gz + s * 4.2 - 0.5, dx1 - 2, 1.1, gz + s * 4.2 + 0.5, VH.col(0x355f2c));
+    // Garden lamps: the drive, the pool, the gate. Belvedere is lit like a party every night.
+    for (let x = dx0 + 3; x < dx1 - 1; x += isVoss ? 8 : 14) for (const s of [-1, 1]) gardenLamp(world, ctx, x, gz + s * 3.5, isVoss ? 7 : 6);
+    for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gardenLamp(world, ctx, px + ox * (pd / 2 + 1.5), gz + oz * (pw / 2 + 1.5), isVoss ? 9 : 6);
+    if (isVoss) for (const oz of [-0.5, 0, 0.5]) gardenLamp(world, ctx, px + (pd / 2 + 1.5) * (L.gate === 'e' ? 1 : -1), gz + oz * pw * 0.8, 8);
     const gateOut = L.gate === 'e' ? 1 : -1;
     spots.push({ x: gateX + gateOut * 3, z: gz, yaw: L.gate === 'e' ? -Math.PI / 2 : Math.PI / 2, kinds: ['mansion', 'street'], name: isVoss ? 'The Voss estate gate' : 'Mansion gate' });
     spots.push({ x: (dx0 + dx1) / 2, z: gz + 1.5, yaw: L.gate === 'e' ? -Math.PI / 2 : Math.PI / 2, kinds: ['mansion', 'parking'], name: isVoss ? 'The Voss forecourt' : 'Mansion driveway' });
