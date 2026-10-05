@@ -498,7 +498,7 @@
       if (this._continuing) return;
       // A new story: the first job starts by itself.
       const first = this.missions.nextMain;
-      if (first && (first.start === 'auto' || first.start === 'intro')) setTimeout(() => this.missions.start(first), 600);
+      if (first && (first.start === 'auto' || first.start === 'intro') && !this.noAutoStory) setTimeout(() => this.missions.start(first), 600); // noAutoStory: automated tests
       else this.hud.notify({ title: 'Welcome back, Jay', text: 'Look for the glowing markers on the map (' + this.input.labelFor('map') + ') to find work.', icon: '☀', duration: 6500 });
     },
 

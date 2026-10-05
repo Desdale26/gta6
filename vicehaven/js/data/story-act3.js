@@ -775,6 +775,184 @@
     ],
   });
 
+  // ===================================================================
+  // m20 OVERWATCH
+  // ===================================================================
+  act3.push({
+    id: 'm20_overwatch',
+    act: 3,
+    title: 'Overwatch',
+    giver: 'rhea',
+    start: 'kostas_salvage',
+    time: 23,
+    estMinutes: 10,
+    summary: 'Rhea will hold the cranes for the exchange if Jay holds them for her tonight.',
+    reward: { money: 6000, weapons: ['sniper'] },
+    steps: [
+      { music: 'off' },
+      { scene: { at: 'kostas_salvage', cast: ['rhea', 'deb', 'kostya'] }, say: [
+        ['caption', '(Kostas Marine Salvage at eleven at night. Propellers taller than a man, stacked like playing cards. Rhea at her pallet desk, writing in pencil, the way she always is.)'],
+        ['rhea', "(not looking up) Augie's wheelman. Sit. Don't sit there, that's a rudder."],
+        ['deb', "(a big woman in navy overalls, peeling an orange with a box cutter) She means it. Kostya sat on it once. We had to call a man."],
+        ['kostya', '(a bigger man, saying nothing, nodding gravely)'],
+        ['rhea', "Halberd has been on my quay three nights running. Clipboards. Long lenses. They stand by the bollards and photograph my people."],
+        ['jay', 'Photograph them for what?'],
+        ['rhea', "Voss sells this port to a fund in Rotterdam in the spring. The fund wants it automated by summer. One man with a joystick in an office, instead of four hundred with families."],
+        ['rhea', "Halberd's making the list. Who to cut first. Who'll make trouble when they're cut. They photograph the faces. Then the faces stop getting shifts."],
+        ['deb', "They photographed Kostya eating a sandwich. Seven times. From different angles. Like he was a building."],
+        ['kostya', '(darkly) It was a good sandwich.'],
+        ['rhea', '(finally putting the pencil down) Augie came to see me. You want my cranes on the thirtieth. Two-ten, Pier 9, my people up top with rifles. Neutral ground.'],
+        ['jay', "He said you'd want something."],
+        ['rhea', "Everyone wants something. I just say mine out loud. It saves time and it saves lawyers."],
+        ['rhea', 'You want my cranes on the thirtieth. I want my cranes tonight. Five spotters on the quay with cameras. A van to carry the cards away. I want the cards and I want the quay empty.'],
+        ['caption', '(She lifts a long, scuffed case off the pallet desk, unclips it, and turns it round to face him. A rifle with a scope the length of his forearm.)'],
+        ['rhea', "(offering it) Stavros's. He shot gulls. Badly."],
+        ['jay', 'Your husband.'],
+        ['rhea', "My husband. He said the gulls were robbing the fish market. They were. He never hit one in nine years. They knew him by name. They waited for him."],
+        ['deb', '(very quietly, to her orange) They still come and sit on his crane.'],
+        ['rhea', "(not hearing that, deliberately) It shoots straighter than he did. Don't get sentimental with it. It's a tool. Like you."],
+      ] },
+      { reward: { weapons: ['sniper'] } },
+      { if: 'saved_teo', then: [
+        { say: [
+          ['rhea', '(as he checks the scope) And Mercer. Augie tells me Rourke has my address now. His money, my back room. Halberd knows where to come.'],
+          ['jay', 'We can move it.'],
+          ['rhea', "Nobody moves anything out of my back room. That's the point of my back room. (beat) Let them come. I've had worse neighbours."],
+        ] },
+      ], else: [
+        { say: [
+          ['rhea', "(as he checks the scope) Augie tells me you took Rourke's phone off him. Codes and all."],
+          ['jay', 'And his books.'],
+          ['rhea', "(the short laugh, like a winch catching) Clever. Expensive, for him. Keep it in your shoe. Men like Rourke want their phones back more than their teeth."],
+        ] },
+      ] },
+      { say: [
+        ['rhea', "Not my cranes, though. Halberd's watching my cranes. You go up on the old Tidewater shed at Pier 9. Flat roof, ladder round the back. Best seat in the port."],
+        ['rhea', "(beat) And you'll want to have sat up there before the thirtieth. It's Augie's lot. Look at it from above. Learn it."],
+        ['deb', '(to Jay, on her way out with Kostya) Good luck, our guy. Shoot the one with the ponytail first. He called me “love”.'],
+      ] },
+      { leave: ['rhea', 'deb', 'kostya'] },
+      { goto: 'pier9_gate', vehicle: true, objective: 'Drive to the Pier 9 gate. The ladder is round the back of the transfer shed.', say: [
+        ['jay', "(to the car, quietly, Stavros's rifle across the back seat) Don't look at it. It's a tool. Like me."],
+        ['jay', '(at the turn onto the dock road, the cranes coming up out of the dark) Here we go. Here we go again.'],
+      ] },
+      { spawn: [
+        { char: 'deb', at: 'crane_row', offset: [-6, 4], behavior: 'idle' },
+        { char: 'kostya', at: 'crane_row', offset: [-6, -4], behavior: 'idle' },
+        { id: 'spotter_a', faction: 'halberd', at: 'crane_row', offset: [-2, -18], weapon: 'pistol', behavior: 'guard', group: 'spotters' },
+        { id: 'spotter_b', faction: 'halberd', at: 'crane_row', offset: [-4, 20], weapon: 'pistol', behavior: 'guard', group: 'spotters' },
+        { id: 'spotter_c', faction: 'halberd', at: 'crane_row', offset: [-24, 32], weapon: 'smg', behavior: 'patrol', group: 'spotters' },
+        { id: 'spotter_d', faction: 'halberd', at: 'crane_row', offset: [-30, -26], weapon: 'pistol', behavior: 'guard', group: 'spotters' },
+        { id: 'spotter_e', faction: 'halberd', at: 'pier9_gate', offset: [10, 12], weapon: 'smg', behavior: 'guard', group: 'spotters' },
+      ] },
+      { spawnCar: 'photo_truck', type: 'porter', at: 'crane_row', color: 0x8c8f93 },
+      { fade: 'out' },
+      { blackout: [
+        ['caption', '(A steel ladder bolted to the back of the transfer shed, flaking orange. Twenty-one rungs. He counts them. He has been counting things all his life without noticing.)'],
+      ] },
+      { teleport: { x: 314, z: 540, yaw: Math.PI / 2 } },
+      { fade: 'in' },
+      { music: 'tension' },
+      { say: [
+        ['caption', '(The roof of the Pier 9 transfer shed. Tar, gull feathers, a broken deckchair somebody once carried up to watch the ships. Below: the whole Tidewater lot under its floodlights.)'],
+        ['caption', '(And from up here you can see it plainly. In bay fourteen the paint is newer than the rest. A cleaner yellow. A square of it about the size of a man.)'],
+        ['jay', '(very quietly) Hi, Tommy.'],
+        ['rhea', '(on the radio, flat) Stop sightseeing. Five of them. Two by the blue gantry, one by the orange, one at the cold store, one at the gate in a baseball cap. Long lenses.'],
+        ['rhea', "My people keep working. They don't look up. You don't miss."],
+      ] },
+      { kill: 'group:spotters', checkpoint: true, objective: "Snipe the Halberd spotters from the roof. Stavros's rifle. Don't hit a docker.", say: [
+        ['deb', "(on Rhea's radio, somewhere down on the quay) Did the one in the cap just fall over? Is that our guy? Hi, our guy!"],
+        ['rhea', "Deb. Work."],
+        ['kostya', '(on the radio, deeply satisfied) Nobody photographs the sandwich.'],
+      ] },
+      { spawn: [driver('photo_drv', 'photo_truck', 'photo_truck', 'halberd_depot')] },
+      { music: 'action' },
+      { phone: 'rhea', say: [
+        ['rhea', "The van. The grey Porter on the quay. Somebody's in it and he has the cards from all five cameras. He's going for the depot."],
+        ['jay', "I'm on a roof."],
+        ['rhea', "Then get off it. My pickup's at the gate, keys in. Don't let that van reach Halberd's fence, or every face on my quay is in a fund manager's inbox by breakfast."],
+      ] },
+      { spawnCar: 'rhea_mesa', type: 'mesa', at: 'pier9_gate', color: 0xc4561d },
+      { fade: 'out' },
+      { teleport: 'pier9_gate' },
+      { fade: 'in' },
+      { getIn: 'rhea_mesa', objective: "Get in Rhea's rust-orange pickup" },
+      { chase: 'photo_truck', mode: 'wreck', route: ['fish_market', 'boatworks', 'halberd_depot'], objective: 'Wreck the van with the camera cards before it reaches the depot', say: [
+        ['jay', "(to the pickup, flooring it) Hi. You smell of fish. That's fine. Everything here smells of fish."],
+        ['rhea', '(on the radio) Through the fish market. He always cuts through the fish market. They all do. They think it\'s clever.'],
+        ['jay', "(as the van takes a crate of ice with it) It isn't."],
+      ] },
+      { goto: 'photo_truck', vehicle: false, radius: 5, objective: 'Get the camera cards out of the van', say: [
+        ['caption', '(The Porter is nose-down in a ditch, back doors open. On the floor, a tackle box of little black memory cards, labelled in marker: QUAY. QUAY. QUAY. KOSTAS. KOSTAS.)'],
+        ['jay', '(picking up one labelled KOSTAS, R.) They photographed Rhea.'],
+      ] },
+      { music: 'off' },
+      { if: 'saved_teo', then: [
+        { phone: 'rhea', say: [
+          ['rhea', "(gunfire behind her, close, and her voice exactly the same as always) Mercer. Are you finished with the van?"],
+          ['jay', "I've got the cards."],
+          ['rhea', "Good. Bring them home. Halberd are at my door. Two trucks, maybe a dozen. Rourke's codes are on the gate panel and they want what's behind my propellers."],
+          ['rhea', "(a shotgun, very loud, and then her voice again, unhurried) Don't drive like Augie's wheelman. Drive like somebody who's late."],
+        ] },
+        { music: 'action' },
+        { goto: 'kostas_salvage', vehicle: true, checkpoint: true, objective: "Get back to Kostas Salvage. Halberd are at Rhea's door." },
+        { leave: ['deb', 'kostya'] },
+        { spawn: [
+          { char: 'rhea', at: 'kostas_salvage', behavior: 'follow', weapon: 'shotgun', health: 900 },
+          { char: 'deb', at: 'kostas_salvage', offset: [3, 2], behavior: 'follow', weapon: 'pistol', health: 600 },
+          { char: 'kostya', at: 'kostas_salvage', offset: [-3, 2], behavior: 'follow', weapon: 'shotgun', health: 800 },
+        ] },
+        { survive: 75, objective: 'Hold Kostas Salvage with Rhea and the Salts', waves: [
+          { at: 'container_maze', count: 4, weapon: 'smg', faction: 'halberd', delay: 0 },
+          { at: 'boatworks', count: 3, weapon: 'pistol', faction: 'halberd', delay: 12 },
+          { at: 'fish_market', count: 4, weapon: 'smg', faction: 'halberd', delay: 28 },
+          { at: 'container_maze', count: 3, weapon: 'rifle', faction: 'halberd', delay: 44 },
+          { at: 'boatworks', count: 4, weapon: 'smg', faction: 'halberd', delay: 58 },
+        ], say: [
+          ['rhea', '(reloading behind a ship\'s propeller like it\'s a garden wall) Left side. The ones in the good boots. They\'re new. New ones run at you.'],
+          ['deb', "They're shooting at the rudder! Not the rudder! Kostya sat on that rudder!"],
+          ['kostya', '(firing, unbothered) I remember.'],
+          ['rhea', "(to Jay, between shots) You led them to my door, Mercer. Rourke's phone. Augie's son. Your choice."],
+          ['jay', 'I know.'],
+          ['rhea', "(another shot) Good choice. Price just went up."],
+        ] },
+        { music: 'off' },
+        { leave: ['rhea', 'deb', 'kostya'] },
+      ] },
+      { setTime: 5.8 },
+      { music: 'hope' },
+      { scene: { at: 'crane_row', cast: ['rhea', 'deb', 'kostya'] }, say: [
+        ['caption', '(Dawn on Crane Row. The first shift coming on. Somewhere a forklift is reversing and telling everybody about it. The quay is clear.)'],
+        ['caption', '(Rhea stands at the foot of the orange gantry with her hands in the pockets of her overalls, looking up at the cab.)'],
+        ['jay', '(holding out the tackle box of memory cards) Every face on your quay.'],
+        ['rhea', '(taking it, not looking inside) Every face on my quay. (She passes it to Deb without a word, and Deb walks it straight to the water and tips it in.)'],
+        ['deb', '(dusting her hands) Gone. Fish can have them. Fish have always wanted to know what Kostya looks like.'],
+        ['rhea', "The thirtieth. Two-ten. Pier 9. My cranes, my eyes. Six of mine up top, with rifles, and nobody fires unless I say. Neutral ground."],
+        ['jay', 'Neutral.'],
+        ['rhea', "Neutral means I don't care who wins. It means I care that nobody cheats in my port. Those are different things. Augie understands the difference. Teach it to yourself."],
+      ] },
+      { if: 'saved_teo', then: [
+        { say: [
+          ['rhea', "The price is eight per cent now. Not four. You brought a war to my propellers."],
+          ['jay', 'Fair.'],
+          ['rhea', "I know it's fair. I don't do unfair. (beat) And tell Augie his son's face looked better than I expected, for a man they put a bag on."],
+        ] },
+      ], else: [
+        { say: [
+          ['rhea', "The price is four per cent. As agreed. You didn't bring me anything I didn't ask for. That's rare. I'll remember it."],
+        ] },
+      ] },
+      { say: [
+        ['rhea', '(looking up at the orange gantry cab, forty metres up, where the dawn is catching the glass) Stavros drove this one. Twenty-two years.'],
+        ['jay', '(beat) I know.'],
+        ['rhea', "(She doesn't say anything else about it. She turns away from the crane like it's a door she's closing.)"],
+        ['rhea', "Everything in this port floats or sinks, Mercer. Pick."],
+        ['jay', 'I picked.'],
+        ['rhea', '(walking off toward the first shift, not turning round) Then float. And keep his rifle clean. He never did.'],
+      ] },
+    ],
+  });
+
   // --- end of main missions ---
 
   S.missions.push(...act3);
