@@ -240,7 +240,7 @@
     ctx.prop.box(x - 0.07, 0, z - 0.07, x + 0.07, 1.0, z + 0.07, VH.col(0x2b2f36));
     ctx.screen.box(x - 0.16, 1.0, z - 0.16, x + 0.16, 1.32, z + 0.16, VH.col(0xffd9a0, 2.2));
     ctx.prop.box(x - 0.2, 1.32, z - 0.2, x + 0.2, 1.4, z + 0.2, VH.col(0x2b2f36));
-    (world.floodlights || (world.floodlights = [])).push({ x, z, r: radius, y: 0.03, strength: 0.75, tint: [1.35, 0.95, 0.62] });
+    (world.floodlights || (world.floodlights = [])).push({ x, z, r: radius, y: 0.03, strength: 0.6, tint: [1.4, 0.92, 0.55] });
   }
 
   /**
@@ -506,8 +506,12 @@
     for (const s of [-1, 1]) ctx.hedge.box(dx0 + 2, 0, gz + s * 4.2 - 0.5, dx1 - 2, 1.1, gz + s * 4.2 + 0.5, VH.col(0x355f2c));
     // Garden lamps: the drive, the pool, the gate. Belvedere is lit like a party every night.
     for (let x = dx0 + 3; x < dx1 - 1; x += isVoss ? 8 : 14) for (const s of [-1, 1]) gardenLamp(world, ctx, x, gz + s * 3.5, isVoss ? 7 : 6);
-    for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gardenLamp(world, ctx, px + ox * (pd / 2 + 1.5), gz + oz * (pw / 2 + 1.5), isVoss ? 9 : 6);
-    if (isVoss) for (const oz of [-0.5, 0, 0.5]) gardenLamp(world, ctx, px + (pd / 2 + 1.5) * (L.gate === 'e' ? 1 : -1), gz + oz * pw * 0.8, 8);
+    for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gardenLamp(world, ctx, px + ox * (pd / 2 + 1.5), gz + oz * (pw / 2 + 1.5), 5.5);
+    if (isVoss) for (const oz of [-0.5, 0, 0.5]) gardenLamp(world, ctx, px + (pd / 2 + 1.5) * (L.gate === 'e' ? 1 : -1), gz + oz * pw * 0.8, 5.5);
+    // Underwater lights: the pool glows turquoise at night.
+    for (let z = gz - pw / 2 + pd / 2; z <= gz + pw / 2 - pd / 2 + 0.01; z += pd * 0.8) {
+      (world.floodlights || (world.floodlights = [])).push({ x: px, z, r: pd * 0.55, y: 0.26, strength: 0.7, tint: [0.25, 0.95, 1.35] });
+    }
     const gateOut = L.gate === 'e' ? 1 : -1;
     spots.push({ x: gateX + gateOut * 3, z: gz, yaw: L.gate === 'e' ? -Math.PI / 2 : Math.PI / 2, kinds: ['mansion', 'street'], name: isVoss ? 'The Voss estate gate' : 'Mansion gate' });
     spots.push({ x: (dx0 + dx1) / 2, z: gz + 1.5, yaw: L.gate === 'e' ? -Math.PI / 2 : Math.PI / 2, kinds: ['mansion', 'parking'], name: isVoss ? 'The Voss forecourt' : 'Mansion driveway' });

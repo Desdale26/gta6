@@ -123,7 +123,7 @@ const shotNow = async (name) => {
 
 // The story's first job starts by itself after New Game; the movement checks need a quiet city.
 await game(() => { VH.game.noAutoStory = true; });
-await page.click('#screen-title .btn-primary');
+await page.click('#screen-title button:has-text("New Game")');
 await advance(2.5);
 check((await game(() => VH.game.state)) === 'playing', 'New Game reaches gameplay after the intro');
 await shotNow('02-spawn');
