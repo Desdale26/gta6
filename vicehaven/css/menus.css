@@ -482,3 +482,120 @@ select {
 .dialog-list.joblog li.locked {
   opacity: 0.35;
 }
+
+/* ------------------------------------------------------------ end credits */
+.credits-roll {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: radial-gradient(ellipse at 50% 40%, #0d1124 0%, #04050b 70%);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  pointer-events: none;
+}
+
+.credits-roll.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.credits-inner {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: min(640px, 90vw);
+  transform: translate(-50%, 0);
+  text-align: center;
+  font-family: var(--vh-font-display);
+  color: var(--vh-text);
+  animation: credits-roll 60s linear forwards;
+}
+
+@keyframes credits-roll {
+  from { transform: translate(-50%, 0); }
+  to { transform: translate(-50%, calc(-100% - 55vh)); }
+}
+
+.credits-title {
+  font-size: 4.2rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  background: linear-gradient(90deg, var(--vh-accent-2), var(--vh-accent), #b34fff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.credits-sub {
+  margin-top: 0.4rem;
+  font-size: 1rem;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}
+
+.credits-ending {
+  margin-top: 2.4rem;
+  font-size: 1.5rem;
+  letter-spacing: 0.12em;
+  color: var(--vh-accent-2);
+}
+
+.credits-gap {
+  height: 4.5rem;
+}
+
+.credits-head {
+  margin-bottom: 1.2rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--vh-accent-3);
+}
+
+.credits-row {
+  display: flex;
+  justify-content: center;
+  gap: 1.6rem;
+  margin: 0.55rem 0;
+  font-size: 1.05rem;
+}
+
+.credits-role {
+  flex: 1;
+  text-align: right;
+  color: var(--vh-muted);
+}
+
+.credits-name {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+}
+
+.credits-line {
+  font-size: 1.1rem;
+  font-style: italic;
+  color: var(--vh-muted);
+}
+
+.credits-last {
+  font-size: 2.2rem;
+  font-weight: 700;
+}
+
+.credits-hint {
+  margin-top: 1.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  color: var(--vh-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credits-inner {
+    top: 8vh;
+    animation: none;
+  }
+}

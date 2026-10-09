@@ -794,6 +794,37 @@
       this.hud.setVehiclePrompt(text, this.input.labelFor('vehicle'));
     },
 
+    /** After the last job: the credits, then free roam. */
+    endCredits() {
+      const m = this.missions;
+      const f = m.flags;
+      const ending = f.ending_a ? 'Ending: Taillights' : f.ending_b ? 'Ending: The Long Way Home' : f.ending_c ? 'Ending: Wheelman' : '';
+      const chars = (VH.Data.story && VH.Data.story.characters) || {};
+      const ids = ['jay', 'dex', 'mae', 'augie', 'noor', 'ansel', 'calder', 'teo', 'rhea', 'birdie', 'lourdes', 'horne', 'rourke', 'voss', 'nana_lu', 'tommy'];
+      const cast = ids.filter((id) => chars[id]).map((id) => ({ name: chars[id].name, role: chars[id].role || '' }));
+      const done = Object.keys(m.completed).filter((id) => m.all.has(id));
+      const side = done.filter((id) => (m.all.get(id) || {})._chain).length;
+      const jobs = done.filter((id) => (m.all.get(id) || {}).activity).length;
+      const mins = Math.round((this.playTime || 0) / 60);
+      const stats = [
+        ['Time on the road', Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min'],
+        ['Story jobs', String(done.filter((id) => (m.all.get(id) || {})._main).length) + ' / ' + m.main.length],
+        ['Side stories', side + ' / ' + Array.from(m.all.values()).filter((x) => x._chain).length + ' jobs'],
+        ['Jobs between jobs', String(jobs)],
+        ['Taxi fares', String(this.activities ? this.activities.taxi.done : 0)],
+        ['Money in your pocket', VH.util.formatMoney(this.player.money)],
+      ];
+      if (this.audio.moodPad) this.audio.moodPad('hope');
+      this.frozenControls = true;
+      this.player.frozen = true;
+      this.ui.showCredits({ ending, cast, stats }, () => {
+        this.frozenControls = false;
+        this.player.frozen = false;
+        if (this.audio.moodPad) this.audio.moodPad(null);
+        this.hud.notify({ title: 'Vicehaven', text: 'The races, fares, bounties and side stories are still out there.', icon: '☀', duration: 7000 });
+      });
+    },
+
     /** Between songs the station's host sometimes says something. */
     _djLink(index) {
       const stations = (VH.Data.story && VH.Data.story.activities && VH.Data.story.activities.radio) || [];

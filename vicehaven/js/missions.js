@@ -1504,6 +1504,11 @@
       this._music('off');
       this.save();
       setTimeout(() => this.refreshMarkers(), 2500);
+      // The last main job: roll the credits.
+      if (m._main && !this.nextMain && !this.completed._credits) {
+        this.completed._credits = true;
+        setTimeout(() => game.endCredits && game.endCredits(), 6500);
+      }
       // Chained missions start straight away.
       const next = this.available().find((n) => n.start === 'chain' && (n.requires || []).includes(m.id));
       if (next) setTimeout(() => this.start(next), 4200);

@@ -556,6 +556,65 @@
       document.body.append(this.intro);
     }
 
+    /**
+     * The end credits after the last job: the ending's name, the cast, the
+     * player's own numbers, then back to the city. Any key past the first
+     * few seconds skips to the end.
+     */
+    showCredits(info, onDone) {
+      const root = el('div', 'credits-roll');
+      const inner = el('div', 'credits-inner');
+      const add = (cls, text) => {
+        const e = el('div', cls, text || '');
+        inner.append(e);
+        return e;
+      };
+      add('credits-title', 'VICEHAVEN');
+      add('credits-sub', 'Ten and Two');
+      if (info.ending) add('credits-ending', info.ending);
+      add('credits-gap');
+      add('credits-head', 'Starring');
+      for (const c of info.cast) {
+        const r = el('div', 'credits-row');
+        r.append(el('span', 'credits-role', c.role), el('span', 'credits-name', c.name));
+        inner.append(r);
+      }
+      add('credits-gap');
+      add('credits-head', 'Your Vicehaven');
+      for (const [k, v] of info.stats) {
+        const r = el('div', 'credits-row');
+        r.append(el('span', 'credits-role', k), el('span', 'credits-name', v));
+        inner.append(r);
+      }
+      add('credits-gap');
+      add('credits-line', 'In memory of everyone who got left in the lot.');
+      add('credits-gap');
+      add('credits-last', 'Thanks for driving.');
+      add('credits-hint', 'The city is still out there. Press E to keep driving.');
+      root.append(inner);
+      document.body.append(root);
+      requestAnimationFrame(() => root.classList.add('visible'));
+      const dur = Math.max(40, inner.childElementCount * 1.7);
+      inner.style.animationDuration = dur + 's';
+      const t0 = performance.now();
+      const close = () => {
+        window.removeEventListener('keydown', onKey, true);
+        root.classList.remove('visible');
+        setTimeout(() => root.remove(), 1200);
+        if (onDone) onDone();
+      };
+      const onKey = (e) => {
+        if (performance.now() - t0 < 4000) return;
+        if (e.code === 'KeyE' || e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+        }
+      };
+      window.addEventListener('keydown', onKey, true);
+      inner.addEventListener('animationend', () => setTimeout(close, 6000));
+    }
+
     showIntro(place, line) {
       this.introPlace.textContent = place;
       this.introLine.textContent = line;
