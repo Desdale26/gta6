@@ -298,6 +298,7 @@
 
     damage(amount, source, kind) {
       if (this.dead) return;
+      if (this.damageScale) amount *= this.damageScale; // named crew are hard to kill
       let rest = amount;
       if (this.armor > 0) {
         const a = Math.min(this.armor, rest * 0.6);

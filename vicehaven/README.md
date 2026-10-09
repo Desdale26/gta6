@@ -28,7 +28,7 @@ buying the city block by block with money Jay once helped steal.
 ## Running it in Microsoft Edge
 
 **Easiest: the single file.** `vicehaven/dist/vicehaven.html` is the whole
-game in one HTML file (every script, stylesheet and three.js inlined).
+game in one 3 MB HTML file (every script, stylesheet, the whole story and three.js inlined).
 Download it anywhere (your Downloads folder, a USB stick) and double-click
 it. It needs nothing else and works offline.
 

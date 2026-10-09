@@ -230,7 +230,6 @@ for (const ch of story.side || []) {
   if (ch.unlockAfter && !allMissions.has(ch.unlockAfter)) bad(ch.id, 'unlockAfter unknown mission "' + ch.unlockAfter + '"');
   for (const m of ch.missions || []) mission(m, false);
 }
-for (const [w, f] of flagsUsed) if (!flagsSet.has(f) && !/^unlocked:/.test(f) && !allMissions.has(f)) soft(w, 'flag "' + f + '" is tested but never set');
 for (const t of story.texts || []) {
   if (t.after && !allMissions.has(t.after)) bad('text', 'after unknown mission "' + t.after + '"');
   if (!speakers.has(t.from)) bad('text', 'unknown sender "' + t.from + '"');
@@ -254,6 +253,8 @@ for (const key of ['races', 'carList', 'bounties', 'turf']) {
   }
 }
 for (const st of Object.values(act.radio || {})) for (const l of st.lines || []) if (typeof (l.text || l) !== 'string') bad('radio', 'bad radio line');
+// Flags last, so ones set by activity choices (bounties) count.
+for (const [w, f] of flagsUsed) if (!flagsSet.has(f) && !/^unlocked:/.test(f) && !allMissions.has(f)) soft(w, 'flag "' + f + '" is tested but never set');
 
 for (const p of problems) console.log('✗ ' + p);
 for (const p of warn) console.log('· ' + p);

@@ -832,6 +832,12 @@
       if (!a) return;
       a.brain = new CrewBrain(this, weapon || a.weapon || 'pistol');
       a.faction = 'crew';
+      // Named crew are plot: losing the job because the AI wandered into a
+      // grenade isn't fair. They can still go down if Jay leaves them exposed.
+      if (a.charId) {
+        a.damageScale = 0.3;
+        a.health = Math.max(a.health, 200);
+      }
       if (!run.crew.includes(id)) run.crew.push(id);
       // Hop straight into Jay's car if he's in one.
       const v = this.game.player.vehicle;
@@ -851,6 +857,7 @@
       }
       a.brain = new LeaveBrain(this);
       a.faction = 'story';
+      a.damageScale = 0;
       a.leaving = true;
     }
 
