@@ -262,7 +262,7 @@ vicehaven/
 │   ├── dialogue.js · places.js · missions.js · activities.js   voices and subtitles; story places;
 │   │                       the mission engine and save system; the jobs between jobs
 │   ├── data/               districts, challenges, weapons, the story (story.js = cast, places,
-│   │                       factions; story-act1…4.js = the jobs; story-extras.js = fares, races,
+│   │                       factions; story-act1…4*.js = the jobs, by act; story-extras.js = fares, races,
 │   │                       bounties, turf wars, texts, radio hosts)
 │   ├── minimap.js · hud.js · ui.js · debug.js · main.js
 ├── docs/STORY_BIBLE.md     the whole story: characters, timeline, every job, choices, endings

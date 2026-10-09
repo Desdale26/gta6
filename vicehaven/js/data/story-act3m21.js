@@ -25,7 +25,11 @@
  * zip-tied in the orange crane's cab, alive and furious; Voss's card read
  * "OLD MARKET STANDS. YOU HAVE MY WORD. H.V."; Augie knew Voss's father, Big
  * Harlan (diesel and oranges), and little Harlan used to steal his bike;
- * letter thirty-seven is "the good one", to be read last.
+ * letter thirty-seven is "the good one", to be read last. Jay rang Gus on
+ * the Thursday before to ask how long Medic 12 takes from Harbor Road to
+ * Pier 9 (his first plan, and it was for the after); Rhea sent two vests
+ * and Augie gave his back ("It doesn't go with the shoes"). In the car
+ * Augie shows Teo how to wind the watch: three turns (m24 leans on this).
  *
  * Engine notes: the crew are pre-spawned at the bar so a checkpoint retry
  * rebuilds them far from the docks. The wounded Augie in bay 14 replaces the
@@ -33,6 +37,10 @@
  * another; on the drive Augie rides as dialogue, not as an actor, so nobody
  * climbs out of the back seat at the hospital. A short `say` step comes
  * before every scene or blackout that follows car banter, so no line is cut.
+ * The clock runs a game minute a second, so setTime pulls it back to night
+ * after every long stretch of talk (and is placed on a cut, never on the
+ * slow-motion beat). Rourke's car is locked so "get a car" can only mean
+ * Lulu.
  */
 (function () {
   'use strict';
@@ -67,14 +75,14 @@
     say: [
       ['caption', '(Augie on his back on the new yellow paint, one hand pressed to his side. The other is still holding the cream card.)'],
       ['augie', '(looking up past him at the floodlights) I said drive.'],
-      ['jay', "(down on one knee over him, pistol up, his free hand flat on Augie's chest) Not this time."],
+      ['jay', "(down on one knee over him, pistol up, his free hand flat on Augie's chest) I heard you."],
       ['augie', '(a breath with a whistle in it) ...You got out of the car.'],
       ['augie', "(his cheek on the concrete) This is the spot. Newer paint. You can feel it. It's smoother."],
-      ['augie', "Kid. Lourdes's million. That was never my idea. It was Tommy's. Her knee. That's what he wanted the money for. That's why he came."],
+      ['augie', "Kid. Lourdes's million. Her knee. That was Tommy's idea, not mine. I'm only finishing his job."],
       cutLine,
       ['jay', 'Stop talking. Save it.'],
       ['augie', "Save it for what? Celia always said I talked too much at funerals. Don't let me talk at mine."],
-      ['noor', "(on the radio) I called Mae. She's on Harbor Road in Medic 12. She says keep pressure. She says two minutes. She says two minutes, Jay."],
+      ['noor', "(on the radio) Mae's on Harbor Road. Medic 12. She was already there, Jay, she was already parked there. She says keep pressure. She says two minutes."],
       ['augie', "(his hand finding Jay's wrist and holding on, hard, the way you hold a railing) You're shaking."],
       ['jay', "I'm not shaking."],
       ['augie', "(eyes closing, opening) No. Steady hands. You always had steady hands. (beat) It's me. It's the concrete. It's cold."],
@@ -102,15 +110,18 @@
   // fast the lines run on into the bay; they are never cut.
   const UP_PELICAN_OPEN = [
     ['caption', "(The back seat. Augie across it, and Mae in the footwell with her bag open and her shears already through his good linen shirt.)"],
+    ['mae', "(out of the window, to the ambulance) Gus! Lights on, stay on us! We are not moving him twice! (to Jay) You're faster than Gus. Drive."],
     ['mae', '(both hands on his chest, her whole weight in them) Augie. It\'s Mae. Look at me. There you are. Stay there.'],
     ['augie', '(surprised, pleased) Mae Reyes. ...You came out.'],
-    ['mae', "I'm on nights. You're on my route. (not looking up) Jay. Drive."],
-    ['caption', '(In the pocket she has cut through: a crayon horse, folded in four. She puts it on the seat without looking at it. Later, she will.)'],
+    ['mae', "I'm on nights. You're on my route."],
+    ['caption', '(In the pocket she has cut through: a crayon horse, folded in four, and a cream card. She puts them on the seat without looking. Later, she will.)'],
     ['augie', "(his eyes on the back of Jay's head) You didn't say it."],
     ['jay', 'Say what?'],
     ['augie', '...Seatbelt.'],
     ['jay', '(and his voice goes somewhere, and comes back) Seatbelt, Augie.'],
     ['augie', "(fading, smiling) Seatbelt... I know. I know. Don't be a pain in the ass."],
+    ['jay', '(and it very nearly comes out as a laugh) That\'s two.'],
+    ['augie', '(his eyes closed, the smile still there) Special occasion.'],
     ['mae', "(close to his face, fierce) Hey. Eyes open. Tell me your son's name."],
   ];
   const UP_PELICAN_SAVED = [

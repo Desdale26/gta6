@@ -553,7 +553,9 @@
     // ------------------------------------------------------------- damage
     damage(amount, source, kind) {
       if (this.wrecked || amount <= 0) return;
-      if (this.damageScale) amount *= this.damageScale; // story cars that must survive are tougher
+      // Story cars that must survive are tougher, and nearly bulletproof while
+      // parked: losing Lulu to a stray round while Jay is on foot isn't fair.
+      if (this.damageScale) amount *= this.damageScale * (this.driver === 'player' ? 1 : 0.25);
       else if (this.type === 'bulwark') amount *= 0.45; // armoured
       this.health -= amount;
       if (source) this.lastHitBy = source;

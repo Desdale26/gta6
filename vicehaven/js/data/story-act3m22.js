@@ -19,9 +19,17 @@
  * Horne's first envelope was $4,000 and went down on the lift; Dex's
  * catalytic converter was wrapped in Birdie's octopus beach towel; with
  * dex_forgiven Ansel spends the night in the garage doorway with a chair
- * (so he is there for Birdie when it burns in m23); with dex_banished Rafi
- * has the garage keys; with dex_to_calder Mae and Gus collect Birdie in
- * Medic 12.
+ * (so he is there for Birdie when it burns in m23), and Birdie has a
+ * spelling test on Thursday (necessary, rhythm, separate); with
+ * dex_banished Rafi has the garage keys and Dex has told Birdie they are
+ * going "somewhere with snow" on holiday; with dex_to_calder Mae and Gus
+ * collect Birdie in Medic 12, and Calder rings Ray Okonkwo (trusted only).
+ *
+ * Engine notes: every branch gets Jay back into Lulu before the coda, so the
+ * radio call is always made from behind the wheel. A short `say` step comes
+ * before every scene or phone call that follows car banter, so no line is
+ * cut. The cleaners are cocky (low accuracy, one group holding by its car)
+ * because they came for one unarmed mechanic; Jay takes a vest in the lull.
  */
 (function () {
   'use strict';
@@ -46,8 +54,8 @@
     halberdSuv('cleaner_c', 'parkade_ramp'),
     halberdSuv('cleaner_d', 'parkade_ramp'),
     { spawn: [
-      { id: 'tidier', faction: 'halberd', at: 'cleaner_c', count: 3, weapon: 'smg', behavior: 'attack', group: 'cleaners2' },
-      { id: 'closer', faction: 'halberd', at: 'cleaner_d', count: 2, weapon: 'rifle', behavior: 'attack', group: 'cleaners2' },
+      { id: 'tidier', faction: 'halberd', at: 'cleaner_c', count: 3, weapon: 'smg', behavior: 'attack', accuracy: 0.32, group: 'cleaners2' },
+      { id: 'closer', faction: 'halberd', at: 'cleaner_d', count: 2, weapon: 'rifle', behavior: 'guard', accuracy: 0.3, group: 'cleaners2' },
     ] },
     { music: 'action' },
   ];
@@ -56,6 +64,7 @@
   // One in the morning. Tuesday. Augie's reminder, set on Jay's phone at
   // the seawall in m19 ("Put you on it too. In case I forget.").
   const CODA = [
+    { getIn: 'lulu', objective: 'Back to Lulu' },
     { setTime: 1 },
     { music: 'off' },
     { text: 'augie', message: 'Tuesday reminder. Request the song. Del knows which one. Don\'t let her play the remix.' },
@@ -102,10 +111,10 @@
           ['calder', "CI LUGNUT's payments go through a parts account. Same day every month, four years. The account's called Calloway Auto Supply."],
           ['jay', '(a long time) There\'s no Calloway Auto Supply.'],
           ['calder', "No. There's a PO box on Tannery Avenue and a garage on Anchor Street with one L out on the sign."],
-          ['calder', 'Two bonuses. One on the first of October, three years ago. The morning after Tidewater. The other one on the twenty-ninth of this month.'],
+          ['calder', 'Two bonuses. One on the first of October, three years ago. The morning after Tidewater. The other one on Saturday. The twenty-ninth.'],
           ['jay', '(very quietly) The day before Pier 9.'],
           ['calder', "(beat) He fixed my car once, you know. Side of Laurel Street, midnight, the alternator. Wouldn't take a dime. Said it was too sad a car to charge for."],
-          ['calder', "I'm sorry, Mercer. I'm not supposed to be sorry, I'm supposed to be a detective. Turns out you can do both. Don't do anything stupid tonight."],
+          ['calder', "(beat) I'm sorry, Mercer. (beat) Don't do anything stupid tonight."],
           ['jay', 'Define stupid.'],
           ['calder', 'Anything I have to write down. (to the engine, away from the phone) Start, you piece of shit. Please. I\'m asking nicely.'],
         ] },
@@ -167,11 +176,10 @@
       { music: 'off' },
       { setTime: 23.6 },
       { goto: 'dex', vehicle: false, radius: 11, objective: 'Leave Lulu. Up the ramp on foot. Stay behind the pillars.', say: [
-        ['caption', '(The Grand Parkade. Seven levels of spiral ramp and bad light. He leaves Lulu two levels down with her nose to the wall and goes up the rest on foot, pillar to pillar.)'],
-        ['caption', '(The top deck. Noor\'s spot, the night of the canary. The spot nobody came to.)'],
-        ['caption', '(Somebody came tonight.)'],
+        ['caption', '(The Grand Parkade. He leaves Lulu with her nose to the wall and goes up the rest on foot, pillar to pillar.)'],
       ] },
       { scene: { at: 'dex', cast: ['dex', 'horne'] }, say: [
+        ['caption', '(The top deck. Noor\'s spot, the night of the canary. The spot nobody came to. Somebody came tonight.)'],
         ['caption', '(Captain Wade Horne, in uniform, leaning on a beige Halcyon nobody would look at twice, eating sunflower seeds from a paper twist. Jay behind a pillar, twelve metres away.)'],
         ['horne', '(checking his gold watch as Dex walks up) Four minutes late, Calloway. I had you down as punctual. It was the one thing I liked about you.'],
         ['dex', "Birdie wouldn't go down. She wanted the story about the horse."],
@@ -226,13 +234,13 @@
         ['dex', "She wears it every day. Junior deputy. On her strap. How do I take it off her, Jay? What do I tell her it's for?"],
         ['jay', 'Augie asked you to cut a key.'],
         ['dex', "(the words coming out of him like teeth) “Anything, Aug. Name it.” I cut it perfect. I cut it perfect so at least one part of it would be right. Then I rang him."],
-        ['jay', 'And then you looked at Noor.'],
+        ['jay', '“How well do we know her, really?”'],
         ['dex', '(nothing; then, to the concrete) Yeah. I did that too.'],
         ['jay', 'Crane Row.'],
-        ['dex', "I told him. He laughed. “That's a canary, Calloway. The old man's testing his birds. Stay home.” So I stayed home, and Augie came in at midnight and said—"],
-        ['jay', '“Told you.”'],
-        ['dex', "(and here he goes, a big man folding at the middle) He was so happy. He wanted my couch. I gave him the good blanket and sat in the office till it got light."],
-        ['dex', "Pier 9 I said no. I said I'm out. And he put a photo on my dashboard. The yellow gate. Three-fifteen. Birdie in her coat with the ears on, holding Grace's hand."],
+        ['dex', "I told him. He laughed. “That's a canary, Calloway. The old man's testing his birds. Stay home.” So I stayed home. Two beers in the fridge. And Augie gets out of your car and says—"],
+        ['jay', '“See? Waited up. That\'s a crew.”'],
+        ['dex', "(and there it goes; the whole size of him gives at once) He was so happy. He wanted my couch. I gave him the good blanket and sat in the office till it got light."],
+        ['dex', "Pier 9 I said no. I said I'm out. And he put a photo on my dashboard. The yellow gate. Three-fifteen. Birdie in her coat with the ears on, holding Pat's hand at the crossing."],
         ['dex', "He didn't say anything. He tapped his watch. So I gave him two-ten, and bay fourteen, and who'd be in the car, and where Rhea's rifles were going to be."],
         ['dex', "Then I said I'd wait at the garage with the second car. And I did. Engine running till four in the morning. Like that made me still on the crew."],
         ['jay', '“Bring him back.”'],
@@ -243,15 +251,14 @@
       halberdSuv('cleaner_a', 'parkade_ramp'),
       halberdSuv('cleaner_b', 'parkade_ramp'),
       { spawn: [
-        { id: 'cleaner', faction: 'halberd', at: 'cleaner_a', count: 3, weapon: 'smg', behavior: 'attack', group: 'cleaners' },
-        { id: 'sweeper', faction: 'halberd', at: 'cleaner_b', count: 2, weapon: 'pistol', behavior: 'attack', group: 'cleaners' },
+        // They arrive cocky: they came for one unarmed mechanic, not for Jay.
+        { id: 'cleaner', faction: 'halberd', at: 'cleaner_a', count: 3, weapon: 'smg', behavior: 'attack', accuracy: 0.3, group: 'cleaners' },
+        { id: 'sweeper', faction: 'halberd', at: 'cleaner_b', count: 2, weapon: 'pistol', behavior: 'guard', accuracy: 0.35, group: 'cleaners' },
       ] },
       { music: 'action' },
-      { say: [
+      { kill: 'group:cleaners', checkpoint: true, objective: "Halberd's come to tidy Horne's informant away. Don't let them.", say: [
         ['dex', "(looking at the envelope in his hand, and understanding all at once) It's all here. He never gives me all of it. He says it keeps you coming back."],
         ['jay', "(pulling the pistol at last) Not if you're not coming back. Get down."],
-      ] },
-      { kill: 'group:cleaners', checkpoint: true, objective: "Halberd's come to tidy Horne's informant away. Don't let them.", say: [
         ['dex', '(flat behind the beige Halcyon, hands over his head) I don\'t have a gun! I have a tyre gauge! Jay, I have a tyre gauge!'],
         ['caption', '(A Halberd man calls across the deck, bored, like a bailiff: “Mr. Calloway. Captain Horne sends his thanks for your service.”)'],
         ['dex', '(yelling back, from the floor) Tell him to fudge himself! (beat, horrified) Shit. Fudge. I said fudge. Birdie\'s not even HERE.'],
@@ -259,7 +266,11 @@
       { music: 'tension' },
       { say: [
         ['caption', '(Quiet, but for a car alarm and a dead man\'s radio asking for a status. Dex takes a pistol off the nearest body, the way you\'d pick up a fish you weren\'t sure was dead.)'],
+        ['caption', '(Jay unbuckles a vest off another one and puts it on without looking at the face. Dex watches him do it.)'],
+        ['dex', '(very quietly) You used to throw up after jobs.'],
+        ['jay', 'I still do. Later.'],
       ] },
+      { reward: { armor: 60 } },
       { join: ['dex'], weapon: 'pistol' },
       { scene: { at: 'dex', cast: ['dex'] }, say: [
         ['dex', "(breathing hard) They'll send more. He always sends more. He told me once, “Never send what you need, Dexter. Send twice what you need.” He was talking about flowers for his wife."],
@@ -311,6 +322,15 @@
             ['caption', '(Neither of them says anything all the way down Southshore.)'],
             ['caption', "(At a red light by the fish market Dex winds his window down, holds Horne's envelope out into the dark, and lets go. The money goes down Southshore like a flock of something.)"],
             ['caption', '(Jay watches it go in the mirror. He doesn\'t say anything about it. He doesn\'t wait for the green.)'],
+            ['caption', '(Saltmarsh. The cranes. Neither of them looks at the Pier 9 gate as it goes by. Both of them see it.)'],
+            ['dex', '(eventually, to the window) Birdie\'s got a spelling test Thursday.'],
+            ['jay', '(a long beat) What words?'],
+            ['dex', 'Necessary. Rhythm. Separate. The ones nobody can spell.'],
+            ['jay', 'Nobody can spell separate.'],
+            ['dex', '(something that starts as a laugh and doesn\'t finish) She can.'],
+          ] },
+          { say: [
+            ['caption', '(Kostas Marine Salvage. A light on behind the half-shut door.)'],
           ] },
           { scene: { at: 'kostas_salvage', cast: ['dex', 'rhea'] }, say: [
             ['caption', '(Kostas Marine Salvage, past midnight. The doors rolled half down. Rhea at her pallet desk, writing in pencil, exactly as if it were noon.)'],
@@ -369,6 +389,14 @@
           { setTime: 0.9 },
           { music: 'sad' },
           { goto: 'dex_garage', vehicle: 'lulu', objective: 'Calloway Auto. Make sure he goes.', say: [
+            ['dex', '(on the phone, low, a zip being done up somewhere) She woke up. She asked if we\'re going on holiday. I said yes.'],
+            ['dex', '(beat) Where are we going on holiday, Jay?'],
+            ['jay', 'Somewhere with snow.'],
+            ['dex', "She's never seen snow. She thinks it's a thing they make up for films."],
+            ['jay', "Then it's a holiday."],
+            ['dex', '(away from the phone, gentle, a voice Jay has never heard him use on a car) Arms up, Bird. Other arm. That\'s it.'],
+          ] },
+          { say: [
             ['caption', '(Anchor Street at one in the morning. Every light in Calloway Auto is on, for the first time in years, as if the building wants a good look at him.)'],
           ] },
           { scene: { at: 'dex_garage', cast: ['dex', 'rafi'] }, say: [
@@ -394,10 +422,13 @@
           ] },
           { leave: ['dex', 'rafi'] },
           { spawn: [{ id: 'dex_north', at: 'dex_tow', behavior: 'drive', car: 'dex_tow', to: 'downtown', hostile: false }] },
-          { camera: 'dex_garage', seconds: 9, say: [
+          { camera: 'dex_garage', seconds: 8, say: [
             ['caption', '(The mustard tow truck pulls out of the lot, indicates for an empty street, and turns north at exactly the speed limit.)'],
+          ] },
+          { say: [
             ['caption', '(Jay stands in the lot and watches the taillights all the way to the end of Anchor Street.)'],
-            ['caption', '(All his life he has been the taillights. He has never once been the one left in the lot, watching them go.)'],
+            ['caption', '(The last time he stood and watched a pair of taillights to the end of a street, he was six, and he waited on the kerb till Nana Lu came out and carried him in.)'],
+            ['caption', '(Nobody comes out. He waits anyway.)'],
           ] },
         ] },
         { label: "You're going to tell Calder everything. On the record.", flag: 'dex_to_calder', then: [
@@ -424,25 +455,27 @@
           ] },
           { setTime: 0.9 },
           { music: 'sad' },
-          { phone: 'mae', objective: 'Head for VPD Central', say: [
-            ['mae', "(an ambulance radio crackling behind her) Medic 12. Jay? It's one in the morning. Who's hurt?"],
+          { phone: 'calder', objective: 'Call Calder', say: [
+            ['calder', '(on the first ring, wary) Mercer.'],
+            ['jay', "I'm bringing you LUGNUT. He wants to talk. On the record."],
+            ['calder', "(a very long pause) ...I'll be on the bench out front. Don't come round the back. Southside parks round the back."],
+          ] },
+          { goto: 'vpd_central', vehicle: 'lulu', objective: 'VPD Central. Calder is on the bench out front.', say: [
+            ['caption', '(He dials again. Dex, beside him, looks at his own hands.)'],
+            ['mae', "(on the phone, an ambulance radio crackling behind her) Medic 12. Jay? It's one in the morning. Who's hurt?"],
             ['jay', "Nobody. I need you to pick up Birdie Calloway. Tonight. The flat over the garage. Rafi's with her."],
-            ['mae', "I'm on shift. Gus is— (beat) What's happened? Is Dex hurt?"],
+            ['mae', "(on the phone) I'm on shift. Gus is— (beat) What's happened? Is Dex hurt?"],
             ['jay', 'No.'],
             ['mae', '(a pause; she has spent ten years hearing what is under what people say) Jay. What did he do?'],
-            ['jay', "(a long time, with Dex beside him looking at his own hands) Ask me when it's over."],
+            ['jay', "(a long time, with Dex beside him) Ask me when it's over."],
             ['mae', "(silence on the line) ...That's mine. You don't get to use mine."],
             ['jay', 'I know.'],
             ['mae', '(away from the phone) Gus. Anchor Street.'],
             ['gus', "(distant, aggrieved) I'm sixty-one, Reyes. I don't do Anchor Street."],
             ['mae', "(back to Jay, quieter) I've got her. Whatever it is. I've got her."],
           ] },
-          { phone: 'calder', say: [
-            ['calder', '(on the first ring, wary) Mercer.'],
-            ['jay', "I'm bringing you LUGNUT. He wants to talk. On the record."],
-            ['calder', "(a very long pause) ...I'll be on the bench out front. Don't come round the back. Southside parks round the back."],
-          ] },
-          { goto: 'vpd_central', vehicle: 'lulu', objective: 'VPD Central. Calder is on the bench out front.', say: [
+          { say: [
+            ['caption', '(Outside the precinct. The engine ticking as it cools. Neither of them reaches for the door.)'],
             ['dex', '(after a long time, to the window) What do I tell her? When I call.'],
             ['jay', 'The truth.'],
             ['dex', "She's eight."],
@@ -453,7 +486,8 @@
           { if: 'trusted_calder', then: [
             { scene: { at: 'vpd_central', cast: ['calder', 'dex'] }, say: [
               ['caption', '(VPD Central, past one. The crooked flagpole. The bench for the families who wait. Calder is on it with an empty cup. Her car is across two spaces.)'],
-              ['calder', "(standing) You called me. You actually called me. I'd like it noted that I didn't cry. I came close. That's not going in the report either."],
+              ['calder', "(standing, the empty cup in her hand) Eleven o'clock I give you a parts account. One in the morning you bring me the parts."],
+              ['calder', "Ray Okonkwo waited six years for somebody to walk up these steps with one of Horne's. I'm going to ring him after. He'll pretend he was asleep."],
             ] },
           ], else: [
             { scene: { at: 'vpd_central', cast: ['calder', 'dex'] }, say: [
@@ -465,7 +499,7 @@
           ] },
           { scene: { at: 'vpd_central', cast: ['calder', 'dex'] }, say: [
             ['calder', '(to Dex) Mr. Calloway.'],
-            ['dex', "Detective. (beat, helplessly, because it's who he is) Your alternator's going again. I can hear it from here."],
+            ['dex', "Detective. (beat, helplessly, because it's who he is) Your alternator's going again. I heard you pull in from two streets away."],
             ['calder', '(over her shoulder, to the car) Traitor.'],
             ['calder', "Here's how it goes. You talk, I write. Every envelope, every date, every word. You sign it. Then you live in a hotel with very small soap until a judge is ready for you."],
             ['dex', 'Do I go to prison?'],
@@ -479,7 +513,7 @@
           ] },
           { leave: ['calder', 'dex'] },
           { say: [
-            ['caption', '(The precinct door swings shut behind them. Jay sits down on the bench for the families who wait, because there is nowhere else he needs to be.)'],
+            ['caption', '(The precinct door swings shut behind them. Jay sits down on the bench for the families who wait. He has never been one of them before.)'],
           ] },
         ] },
       ] } },
