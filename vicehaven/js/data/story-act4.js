@@ -54,8 +54,8 @@
       voice: { gender: 'female', pitch: 1.15, rate: 1.05 },
       bio: 'Marine biology, third year. Believes a scholarship fund has been paying her rent since she was fifteen.',
     },
-    ashby: {
-      name: 'Corinne Ashby', role: 'Chief executive, Halberd Security', age: 49,
+    lister: {
+      name: 'Corinne Lister', role: 'Chief executive, Halberd Security', age: 49,
       look: { skin: 0xf1d0b0, hair: 0x2a1d14, top: 0x2a2e33, bottom: 0x2a2e33, shoes: 0x111111, build: 'slim', longHair: true },
       voice: { gender: 'female', pitch: 0.95, rate: 1.0 },
       bio: "Rourke's replacement. Shakes hands like she is signing something.",
@@ -133,7 +133,7 @@
         ['rhea', '(beat) He had very small eyebrows for the rest of that year.'],
         ['deb', 'Rhea says take Kostya.'],
         ['kostya', "Kostya says it's his day off."],
-        ['deb', "It's Thursday."],
+        ['deb', "It's Sunday. Nobody on this quay has had a Sunday off since 1990."],
         ['kostya', "I'm taking it as a day off."],
         ['rhea', "Nobody goes with him. If a Salt is seen on Crane Row today, it's my war. If a Mercer is seen, it's his. (to Jay) I'll be in the cab of the blue crane. My cranes, my eyes."],
       ] },
@@ -359,7 +359,7 @@
       ] },
       { if: 'dex_forgiven', then: [
         { say: [
-          ['dex', "(in the passenger seat, gripping the dash) You're enjoying this. I can see it in your neck."],
+          ['dex', "(in the passenger seat, gripping the dash) You're enjoying this. I've known you since you were twelve. You're enjoying this."],
           ['jay', "I'm not enjoying it."],
           ['dex', "(after a while, staring at the radio with Horne's call sign taped above it) Four years I sat here. You know what he talked about? His boat. Every month. The boat he never takes out."],
           ['dex', "And I'd say, sounds great, Captain. And I'd take the envelope. (beat) I'd eat the butterscotch, Jay. Every time. I'm a grown man."],
@@ -560,8 +560,8 @@
       { if: 'foxes_done', then: [
         { say: [
           ['noor', '(squinting at his feet) Why are you wearing church shoes on a beach?'],
-          ['jay', "Walt's funeral. Saturday. Lefty said wear the good shoes."],
-          ['noor', "That was two days ago."],
+          ['jay', "Walt's funeral. Tuesday. Lefty said wear the good shoes."],
+          ['noor', "That was yesterday."],
           ['jay', "(looking at them) I haven't taken them off."],
         ] },
       ] },
@@ -591,7 +591,7 @@
         { say: [
           ['teo', "(leaning out of a candy-red lowrider, revving it so the whole car shrugs) Old man's car against mine. Seawall to the Last Resort to Meridian. Loser buys Rhea's bathtub."],
           ['jay', "That's not a prize, that's a punishment."],
-          ['teo', "That's why it's for the loser. Don't make it weird. Just lose."],
+          ['teo', "That's why it's for the loser. Just lose."],
         ] },
         { race: { checkpoints: ['harbor_point', 'last_resort_bar', 'meridian_boulevard'], mustWin: false, rivals: [{ char: 'teo', car: 'lowrider', color: 0xb3202a, skill: 0.95 }] }, objective: 'Race Teo for the ouzo', say: [
           ['teo', '(over the open windows, side by side) Two land-yachts! This is the slowest race in the history of Vicehaven!'],
@@ -829,7 +829,7 @@
         ['pruitt', '(not moving his lips, like a ventriloquist with a gun to his head) What are you doing here?'],
         ['jay', "Parking. The vote's tomorrow."],
         ['pruitt', 'I know when the vote is.'],
-        ['jay', "You said I'd know when. (beat) I know when."],
+        ['jay', "I said you'd know when. (beat) This is when."],
         ['pruitt', "(dabbing his forehead with a cocktail napkin he has clearly already used) Nine o'clock. Council chamber. Harlan has the votes, Mr. Mercer. Everybody's in the book. Everybody votes yes. That's what the book is for."],
         ['jay', 'Everybody?'],
         ['pruitt', '(a long, damp look at him) Ask me in the morning.'],
@@ -1009,12 +1009,12 @@
         ['jay', 'Mercer.'],
         ['noor', "(a breath that shakes on the way out) Okay. Okay, everybody be quiet now. I'm going to cry, and I have a job."],
       ] },
-      { spawnCar: 'horne_car', type: 'interceptor', at: 'voss_estate', police: true },
+      { spawnCar: 'horne_cruiser', type: 'interceptor', at: 'voss_estate', police: true },
       halberdVan('van_lead', 'voss_estate'),
       halberdVan('van_two', 'voss_estate'),
       halberdVan('van_three', 'voss_estate'),
       { spawn: [
-        { char: 'horne', at: 'horne_car', behavior: 'drive', car: 'horne_car', to: 'meridian_boulevard' },
+        { char: 'horne', at: 'horne_cruiser', behavior: 'drive', car: 'horne_cruiser', to: 'meridian_boulevard' },
         driver('two_driver', 'van_two', 'van_two', 'meridian_boulevard'),
         driver('three_driver', 'van_three', 'van_three', 'meridian_boulevard'),
       ] },

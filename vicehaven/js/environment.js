@@ -368,10 +368,12 @@
       this.shared.uTime.value += dt;
       if (this.clockRunning) this.setTime(this.hours + dt / 60);
 
-      this._envTimer -= dt;
-      if (this._envDirty && this._envTimer <= 0) {
+      // Reflections follow the sky at most every 2 s of *real* time: fast-forwarding
+      // the simulation must not queue up hundreds of PMREM renders on the GPU.
+      const now = performance.now();
+      if (this._envDirty && (!this._envLast || now - this._envLast > 2000)) {
         this._regenerateEnvMap();
-        this._envTimer = 2; // at most every 2 seconds while the clock runs
+        this._envLast = now;
       }
 
       this.sky.position.copy(focus);

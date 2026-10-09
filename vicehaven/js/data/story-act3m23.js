@@ -82,7 +82,7 @@
       ['jay', "(looking at the neat pencil numbers) There's always an after."],
       ['ilunga', 'Nobody ever plans for the after. Yes. He said it to me too, in that exact voice, over my stew, which he hated.'],
       ['ilunga', "There's a sixth item. (He folds the page away before Jay can see it.) It isn't for now. He was very particular about the order."],
-      ['ilunga', "Thirteen years he paid me two hundred dollars a year for the upkeep of that vault. I've chosen to believe it was love letters. Very heavy ones. Two bags."],
+      ['ilunga', "Twelve years he paid me two hundred dollars a year for the upkeep of that vault. I've chosen to believe it was love letters. Very heavy ones. Two bags."],
       ['jay', "(a breath out that is nearly a laugh) That's close enough."],
       ['ilunga', "(touching the angel's chipped face) Teo did that. Twelve years old, at his mother's funeral, with half a brick. His father wasn't here. Somebody had to hit something."],
       ['ilunga', 'I never had it mended. Some things you leave the way grief left them.'],

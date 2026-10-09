@@ -13,7 +13,8 @@ buying the city block by block with money Jay once helped steal.
 
 - **The story:** 31 main jobs in four acts, four side stories of four jobs
   each, five big choices that change who lives, who leaves and how it ends,
-  and three endings. About 5½ hours of story and 2 hours of side stories.
+  and three endings: over 7,000 lines of dialogue, about 5½ hours of story
+  and 2¼ hours of side stories.
 - **Between jobs:** 25 taxi fares, 6 street races, 10 cars on Dex's list,
   8 bounties, 5 turf wars, 12 stunt jumps and 30 hidden lanterns.
 - **The city:** downtown towers, Old Market alleys, Palm Crescent's pastel

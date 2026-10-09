@@ -407,7 +407,7 @@
     ['teo', '(dropping one gold shoelace on the far side of the bonnet, nowhere near the others) Tannery Row. Forty Kings and a riot. Half of Halberd looking the wrong way.'],
   ];
   const BONNET_PHONE = [
-    ['noor', "(setting Rourke's phone face down at the back of the line) And the last van stops dead when I say. With his own codes. (beat) The phone you picked."],
+    ['noor', "(setting Rourke's phone face down on the middle nut) And the middle van stops dead when I say. With his own codes. (beat) The phone you picked."],
     ['caption', '(Nobody puts anything on the far side of the bonnet, where Lantern Alley would be. He leaves the space there anyway.)'],
   ];
   const SECOND_CAR = [

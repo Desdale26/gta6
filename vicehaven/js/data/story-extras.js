@@ -772,8 +772,7 @@
     { after: 'm17_canary', from: 'teo', message: 'I\'m sorry. I don\'t know who else to say it to.' },
     { after: 'm19_the_first_letter', from: 'augie', message: 'Good morning, kid. Best sunrise in three years.' },
     { after: 'm21_two_ten', from: 'lourdes', message: 'Mae told me. I\'m making food. You\'ll come and you\'ll eat. That\'s all.', delay: 45 },
-    { after: 'm21_two_ten', from: 'augie', message: '(scheduled message) Tuesday reminder: request the song. Del knows which one. Don\'t let her play the remix.', delay: 240 },
-    { after: 'm22_lugnut', from: 'birdie', message: 'Daddy is sad and won\'t say why. Is it because of the policeman?' },
+    { after: 'm22_lugnut', from: 'birdie', requiresFlag: '!dex_to_calder', message: 'Daddy is sad and won\'t say why. Is it because of the policeman?' },
     { after: 'm23_ashes', from: 'ilunga', message: 'He asked me to tell you, if it ever came to this, that he was proud. I\'m telling you.' },
     { after: 'm24_the_notebook', from: 'noor', message: 'Found a page in Augie\'s notebook you missed. It says \'Jay: 11/10. Would steal my car again.\'' },
     { after: 'm26_gold_watch', from: 'calder', message: 'Horne\'s cruiser was on the morning news. Under the Beacon. Lights on. I have never been happier at work.' },
@@ -783,7 +782,7 @@
     { after: 'da4_signal_boost', from: 'solace', message: 'Ratings are up 4000%. That\'s a made-up number. The truth is somebody\'s listening. That\'s enough.' },
   );
   // Walt's death, only if the Silver Foxes chain is done.
-  S.texts.push({ after: 'm25_iron', from: 'lefty', requiresFlag: 'foxes_done', message: 'Walt passed in his sleep. He thought it was 1981 and Ruthie was making coffee. Good way to go. Funeral Saturday. Wear the good shoes.' });
+  S.texts.push({ after: 'm25_iron', from: 'lefty', requiresFlag: 'foxes_done', message: 'Walt passed in his sleep. He thought it was 1981 and Ruthie was making coffee. Good way to go. Funeral Tuesday. Wear the good shoes.' });
 
   // ---------------------------------------------------------------- radio
   // Station index matches VH.Radio: 0 Sunset Drive, 1 Pulse, 2 Harbor Heat.
@@ -798,7 +797,7 @@
       { text: 'The Starlite Diner, open since before you were born and open after you\'re gone. Pie is not a metaphor.' },
       { text: 'You know what they never put on postcards? The street at four a.m. when it\'s just you and the lights. That\'s the real city. Stay with me.' },
       { text: 'Voss Meridian presents The Crown. Rise with us. (sighs) Well. Some of us will rise. Here\'s a song about falling.' },
-      { text: 'This next one\'s for Augustine Vance, who used to call in every Tuesday and request the same song. Rest easy, Augie.', after: 'm21_two_ten' },
+      { text: 'This next one\'s for Augustine Vance, who used to call in every Tuesday and request the same song. Rest easy, Augie.', after: 'm22_lugnut' },
       { text: 'Bayside Mattress Kingdom. Sleep like you\'ve got nothing to hide.' },
       { text: 'It\'s three a.m., night drivers. If you\'re thinking about calling someone, call them. Trust Del.' },
       { text: 'I played a wedding anniversary once, on Heron Street. Lucinda and Cal senior. Forty years. She danced like the floor owed her money. Goodnight, Lucinda.', after: 'm02_what_she_left' },

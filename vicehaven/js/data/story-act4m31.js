@@ -78,9 +78,10 @@
     ['augie', "I made the picture without you in it on purpose, so it wouldn't hurt when it was true. That's a planner's trick. It doesn't work. Don't use it."],
     ['augie', "But in case you're there. In case. I want you to know what I'll be thinking, so you don't have to guess, because you always guess wrong."],
     ['augie', "I'll be thinking: there he is. Late."],
-    ['augie', "Your grandmother came Sunday. Plum cake, too much clove. She told me the thing about twelve. Hands at ten and two, heart at twelve. I asked her what's at twelve."],
-    ['augie', "She said, “Wherever you're going, Augustine. Even you.” I've thought about it for a year. I think she meant it isn't a place, kid. It never was. It's people."],
-    ['augie', "Go where your people are. That's all twelve ever was. That's the whole plan. It's the only one I ever made that didn't fail."],
+    ['augie', "Your grandmother came Sunday. Plum cake, too much clove. She comes every month. Two buses. Last year, at this table, she told me the thing about twelve."],
+    ['augie', "Hands at ten and two, heart at twelve. I asked her what's at twelve. She said, “Wherever you're going, Augustine. Even you.”"],
+    ['augie', "I've thought about it every night since. I think she meant it isn't a place, kid. It never was. It's people."],
+    ['augie', "That's the whole plan. It's the only one I ever made that didn't fail."],
     ['augie', 'A.'],
     ['augie', "P.S. Leave a light on for somebody. Celia did. It's the only reason I ever found my way home."],
   ];
@@ -91,6 +92,7 @@
 
   // Mae is in the passenger seat with mae_stay and (gave_cut or nightshift_done).
   const MAE_RIDES = [
+    { spawnCar: 'medic12', type: 'medic', at: PIER_KERB, locked: true, watch: false },
     { scene: { at: PIER_KERB, cast: ['mae'] }, say: [
       ['caption', "(Mae Reyes is sitting on Lulu's bonnet with her bag between her boots and a cut on her forehead she still hasn't noticed. She has been there a while.)"],
       ['mae', "Ansel's stitched. Noor's asleep on a pile of money. Rhea's charging everybody for the kettle."],
@@ -101,7 +103,9 @@
       ['mae', '(a laugh with nothing in it) Of course he is.'],
       ['mae', '(beat) You\'re going.'],
       ['jay', '(beat) Yeah.'],
-      ['caption', '(She looks at him for a long time. Then she gets down off the bonnet, walks round to the passenger side, opens the door and gets in. Her feet go up on the dash.)'],
+      ['caption', "(She looks at him for a long time. Then she gets down off the bonnet and drops the Medic 12 keys through the ambulance's open window onto the seat.)"],
+      ['mae', "Somebody'll come for her."],
+      ['caption', '(She walks round to Lulu\'s passenger side, opens the door and gets in. Her feet go up on the dash.)'],
       ['mae', "Mama has the cats. The cats have Mama. I've got a bag. (beat) Ask me."],
       ['jay', '(at the driver\'s door, not moving) It\'s over?'],
       ['mae', "It's over. Ask me."],
@@ -111,7 +115,7 @@
     { if: 'nightshift_done', then: [
       { say: [
         ['caption', "(Stuck to Lulu's dash with electrical tape, where it has been since Gus's last shift: a MEDIC 12 patch. Mae presses it flat with her thumb.)"],
-        ['mae', "Then drive. (beat) Get us there, Jay. Everything else is paperwork."],
+        ['mae', "(not looking at him) Get us there. Everything else is paperwork."],
       ] },
     ] },
     { join: ['mae'] },
@@ -158,7 +162,13 @@
     ] },
     { reward: { money: 4000000 } },
     { getIn: 'lulu', objective: 'Get in Lulu' },
-    { if: '!a_mae_rides', then: MAE_STAYS },
+    { if: 'a_mae_rides', then: [
+      { say: [
+        ['jay', '(his hand on the key, not turning it) Seatbelt.'],
+        ['caption', '(Mae looks at him for a long second. She was in the back of this car with her hands on Augie\'s chest. She heard what he said.)'],
+        ['mae', '(clicking it home, feet still on the dash) I know. (beat) I know.'],
+      ] },
+    ], else: MAE_STAYS },
     { music: 'hope' },
     { goto: 'meridian_boulevard', vehicle: 'lulu', stop: false, radius: 16, objective: 'West on Meridian. Out of Harbor Point.', say: [
       ['noor', "(on the phone, half asleep, then not at all) Jay? Where are you? Mae said you went after him. Is he— did you—"],
@@ -176,10 +186,10 @@
       ['jay', 'Boateng Blooms. Tannery Row. Whatever it costs.'],
       ['ansel', "Sunflowers out front, I think. They turn to follow the light. (beat) I'll keep a bucket by the door for you. Of whatever's in season. In case."],
       ['jay', 'Ansel.'],
-      ['ansel', "Most people leave by standing up. You're doing it sitting down. That's allowed. It's still standing up."],
+      ['ansel', "Most fights end when you stand up. I never found out what ends when you drive away. (beat) Write and tell me. I'll read it to the sunflowers."],
       ['rhea', "(on the phone, the kettle going behind her) Thirty million dollars in my warehouse and you want me to split it like a bar bill."],
-      ['jay', "Four per cent storage. You told me once. Sentiment fee zero."],
-      ['rhea', "(beat) I'm cashing the cheque. Stavros's. I'm buying the crane. Pink. He'll hate it."],
+      ['jay', 'Take your cut off the top. What we agreed.'],
+      ['rhea', "(the pencil stops) Augie haggled. You never do. (beat) I'm cashing the cheque. Stavros's. I'm buying a crane. Pink. He'll hate it."],
       ['rhea', "Everything in this port floats or sinks, Mercer. (beat) You floated. Don't come back and sink."],
     ] },
     { if: 'dex_to_calder', then: [
@@ -208,7 +218,7 @@
       { goto: 'dex_garage', vehicle: 'lulu', radius: 10, objective: 'One stop. Calloway Auto.', say: [
         ['jay', '(to the car, turning onto Anchor Street) One stop. One.'],
       ] },
-      { say: [['caption', '(Anchor Street. The smell of old fire, still, three weeks on.)']] },
+      { say: [['caption', '(Anchor Street. The smell of old fire, still, a week on.)']] },
       { scene: { at: 'dex_garage', cast: ['dex', 'birdie'] }, say: [
         ['caption', "(What's left of Calloway Auto: a black slab, a twisted lift, the smell of old fire. On the kerb in front of it, at half past six in the morning, Dex and Birdie, waiting.)"],
         ['caption', "(Birdie holds a sign on a broom handle, painted on the back of a Renewal notice: CALLOWAY AUTO (UNDER NEW INVESTMENT). The dead neon L hangs round her neck on a string.)"],
@@ -219,13 +229,15 @@
         ['birdie', "Are you going away for a week?"],
         ['jay', '(crouching to her height) Longer than a week, Bird.'],
         ['birdie', "(considering this) Okay. I'll count. (beat) You have to come back when I get to a number I don't know."],
-        ['dex', "(very quietly, over her head) Go, Jay. (beat) Thank you for the car. Last night. For letting me drive the second car."],
+        ['dex', "(very quietly, over her head) Go on, Jay. (beat) You gave me the second car last night. Keys and everything. Nobody's handed me keys in four years."],
         ['caption', '(When Lulu pulls away they are both waving. Birdie waves the whole sign. Dex waves until the corner, and then a bit after it, at nothing.)'],
       ] },
       { getIn: 'lulu', objective: 'Get in Lulu' },
     ] },
+    { text: 'oyelaran', message: "Lucinda's porch light is on. I put it on. I'm leaving it on. Key's under MY mat, whenever. I'll water the lemon. Don't argue." },
     { if: 'kept_cut', then: [
-      { text: 'oyelaran', message: "Saw Lucinda's porch light on at five. Was that you? Key's back under MY mat. I'll water the lemon. Don't argue." },
+      { wait: 4 },
+      { text: 'lourdes', message: "There is a HOUSE in my mailbox, Jay. A whole house, in an envelope. I told you, pay it back to somebody else. Fine. The tenants will have it. Drive safe, mijo." },
     ] },
     { if: 'foxes_done', then: [
       { text: 'lefty', message: 'Ansel says you went north. Frankie always went north too. Never sent a card. Send a card. — L.M.' },
@@ -314,6 +326,7 @@
   // =====================================================================
   // Mae on the step of Medic 12 behind Lulu: she keeps the jacket (mae_stay).
   const B_MAE_JACKET = [
+    { spawnCar: 'medic12', type: 'medic', at: PIER_KERB, locked: true, watch: false },
     { scene: { at: PIER_KERB, cast: ['mae'] }, say: [
       ['caption', "(Medic 12 is parked across two bays behind Lulu with its back doors open. Mae Reyes is sitting on the step with her bag, and a cut on her forehead she still hasn't noticed.)"],
       ['mae', "Noor said the pier. She said you sounded calm. That's how I knew to come."],
@@ -323,7 +336,7 @@
       ['jay', "Long enough. Not as long as three years."],
       ['caption', '(He takes off the brown leather jacket, the one he has worn in every weather since he was twenty, and holds it out to her.)'],
       ['jay', 'Hold this for me?'],
-      ['mae', '(taking it, holding it against her chest with both arms) You never let anybody hold this jacket. Tommy asked for ten years.'],
+      ['mae', '(taking it, holding it against her chest with both arms) You never let anybody hold this jacket. Tommy asked every week for five years.'],
       ['jay', 'I know.'],
       ['mae', '(putting it on over her uniform; far too big, the sleeves over her hands) I told you to ask me when it was over.'],
       ['jay', "It's not over."],
@@ -383,6 +396,7 @@
       ['jay', '(to the car, at a red light he could have run, and doesn\'t) Seatbelt.'],
     ] },
     { say: [['caption', '(VPD Central at a quarter to seven. Jay parks Lulu in a bay marked VISITORS, nose out, the way Augie taught him.)']] },
+    { spawnCar: 'calder_car', type: 'unmarked', at: 'vpd_central', color: CALDER_GREEN, locked: true, watch: false },
     { scene: { at: 'vpd_central', cast: ['calder'] }, say: [
       ['caption', '(Brutalist concrete, the crooked flagpole, and the one bench for the families who wait.)'],
       ['caption', '(Behind him the green unmarked car pulls in, and shudders, and stalls.)'],
@@ -409,7 +423,7 @@
         ['jay', 'A book. Green. Fourteen years. His handwriting.'],
         ['caption', "(A click, somewhere in a purple van that used to sell ice cream. A red light coming on.)"],
         ['solace', "Then read it to me. We're live in ten seconds. Sable leaves the transmitter door open for me. He says he's furious about it."],
-        ['solace', "(on the air, low and warm, like a lighthouse) Good morning, Vicehaven. It's six o'clock. This is Solace. I have a book here. (beat) Page one."],
+        ['solace', "(on the air, low and warm, the voice in every taxi after midnight) Good morning, Vicehaven. It's six o'clock. This is Solace. I have a book here. (beat) Page one."],
       ] },
     ], else: [
       { phone: 'hattie', say: [
@@ -491,9 +505,12 @@
       ['ansel', '(waiting his turn, then simply lifting Jay off the ground, paper bag and all) Welcome home.'],
       ['jay', '(off the ground) Ansel. Put me down.'],
       ['ansel', "Most hugs end when you stand up. (He doesn't put him down.)"],
+      ['ansel', "(setting him down at last, and straightening the paper bag for him) I have to go. It's Saturday. Somebody comes to the stall at half past nine, and I have never once been late."],
+      ['ansel', '(already walking) Drive past. Slowly. Don\'t stop. Don\'t wave.'],
     ] },
+    { leave: ['ansel'] },
     { if: 'mae_stay', then: [
-      { scene: { at: 'vpd_central', cast: ['mae', 'noor', 'ansel', 'teo'] }, say: [
+      { scene: { at: 'vpd_central', cast: ['mae', 'noor', 'teo'] }, say: [
         ['caption', '(And at the back, in her uniform, Mae Reyes, holding a brown leather jacket folded over her arm. It has been worn. It has been worn a lot.)'],
         ['mae', "(holding it out) I wore it. Every shift. It smells like ambulance now. That's your problem."],
         ['jay', '(taking it, not putting it on yet) Is it over?'],
@@ -514,14 +531,20 @@
         ['calder', "I'm off duty. I'm allowed a full one. (beat) Okonkwo says hello. Ray. He's my partner again. He says you drive like a weather event."],
         ['jay', 'Is that a compliment?'],
         ['calder', "It's evidence. (She lifts two fingers off the cup, the way she does off a steering wheel.) Go home, Mercer."],
-        ['caption', '(Behind her, on Kostas Salvage\'s flatbed at the kerb, Big Kostya leans on the horn for eleven seconds. Rhea doesn\'t do gates. She sent the horn.)'],
       ] },
     ], else: [
       { say: [
         ['caption', "(On the bench for the families who wait, somebody has left a VPD business card. On the back, in a cop's handwriting, one word: SIGNED. — I.C.)"],
       ] },
     ] },
+    { say: [
+      ['caption', "(Out on Lantern Street, Kostas Salvage's flatbed slows at the kerb and Kostya leans on the horn for eleven seconds. Rhea doesn't do gates. She sent the horn.)"],
+      ['noor', "(wiping her face) That's eleven seconds. She timed it. She'll charge you per second."],
+    ] },
     { if: 'mae_space', then: [
+      { say: [['caption', "(In the paper bag, with his belt and his keys, his phone. Dead since the day he went in. Noor plugs it into Lulu, and it wakes up, and buzzes once.)"]] },
+      { text: 'mae', message: 'Home?' },
+      { wait: 3 },
       { scene: { at: 'vpd_central', cast: ['mae'] }, say: [
         ['caption', "(One whoop of a siren, and Medic 12 swings into the car park at a speed Mae Reyes would scold anybody else for.)"],
         ['mae', '(out of the window) Sorry. Sorry! Cardiac on Laurel. Four minutes out.'],
@@ -585,9 +608,15 @@
 
   // The long way home: Tannery Row, the pharmacy, the mural, Heron Street.
   const B_HOME = [
-    { join: ['noor', 'teo'] },
-    { if: 'mae_stay', then: [{ join: ['mae'] }] },
+    { join: ['noor', 'teo', 'mae'] },
     { getIn: 'lulu', objective: 'Take everybody home. The long way.' },
+    { say: [
+      ['jay', '(his hand on the key, not turning it) Seatbelts.'],
+      ['noor', "(holding hers up as proof) I put it on in the car park. Before you came out. I'm a passenger now. I've grown."],
+      ['teo', '(clicking his) Pop said you once held up a getaway for a seatbelt.'],
+      ['jay', 'Twice.'],
+      ['mae', '(from the front, clicking hers, very quietly) Good.'],
+    ] },
     { music: 'hope' },
     { goto: 'tannery_row', vehicle: 'lulu', stop: false, radius: 16, objective: 'Take everybody home. The long way. Tannery Row first.', say: [
       ['noor', "(from the back, pointing between the seats) Left. LEFT. Tannery Row. You have to see it. Ansel made us promise. In writing."],
@@ -637,7 +666,12 @@
         ['caption', '(Grace Oyelaran is on the pink house\'s porch with a key in her hand, as if she has been standing there since he left.)'],
         ['oyelaran', "Key was under MY mat. Fourteen months. Twenty-two. I lost count. (She hands it over.) I watered the lemon. Don't argue."],
         ['caption', "(He takes a yellow hoodie off Lulu's back seat, where it has ridden under a tarp in Kostya's yard all this time, and lays it over the porch rail, facing the street.)"],
-        ['caption', '(Somewhere nice. Somewhere with a view.)'],
+      ] },
+      { scene: { at: 'nana_lu_house', cast: ['oyelaran', 'lourdes'] }, say: [
+        ['caption', '(Lourdes Reyes comes up the path from the bus stop with a cake tin under her arm. She sees the rail, and stops.)'],
+        ['lourdes', '(touching the cuff, the hole in it, where he used to chew it) Is this somewhere nice?'],
+        ['jay', "It's the best I've got."],
+        ['lourdes', '(beat; patting his face, the way she did at the funeral) He liked a porch. He liked a view of the street, so he could see who was coming. (beat) Go in, mijo. Go in your house.'],
       ] },
     ] },
     { music: 'off' },
@@ -739,16 +773,17 @@
     ] },
     { reward: { weapons: ['pistol'] } },
     { music: 'off' },
+    { slowmo: 3 },
     { kill: ['voss'], objective: 'Finish it.' },
-    { slowmo: 2 },
     { heat: 0 },
     { wait: 2 },
     { blackout: [
       ['caption', '(One shot, across the boards. Flat. Close. Every gull on Oceanview Pier goes up at once.)'],
       ['caption', '(Harlan Voss sits down against the rail as if he has decided to, and looks at the sunrise he paid for, and then doesn\'t.)'],
       ['caption', '(Out in the bay, the launch called Hope turns round and goes back the way it came, empty. Nobody on her looks back.)'],
-      ['caption', "(The sun comes up. It doesn't wait for anybody. It never has.)"],
-      ['caption', "(He picks the green book up off the bench. It is lighter than it should be. Rhea said that.)"],
+      ['caption', "(He picks the green book up off the bench. Under it there is a small brass plaque, and because nobody reads plaques, he reads it.)"],
+      ['caption', 'GIFTED TO THE CITY OF VICEHAVEN BY H. VOSS, 1994. FOR THE VIEW.'],
+      ['caption', "(Rourke's ring is still on the rail. He leaves it there. A man who is always at work doesn't need one.)"],
     ] },
     { reward: { money: 30000000 } },
     { goto: PIER_KERB, vehicle: false, radius: 6, objective: 'Walk back up the pier.', say: [
@@ -763,30 +798,30 @@
     { blackout: [['caption', 'Eleven days later.']] },
     { setTime: 12 },
     { fade: 'in' },
-    { scene: { at: 'meridian_yard', cast: ['ashby', 'pruitt', 'rhea'] }, say: [
+    { scene: { at: 'meridian_yard', cast: ['lister', 'pruitt', 'rhea'] }, say: [
       ['caption', "(The Crown. Meridian Yard at noon. The tower is finished at last, all glass, and the ribbon is still across the doors because nobody can agree who's allowed to cut it now.)"],
-      ['ashby', "(a hand out; a grip like signing something) Mr. Mercer. Corinne Ashby, Halberd Security. Chief executive, since Monday. My condolences on Mr. Voss. I'm told you were there."],
+      ['lister', "(a hand out; a grip like signing something) Mr. Mercer. Corinne Lister, Halberd Security. Chief executive, since Monday. My condolences on Mr. Voss. I'm told you were there."],
       ['jay', 'I was there.'],
-      ['ashby', "Then you'll know there's a vacancy. (beat) Halberd provides certainty. We'd like to keep providing it. To whoever is holding the book."],
+      ['lister', "Then you'll know there's a vacancy. (beat) Halberd provides certainty. We'd like to keep providing it. To whoever is holding the book."],
       ['jay', 'Send me an invoice.'],
-      ['ashby', "(the thinnest smile) Everybody's loyal until the invoice, Mr. Mercer. That was Kessler's. I've kept it."],
+      ['lister', "(the thinnest smile) Everybody's loyal until the invoice, Mr. Mercer. That was Kessler's. I've kept it."],
       ['pruitt', '(sweating through linen, an order paper folded very small in both hands) Mr. Mercer. Sir. The vote. It was postponed. After the... after. It\'s been eleven days.'],
       ['pruitt', "Everybody would like to know. All of us. How you'd like it to go."],
       ['caption', '(Jay looks up at the glass for a long time. It shows him a man in a brown leather jacket looking up at glass.)'],
       ['jay', "I'll let you know."],
       ['pruitt', '(nodding far too many times) Of course. Of course, sir. Sir.'],
       ['caption', "(Rhea Kostas arrives last in Stavros's watch cap, and doesn't shake anybody's hand.)"],
-      ['rhea', "The thirty's in my warehouse. Storage fee's out of it. Four per cent. (beat) Sentiment fee's still zero."],
+      ['rhea', "The thirty's in my warehouse. My cut's out of it, as agreed. (beat) No charge for sentiment. There wasn't any."],
       ['rhea', "(lower, to him only) I cashed Stavros's cheque yesterday. (She looks at the glass too.) It felt like a price."],
       ['caption', '(She gives him one nod. Exactly one. Business.)'],
     ] },
     { if: 'saved_teo', then: [
-      { scene: { at: 'meridian_yard', cast: ['teo', 'ashby'] }, say: [
+      { scene: { at: 'meridian_yard', cast: ['teo', 'lister'] }, say: [
         ['caption', "(A step behind Jay's shoulder, in a black suit that doesn't fit: Teo Vance, with his father's steel watch on his wrist. He hasn't slept in a while. It shows.)"],
-        ['ashby', '(to Teo) And you are?'],
+        ['lister', '(to Teo) And you are?'],
         ['teo', "(a beat too long) I'm with Mr. Mercer."],
         ['caption', '(He has never once called him that. Neither of them says anything about it.)'],
-        ['teo', '(low, when Ashby has gone) The Kings want to know if we\'re Halberd now.'],
+        ['teo', '(low, when Lister has gone) The Kings want to know if we\'re Halberd now.'],
         ['jay', "We're whatever I say."],
         ['teo', "(looking down at the watch) Yeah. (beat) It's still right. Never loses a second. (beat) He'd hate that it's still right."],
       ] },
@@ -822,6 +857,10 @@
     { getIn: 'lulu', objective: 'Get in Lulu', say: [
       ['caption', "(On Lulu's windscreen, under the wiper, there is a single red rose with every one of its thorns left on. No note. Ansel has never needed one.)"],
       ['caption', '(Roses are just thorns that got lucky. He doesn\'t move it. He drives with it there.)'],
+    ] },
+    { say: [
+      ['jay', '(to the passenger seat, out of habit, before he turns the key) Seatbelt.'],
+      ['caption', '(Nobody answers. He waits a second too long anyway. Then he pulls out.)'],
     ] },
     { if: 'kept_cut', then: [
       { say: [['caption', "(He owns every house on Heron Street now. Pelican sent the deeds in a box with a ribbon on it. He hasn't been to the pink one. Sentiment. It's expensive.)"]] },
@@ -910,23 +949,23 @@
       { music: 'tension' },
       { if: 'trusted_calder', then: [
         { scene: { at: 'pier9_gate', cast: ['calder', 'horne'] }, say: [
-          ['caption', '(Pier 9. Twenty-four minutes to six. The floodlights are still on, and they have stopped meaning anything. Over the cranes, the sky is a bruise starting to heal.)'],
+          ['caption', '(Pier 9. Twenty-four minutes to six. The floodlights are still on, and they have stopped meaning anything. Over the cranes the dark is coming off the sky like old paint.)'],
           ['caption', '(Captain Wade Horne sits on the kerb outside the guard booth with his hands cuffed behind him. Detective Ines Calder stands over him with an empty coffee cup.)'],
-          ['horne', '(to Jay, the old smile trying to find its way back onto his face) Mercer. You missed the good part. She read me my rights. Both pages. Slowly.'],
+          ['horne', '(to Jay, the old smile trying to find its way back onto his face) Mercer. You left before the good part. She read me the rest of my rights. Both pages. Slowly.'],
           ['calder', "I wanted him to hear the whole thing. He's never heard the whole thing. He's always been the one reading it."],
           ['caption', "(Horne's shoulder twitches: thirty years of habit, reaching to tap a gold watch. The watch is in a plastic evidence bag in Calder's blazer pocket.)"],
           ['calder', '(patting the pocket) Exhibit fourteen. I numbered it myself. It felt right.'],
           ['jay', "Where's Voss?"],
-          ['calder', "Noor says Harbor Road. White car, two Halberd trucks on it like gulls on a chip. First time in thirty years he's set foot in Saltmarsh without a ribbon to cut."],
+          ['calder', "Noor told me. He came down here himself. First time in forty years Harlan Voss has set foot in Saltmarsh, and he came for a book."],
           ['horne', "(a low laugh) You think you're going to catch Harlan? Harlan doesn't get caught, son. Harlan gets inconvenienced."],
           ['calder', "(not looking at him) I can't go. I sit on this one till the van comes, or a lawyer in a nicer suit than mine has him home by lunch."],
           ['calder', '(as Jay turns) Mercer. Whatever\'s at the end of this. Make it something I can sign.'],
         ] },
       ], else: [
         { scene: { at: 'pier9_gate', cast: ['calder', 'horne'] }, say: [
-          ['caption', '(Pier 9. Twenty-four minutes to six. The floodlights are still on, and they have stopped meaning anything. Over the cranes, the sky is a bruise starting to heal.)'],
+          ['caption', '(Pier 9. Twenty-four minutes to six. The floodlights are still on, and they have stopped meaning anything. Over the cranes the dark is coming off the sky like old paint.)'],
           ['caption', '(Captain Wade Horne is chained to the Tidewater gate with his own handcuffs, his second phone taped over his badge, 0211 written on the tape in marker.)'],
-          ['calder', "(reading from a card she hasn't needed in years) ...can and will be used against you. (beat) I'll skip the right to remain silent. You've had three years of it."],
+          ['calder', "(from a card she hasn't needed in years) ...can and will be used against you. (She lowers it.) You've had the right to remain silent for three years, Wade. You used it beautifully."],
           ['horne', '(to Jay, rattling the chain) Mercer. Tell her about the gun. The boy had a—'],
           ['jay', 'He had a phone.'],
           ['caption', "(Horne's shoulder twitches: thirty years of habit, reaching to tap a gold watch. His wrists are round a gate post. The watch ticks on, out of reach.)"],
@@ -969,8 +1008,13 @@
         ['rhea', "(over the radio) Harbor Road's my road, Mercer. Every pothole on it is a personal friend. Use the potholes."],
         ['noor', '(over the radio, as metal screams somewhere) Was that you? Tell me that was you. (beat) That was you. Okay. Okay. Shit. Okay.'],
       ] },
+      { spawn: [
+        { id: 'escort_a_crew', faction: 'halberd', at: 'escort_a', count: 2, weapon: 'smg', behavior: 'attack' },
+        { id: 'escort_b_crew', faction: 'halberd', at: 'escort_b', count: 2, weapon: 'smg', behavior: 'attack' },
+      ] },
       { say: [
         ['noor', "(over the radio) Both trucks are down! He's on his own! Jay, he's on his own for the first time in thirty years!"],
+        ['rhea', '(over the radio) And the trucks had passengers. Four, crawling out with guns. Don\'t stop to chat, Mercer.'],
         ['caption', '(Somewhere ahead, the white Sovereign stops being careful.)'],
       ] },
       { heat: 3, checkpoint: true, say: [
@@ -981,6 +1025,9 @@
       { chase: 'voss_car', mode: 'catch', escape: 450, route: ['seawall_overlook', 'starlite_diner', 'harbor_point', 'last_resort_bar', 'the_boardwalk'], objective: 'Stop Voss before his launch reaches the pier. Box him in.', say: [
         ['noor', "(over the radio) The launch is out past the breakwater! Five minutes, maybe four! He's going round Harbor Point in circles till it comes!"],
         ['jay', '(to the car, a cruiser filling the mirror) Come on. Come on, old girl. One more lap. You know these streets better than he does.'],
+        ['voss', '(on the police band, unhurried, as if from a deckchair) Mr. Mercer. You\'re braking early into the corners. Augustine would have mentioned it.'],
+        ['noor', '(over the radio) Is that HIM? On the police band? Don\'t listen to him! I\'ve got your telemetry, you\'re braking perfectly! Probably! I think!'],
+        ['jay', '(flooring it) I\'m not listening.'],
         ['rhea', '(over the radio) Southside, two blocks behind you. They\'re not Horne\'s now. They don\'t know whose they are. That makes them stupid.'],
         ['noor', "(over the radio) Starlite corner! He's going past the Starlite! Somebody's eating pancakes in the window and watching you, Jay, you're on a pancake man's morning!"],
         ['jay', '(threading Lulu between a delivery van and a hydrant, almost to himself) Ten and two. Heart at twelve.'],
@@ -989,7 +1036,7 @@
       ] },
       { heat: 0 },
       { say: [
-        ['DISPATCH', "(on the police band) All units. Disregard the Seawall pursuit. Sergeant Okafor's orders. (pause) He says he heard the Pier 9 tape at four o'clock and he's going home."],
+        ['DISPATCH', "(on the police band) All units. Disregard the Seawall pursuit. Sergeant Delgado's orders. (pause) He says he heard the Pier 9 tape at two minutes to four and he's going home."],
         ['DISPATCH', '(on the police band, quieter) Southside has no captain this morning. Everybody... just go and get a coffee.'],
       ] },
       { if: 'trusted_calder', then: [
@@ -1003,7 +1050,7 @@
       { music: 'off' },
       { fade: 'in' },
       { camera: 'oceanview_pier', seconds: 9, checkpoint: true, say: [
-        ['caption', '(The foot of Oceanview Pier. The white Sovereign has gone over the kerb and nose-first into the bollards under the arch. Its driver is over the rail and running.)'],
+        ['caption', '(The foot of Oceanview Pier. The white Sovereign has gone over the kerb and nose-first into the bollards under the arch. Its driver is halfway up Seawall Drive, running.)'],
       ] },
       { goto: 'pier_end', vehicle: false, radius: 6, objective: 'Down the pier. All the way to the end.', say: [
         ['caption', '(The back door hangs open. Far down the pier, a man in a white suit is walking toward the sea with a green book under his arm. He is not hurrying. He never has.)'],
@@ -1026,7 +1073,8 @@
         ['jay', '(not sitting) Augie sat there.'],
         ['voss', "I know. Kessler had a man on the boardwalk with a long lens. Two men with fishing rods the wrong way round. One of them cried. The photographs weren't clear."],
         ['jay', '(quietly) Me.'],
-        ['voss', "(nodding, as if that settles a small bet) I thought so. Augustine was a talker. He knew my father, you know. He never once used it. It was his only flaw."],
+        ['voss', "(nodding, as if that settles a small bet) I thought so. Augustine planned for thirty years and never fired a shot. I always took that for vanity."],
+        ['voss', '(beat) It was. It was also the only thing in this city I never managed to buy.'],
         ['caption', '(Jay takes something small out of his jacket pocket and sets it on the rail between them. A wedding ring. Rourke\'s. It rolls a quarter of an inch and stops.)'],
         ['voss', '(looking at it, not touching it) He took that off before work.'],
         ['jay', 'He was always at work.'],
@@ -1047,16 +1095,18 @@
         ['voss', '(the smallest smile) And the last one?'],
         ['jay', "...I'm saving it."],
         ['voss', "Of course you are. Men like us always keep one envelope shut. It's how we know we could still leave."],
-        ['voss', "Take the money and drive, Mr. Mercer. It's what you do. You were magnificent tonight. I listened on the police band. You never once touched the brake when you didn't mean it."],
+        ['voss', "Take the money and drive, Mr. Mercer. It's what you do. You were magnificent tonight."],
+        ['voss', "I told you on the band you were braking early. You weren't. You never once touched the brake when you didn't mean it. I wanted to see if you'd listen."],
         ['voss', "You'll be magnificent in some other city. I mean that. I build for weather. I have never once wished it would stay."],
         ['jay', '(and when it comes, it comes slowly, to the water) My father drove a truck. Long haul. When I was six he said he\'d be back Sunday.'],
-        ['jay', "I sat on Nana's step and watched his taillights to the end of Heron Street. Left onto Coral. Gone."],
-        ['jay', "I thought that was a thing that happened to me. It took me twenty years to see it was a thing I learned."],
-        ['jay', 'Tidewater. Augie said drive, and I drove. Three years at the speed limit. I was good at it. Leaving. It\'s the only thing I was ever better at than driving.'],
+        ['jay', "I sat on Nana's step and watched his taillights all the way down Heron Street. Left onto Coral. Gone."],
+        ['jay', 'Nana taught me where to put my hands. He taught me the rest. You watch the lights get small. You find out they always do.'],
+        ['jay', 'Tidewater. Augie said drive, and I drove. Three years at the speed limit. (beat) Leaving. It\'s the only thing I was ever better at than driving.'],
         ['voss', '(gently, and he means it) Then be good at it. There\'s no shame in a gift.'],
-        ['jay', '(looking back down the whole length of the pier, all the way to the city) There was somebody at the end of this pier last time. With the rods the wrong way round.'],
-        ['jay', "(beat) There's nobody this time. Just you."],
-        ['voss', '(spreading his hands, the book in one of them) Just me.'],
+        ['jay', '(looking back down the whole length of the pier, all the way to the city) Last time I was out here, a man with his rods the wrong way round told me there was nobody there to leave.'],
+        ['voss', '(gently) And he was right. Augustine was usually right. It\'s why he died poor.'],
+        ['jay', "(beat) There's a lot of people there this time."],
+        ['voss', '(spreading his hands, the book in one of them) There always are, Mr. Mercer. That\'s all a city is. It has never once stopped anybody driving.'],
         ['caption', '(The launch is close enough to hear now: a low engine, idling, patient. A man in a white shirt stands on the bow with a rope.)'],
         ['voss', "One minute, Mr. Mercer. I'm not frightened of you. I'd like you to know that. I'm only curious which way you'll go."],
         ['caption', '(And the sun comes up out of the bay, all at once, the way it does at the end of the pier and nowhere else, as if somebody has told it to.)'],
