@@ -668,6 +668,12 @@
     }
 
     respawn() {
+      if (this._ragdoll) {
+        // The animation only writes some axes of each joint: clear what the ragdoll twisted.
+        for (const k of Object.keys(this.model.joints)) this.model.joints[k].rotation.set(0, 0, 0);
+      }
+      this._ragdoll = null;
+      this._ragdollFinal = false;
       this.spawn(this.spawnPoint);
       this.wantCrouch = false;
       this.crouched = false;
@@ -696,6 +702,32 @@
         root.rotation.set(-1.45 * down, this.heading, 0);
         root.position.y += 0.15 * down;
         this.model.animate(dt, { speed: 0, grounded: false, vy: -4, crouch: 0, aim: 0, climb: -1, sprint: false, backwards: false, land: 0, lookPitch: 0 });
+        return rp;
+      }
+      if (this.state === 'dead' && VH.Ragdoll) {
+        // Down as a ragdoll, thrown away from whatever hit him last.
+        if (!this._ragdoll) {
+          root.rotation.set(0, this.heading, 0);
+          const h = this.lastHitFrom;
+          let ix = 0, iz = 0;
+          if (h && VH.game && VH.game.time - h.t < 1.5) {
+            const l = Math.hypot(this.pos.x - h.x, this.pos.z - h.z) || 1;
+            ix = ((this.pos.x - h.x) / l) * 3.5;
+            iz = ((this.pos.z - h.z) / l) * 3.5;
+          }
+          this._ragdoll = new VH.Ragdoll(this.model, this.physics, { vx: this.vel.x, vy: Math.min(this.vel.y, 4), vz: this.vel.z, hit: ix || iz ? { x: ix / 3.5, y: 0.15, z: iz / 3.5, power: 3.5 } : null });
+          this._pooled = false;
+        }
+        const r = this._ragdoll;
+        if (!r.settled || !this._ragdollFinal) {
+          r.step(dt);
+          r.apply(this.model);
+          this._ragdollFinal = r.settled;
+        }
+        if (!this._pooled && (r.settled || r.t > 1.2)) {
+          this._pooled = true;
+          if (VH.game && VH.game.fx && VH.game.fx.bloodPool) VH.game.fx.bloodPool(r.pelvis.x, r.pelvis.y, r.pelvis.z, 1.6);
+        }
         return rp;
       }
       if (this.state === 'dead') {

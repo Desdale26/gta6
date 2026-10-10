@@ -133,7 +133,7 @@
       for (const v of this.list) v.fixedUpdate(dt);
       this._collidePairs();
       if (pv) this._playerExtras(pv, dt);
-      else this._nitroRegen(dt, 0);
+      else this._nitroRegen(dt, 0.06); // tops up on foot too
     }
 
     _playerControls(v, dt) {
@@ -169,7 +169,8 @@
       // Nitro drains while boosting and fills from style.
       const boosting = v.boostFx > 0.9 && v.input.boost;
       if (boosting) this.nitro = Math.max(0, this.nitro - dt * 0.3);
-      let gain = 0.01;
+      // Refills from empty in about 11 s of ordinary driving; drifts and jumps fill it faster.
+      let gain = boosting ? 0 : 0.09;
       if (v.drifting > 0.5 && v.speed > 12) gain += 0.13 * v.drifting;
       if (!v.grounded) gain += 0.12;
       this._nitroRegen(dt, gain);

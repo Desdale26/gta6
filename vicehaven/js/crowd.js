@@ -22,6 +22,7 @@
   const VH = window.VH;
   const { clamp, lerp, smoothstep, dampAngle } = VH.math;
 
+  const MAX_RAGDOLLS = 14; // bodies simulated at once; any more just fall flat
   const SLOTS = { skin: 0, hair: 1, top: 2, trim: 3, shirt: 4, bottom: 5, belt: 6, shoes: 7, sole: 8, dark: 9, stubble: 10, metal: 11, cap: 12, hairLong: 13, bag: 14 };
   const JOINTS = ['pelvis', 'spine', 'neck', 'head', 'shoulderL', 'elbowL', 'shoulderR', 'elbowR', 'hipL', 'kneeL', 'ankleL', 'hipR', 'kneeR', 'ankleR'];
 
@@ -299,9 +300,12 @@
       this.damage(damage, source, 'impact');
     }
 
-    damage(amount, source, kind) {
+    /** hit (optional) = { x, y, z, dx, dy, dz, head }: where it struck and which way it was going. */
+    damage(amount, source, kind, hit) {
       if (this.dead) return;
       if (this.damageScale) amount *= this.damageScale; // named crew are hard to kill
+      this.lastHit = hit || null;
+      this.lastKind = kind;
       let rest = amount;
       if (this.armor > 0) {
         const a = Math.min(this.armor, rest * 0.6);
@@ -317,8 +321,8 @@
         this.deadTime = 0;
         if (!this.down) this.down = { t: 0, vx: 0, vy: 0.5, vz: 0, spin: 0, rest: false, flip: 0 };
         this.state = 'down';
-        VH.events.emit('agent:died', { agent: this, source, kind });
-      } else VH.events.emit('agent:hurt', { agent: this, source, amount, kind });
+        VH.events.emit('agent:died', { agent: this, source, kind, hit, amount });
+      } else VH.events.emit('agent:hurt', { agent: this, source, amount, kind, hit });
     }
   }
 
@@ -620,6 +624,22 @@
     _downStep(a, dt) {
       const d = a.down;
       d.t += dt;
+      // The dead fall as ragdolls (a few at a time; extras keep the simple fall).
+      if (a.dead && !a.ragdoll && !d.rest && VH.Ragdoll && this._ragdolls() < MAX_RAGDOLLS) this._startRagdoll(a);
+      if (a.ragdoll) {
+        const r = a.ragdoll;
+        r.step(dt);
+        a.pos.x = r.pelvis.x;
+        a.pos.z = r.pelvis.z;
+        a.pos.y = this.physics.groundHeight(a.pos.x, a.pos.z, r.pelvis.y + 0.5);
+        a.deadTime += dt;
+        if ((r.settled || r.t > 1.2) && !a.pooled) {
+          a.pooled = true;
+          if (this.game.fx && this.game.fx.bloodPool) this.game.fx.bloodPool(a.pos.x, a.pos.y, a.pos.z, 1.3 + Math.random() * 0.8);
+        }
+        if (r.settled) d.rest = true;
+        return;
+      }
       if (!d.rest) {
         d.vy -= 18 * dt;
         a.pos.x += d.vx * dt;
@@ -843,6 +863,29 @@
       }
     }
 
+    _ragdolls() {
+      let n = 0;
+      for (const a of this.agents) if (a.ragdoll && !a.ragdoll.settled) n++;
+      return n;
+    }
+
+    /** Turn a fresh corpse into a ragdoll, carrying the momentum of what killed it. */
+    _startRagdoll(a) {
+      const rig = a.rig;
+      // Make sure the rig stands where the body is before copying its joints.
+      rig.root.position.copy(a.pos);
+      rig.root.rotation.set(0, a.heading, 0);
+      const d = a.down;
+      const h = a.lastHit;
+      const power = !h ? 0 : (h.head ? 5.5 : 4) * (a.lastKind === 'melee' ? 0.8 : 1);
+      a.ragdoll = new VH.Ragdoll(rig, this.physics, {
+        // A shot already carries its own push (hit); a car or blast throws the whole body.
+        vx: (d.vx || 0) * (h ? 0.5 : 1), vy: Math.min(d.vy || 0, 6), vz: (d.vz || 0) * (h ? 0.5 : 1),
+        hit: h ? { x: h.dx, y: Math.max(-0.2, h.dy) + 0.15, z: h.dz, power, head: h.head } : null,
+      });
+      a._ragdollFinal = false;
+    }
+
     /** Push Jay out of people (called from the player controller). */
     resolvePlayer(pos, r, y0) {
       for (const a of this.agents) {
@@ -868,6 +911,14 @@
       a._animFrame = ((a._animFrame || 0) + 1) % every;
       const root = a.rig.root;
       root.position.copy(a.pos);
+      if (a.ragdoll) {
+        // Posed by the ragdoll; once it has settled the pose just stays.
+        if (!a.ragdoll.settled || !a._ragdollFinal) {
+          a.ragdoll.apply(a.rig);
+          if (a.ragdoll.settled) a._ragdollFinal = true;
+        }
+        return;
+      }
       if (a.state === 'down' && a.down) {
         const t = a.down.flip;
         root.rotation.set(-1.45 * smoothstep(0, 1, t), a.heading, (a.id % 2 ? 0.3 : -0.3) * t, 'YXZ');

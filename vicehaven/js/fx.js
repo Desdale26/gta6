@@ -194,6 +194,134 @@
     }
   }
 
+
+  // ------------------------------------------------------------ blood
+  /** Splats and pools on the ground: one mesh, a ring buffer of quads, pools that spread. */
+  class BloodDecals {
+    constructor(max, physics) {
+      this.max = max;
+      this.physics = physics;
+      this.next = 0;
+      this.items = new Array(max).fill(null);
+      this.growing = [];
+      const geo = new THREE.BufferGeometry();
+      this.pos = new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      this.uv = new THREE.BufferAttribute(new Float32Array(max * 4 * 2), 2).setUsage(THREE.DynamicDrawUsage);
+      this.col = new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      const idx = new Uint32Array(max * 6);
+      for (let i = 0; i < max; i++) idx.set([i * 4, i * 4 + 2, i * 4 + 1, i * 4 + 2, i * 4 + 3, i * 4 + 1], i * 6);
+      const nrm = new Float32Array(max * 4 * 3);
+      for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1; // flat on the ground, facing up
+      geo.setAttribute('position', this.pos);
+      geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      geo.setAttribute('uv', this.uv);
+      geo.setAttribute('color', this.col);
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      // Wet and dark: lit by the scene so it isn't glowing red at night.
+      const mat = new THREE.MeshStandardMaterial({
+        map: BloodDecals.texture(), color: 0xffffff, vertexColors: true, transparent: true, depthWrite: false,
+        roughness: 0.22, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6,
+      });
+      this.mesh = new THREE.Mesh(geo, mat);
+      this.mesh.frustumCulled = false;
+      this.mesh.renderOrder = 3;
+      this.mesh.name = 'blood';
+    }
+
+    /** A 2x2 atlas: three splatters and a pool, drawn once on a canvas. */
+    static texture() {
+      if (BloodDecals._tex) return BloodDecals._tex;
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const x = c.getContext('2d');
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const blob = (cx, cy, r, a) => {
+        const g = x.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
+        g.addColorStop(0, 'rgba(120,6,6,' + a + ')');
+        g.addColorStop(0.75, 'rgba(95,3,3,' + a * 0.95 + ')');
+        g.addColorStop(1, 'rgba(70,0,0,0)');
+        x.fillStyle = g;
+        x.beginPath();
+        x.arc(cx, cy, r, 0, Math.PI * 2);
+        x.fill();
+      };
+      for (let cell = 0; cell < 4; cell++) {
+        const ox = (cell % 2) * 128 + 64;
+        const oy = Math.floor(cell / 2) * 128 + 64;
+        if (cell === 3) {
+          // Pool: overlapping lobes for an irregular edge.
+          blob(ox, oy, 40, 1);
+          for (let i = 0; i < 9; i++) {
+            const a = (i / 9) * Math.PI * 2 + rnd();
+            blob(ox + Math.cos(a) * 26, oy + Math.sin(a) * 26, 18 + rnd() * 14, 0.95);
+          }
+        } else {
+          // Splatter: a core, then drops and streaks thrown outward.
+          blob(ox, oy, 20 + rnd() * 8, 1);
+          for (let i = 0; i < 26; i++) {
+            const a = rnd() * Math.PI * 2;
+            const d = 14 + rnd() * 44;
+            blob(ox + Math.cos(a) * d, oy + Math.sin(a) * d, 2 + rnd() * (d < 30 ? 9 : 5), 0.95);
+          }
+        }
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 4;
+      BloodDecals._tex = t;
+      return t;
+    }
+
+    /** Add a decal; pools (grow > 0) spread over `grow` seconds. */
+    add(x, z, size, kind, grow, yHint) {
+      const ph = this.physics;
+      const y = ph.groundHeight(x, z, (yHint === undefined ? 50 : yHint + 1)) + 0.012 + (this.next % 16) * 0.0006;
+      const i = this.next;
+      this.next = (this.next + 1) % this.max;
+      const old = this.items[i];
+      if (old) this.growing = this.growing.filter((g) => g !== old);
+      const it = { i, x, y, z, rot: Math.random() * Math.PI * 2, size, cell: kind === 'pool' ? 3 : Math.floor(Math.random() * 3), t: 0, grow: grow || 0, alpha: 0.92 };
+      this.items[i] = it;
+      if (it.grow > 0) this.growing.push(it);
+      this._write(it, it.grow > 0 ? 0.12 : 1);
+    }
+
+    _write(it, k) {
+      const r = it.size * (0.25 + 0.75 * k) * 0.5;
+      const c = Math.cos(it.rot) * r;
+      const s = Math.sin(it.rot) * r;
+      const b = it.i * 12;
+      const P = this.pos.array;
+      P.set([it.x - c + s, it.y, it.z - s - c, it.x + c + s, it.y, it.z + s - c, it.x - c - s, it.y, it.z - s + c, it.x + c - s, it.y, it.z + s + c], b);
+      const u0 = (it.cell % 2) * 0.5;
+      const v0 = 1 - Math.floor(it.cell / 2) * 0.5 - 0.5;
+      this.uv.array.set([u0, v0, u0 + 0.5, v0, u0, v0 + 0.5, u0 + 0.5, v0 + 0.5], it.i * 8);
+      const C = this.col.array;
+      for (let n = 0; n < 4; n++) C.set([1, 1, 1, it.alpha], it.i * 16 + n * 4);
+      this.pos.needsUpdate = true;
+      this.uv.needsUpdate = true;
+      this.col.needsUpdate = true;
+    }
+
+    update(dt) {
+      if (!this.growing.length) return;
+      for (const it of this.growing) {
+        it.t += dt;
+        const k = Math.min(1, it.t / it.grow);
+        this._write(it, 1 - (1 - k) * (1 - k));
+      }
+      this.growing = this.growing.filter((it) => it.t < it.grow);
+    }
+
+    clear() {
+      this.items.fill(null);
+      this.growing = [];
+      this.pos.array.fill(0);
+      this.pos.needsUpdate = true;
+    }
+  }
+
   // ------------------------------------------------------------ skid marks
   class SkidMarks {
     constructor(max) {
@@ -374,6 +502,9 @@
 
       this.skids = new SkidMarks(2600);
       this.scene.add(this.skids.mesh);
+      this.bloodDecals = new BloodDecals(260, this.physics);
+      this.scene.add(this.bloodDecals.mesh);
+      this._bindBlood();
 
       // Tracers.
       this.maxTracers = 64;
@@ -568,18 +699,94 @@
       this._pulse(x, y, z, big ? 6 : 4, 0xffb060, 0.06, 12);
     }
 
+    // ------------------------------------------------------------ blood
+    /** Settings → Gameplay → Blood: 1 (lots), 0.4 (some) or 0 (off). */
+    get bloodAmount() {
+      const b = VH.settings ? VH.settings.get('gameplay.blood') : 'lots';
+      return b === 'off' ? 0 : b === 'some' ? 0.4 : 1;
+    }
+
+    /**
+     * A wound: a spray of drops along (dx, dy, dz) and a fine mist, and
+     * splats on the ground where the drops land. power ~1 for a pistol hit.
+     */
+    blood(x, y, z, dx, dy, dz, power) {
+      const amt = this.bloodAmount;
+      if (!amt) return;
+      const pw = Math.max(0.3, power || 1);
+      const n = Math.round((10 + 16 * pw) * amt);
+      for (let i = 0; i < n; i++) {
+        const s = (1.2 + Math.random() * 3.2) * (0.6 + 0.4 * pw);
+        this.soft.emit({
+          x, y, z,
+          vx: dx * s + (Math.random() - 0.5) * 1.6, vy: dy * s + Math.random() * 1.8, vz: dz * s + (Math.random() - 0.5) * 1.6,
+          life: 0.45 + Math.random() * 0.5, size: 0.045 + Math.random() * 0.05, size1: 0.03,
+          r: 0.55, g: 0.015, b: 0.015, r1: 0.3, g1: 0.005, b1: 0.005, a: 0.95, drag: 0.4, grav: 11,
+        });
+      }
+      for (let i = 0; i < Math.ceil(3 * amt); i++) {
+        this.soft.emit({
+          x, y, z, vx: dx * 1.2 + (Math.random() - 0.5) * 0.6, vy: 0.2 + Math.random() * 0.4, vz: dz * 1.2 + (Math.random() - 0.5) * 0.6,
+          life: 0.35 + Math.random() * 0.2, size: 0.18, size1: 0.55 + 0.25 * pw, r: 0.42, g: 0.02, b: 0.02, a: 0.45, drag: 3,
+        });
+      }
+      // Where the spray comes down: a splat or two ahead of the wound, one at the feet.
+      const hl = Math.hypot(dx, dz) || 1;
+      const splats = Math.max(1, Math.round((1 + pw) * amt));
+      for (let i = 0; i < splats; i++) {
+        const d = 0.5 + Math.random() * 1.6 * pw;
+        this.bloodDecals.add(x + (dx / hl) * d + (Math.random() - 0.5) * 0.5, z + (dz / hl) * d + (Math.random() - 0.5) * 0.5, (0.55 + Math.random() * 0.6) * (0.7 + 0.3 * pw) * (0.6 + 0.4 * amt), 'splat', 0, y - 1);
+      }
+      this.bloodDecals.add(x + (Math.random() - 0.5) * 0.4, z + (Math.random() - 0.5) * 0.4, 0.45 + 0.25 * pw, 'splat', 0, y - 1);
+    }
+
+    /** A pool spreading out from under a body. */
+    bloodPool(x, y, z, size) {
+      const amt = this.bloodAmount;
+      if (!amt) return;
+      this.bloodDecals.add(x, z, (size || 1.6) * (0.5 + 0.5 * amt), 'pool', 9, y);
+    }
+
+    _bindBlood() {
+      const where = (a) => (a && a.pos ? a.pos : a === 'player' && this.game.player ? this.game.player.pos : null);
+      const onHit = (e) => {
+        const a = e.agent;
+        if (!a || e.kind === 'fire') return;
+        const h = e.hit;
+        if (h) {
+          this.blood(h.x, h.y, h.z, h.dx, h.dy, h.dz, (h.head ? 1.8 : 1) * (e.dead ? 1.3 : 1) * Math.min(2, 0.6 + (e.amount || 25) / 40));
+          return;
+        }
+        // No hit point (cars, blasts, falls): from the attacker, or along the body's flight.
+        const from = where(a.lastAttacker);
+        let dx = 0, dz = 0;
+        if (a.down && (a.down.vx || a.down.vz)) {
+          const l = Math.hypot(a.down.vx, a.down.vz) || 1;
+          dx = a.down.vx / l;
+          dz = a.down.vz / l;
+        } else if (from) {
+          const l = Math.hypot(a.pos.x - from.x, a.pos.z - from.z) || 1;
+          dx = (a.pos.x - from.x) / l;
+          dz = (a.pos.z - from.z) / l;
+        }
+        const big = e.kind === 'impact' || e.kind === 'crash' || e.kind === 'blast' || e.kind === 'explosion';
+        this.blood(a.pos.x, a.pos.y + 1.1, a.pos.z, dx, 0.3, dz, big ? 2 : 1);
+      };
+      VH.events.on('agent:hurt', onHit);
+      VH.events.on('agent:died', (e) => onHit(Object.assign({ dead: true }, e)));
+      // Jay bleeds too.
+      VH.events.on('player:shot', (e) => {
+        const p = this.game.player;
+        if (!p || p.inVehicle) return;
+        const l = Math.hypot(p.pos.x - e.x, p.pos.z - e.z) || 1;
+        this.blood(p.pos.x, p.pos.y + 1.2, p.pos.z, (p.pos.x - e.x) / l, 0.25, (p.pos.z - e.z) / l, 0.8);
+      });
+    }
+
     /** A bullet hitting something. */
     impact(x, y, z, nx, ny, nz, surface) {
       if (surface === 'metal' || surface === 'car') this.sparks(x, y, z, nx, nz, 6, 4);
-      if (surface === 'flesh') {
-        for (let i = 0; i < 4; i++) {
-          this.soft.emit({
-            x, y, z, vx: nx * 1.5 + (Math.random() - 0.5), vy: 0.5 + Math.random(), vz: nz * 1.5 + (Math.random() - 0.5),
-            life: 0.4, size: 0.12, size1: 0.35, r: 0.35, g: 0.02, b: 0.02, a: 0.6, drag: 2, grav: 6,
-          });
-        }
-        return;
-      }
+      if (surface === 'flesh') return; // blood() handles wounds (agent:hurt / agent:died)
       if (surface === 'glass') this.glass(x, y, z, 8);
       const c = surface === 'wood' ? [0.45, 0.35, 0.22] : [0.62, 0.6, 0.56];
       for (let i = 0; i < 3; i++) {
@@ -746,6 +953,7 @@
       this.fires.length = 0;
       this.geysers.length = 0;
       this.skids.clear();
+      this.bloodDecals.clear();
     }
 
     // ------------------------------------------------------------ frame
@@ -771,6 +979,7 @@
       this.geysers = this.geysers.filter((g) => g.t < g.dur);
       this.soft.update(dt, true);
       this.glow.update(dt, false);
+      this.bloodDecals.update(dt);
       this._updateDebris(dt);
 
       // Tracers.

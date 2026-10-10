@@ -343,6 +343,7 @@
         const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
         const a = Math.atan2(e.x - this.player.pos.x, e.z - this.player.pos.z) - Math.atan2(fwd.x, fwd.z);
         this.hud.damageFrom(-a);
+        this.player.lastHitFrom = { x: e.x, z: e.z, t: this.time };
         if (this.renderer.post) this.renderer.post.pulse(0.16, [1, 0.05, 0.05]);
         this.cameraRig.addShake(0.12);
       });

@@ -787,7 +787,7 @@
         if (hit.type === 'agent') {
           const a = hit.agent;
           const dmg = dmgAt(hit.head);
-          a.damage(dmg, 'player', 'bullet');
+          a.damage(dmg, 'player', 'bullet', { x: hx, y: hy, z: hz, dx: ray.d.x, dy: ray.d.y, dz: ray.d.z, head: hit.head });
           if (a.brain && a.brain.setAlert) a.brain.setAlert(a);
           g.fx.impact(hx, hy, hz, -ray.d.x, -ray.d.y, -ray.d.z, 'flesh');
           if (g.audio.bulletImpact) g.audio.bulletImpact('flesh', this.pan(hx, hz), this.gain(hx, hz, 8));
@@ -849,29 +849,38 @@
       this._meleeT = 1 / (w.fireRate || 2);
       p._meleeSwing = 1;
       if (g.audio.meleeSwing) g.audio.meleeSwing();
-      const range = w.range || 1.5;
+      // A generous reach and a wide arc: a punch that looks like it lands, lands.
+      const range = (w.range || 1.5) + 1.3;
       const fx = Math.sin(p.heading);
       const fz = Math.cos(p.heading);
       let target = null;
-      let best = range + 0.5;
+      let best = Infinity;
       for (const a of g.crowd.agents) {
         if (a.dead || a.hidden) continue;
         const dx = a.pos.x - p.pos.x;
         const dz = a.pos.z - p.pos.z;
         const d = Math.hypot(dx, dz);
-        if (d > range + 0.3 || Math.abs(a.pos.y - p.pos.y) > 1) continue;
-        if ((dx * fx + dz * fz) / (d || 1) < 0.35) continue;
-        if (d < best) {
-          best = d;
+        if (d > range || Math.abs(a.pos.y - p.pos.y) > 1.6) continue;
+        const facing = (dx * fx + dz * fz) / (d || 1);
+        if (facing < (d < 1.2 ? -0.2 : 0.15)) continue; // right up close, almost anything around Jay counts
+        // Prefer whoever is nearest to straight ahead; fighters before bystanders.
+        const score = d * (1.6 - facing) * (a.brain && a.brain.hostile ? 0.6 : 1);
+        if (score < best) {
+          best = score;
           target = a;
         }
       }
       if (!target) return;
+      // Turn into the punch.
+      p.heading = Math.atan2(target.pos.x - p.pos.x, target.pos.z - p.pos.z);
       setTimeout(() => {
         if (target.dead) return;
         const dmg = w.damage || 12;
         const heavy = w.slot === 'melee';
-        target.damage(dmg, 'player', 'melee');
+        const l = Math.hypot(target.pos.x - p.pos.x, target.pos.z - p.pos.z) || 1;
+        const hx = (target.pos.x - p.pos.x) / l;
+        const hz = (target.pos.z - p.pos.z) / l;
+        target.damage(dmg, 'player', 'melee', { x: target.pos.x - hx * 0.2, y: target.pos.y + 1.45, z: target.pos.z - hz * 0.2, dx: hx, dy: 0.1, dz: hz, head: heavy });
         if (target.brain && target.brain.setAlert) target.brain.setAlert(target);
         if (heavy || target.dead || Math.random() < 0.25) target.knock(fx * (heavy ? 4 : 2.5), 1.5, fz * (heavy ? 4 : 2.5), 0, 'player');
         if (g.audio.meleeHit) g.audio.meleeHit(heavy);
@@ -975,10 +984,10 @@
           p.damage(dmg, 'bullet');
           VH.events.emit('player:shot', { from: a, x: mx, z: mz, damage: dmg });
         } else if (target.damage) {
-          target.damage(dmg * 0.6, a, 'bullet');
+          target.damage(dmg * 0.6, a, 'bullet', { x: mx + (dx / len) * endT, y: my + (dy / len) * endT, z: mz + (dz / len) * endT, dx: dx / len, dy: dy / len, dz: dz / len });
         }
       } else if (tr.type === 'agent') {
-        tr.agent.damage((w.damage || 20) * 0.5, a, 'bullet');
+        tr.agent.damage((w.damage || 20) * 0.5, a, 'bullet', { x: mx + (dx / len) * tr.t, y: my + (dy / len) * tr.t, z: mz + (dz / len) * tr.t, dx: dx / len, dy: dy / len, dz: dz / len, head: tr.head });
       } else if (tr.type === 'car') {
         tr.v.damage((w.damage || 20) * 0.35, a, 'bullet');
       }

@@ -132,6 +132,7 @@
         timeOfDay: 'cycle',
         voicedDialogue: true,
         policeVoice: true,
+        blood: 'lots',
       },
       audio: { master: 0.8, music: 0.6, effects: 0.8, ambience: 0.7, dialogue: 0.9 },
       accessibility: {

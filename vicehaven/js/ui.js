@@ -46,6 +46,8 @@
     gameplay: {
       label: 'Gameplay',
       items: [
+        { path: 'gameplay.blood', label: 'Blood', type: 'select', options: [['lots', 'Lots'], ['some', 'Some'], ['off', 'Off']],
+          help: 'Blood sprays, splats and pools when people are hurt. Bodies still fall as ragdolls with it off.' },
         { path: 'gameplay.difficulty', label: 'Difficulty', type: 'select', options: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']],
           help: 'How well enemies and police shoot, how much damage Jay takes and how fast his health comes back.' },
         { path: 'gameplay.mouseSensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.2, max: 3, step: 0.05, format: (v) => v.toFixed(2) + '×' },

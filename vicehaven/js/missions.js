@@ -436,6 +436,13 @@
       this._objRing = ring;
       this._objGroup.visible = false;
       this.game.scene.add(this._objGroup);
+      // A bobbing arrow over a moving target (the car to chase, the people to stop).
+      const arrowGeo = new THREE.ConeGeometry(0.55, 1.1, 4).rotateX(Math.PI);
+      this._objArrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.2, 0.25), transparent: true, opacity: 0.95, depthWrite: false, depthTest: false }));
+      this._objArrow.renderOrder = 20; // seen through buildings, like the HUD marker
+      this._objArrow.visible = false;
+      this._objArrow.name = 'mission target arrow';
+      this.game.scene.add(this._objArrow);
     }
 
     _markerFor(m) {
@@ -723,9 +730,39 @@
       this.game.hud.setObjectiveText(text);
     }
 
+    /**
+     * The objective is something that moves (a car to chase, people to stop):
+     * the marker, the arrow over it and the GPS route follow whatever getter()
+     * returns each frame (null when there's nothing left to point at).
+     */
+    _track(getter) {
+      const run = this.run;
+      if (!run) return;
+      this._setMarker(null);
+      run.track = getter;
+    }
+
+    /** The nearest of a list that is still in play (people or cars). */
+    _nearestOf(list) {
+      const p = this.game.player.pos;
+      let best = null;
+      let bd = Infinity;
+      for (const o of list) {
+        if (!o || o.dead || o.removed || o.wrecked || o.hidden) continue;
+        const d = Math.hypot(o.pos.x - p.x, o.pos.z - p.z);
+        if (d < bd) {
+          bd = d;
+          best = o;
+        }
+      }
+      return best;
+    }
+
     _setMarker(pos, opts) {
       const run = this.run;
       if (!run) return;
+      run.track = null;
+      if (this._objArrow) this._objArrow.visible = false;
       run.marker = pos ? { x: pos.x, y: pos.y || 0, z: pos.z, r: (opts && opts.r) || 4 } : null;
       this._objGroup.visible = !!pos && !(opts && opts.noRing);
       if (pos) {
@@ -1188,7 +1225,7 @@
       for (const a of list) if (a.brain && a.brain.setAlert && step.alert !== false) a.brain.setAlert(a);
       const need = step.count || list.length;
       const base = step.objective || 'Take them out';
-      this._setMarker(null);
+      this._track(() => this._nearestOf(list));
       await this._until(() => {
         const dead = list.filter((a) => a.dead || a.removed).length;
         this._objective(base + (list.length > 1 ? ' (' + Math.max(0, need - dead) + ' left)' : ''));
@@ -1203,7 +1240,7 @@
       let t = 0;
       const spawned = new Set();
       this._objective(step.objective || 'Hold out');
-      this._setMarker(null);
+      this._track(() => this._nearestOf(run.targets));
       run.timer = { left: step.survive };
       game.hud.setMissionTimer(step.survive);
       await this._until(() => {
@@ -1240,7 +1277,7 @@
       run.targetCars = [car];
       const mode = step.mode || 'wreck';
       this._objective(step.objective || (mode === 'catch' ? 'Stop ' + carRef(car) : 'Take out ' + carRef(car)));
-      this._setMarker(null);
+      this._track(() => (car.wrecked || car.removed ? null : car));
       let lostT = 0;
       let boxT = 0;
       await this._until(() => {
@@ -1284,7 +1321,7 @@
       let close = 0;
       let far = 0;
       this._objective(step.objective || 'Follow ' + carRef(car) + ' — not too close');
-      this._setMarker(null);
+      this._track(() => (car.wrecked || car.removed ? null : car));
       await this._until(() => {
         const p = game.player;
         const d = Math.hypot(car.pos.x - p.pos.x, car.pos.z - p.pos.z);
@@ -1439,7 +1476,7 @@
       const cars = [].concat(step.destroy).map((id) => run.cars.get(id)).filter(Boolean);
       run.targetCars = cars;
       this._objective(step.objective || 'Destroy the ' + (cars.length === 1 ? cars[0].name : 'cars'));
-      this._setMarker(null);
+      this._track(() => this._nearestOf(cars));
       await this._until(() => cars.every((c) => c.wrecked || c.removed), run);
       run.targetCars = [];
     }
@@ -1600,6 +1637,7 @@
       this.game.hud.setMissionTimer(null);
       this.game.hud.setSuspicion(null);
       this._objGroup.visible = false;
+      if (this._objArrow) this._objArrow.visible = false;
       this.game.route = null;
     }
 
@@ -1695,6 +1733,24 @@
       }
       const run = this.run;
       if (!run) return;
+      // A moving objective: the marker, arrow and route follow it.
+      if (run.track) {
+        const o = run.track();
+        if (o) {
+          const pos = o.renderPos || o.pos;
+          const top = o.height ? o.height + 1.6 : 2.6;
+          run.marker = { x: pos.x, y: pos.y, z: pos.z, r: 3, moving: true };
+          this._routeTo = run.marker;
+          const bob = Math.sin(game.time * 4) * 0.25;
+          this._objArrow.position.set(pos.x, pos.y + top + bob, pos.z);
+          this._objArrow.rotation.y += dt * 2.2;
+          this._objArrow.visible = true;
+        } else {
+          run.marker = null;
+          this._routeTo = null;
+          this._objArrow.visible = false;
+        }
+      }
       // GPS route to the marker.
       if (this._routeTo && VH.Minimap) {
         this._routeT -= dt;
