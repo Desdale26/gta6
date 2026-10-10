@@ -940,6 +940,7 @@
     title: 'Last Light',
     giver: 'jay',
     start: 'chain',
+    resumeAt: 'pier9_gate', // where it waits if the chain was interrupted
     time: 5.6,
     estMinutes: 12,
     summary: 'Sunrise at the end of the pier, where the letter was read, and the last choice.',

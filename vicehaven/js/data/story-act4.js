@@ -974,6 +974,7 @@
     title: 'Tidewater, Again',
     giver: 'jay',
     start: 'chain',
+    resumeAt: CRESTLINE_WAIT, // where it waits if the chain was interrupted
     time: 22.5,
     estMinutes: 13,
     summary: 'Same job. Same driver. Different ending.',

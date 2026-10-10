@@ -23,14 +23,24 @@
   const { damp, smoothstep, clamp } = VH.math;
 
   const materialCache = new Map();
+  // At night people glow very faintly in their own colours, so Jay and the
+  // cast stay readable away from street lamps (a common game-lighting cheat).
+  const NIGHT_FILL = { value: 0 };
   function material(hex, roughness) {
     const key = hex + ':' + roughness;
     let m = materialCache.get(key);
     if (!m) {
       m = new THREE.MeshStandardMaterial({ color: hex, roughness, metalness: 0 });
+      m.emissive.copy(m.color).multiplyScalar(NIGHT_FILL.value);
       materialCache.set(key, m);
     }
     return m;
+  }
+  /** 0 by day; the environment raises it after dark. */
+  function setNightFill(k) {
+    if (Math.abs(k - NIGHT_FILL.value) < 0.002) return;
+    NIGHT_FILL.value = k;
+    for (const m of materialCache.values()) m.emissive.copy(m.color).multiplyScalar(k);
   }
 
   /** Jay Mercer's default outfit. Colours are sRGB hex. */
@@ -465,5 +475,7 @@
 
   Humanoid.JAY_LOOK = JAY_LOOK;
   Humanoid.material = material;
+  Humanoid.setNightFill = setNightFill;
+  Humanoid.nightFill = NIGHT_FILL; // shared uniform for the instanced crowd
   VH.Humanoid = Humanoid;
 })();

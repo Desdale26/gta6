@@ -81,9 +81,12 @@
         else if (slot == 14.0) c = iShoes * 0.5 + vec3(0.03);
         vCrowd = c * aShade;`}`);
     if (!depthOnly) {
+      if (VH.Humanoid && VH.Humanoid.nightFill) shader.uniforms.uNightFill = VH.Humanoid.nightFill;
+      else shader.uniforms.uNightFill = { value: 0 };
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vCrowd;')
-        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= vCrowd;');
+        .replace('#include <common>', '#include <common>\nvarying vec3 vCrowd;\nuniform float uNightFill;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= vCrowd;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * uNightFill;');
     }
   }
 

@@ -38,6 +38,7 @@
     title: 'Homecoming',
     giver: 'dex',
     start: 'auto',
+    resumeAt: 'civic_plaza', // its marker, if the first attempt was quit or failed
     estMinutes: 11,
     summary: "Jay comes home late for his grandmother's funeral and is back in a fight within the hour.",
     reward: { money: 500 },

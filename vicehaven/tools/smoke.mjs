@@ -146,7 +146,9 @@ const pos = () => game(() => ({ x: VH.game.player.pos.x, y: VH.game.player.pos.y
 const start = await pos();
 log('spawn', JSON.stringify(start));
 
-// Walk forward (camera faces north = -Z).
+// Walk forward (camera faces north = -Z). Drop any mouse movement left over
+// from clicking New Game, which a busy machine can deliver after pointer lock.
+await game(() => { VH.game.input.takeMouseDelta(); VH.game.cameraRig.snapBehind(VH.game.player); });
 await page.keyboard.down('KeyW');
 await advance(1.5);
 const walked = await pos();

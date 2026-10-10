@@ -209,6 +209,8 @@ function mission(m, isMain) {
   if (!m.id || !m.title) bad(where, 'missing id or title');
   if (!m.start) bad(where, 'missing start');
   else if (m.start !== 'chain' && m.start !== 'auto' && !placeOk(m.start)) bad(where, 'start place "' + m.start + '" not defined');
+  if (['chain', 'auto', 'intro'].includes(m.start) && !m.resumeAt) bad(where, 'self-starting job has no resumeAt (nowhere to restart it after a quit or a failed attempt)');
+  if (m.resumeAt && !placeOk(m.resumeAt)) bad(where, 'resumeAt place "' + m.resumeAt + '" not defined');
   for (const r of m.requires || []) if (!allMissions.has(r)) bad(where, 'requires unknown mission "' + r + '"');
   if (!m.estMinutes) soft(where, 'no estMinutes');
   if (isMain) est += m.estMinutes || 0;

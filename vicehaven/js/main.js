@@ -220,9 +220,12 @@
           continueGame: () => this.continueGame(),
           hasSave: () => !!VH.MissionEngine.loadSave(),
           save: () => {
-            if (this.missions.run) this.hud.notify({ title: 'Can\'t save during a job', text: 'Finish or abandon it first.', icon: '✕', tone: 'bad' });
-            else if (this.police.level > 0) this.hud.notify({ title: 'Can\'t save with the police after you', text: 'Lose them first.', icon: '✕', tone: 'bad' });
-            else if (this.missions.save()) this.ui.setPauseMeta('Saved · ' + new Date().toLocaleTimeString());
+            if (!this._autoSave()) {
+              const why = this.missions.lastSaveRefusal;
+              const text = why === 'storage' ? 'This browser is blocking storage for this page.' : why === 'other-tab' ? 'A newer save was made in another tab. Reload the page to carry on from it.' : 'Wait until Jay is back on his feet.';
+              return this.hud.notify({ title: 'Couldn\'t save', text, icon: '✕', tone: 'bad' });
+            }
+            this.ui.setPauseMeta('Saved · ' + new Date().toLocaleTimeString() + (this.missions.run ? ' · this job will start again from its marker' : ''));
           },
           openMap: () => {
             this.resume();
@@ -370,14 +373,21 @@
       VH.events.on('renderer:contextlost', () => {
         this.hud.notify({ title: 'Graphics reset', text: 'The graphics driver restarted. If the picture doesn\'t come back, reload the page.', icon: '⚠', tone: 'bad', duration: 8000 });
       });
+      // Closing the tab, reloading, or switching away saves first. pagehide is
+      // the one Edge always fires (beforeunload is skipped for some closes);
+      // visibilitychange also covers sleeping tabs that are discarded later.
       window.addEventListener('beforeunload', (e) => {
+        this._autoSave();
         if ((this.state === 'playing' || this.state === 'paused' || this.state === 'dialog') && this.settings.get('gameplay.confirmClose')) {
           e.preventDefault();
           e.returnValue = '';
         }
       });
+      window.addEventListener('pagehide', () => this._autoSave());
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden && this.state === 'playing') this.pause();
+        if (!document.hidden) return;
+        this._autoSave();
+        if (this.state === 'playing') this.pause();
       });
     },
 
@@ -424,10 +434,30 @@
       document.body.classList.remove('cutscene');
     },
 
+    /** The play clock, and an autosave every 45 s of play. */
+    _tickPlayTime(dt) {
+      this.playTime += dt;
+      this._autoSaveT = (this._autoSaveT || 0) + dt;
+      // A refused save (knocked out, being arrested) tries again every second
+      // until it goes through, instead of waiting another 45 s.
+      if (this._autoSaveT > 45 && !this._autoSave()) this._autoSaveT = 44;
+    },
+
+    /** Quiet save (see MissionEngine.autoSave). */
+    _autoSave() {
+      if (!this.missions || this.noAutoSave) return false; // noAutoSave: automated tests
+      const ok = this.missions.autoSave();
+      if (ok) {
+        this._autoSaveT = 0;
+        this._lastSaveAt = new Date();
+      }
+      return ok;
+    },
+
     _saveInfo() {
       const d = VH.MissionEngine.loadSave();
       if (!d) return null;
-      const done = Object.keys(d.completed || {}).length;
+      const done = Object.keys(d.completed || {}).filter((id) => !this.missions || this.missions.all.has(id)).length;
       const total = this.missions ? this.missions.all.size : 0;
       const pct = total ? Math.round((done / total) * 100) : 0;
       const t = Math.floor(d.playTime || 0);
@@ -446,6 +476,8 @@
       this._resetWorld();
       this.player.respawn();
       this.missions.load(data);
+      this._interrupted = data.interrupted && this.missions.all.get(data.interrupted) && !this.missions.completed[data.interrupted] ? this.missions.all.get(data.interrupted) : null;
+      this._restoreHeat = data.heat > 0 && !data.interrupted ? data.heat : 0; // the police pick up the chase once playing
       this.cameraRig.snapBehind(this.player);
       this.hud.resetChecklist();
       this.hud.show(true);
@@ -495,10 +527,30 @@
       if (!this.input.locked) this.input.requestLock();
       this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
       this.missions.refreshMarkers();
-      if (this._continuing) return;
+      if (this._continuing) {
+        const job = this._interrupted;
+        this._interrupted = null;
+        if (this._restoreHeat) {
+          this.police.setLevel(this._restoreHeat, 'save');
+          this.police._sawPlayer();
+          this._restoreHeat = 0;
+        }
+        if (job) this.hud.notify({ title: 'Picking up where you left off', text: 'You quit in the middle of “' + job.title + '”. Walk into its marker to start it again.', icon: '↻', duration: 8000 });
+        return;
+      }
       // A new story: the first job starts by itself.
       const first = this.missions.nextMain;
-      if (first && (first.start === 'auto' || first.start === 'intro') && !this.noAutoStory) setTimeout(() => this.missions.start(first), 600); // noAutoStory: automated tests
+      if (first && (first.start === 'auto' || first.start === 'intro') && !this.noAutoStory) { // noAutoStory: automated tests
+        this.missions._chainPending = first.id; // no marker flash before it starts
+        this.missions.refreshMarkers();
+        setTimeout(() => {
+          if (this.missions._chainPending !== first.id) return;
+          this.missions._chainPending = null;
+          if (this.state === 'title' || this.missions.run) return;
+          this.missions.start(first);
+          if (!this.missions.run) this.missions.refreshMarkers();
+        }, 600);
+      }
       else this.hud.notify({ title: 'Welcome back, Jay', text: 'Look for the glowing markers on the map (' + this.input.labelFor('map') + ') to find work.', icon: '☀', duration: 6500 });
     },
 
@@ -514,7 +566,8 @@
           rows.push({ title: 'Act ' + (job.act || 1) + ' · ???', text: '', state: 'locked' });
           break;
         }
-        rows.push({ title: job.title, text: done ? job.summary || '' : 'Next: ' + (job.summary || '') + ' (' + ((this.places.get(job.start) || {}).name || 'see the map') + ')', state: done ? 'done' : 'next' });
+        const where = (VH.MissionEngine.selfStarting(job) ? m._place(job.resumeAt) : this.places.get(job.start)) || {};
+        rows.push({ title: job.title, text: done ? job.summary || '' : 'Next: ' + (job.summary || '') + ' (' + (where.name || 'see the map') + ')', state: done ? 'done' : 'next' });
       }
       for (const chain of m.side) {
         const next = chain.missions.find((j) => !m.completed[j.id]);
@@ -535,7 +588,8 @@
       this.input.releaseAll();
       this.input.exitLock();
       const d = this._district || this.world.districtAt(this.player.pos.x, this.player.pos.z);
-      this.ui.setPauseMeta(this.player.name + ' · ' + VH.util.formatMoney(this.player.money) + ' · ' + (this._place || d.name));
+      const saved = this._autoSave() ? ' · Saved ' + this._lastSaveAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      this.ui.setPauseMeta(this.player.name + ' · ' + VH.util.formatMoney(this.player.money) + ' · ' + (this._place || d.name) + saved);
       this.ui.hideAll();
       this.ui.setChallengeActive(this.challenges.active);
       this.ui.show('pause');
@@ -557,6 +611,7 @@
     },
 
     quitToTitle() {
+      this._autoSave();
       this.challenges.abandon(true);
       if (this.missions.run) this.missions.fail('You quit the job.');
       this.dialogue.stop();
@@ -626,6 +681,7 @@
           if (this._introTime > 2.2) this._startPlaying();
         }
         if (this.state === 'playing') this.challenges.update(FIXED_DT);
+        if (this.state === 'playing' || this.state === 'dialog') this._tickPlayTime(FIXED_DT);
         this._acc = 0;
         this._simulate(FIXED_DT, this.state === 'playing');
         this.vehicles.update(FIXED_DT, 1, this.player.pos);
@@ -730,7 +786,7 @@
         }
         case 'playing':
         case 'dialog': {
-          this.playTime += dt;
+          this._tickPlayTime(dt);
           if (this.state === 'playing') {
             if (!(this.combat && this.combat.wheelOpen)) this.cameraRig.handleInput(dt, this.player.aiming);
             this._vehicleInput();

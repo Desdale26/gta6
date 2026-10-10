@@ -118,7 +118,7 @@
   function defaults() {
     return {
       version: 1,
-      graphics: Object.assign({ quality: 'high', fov: 65, showFps: true }, PRESETS.high),
+      graphics: Object.assign({ quality: 'high', fov: 65, showFps: true, nightBrightness: 1 }, PRESETS.high),
       gameplay: {
         difficulty: 'normal',
         mouseSensitivity: 1.0,

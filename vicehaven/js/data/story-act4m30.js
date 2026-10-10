@@ -111,6 +111,7 @@
     title: 'Salt and Iron',
     giver: 'jay',
     start: 'chain',
+    resumeAt: 'kostas_salvage', // where it waits if the chain was interrupted
     time: 3.5,
     estMinutes: 12,
     summary: 'Halberd and Southside come for the money, and Jay finishes it with Horne where it began.',

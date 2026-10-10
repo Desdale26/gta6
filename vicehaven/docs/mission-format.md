@@ -123,7 +123,8 @@ dex: {
   act: 1,
   title: 'Homecoming',
   giver: 'dex',                 // whose icon marks the start on the map
-  start: 'civic_plaza',         // a place id; the mission starts when Jay walks into its marker. 'chain' = starts right after the previous one
+  start: 'civic_plaza',         // a place id; the mission starts when Jay walks into its marker. 'chain' = starts right after the previous one, 'auto' = starts a new game
+  resumeAt: 'pier9_gate',       // 'chain' / 'auto' jobs only (required): where their marker waits if that moment was missed (a quit, or a failed attempt)
   requires: ['m00_prologue'],   // missions that must be done first (default: the previous one)
   time: 20.5,                   // optional: jump the clock to this hour when it starts
   estMinutes: 10,               // realistic play time

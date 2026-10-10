@@ -111,6 +111,7 @@
     uniform float uBloom;
     uniform float uExposure;
     uniform float uSaturation;
+    uniform float uNightLift;
     uniform float uContrast;
     uniform vec3 uShadowTint;
     uniform vec3 uHighlightTint;
@@ -154,9 +155,12 @@
       c = mix(vec3(l), c, uSaturation);
       c += uShadowTint * (1.0 - smoothstep(0.0, 0.45, l)) + uHighlightTint * smoothstep(0.45, 1.0, l);
 
-      // Vignette.
+      // Night: raise the black level toward moonlit blue so shapes stay readable.
+      c += vec3(0.022, 0.03, 0.055) * uNightLift * (1.0 - smoothstep(0.0, 0.35, l));
+
+      // Vignette (lighter at night, when the edges are dark already).
       vec2 d = (vUv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-      c *= 1.0 - smoothstep(0.35, 1.25, length(d)) * uVignette;
+      c *= 1.0 - smoothstep(0.35, 1.25, length(d)) * uVignette * (1.0 - 0.45 * min(uNightLift, 1.0));
 
       // Full-screen flash (checkpoints, finishes, hard landings).
       c = mix(c, uFlashColor, uFlash);
@@ -178,6 +182,7 @@
       this.width = 1;
       this.height = 1;
       this.bloomStrength = 0.55;
+      this.nightLift = 0;
       this.flash = 0;
       this.flashColor = new THREE.Color(1, 1, 1);
       this.time = 0;
@@ -213,7 +218,7 @@
       this.upMat.blendEquation = THREE.AddEquation;
       this.compMat = mat(COMPOSITE_FRAGMENT, {
         tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.5 }, uExposure: { value: 1 },
-        uSaturation: { value: 1.07 }, uContrast: { value: 1.05 },
+        uSaturation: { value: 1.07 }, uContrast: { value: 1.05 }, uNightLift: { value: 0 },
         uShadowTint: { value: new THREE.Vector3(-0.004, 0.002, 0.012) },
         uHighlightTint: { value: new THREE.Vector3(0.028, 0.012, -0.018) },
         uVignette: { value: 0.32 }, uGrain: { value: 0.025 }, uTime: { value: 0 },
@@ -323,6 +328,7 @@
       c.tBloom.value = this.mips[0].texture;
       c.uBloom.value = this.bloomStrength / this.mips.length;
       c.uExposure.value = r.toneMappingExposure;
+      c.uNightLift.value = this.nightLift;
       c.uTime.value = this.time;
       c.uResolution.value.set(this.width, this.height);
       c.uFlash.value = Math.min(0.85, this.flash);

@@ -37,7 +37,7 @@
       this.sirenLight = new THREE.PointLight(0xff2020, 0, 28, 2);
       this.sirenLight.position.set(0, -100, 0);
       game.scene.add(this.sirenLight);
-      this.headlight = new THREE.SpotLight(0xfff1dc, 0, 55, 0.62, 0.55, 1.6);
+      this.headlight = new THREE.SpotLight(0xfff1dc, 0, 80, 0.7, 0.5, 1.4);
       this.headlight.position.set(0, -100, 0);
       game.scene.add(this.headlight);
       game.scene.add(this.headlight.target);
@@ -213,9 +213,9 @@
         const f = Math.sin(pv.renderYaw);
         const g = Math.cos(pv.renderYaw);
         this.headlight.position.set(pv.renderPos.x + f * pv.hz, pv.renderPos.y + 0.8, pv.renderPos.z + g * pv.hz);
-        this.headlight.target.position.set(pv.renderPos.x + f * (pv.hz + 20), pv.renderPos.y - 0.5, pv.renderPos.z + g * (pv.hz + 20));
+        this.headlight.target.position.set(pv.renderPos.x + f * (pv.hz + 24), pv.renderPos.y - 0.6, pv.renderPos.z + g * (pv.hz + 24));
         this.headlight.target.updateMatrixWorld();
-        this.headlight.intensity = 90 * night;
+        this.headlight.intensity = 170 * night;
       } else this.headlight.intensity = 0;
 
       this._mixVoices(dt);

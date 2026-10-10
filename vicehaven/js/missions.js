@@ -439,7 +439,9 @@
     }
 
     _markerFor(m) {
-      const place = this.game.places.get(m.start);
+      // A chained job normally starts by itself; if that moment was missed
+      // (quit, or a failed attempt) it waits at its resumeAt place instead.
+      const place = this._place(MissionEngine.selfStarting(m) ? m.resumeAt : m.start);
       if (!place) return null;
       const color = m._main ? new THREE.Color(3, 1.3, 0.35) : new THREE.Color(0.4, 1.6, 3);
       const g = new THREE.Group();
@@ -466,7 +468,7 @@
       this.markers = [];
       if (this.run) return;
       for (const m of this.available()) {
-        if (m.start === 'chain') continue;
+        if (MissionEngine.selfStarting(m) && (!m.resumeAt || this._chainPending === m.id)) continue;
         const mk = this._markerFor(m);
         if (mk) this.markers.push(mk);
       }
@@ -493,11 +495,20 @@
     start(m, fromCheckpoint) {
       const game = this.game;
       if (this.run) return;
+      const isRetry = this._retriedFrom === m.id;
+      this._retriedFrom = null;
       if (game.police.level > 0) {
         game.hud.notify({ title: 'Too hot', text: 'Lose the police before you start a job.', icon: '✕', tone: 'bad' });
         return;
       }
       if (game.challenges && game.challenges.active) game.challenges.abandon(true);
+      // What an autosave falls back to while this job runs. Retrying the same
+      // job keeps the snapshot from before the first attempt.
+      if (!(this._preRun && this._preRunFor === m.id && isRetry)) {
+        this._preRun = this._saveData();
+        this._preRunFor = m.id;
+      }
+      this._chainPending = null;
       const run = (this.run = {
         m, actors: new Map(), cars: new Map(), groups: new Map(), crew: [], protect: new Set(), failIf: (m.failIf || []).slice(),
         marker: null, objective: '', timer: null, targets: [], targetCars: [], watchCars: [], checkpoint: fromCheckpoint || 0,
@@ -537,9 +548,17 @@
         if (step.checkpoint && steps === run.m.steps) {
           run.checkpoint = i;
           this._checkpointPos = this._snapshotPlayer();
+          // What a retry from here starts with (choices made before it stay made).
+          run.cpFlags = JSON.parse(JSON.stringify(this.flags));
+          run.cpMoney = run.midMoney || 0;
         }
         await this._exec(step, run, false);
       }
+    }
+
+    /** Jobs that start by themselves (the opening, chained finales) rather than at a marker. */
+    static selfStarting(m) {
+      return m.start === 'chain' || m.start === 'auto' || m.start === 'intro';
     }
 
     static kindOf(step) {
@@ -663,7 +682,10 @@
           if (!setup) await this._establish(step.camera, step.seconds || 4, run);
           return;
         case 'reward':
-          if (!setup) this._reward(step.reward, true);
+          if (!setup) {
+            this._reward(step.reward, true);
+            run.midMoney = (run.midMoney || 0) + ((step.reward && step.reward.money) || 0);
+          }
           return;
         default:
           return;
@@ -1518,7 +1540,16 @@
       }
       // Chained missions start straight away.
       const next = this.available().find((n) => n.start === 'chain' && (n.requires || []).includes(m.id));
-      if (next) setTimeout(() => this.start(next), 4200);
+      if (next) {
+        this._chainPending = next.id;
+        setTimeout(() => {
+          if (this._chainPending !== next.id) return;
+          this._chainPending = null;
+          if (this.run || this.game.state === 'title') return this.refreshMarkers();
+          this.start(next);
+          if (!this.run) this.refreshMarkers(); // refused (police): its marker shows instead
+        }, 4200);
+      }
       // Ambient texts after this mission.
       for (const t of this.story.texts || []) {
         if (t.after !== m.id || (t.requiresFlag && !MissionEngine.testFlag(Object.assign({}, this.completed, this.flags), t.requiresFlag))) continue;
@@ -1551,7 +1582,12 @@
       else if (game.audio.fail) game.audio.fail();
       this._music('off');
       VH.events.emit('mission:fail', { m: run.m, reason });
-      this._retry = { m: run.m, checkpoint: run.checkpoint, pos: this._checkpointPos, until: game.time + 14 };
+      // A failed attempt leaves nothing behind: its choices and the money it
+      // paid out mid-job are rolled back (a retry from a checkpoint gets back
+      // whatever was decided and paid before that checkpoint).
+      if (this._preRun && this._preRunFor === run.m.id) this.flags = JSON.parse(JSON.stringify(this._preRun.flags));
+      if (run.midMoney) game.player.money = Math.max(0, game.player.money - run.midMoney);
+      this._retry = { m: run.m, checkpoint: run.checkpoint, pos: this._checkpointPos, until: game.time + 14, cpFlags: run.cpFlags || null, cpMoney: run.cpMoney || 0 };
       setTimeout(() => this.refreshMarkers(), 1500);
     }
 
@@ -1601,6 +1637,11 @@
       const r = this._retry;
       if (!r || this.run || this.game.time > r.until) return false;
       this._retry = null;
+      this._retriedFrom = r.m.id;
+      if (r.checkpoint && r.cpFlags) {
+        this.flags = JSON.parse(JSON.stringify(r.cpFlags));
+        if (r.cpMoney) this.game.player.money += r.cpMoney;
+      }
       this.game.hud.missionResult(null);
       const game = this.game;
       if (r.checkpoint && r.pos) {
@@ -1733,31 +1774,80 @@
     }
 
     // ------------------------------------------------------------- save
-    save() {
+    /** Everything a save holds, as it stands right now (a detached copy). */
+    _saveData() {
       const g = this.game;
+      const p = g.player;
+      const v = p.vehicle;
       const data = {
         version: 1,
         savedAt: Date.now(),
         completed: this.completed,
         flags: this.flags,
         stats: this.stats,
-        money: g.player.money,
-        health: g.player.health,
-        armor: g.player.armor,
-        playerStats: g.player.stats,
+        money: p.money,
+        health: p.health,
+        armor: p.armor,
+        playerStats: p.stats,
         playTime: g.playTime,
         hours: g.environment.hours,
-        pos: { x: g.player.pos.x, z: g.player.pos.z, yaw: g.player.heading },
+        pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.heading },
+        // The car Jay is sitting in comes back with him.
+        vehicle: v && !v.wrecked && !v.removed && !v.burning ? { type: v.type, color: v.model.color, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw } : null,
+        // Closing the tab is not a way to lose the police.
+        heat: g.police.level || 0,
         weapons: g.combat.serialize(),
         activities: g.activities ? g.activities.serialize() : null,
       };
+      return JSON.parse(JSON.stringify(data));
+    }
+
+    save(opts) {
+      const o = opts || {};
+      const data = o.data || this._saveData();
+      data.savedAt = Date.now();
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-        g.hud.showToast('Progress saved');
+        this._knownSavedAt = data.savedAt;
+        if (!o.silent) this.game.hud.showToast('Progress saved');
         return true;
       } catch (err) {
         return false;
       }
+    }
+
+    /**
+     * A quiet save for closing the tab, switching away, quitting and the
+     * timer. In the middle of a job it writes the state from just before the
+     * job began (with the time played brought up to date), so the job starts
+     * over from its marker next time instead of leaving a half-built mission.
+     */
+    autoSave() {
+      const g = this.game;
+      this.lastSaveRefusal = null;
+      const refuse = (why) => {
+        this.lastSaveRefusal = why;
+        return false;
+      };
+      if (!['playing', 'paused', 'dialog'].includes(g.state)) return refuse('state');
+      // The game open in two tabs: never let the older one overwrite newer
+      // progress made in the other (for example when it is finally closed).
+      const cur = MissionEngine.loadSave();
+      if (cur && cur.savedAt > (this._knownSavedAt || 0) + 1) {
+        if (!this._warnedOtherTab) {
+          this._warnedOtherTab = true;
+          g.hud.notify({ title: 'Open in another tab', text: 'Vicehaven was saved from another tab, so this one has stopped saving. Reload the page to carry on from the newest save.', icon: '⚠', tone: 'bad', duration: 10000 });
+        }
+        return refuse('other-tab');
+      }
+      // Knocked out or being arrested: keep the last good save.
+      if (g.player.state === 'dead' || g._arresting) return refuse('busy');
+      let data;
+      if (this.run) {
+        if (!this._preRun) return refuse('state');
+        data = Object.assign({}, this._preRun, { playTime: g.playTime, interrupted: this.run.m.id });
+      } else data = this._saveData();
+      return this.save({ data, silent: true }) || refuse('storage');
     }
 
     static loadSave() {
@@ -1779,6 +1869,8 @@
 
     load(data) {
       const g = this.game;
+      this._knownSavedAt = data.savedAt || 0;
+      this._warnedOtherTab = false;
       this.completed = data.completed || {};
       this.flags = data.flags || {};
       this.stats = data.stats || { missions: 0, side: 0 };
@@ -1790,7 +1882,21 @@
       if (data.hours !== undefined) g.environment.setTime(data.hours);
       g.combat.load(data.weapons);
       if (g.activities && data.activities) g.activities.load(data.activities);
-      if (data.pos) g.player.teleport(data.pos.x, data.pos.z, data.pos.yaw);
+      if (data.pos) g.player.teleport(data.pos.x, data.pos.z, data.pos.yaw, data.pos.y);
+      this._preRun = null;
+      this._chainPending = null;
+      const c = data.vehicle;
+      if (c && VH.CarModels && VH.CarModels.list().includes(c.type)) {
+        const v = g.vehicles.spawn(c.type, c.x, c.z, c.yaw, { color: c.color, persistent: true, y: c.y });
+        if (v) {
+          // The kerbside space it stands in is taken (no parked twin on top of it).
+          for (const s of g.vehicles.spots || []) if (Math.hypot(s.x - v.pos.x, s.z - v.pos.z) < 6) s.used = true;
+          const stolen = g.player.stats.carsStolen;
+          g.vehicles.beginEnter({ v, side: 1, x: g.player.pos.x, z: g.player.pos.z });
+          g.vehicles._finishEnter();
+          g.player.stats.carsStolen = stolen; // getting back in isn't a theft
+        }
+      }
     }
 
     reset() {
@@ -1806,6 +1912,12 @@
       this.flags = {};
       this.stats = { missions: 0, side: 0 };
       this._retry = null;
+      this._preRun = null;
+      this._chainPending = null;
+      // A new story may replace whatever save exists (the title screen asked).
+      const cur = MissionEngine.loadSave();
+      this._knownSavedAt = cur ? cur.savedAt || 0 : 0;
+      this._warnedOtherTab = false;
     }
   }
 

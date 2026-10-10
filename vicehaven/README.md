@@ -41,10 +41,14 @@ it. It needs nothing else and works offline.
 4. Click inside the game if the mouse isn't captured. **Esc** releases the
    mouse and pauses.
 
-**Saving.** The game saves after every job (and from the pause menu) in the
-browser's storage for that file. **Continue** on the title screen picks up
-where you left off. Opening the same file in the same browser keeps your
-save; a different browser or a private window starts fresh.
+**Saving.** The game saves by itself: after every job, every 45 seconds of
+play, whenever you pause, switch to another tab or window, quit to the title,
+or close the tab. It keeps the car you're sitting in. If you quit in the
+middle of a job, the save holds the moment just before the job began, and
+the job's marker waits for you to start it again. **Continue** on the title
+screen picks up where you left off. Saves live in the browser's storage for
+that file: the same file in the same browser keeps your save; a different
+browser or a private window starts fresh.
 
 **Voices.** Dialogue is read aloud by the browser's built-in speech voices.
 Edge has natural-sounding voices on Windows 10 and 11. Turn voices off under
@@ -212,8 +216,10 @@ and headshots. Enemies take cover, flank and shoot back.
 Between songs the hosts talk, and they react to what you've done.
 
 **Time and light.** The clock runs (a full day is about 24 minutes) unless
-you fix the time in Settings. Night brings street-light pools, headlights,
-lit windows and neon. Jobs set their own hour.
+you fix the time in Settings. Night is moonlit blue rather than black, with
+street-light pools, headlights, lit windows and neon. If nights are still too
+dark (or too bright) on your screen, change **Settings → Graphics → Night
+brightness**. Jobs set their own hour.
 
 ---
 
@@ -272,6 +278,7 @@ vicehaven/
 └── tools/
     ├── bundle.mjs          builds dist/vicehaven.html (plain Node, no packages)
     ├── validate-story.mjs  checks the story data (ids, places, cars, flags) and counts it
+    ├── save-test.mjs       optional test: close the tab, reopen, Continue
     └── smoke.mjs           optional automated test (Node + Playwright)
 ```
 
@@ -306,9 +313,12 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
 - [ ] Fail a job (die or get caught) and retry with E
 - [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done
+- [ ] Drive somewhere, close the tab, open the file again: Continue puts you back in the same car
+- [ ] Close the tab in the middle of a job: Continue says so and the job's marker is there to restart it
 - [ ] M opens the map with job icons and the route
 - [ ] In a cab, P starts taxi duty and a fare tells you their story
-- [ ] Night falls: street-light pools, headlights, lit windows, the helicopter's searchlight
+- [ ] Night falls: street-light pools, headlights, lit windows, the helicopter's searchlight; Jay, cars and roads stay easy to see
+- [ ] Settings → Graphics → Night brightness changes how bright nights are, live
 - [ ] Settings change live and persist (quality presets, voices, strong language)
 
 For developers, the automated checks need Node.js and Playwright:
@@ -316,6 +326,7 @@ For developers, the automated checks need Node.js and Playwright:
 ```bash
 node vicehaven/tools/validate-story.mjs --summary   # story data: 0 problems expected
 node vicehaven/tools/smoke.mjs                      # boots the game from file:// and plays it
+node vicehaven/tools/save-test.mjs                  # closes the tab mid-game, reopens, checks Continue
 node vicehaven/tools/bundle.mjs && TARGET=dist node vicehaven/tools/smoke.mjs   # test the single file
 ```
 

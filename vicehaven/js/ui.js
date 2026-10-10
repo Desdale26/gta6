@@ -37,6 +37,8 @@
           help: 'The glow on lamps, neon, lit windows and the sun, and the Vicehaven colour grade.' },
         { path: 'graphics.antialias', label: 'Anti-aliasing', type: 'toggle',
           help: 'Smooths jagged edges. With post-processing Off it applies after reloading the page.' },
+        { path: 'graphics.nightBrightness', label: 'Night brightness', type: 'range', min: 0.5, max: 2, step: 0.05, format: pct,
+          help: 'How much the moon and street light brighten the city after dark. Turn it up if nights are hard to see on your screen.' },
         { path: 'graphics.fov', label: 'Field of view', type: 'range', min: 50, max: 90, step: 1, format: (v) => v + '°' },
         { path: 'graphics.showFps', label: 'Show FPS counter', type: 'toggle' },
       ],
@@ -53,7 +55,7 @@
         { path: 'gameplay.cameraShake', label: 'Camera shake', type: 'toggle' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
-          help: 'Catches an accidental Ctrl+W while crouch-walking.' },
+          help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
       ],
     },
     audio: {

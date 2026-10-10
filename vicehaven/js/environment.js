@@ -21,9 +21,10 @@
 
   // Sun elevation (sin of altitude) → colours. Hex values are sRGB.
   const KEYS = [
-    { s: -0.4, zenith: 0x03060f, horizon: 0x111a32, light: 0x8ea8ff, intensity: 0.8, env: 0.6, exposure: 1.85 },
-    { s: -0.12, zenith: 0x08102a, horizon: 0x222748, light: 0x8ea8ff, intensity: 0.6, env: 0.55, exposure: 1.65 },
-    { s: -0.03, zenith: 0x18244a, horizon: 0x6a4a5c, light: 0xff7a4a, intensity: 0.0, env: 0.45, exposure: 1.25 },
+    // Night is a moonlit blue, not black: you have to be able to drive in it.
+    { s: -0.4, zenith: 0x07102a, horizon: 0x1c2852, light: 0xa0b6ff, intensity: 1.0, env: 0.72, exposure: 1.9 },
+    { s: -0.12, zenith: 0x0b1534, horizon: 0x29325e, light: 0xa0b6ff, intensity: 0.8, env: 0.66, exposure: 1.75 },
+    { s: -0.03, zenith: 0x1a274e, horizon: 0x6a4a5c, light: 0xff7a4a, intensity: 0.0, env: 0.6, exposure: 1.45 },
     { s: 0.03, zenith: 0x2a4378, horizon: 0xf09a62, light: 0xff9050, intensity: 1.0, env: 0.55, exposure: 1.05 },
     { s: 0.14, zenith: 0x3563a6, horizon: 0xf2c796, light: 0xffc890, intensity: 2.0, env: 0.65, exposure: 1.0 },
     { s: 0.38, zenith: 0x2f68bd, horizon: 0xbcd5ec, light: 0xfff1de, intensity: 2.35, env: 0.72, exposure: 0.95 },
@@ -33,6 +34,10 @@
   // ---------------------------------------------------- tone mapping (CPU)
   // A port of three.js's ACESFilmicToneMapping so the fog can be given the
   // exact on-screen colour of the sky's horizon.
+  // Moonlight and the orange bounce of street lamps fill the shadows at night.
+  const NIGHT_SKY = new THREE.Color(0x5a6ca4);
+  const NIGHT_GROUND = new THREE.Color(0x4a3a2a);
+
   function acesFilmic(rgb, exposure) {
     const e = exposure / 0.6;
     const r = rgb[0] * e, g = rgb[1] * e, b = rgb[2] * e;
@@ -232,7 +237,10 @@
 
       this.applySettings();
       VH.events.on('settings:changed', (e) => {
-        if (e.path === 'graphics' || e.path.startsWith('graphics.') || e.path === '*') this.applySettings();
+        if (e.path === 'graphics' || e.path.startsWith('graphics.') || e.path === '*') {
+          this.applySettings();
+          this._applyKeys(this.sunDir.y);
+        }
       });
       VH.events.on('postfx:changed', () => this._applyKeys(this.sunDir.y));
       this.setTime(this.hours);
@@ -245,6 +253,7 @@
     }
 
     applySettings() {
+      this.nightBrightness = VH.math.clamp(+this.settings.get('graphics.nightBrightness') || 1, 0.5, 2);
       const base = this.settings.shadowTier();
       const tier = this._extentOverride && base.enabled ? Object.assign({}, base, { extent: this._extentOverride }) : base;
       const sun = this.sun;
@@ -311,7 +320,10 @@
       const lightColor = mixHex(a.light, b.light, new THREE.Color());
       const intensity = lerp(a.intensity, b.intensity, k);
       const envIntensity = lerp(a.env, b.env, k);
-      const exposure = lerp(a.exposure, b.exposure, k);
+      const night = smoothstep(-0.04, -0.22, s);
+      // Settings → Night brightness scales everything night adds on top of the day.
+      const nb = this.nightBrightness;
+      const exposure = lerp(a.exposure, b.exposure, k) * (1 + (nb - 1) * night * 0.6);
 
       // Above the horizon the sun lights the city; below it, the moon.
       const moon = s < -0.035;
@@ -322,15 +334,18 @@
       this.sun.color.copy(lightColor);
       this.sun.intensity = moon ? intensity * smoothstep(-0.035, -0.12, s) : intensity * smoothstep(-0.02, 0.03, s);
 
-      this.hemi.color.copy(zenith).lerp(horizon, 0.3);
-      this.hemi.groundColor.setRGB(0.18, 0.16, 0.13).multiplyScalar(envIntensity);
-      this.hemi.intensity = 0.3 + envIntensity * 0.25;
+      this.hemi.color.copy(zenith).lerp(horizon, 0.3).lerp(NIGHT_SKY, night * 0.85);
+      this.hemi.groundColor.setRGB(0.18, 0.16, 0.13).multiplyScalar(envIntensity).lerp(NIGHT_GROUND, night * 0.8);
+      // People and cars are lit by this at night (lamp pools are only on the ground).
+      this.hemi.intensity = 0.3 + envIntensity * 0.25 + night * 0.32 * nb;
       // Sky light fills shadows: keep shaded streets readable, not black.
-      this.scene.environmentIntensity = envIntensity * 1.15;
+      this.scene.environmentIntensity = envIntensity * 1.15 + night * 0.2 * nb;
       this.vhRenderer.renderer.toneMappingExposure = exposure;
       this.exposure = exposure;
+      // Lift the very darkest tones a touch (post-processing): moonlit, not crushed.
+      if (this.vhRenderer.post) this.vhRenderer.post.nightLift = night * nb;
+      if (VH.Humanoid && VH.Humanoid.setNightFill) VH.Humanoid.setNightFill(0.075 * night * nb);
 
-      const night = smoothstep(-0.04, -0.22, s);
       this.skyUniforms.uNight.value = night;
       this.shared.uWindowGlow.value = smoothstep(0.1, -0.08, s);
       this.nightFactor = night;
