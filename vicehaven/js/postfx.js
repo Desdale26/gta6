@@ -162,8 +162,8 @@
       vec2 d = (vUv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
       c *= 1.0 - smoothstep(0.35, 1.25, length(d)) * uVignette * (1.0 - 0.45 * min(uNightLift, 1.0));
 
-      // Full-screen flash (checkpoints, finishes, hard landings).
-      c = mix(c, uFlashColor, uFlash);
+      // Full-screen flash (checkpoints, finishes, hard landings, getting hit).
+      if (uFlash > 0.0) c = mix(c, uFlashColor, uFlash);
 
       c = toSRGB(clamp(c, 0.0, 1.0));
       // Film grain plus a little dither, which also hides banding in the sky.
@@ -291,8 +291,12 @@
     pulse(amount, color) {
       if (this.settings.get('accessibility.reducedFlashing')) amount *= 0.25;
       this.flash = Math.max(this.flash, amount);
-      if (color) this.flashColor.copy(color);
+      // A colour, or [r, g, b]. Anything else would put NaN in the shader,
+      // and NaN turns the whole picture black.
+      if (Array.isArray(color)) this.flashColor.setRGB(color[0], color[1], color[2]);
+      else if (color && color.isColor) this.flashColor.copy(color);
       else this.flashColor.setRGB(1, 1, 1);
+      if (!Number.isFinite(this.flashColor.r + this.flashColor.g + this.flashColor.b)) this.flashColor.setRGB(1, 1, 1);
     }
 
     render(scene, camera, dt) {

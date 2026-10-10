@@ -8,6 +8,10 @@
  *   node vicehaven/tools/save-test.mjs
  *   TARGET=dist node vicehaven/tools/save-test.mjs   (tests dist/vicehaven.html)
  *
+ * Each case plays a few seconds so an autosave lands before the tab closes:
+ * that is what a person does, and on a busy machine the save made during the
+ * close itself isn't guaranteed to reach the disk.
+ *
  * Cases: free roam, sitting in a car, switching to another tab, the timed
  * autosave, quitting in the middle of a job (the save keeps the state from
  * before the job and its marker comes back), quitting while a chained
@@ -105,14 +109,14 @@ const p1 = await page.evaluate(() => {
   g.advance(3);
   g.player.teleport(-51, 86, 1.2);
   g.player.money = 777;
-  g.advance(0.5);
+  g.advance(22); // a little play: the timed autosave lands
   return { state: g.state, x: g.player.pos.x, z: g.player.pos.z };
 });
 check(p1.state === 'playing', 'new game reaches free roam', p1);
 await closeTab(page);
 page = await open();
 let s = await readSave(page);
-check(s && s.money === 777 && near(s.pos, p1), 'closing the tab saved money and position', s && { money: s.money, pos: s.pos });
+check(s && s.money === 777 && near(s.pos, p1), 'play a little, close the tab: money and position are saved', s && { money: s.money, pos: s.pos });
 let c = await cont(page);
 check(c.state === 'playing' && c.money === 777 && near(c.pos, p1), 'Continue puts Jay back where he was', c);
 
@@ -124,7 +128,7 @@ const p2 = await page.evaluate(() => {
   g.advance(0.2);
   const t = g.vehicles.findEnterable(g.player.pos.x, g.player.pos.z, 6);
   if (t) g.vehicles.beginEnter(t);
-  g.advance(2);
+  g.advance(6); // getting in saves within a few seconds
   return { car: g.player.vehicle ? g.player.vehicle.type : null, stolen: g.player.stats.carsStolen };
 });
 check(p2.car === 'halcyon', 'Jay got into a car', p2);
@@ -166,6 +170,14 @@ const timed = await page.evaluate((k) => {
   return JSON.parse(localStorage.getItem(k)).money;
 }, KEY);
 check(timed === 9999, 'autosaves on its own while playing', timed);
+const soon = await page.evaluate((k) => {
+  const g = VH.game;
+  g.advance(1);
+  g.giveMoney(250, 'test'); // earning money saves within a few seconds
+  g.advance(4);
+  return JSON.parse(localStorage.getItem(k)).money;
+}, KEY);
+check(soon === 10249, 'earning money saves within a few seconds', soon);
 
 // ------------------------------------------------------------------ 4b. police heat
 await page.evaluate(() => {
@@ -173,6 +185,8 @@ await page.evaluate(() => {
   g.police.setLevel(3, 'test');
   g.police._sawPlayer();
   g.advance(0.5);
+  g._autoSaveSoon();
+  g.advance(4);
 });
 await closeTab(page);
 page = await open();
@@ -208,6 +222,7 @@ const p5 = await page.evaluate(() => {
   g.missions.start(g.missions.all.get('m01_homecoming'));
   g.advance(4);
   g.player.money = 3; // mid-job changes must not reach the save
+  g.advance(22); // an autosave lands mid-job
   return { before, run: g.missions.run ? g.missions.run.m.id : null };
 });
 check(p5.run === 'm01_homecoming', 'a job is running', p5);
@@ -234,6 +249,8 @@ const p6 = await page.evaluate(() => {
   m.refreshMarkers();
   m._chainPending = 'm29_tidewater_again'; // the 4-second gap after the previous job
   m.refreshMarkers();
+  g._autoSaveSoon();
+  g.advance(4);
   return { pending: m.markers.some((k) => k.m.id === 'm29_tidewater_again') };
 });
 check(!p6.pending, 'no marker while the chained job is about to start', p6);

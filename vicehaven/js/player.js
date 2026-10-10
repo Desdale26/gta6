@@ -21,6 +21,15 @@
   const VH = window.VH;
   const { clamp, damp, dampAngle, lerp, lerpAngle, smoothstep } = VH.math;
 
+  // How hard the city hits Jay and how quickly he gets his breath back
+  // (Settings → Gameplay → Difficulty). Health refills all the way.
+  const TOUGHNESS = {
+    easy: { taken: 0.4, delay: 2.5, regen: 12 },
+    normal: { taken: 0.6, delay: 3.5, regen: 8 },
+    hard: { taken: 0.9, delay: 5, regen: 4 },
+  };
+  const toughness = () => TOUGHNESS[VH.settings && VH.settings.get('gameplay.difficulty')] || TOUGHNESS.normal;
+
   const P = {
     radius: 0.3,
     height: 1.8,
@@ -180,6 +189,8 @@
         this._deadTimer += dt;
         return;
       }
+      const T = toughness();
+      if (this._sinceDamage > T.delay && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + dt * T.regen);
       if (this.state === 'vehicle' && this.vehicle) {
         // Riding along: the car carries Jay.
         const v = this.vehicle;
@@ -387,7 +398,6 @@
       }
       if (this._land > 0) this._land = Math.max(0, this._land - dt * 3.2);
       if (this._stagger > 0) this._stagger -= dt;
-      if (this._sinceDamage > 6 && this.health < 50) this.health = Math.min(50, this.health + dt * 2);
       if (this.pos.y < -25) this._fellOutOfWorld();
     }
 
@@ -578,6 +588,7 @@
     // ------------------------------------------------------------ health
     damage(amount, source) {
       if (this.godMode || this.state === 'dead' || amount <= 0) return;
+      if (source !== 'fall') amount *= toughness().taken;
       this._sinceDamage = 0;
       let rest = amount;
       if (this.armor > 0 && source !== 'fall') {

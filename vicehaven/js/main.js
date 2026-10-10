@@ -329,6 +329,7 @@
         this.hud.notify({ title: 'Knocked out', text: 'Take it easy on those drops.', icon: '✕', tone: 'bad' });
       });
       VH.events.on('vehicle:enter', (e) => {
+        this._autoSaveSoon();
         this.cameraRig.snapToCar(e.v);
         this.vehicles.lastPlayerCar = e.v;
         if (e.jacked) this.player.stats.carsStolen++;
@@ -342,10 +343,12 @@
         const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
         const a = Math.atan2(e.x - this.player.pos.x, e.z - this.player.pos.z) - Math.atan2(fwd.x, fwd.z);
         this.hud.damageFrom(-a);
-        if (this.renderer.post) this.renderer.post.pulse(0.25, [1, 0.05, 0.05]);
+        if (this.renderer.post) this.renderer.post.pulse(0.16, [1, 0.05, 0.05]);
         this.cameraRig.addShake(0.12);
       });
+      VH.events.on('money:changed', () => this._autoSaveSoon());
       VH.events.on('vehicle:exit', () => {
+        this._autoSaveSoon();
         this.hud.showVehicle(null);
         if (this.radio) this.radio.setActive(false);
       });
@@ -434,13 +437,22 @@
       document.body.classList.remove('cutscene');
     },
 
-    /** The play clock, and an autosave every 45 s of play. */
+    /**
+     * The play clock, and an autosave every 20 s of play (sooner after money
+     * or a car changes hands). Saving often matters: on a busy machine the
+     * save made as the tab closes doesn't always reach the disk in time.
+     */
     _tickPlayTime(dt) {
       this.playTime += dt;
       this._autoSaveT = (this._autoSaveT || 0) + dt;
       // A refused save (knocked out, being arrested) tries again every second
-      // until it goes through, instead of waiting another 45 s.
-      if (this._autoSaveT > 45 && !this._autoSave()) this._autoSaveT = 44;
+      // until it goes through, instead of waiting another 20 s.
+      if (this._autoSaveT > 20 && !this._autoSave()) this._autoSaveT = 19;
+    },
+
+    /** Something worth keeping just happened: save within a few seconds. */
+    _autoSaveSoon() {
+      this._autoSaveT = Math.max(this._autoSaveT || 0, 17);
     },
 
     /** Quiet save (see MissionEngine.autoSave). */

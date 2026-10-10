@@ -41,8 +41,8 @@ it. It needs nothing else and works offline.
 4. Click inside the game if the mouse isn't captured. **Esc** releases the
    mouse and pauses.
 
-**Saving.** The game saves by itself: after every job, every 45 seconds of
-play, whenever you pause, switch to another tab or window, quit to the title,
+**Saving.** The game saves by itself: after every job, every 20 seconds of
+play (and a few seconds after you earn money or get in or out of a car), whenever you pause, switch to another tab or window, quit to the title,
 or close the tab. It keeps the car you're sitting in. If you quit in the
 middle of a job, the save holds the moment just before the job began, and
 the job's marker waits for you to start it again. **Continue** on the title
@@ -130,6 +130,11 @@ look, RT accelerates and LT brakes in a car, RT fires and LT aims on foot,
 A jumps, Y talks and gets in and out of cars, the D-pad does taxi duty
 (up), horn (down) and lights (left), and Menu pauses. **Aim assist** (on by default,
 stronger on a controller) pulls near misses onto an enemy.
+
+**Health.** Get out of trouble for a few seconds and Jay's health refills
+on its own, all the way. **Settings → Gameplay → Difficulty** sets how much
+damage he takes and how quickly it comes back (Easy: least damage, fastest
+recovery).
 
 ---
 
@@ -310,6 +315,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Traffic stops at red lights; pedestrians wait at crossings and run from gunfire
 - [ ] Get to St. Brigid's for the funeral; cutscenes letterbox; Space skips a line
 - [ ] Shoot (aim with right mouse); hold Tab for the weapon wheel; R reloads
+- [ ] Get hit by a thug: a short red flash, the picture stays clear, and health refills a few seconds after the fight
 - [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
 - [ ] Fail a job (die or get caught) and retry with E
 - [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done

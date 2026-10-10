@@ -47,7 +47,7 @@
       label: 'Gameplay',
       items: [
         { path: 'gameplay.difficulty', label: 'Difficulty', type: 'select', options: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']],
-          help: 'How well enemies and police shoot.' },
+          help: 'How well enemies and police shoot, how much damage Jay takes and how fast his health comes back.' },
         { path: 'gameplay.mouseSensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.2, max: 3, step: 0.05, format: (v) => v.toFixed(2) + '×' },
         { path: 'gameplay.invertY', label: 'Invert vertical look', type: 'toggle' },
         { path: 'gameplay.gamepadSensitivity', label: 'Controller look speed', type: 'range', min: 0.3, max: 2.5, step: 0.05, format: (v) => v.toFixed(2) + '×' },
