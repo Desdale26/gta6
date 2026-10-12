@@ -51,6 +51,8 @@
       // the lights, swerves round anything stopped and shoves through the rest.
       this.plow = !!opts.plow;
       if (this.plow) this.ignoreRed = true;
+      this._personGap = Infinity;
+      this._hardAhead = false;
     }
 
     /** Start on a lane position { road, dir, lane, along }. */
@@ -244,10 +246,11 @@
       }
       let gap = Math.min(this._gapAhead, stopDist);
       const vLead = this._gapAhead <= stopDist ? this._speedAhead : 0;
-      if (this.plow) {
-        // Barge on at a shoving pace into whatever is ahead instead of waiting behind it.
+      if (this.plow && !this._hardAhead) {
+        // Barge on at a shoving pace into the cars ahead instead of waiting
+        // behind them. (Jay's car and people still stop it: _hardAhead.)
         if (this._gapAhead < 14) desired = Math.min(desired, 9);
-        gap = Infinity;
+        gap = Math.min(stopDist, this._personGap);
       }
 
       // Intelligent Driver Model.
@@ -350,7 +353,8 @@
         b.t += dt;
         const car = b.car;
         const l = car.removed ? { z: -99 } : v.worldToLocal(car.pos.x, car.pos.z, this._tmp7 || (this._tmp7 = {}));
-        if (l.z < -(car.hz + v.hz + 2) || b.t > 9) b.leaving = (b.leaving || 0) + dt;
+        // Done once past it, once it drives off again (a queue moving at green), or after 9 s.
+        if (l.z < -(car.hz + v.hz + 2) || car.speed > 3 || b.t > 9) b.leaving = (b.leaving || 0) + dt;
         if (b.leaving > 1.2) {
           this._bypass = null;
           return 0;
@@ -360,8 +364,15 @@
       const o = this._blockedBy;
       const plow = this.plow;
       // A plough goes round anything slow (a queue at the lights too); others only round a parked or broken-down car.
-      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
+      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 && o.driver !== 'player' : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
       if (!parkedish || this._gapAhead > (plow ? 18 : 12) || v.speed > (plow ? 7 : 1.5)) {
+        this._waitT = 0;
+        return 0;
+      }
+      // Waiting at a red or amber light (behind Jay, say) is not being blocked.
+      const p0 = this.pieces[0];
+      const next = this.pieces[1];
+      if (!this.ignoreRed && p0 && next && next.signal && this.sys.world.signalState[next.signal] !== 'green' && (1 - this.t) * p0.length < this._gapAhead + 30) {
         this._waitT = 0;
         return 0;
       }
@@ -401,6 +412,7 @@
       let best = Infinity;
       let bestSpeed = 0;
       let blocker = null;
+      let person = Infinity; // Jay on foot or a pedestrian: even a plough stops for them
       const pt = this._tmp4 || (this._tmp4 = {});
       const list = this.sys.vehicles.list;
       const player = this.sys.game.player;
@@ -428,6 +440,7 @@
           const dz = player.pos.z - pt.z;
           if (dx * dx + dz * dz < 2.2 && Math.abs(player.pos.y - v.pos.y) < 1.5) {
             const gap = s - v.hz - 0.8;
+            person = Math.min(person, gap);
             if (gap < best) {
               best = gap;
               bestSpeed = 0;
@@ -437,6 +450,7 @@
         }
         if (crowd && crowd.blockingPoint && crowd.blockingPoint(pt.x, pt.z, 1.3)) {
           const gap = s - v.hz - 0.8;
+          person = Math.min(person, gap);
           if (gap < best) {
             best = gap;
             bestSpeed = 0;
@@ -447,6 +461,9 @@
       this._gapAhead = best;
       this._speedAhead = bestSpeed;
       this._blockedBy = blocker;
+      this._personGap = person;
+      // Jay's own car isn't shoved aside (you can box a runaway in).
+      this._hardAhead = !!(blocker && blocker.pos && blocker.driver === 'player');
     }
   }
 

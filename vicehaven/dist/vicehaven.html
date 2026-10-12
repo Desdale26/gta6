@@ -26580,7 +26580,8 @@ void main() {
       v.lastContact = this.time;
       if (speed < 1.2 && (slide || 0) < 3) return;
       if (speed > 5.5) {
-        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (v.plow ? 0.15 : 1);
+        // A plough shrugs off traffic, but Jay ramming it (or it into a wall) still counts.
+        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (this._ploughs(v) && other && other.driver !== 'player' ? 0.15 : 1);
         v.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), other && other.driver === 'player' ? 'player' : other ? other : null, 'crash');
         v.wake();
       }
@@ -26621,12 +26622,17 @@ void main() {
       }
     }
 
+    /** Is this car ploughing right now (flagged, AI-driven, in one piece)? */
+    _ploughs(v) {
+      return !!v.plow && v.driver === 'ai' && !v.wrecked;
+    }
+
     _resolvePair(a, b, r) {
       // Parked cars are heavy until hit (so they don't drift), then fully dynamic.
       // A plough (a mission car that must get through) counts as six times as
       // heavy as whatever it meets, so it shoves cars aside and keeps going.
-      const fa = a.plow && !b.plow && b.driver !== 'player' ? 6 : 1;
-      const fb = b.plow && !a.plow && a.driver !== 'player' ? 6 : 1;
+      const fa = this._ploughs(a) && !this._ploughs(b) && b.driver !== 'player' ? 6 : 1;
+      const fb = this._ploughs(b) && !this._ploughs(a) && a.driver !== 'player' ? 6 : 1;
       const ma = a.mass * fa;
       const mb = b.mass * fb;
       const ia = a.inertia * fa;
@@ -26677,22 +26683,31 @@ void main() {
       a.omega += (rta * jt) / ia;
       b.omega -= (rtb * jt) / ib;
       // The plough also pushes the other car out of its line (to whichever side it's already on).
+      // Once per contact (not every step), and only up to a set sideways speed.
       const pl = fa > 1 ? a : fb > 1 ? b : null;
-      if (pl) {
-        const other = pl === a ? b : a;
+      const pushed = pl && (pl === a ? b : a);
+      if (pl && this.time - (pushed._shoveT || -9) > 0.4) {
+        pushed._shoveT = this.time;
         const rx = Math.cos(pl.yaw);
         const rz = -Math.sin(pl.yaw);
-        const side = (other.pos.x - pl.pos.x) * rx + (other.pos.z - pl.pos.z) * rz >= 0 ? 1 : -1;
-        other.vel.x += rx * side * 2.4 + Math.sin(pl.yaw) * 1.2;
-        other.vel.z += rz * side * 2.4 + Math.cos(pl.yaw) * 1.2;
-        other.wake();
+        const fx = Math.sin(pl.yaw);
+        const fz = Math.cos(pl.yaw);
+        const ox = pushed.pos.x - pl.pos.x;
+        const oz = pushed.pos.z - pl.pos.z;
+        const side = ox * rx + oz * rz >= 0 ? 1 : -1;
+        const lateral = (pushed.vel.x * rx + pushed.vel.z * rz) * side;
+        const add = Math.max(0, 2.4 - lateral);
+        const fwd = ox * fx + oz * fz > 0 ? 1.2 : 0; // only push forward what's in front
+        pushed.vel.x += rx * side * add + fx * fwd;
+        pushed.vel.z += rz * side * add + fz * fwd;
+        pushed.wake();
       }
       const speed = -vn;
       if (a.controller && a.controller.onBump) a.controller.onBump(a, b, speed);
       if (b.controller && b.controller.onBump) b.controller.onBump(b, a, speed);
       this._impact(a, b, speed, r.px, a.pos.y + 0.6, r.pz, r.nx, r.nz, Math.abs(vt));
       if (speed > 5.5) {
-        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (b.plow ? 0.15 : 1);
+        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (this._ploughs(b) && a.driver !== 'player' ? 0.15 : 1);
         b.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), a.driver === 'player' ? 'player' : a, 'crash');
       }
       b.lastContact = this.time;
@@ -26871,6 +26886,7 @@ void main() {
       p.model.setVisible(false);
       v.driver = 'player';
       v.controller = null;
+      v.plow = false; // whatever it was running from, it's Jay's car now
       v.role = 'player';
       v.persistent = true;
       v.sleeping = false;
@@ -27097,6 +27113,8 @@ void main() {
       // the lights, swerves round anything stopped and shoves through the rest.
       this.plow = !!opts.plow;
       if (this.plow) this.ignoreRed = true;
+      this._personGap = Infinity;
+      this._hardAhead = false;
     }
 
     /** Start on a lane position { road, dir, lane, along }. */
@@ -27290,10 +27308,11 @@ void main() {
       }
       let gap = Math.min(this._gapAhead, stopDist);
       const vLead = this._gapAhead <= stopDist ? this._speedAhead : 0;
-      if (this.plow) {
-        // Barge on at a shoving pace into whatever is ahead instead of waiting behind it.
+      if (this.plow && !this._hardAhead) {
+        // Barge on at a shoving pace into the cars ahead instead of waiting
+        // behind them. (Jay's car and people still stop it: _hardAhead.)
         if (this._gapAhead < 14) desired = Math.min(desired, 9);
-        gap = Infinity;
+        gap = Math.min(stopDist, this._personGap);
       }
 
       // Intelligent Driver Model.
@@ -27396,7 +27415,8 @@ void main() {
         b.t += dt;
         const car = b.car;
         const l = car.removed ? { z: -99 } : v.worldToLocal(car.pos.x, car.pos.z, this._tmp7 || (this._tmp7 = {}));
-        if (l.z < -(car.hz + v.hz + 2) || b.t > 9) b.leaving = (b.leaving || 0) + dt;
+        // Done once past it, once it drives off again (a queue moving at green), or after 9 s.
+        if (l.z < -(car.hz + v.hz + 2) || car.speed > 3 || b.t > 9) b.leaving = (b.leaving || 0) + dt;
         if (b.leaving > 1.2) {
           this._bypass = null;
           return 0;
@@ -27406,8 +27426,15 @@ void main() {
       const o = this._blockedBy;
       const plow = this.plow;
       // A plough goes round anything slow (a queue at the lights too); others only round a parked or broken-down car.
-      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
+      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 && o.driver !== 'player' : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
       if (!parkedish || this._gapAhead > (plow ? 18 : 12) || v.speed > (plow ? 7 : 1.5)) {
+        this._waitT = 0;
+        return 0;
+      }
+      // Waiting at a red or amber light (behind Jay, say) is not being blocked.
+      const p0 = this.pieces[0];
+      const next = this.pieces[1];
+      if (!this.ignoreRed && p0 && next && next.signal && this.sys.world.signalState[next.signal] !== 'green' && (1 - this.t) * p0.length < this._gapAhead + 30) {
         this._waitT = 0;
         return 0;
       }
@@ -27447,6 +27474,7 @@ void main() {
       let best = Infinity;
       let bestSpeed = 0;
       let blocker = null;
+      let person = Infinity; // Jay on foot or a pedestrian: even a plough stops for them
       const pt = this._tmp4 || (this._tmp4 = {});
       const list = this.sys.vehicles.list;
       const player = this.sys.game.player;
@@ -27474,6 +27502,7 @@ void main() {
           const dz = player.pos.z - pt.z;
           if (dx * dx + dz * dz < 2.2 && Math.abs(player.pos.y - v.pos.y) < 1.5) {
             const gap = s - v.hz - 0.8;
+            person = Math.min(person, gap);
             if (gap < best) {
               best = gap;
               bestSpeed = 0;
@@ -27483,6 +27512,7 @@ void main() {
         }
         if (crowd && crowd.blockingPoint && crowd.blockingPoint(pt.x, pt.z, 1.3)) {
           const gap = s - v.hz - 0.8;
+          person = Math.min(person, gap);
           if (gap < best) {
             best = gap;
             bestSpeed = 0;
@@ -27493,6 +27523,9 @@ void main() {
       this._gapAhead = best;
       this._speedAhead = bestSpeed;
       this._blockedBy = blocker;
+      this._personGap = person;
+      // Jay's own car isn't shoved aside (you can box a runaway in).
+      this._hardAhead = !!(blocker && blocker.pos && blocker.driver === 'player');
     }
   }
 
@@ -46686,7 +46719,7 @@ void main() {
     }
 
     expired(a, d) {
-      return !a.persistent && d > 140;
+      return !a.persistent && (d > 140 || (a.dead && a.deadTime > 30));
     }
   }
 
@@ -46696,6 +46729,11 @@ void main() {
       this.engine = engine;
       this.to = to || null; // walk in through this door (else just away from Jay)
       this.t = 0;
+    }
+
+    /** Once the job is over (not persistent any more): gone when out of sight or inside. */
+    expired(a) {
+      return !a.persistent && (a.hidden || this.t > 45);
     }
 
     update(a, dt) {
@@ -47067,7 +47105,12 @@ void main() {
         })
         .catch((err) => {
           if (err instanceof Aborted) return;
-          if (err instanceof MissionFailed) return; // _fail already handled it
+          // A waiter's failure was already handled by _failNow (this.run is
+          // null by now); one thrown between steps (a lost race) wasn't.
+          if (err instanceof MissionFailed) {
+            if (this.run === run) this._failNow(run, err.reason);
+            return;
+          }
           console.error('[missions] step error', err);
           if (this.run === run) this._failNow(run, 'Something went wrong (' + err.message + ')');
         });
@@ -48102,10 +48145,13 @@ void main() {
         const r = 25 + Math.random() * 20;
         const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor, null, 4);
         if (Math.abs(s.y - floor) > 1.2 || Math.hypot(s.x - place.x, s.z - place.z) < 18) continue;
+        // (_standSpot hands back the raw point when nothing near is free: check it's real ground, not a wall or the bay.)
+        const gh = game.physics.groundHeight(s.x, s.z, floor + 0.7);
+        if (Math.abs(gh - floor) > 0.7 || game.physics.overlaps(s.x, s.z, 0.38, gh + 0.3, gh + 1.75)) continue;
         if (!game.isVisible(s.x, s.y + 1, s.z, 1.2)) return s;
         fallback = fallback || s;
       }
-      return fallback || this._standSpot(place.x + 25, place.z, floor, null, 10);
+      return fallback || this._standSpot(place.x, place.z, floor);
     }
 
     /** The fight is over: whoever is left of the attackers (list, or all of them) gives up and runs, and stops counting as a mission enemy. */
@@ -48116,7 +48162,9 @@ void main() {
         a.missionHostile = false;
         a.persistent = false;
         if (a.brain && a.brain.hostile !== undefined) a.brain.hostile = false;
-        a.faction = 'civilian';
+        a.faction = 'fled'; // not a civilian: shooting one isn't murdering a passer-by
+        a.anim.aim = 0;
+        a.anim.weaponPose = null;
         a.brain = new FleeBrain(this, this.game.player.pos, 10);
       }
       run.targets = list ? (run.targets || []).filter((a) => !list.includes(a)) : [];
@@ -48146,6 +48194,7 @@ void main() {
           if (boxT > 1.8 || car.health < 300) {
             car.controller = null;
             car.driver = null;
+            car.plow = false;
             car.input.accel = 0;
             car.input.handbrake = 1;
             // Caught, not wrecked: it's often the car Jay has to drive next.
@@ -48549,6 +48598,12 @@ void main() {
       }
       for (const [, a] of run.actors) {
         if (a.removed) continue;
+        // Someone already walking off (a prisoner on their way into the
+        // precinct) finishes that walk, then goes (LeaveBrain.expired).
+        if (!failed && a.leaving && a.brain instanceof LeaveBrain) {
+          a.persistent = false;
+          continue;
+        }
         if (a.inCar && a.brain && a.brain._getOut) a.brain._getOut(a, a.inCar);
         a.persistent = false;
         a.brain = a.dead ? null : new FleeBrain(this, game.player.pos);
@@ -48572,6 +48627,8 @@ void main() {
           v.driver = null;
           v.noEnter = false;
         }
+        // A job car Jay got out of along the way streams out like any other.
+        if (!v.keep) v.persistent = false;
       }
       for (const it of run.watchItems || []) if (!it.gone) it.dispose();
       if (!failed) this._standDown(run);

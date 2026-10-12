@@ -317,7 +317,8 @@
       v.lastContact = this.time;
       if (speed < 1.2 && (slide || 0) < 3) return;
       if (speed > 5.5) {
-        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (v.plow ? 0.15 : 1);
+        // A plough shrugs off traffic, but Jay ramming it (or it into a wall) still counts.
+        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (this._ploughs(v) && other && other.driver !== 'player' ? 0.15 : 1);
         v.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), other && other.driver === 'player' ? 'player' : other ? other : null, 'crash');
         v.wake();
       }
@@ -358,12 +359,17 @@
       }
     }
 
+    /** Is this car ploughing right now (flagged, AI-driven, in one piece)? */
+    _ploughs(v) {
+      return !!v.plow && v.driver === 'ai' && !v.wrecked;
+    }
+
     _resolvePair(a, b, r) {
       // Parked cars are heavy until hit (so they don't drift), then fully dynamic.
       // A plough (a mission car that must get through) counts as six times as
       // heavy as whatever it meets, so it shoves cars aside and keeps going.
-      const fa = a.plow && !b.plow && b.driver !== 'player' ? 6 : 1;
-      const fb = b.plow && !a.plow && a.driver !== 'player' ? 6 : 1;
+      const fa = this._ploughs(a) && !this._ploughs(b) && b.driver !== 'player' ? 6 : 1;
+      const fb = this._ploughs(b) && !this._ploughs(a) && a.driver !== 'player' ? 6 : 1;
       const ma = a.mass * fa;
       const mb = b.mass * fb;
       const ia = a.inertia * fa;
@@ -414,22 +420,31 @@
       a.omega += (rta * jt) / ia;
       b.omega -= (rtb * jt) / ib;
       // The plough also pushes the other car out of its line (to whichever side it's already on).
+      // Once per contact (not every step), and only up to a set sideways speed.
       const pl = fa > 1 ? a : fb > 1 ? b : null;
-      if (pl) {
-        const other = pl === a ? b : a;
+      const pushed = pl && (pl === a ? b : a);
+      if (pl && this.time - (pushed._shoveT || -9) > 0.4) {
+        pushed._shoveT = this.time;
         const rx = Math.cos(pl.yaw);
         const rz = -Math.sin(pl.yaw);
-        const side = (other.pos.x - pl.pos.x) * rx + (other.pos.z - pl.pos.z) * rz >= 0 ? 1 : -1;
-        other.vel.x += rx * side * 2.4 + Math.sin(pl.yaw) * 1.2;
-        other.vel.z += rz * side * 2.4 + Math.cos(pl.yaw) * 1.2;
-        other.wake();
+        const fx = Math.sin(pl.yaw);
+        const fz = Math.cos(pl.yaw);
+        const ox = pushed.pos.x - pl.pos.x;
+        const oz = pushed.pos.z - pl.pos.z;
+        const side = ox * rx + oz * rz >= 0 ? 1 : -1;
+        const lateral = (pushed.vel.x * rx + pushed.vel.z * rz) * side;
+        const add = Math.max(0, 2.4 - lateral);
+        const fwd = ox * fx + oz * fz > 0 ? 1.2 : 0; // only push forward what's in front
+        pushed.vel.x += rx * side * add + fx * fwd;
+        pushed.vel.z += rz * side * add + fz * fwd;
+        pushed.wake();
       }
       const speed = -vn;
       if (a.controller && a.controller.onBump) a.controller.onBump(a, b, speed);
       if (b.controller && b.controller.onBump) b.controller.onBump(b, a, speed);
       this._impact(a, b, speed, r.px, a.pos.y + 0.6, r.pz, r.nx, r.nz, Math.abs(vt));
       if (speed > 5.5) {
-        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (b.plow ? 0.15 : 1);
+        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (this._ploughs(b) && a.driver !== 'player' ? 0.15 : 1);
         b.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), a.driver === 'player' ? 'player' : a, 'crash');
       }
       b.lastContact = this.time;
@@ -608,6 +623,7 @@
       p.model.setVisible(false);
       v.driver = 'player';
       v.controller = null;
+      v.plow = false; // whatever it was running from, it's Jay's car now
       v.role = 'player';
       v.persistent = true;
       v.sleeping = false;

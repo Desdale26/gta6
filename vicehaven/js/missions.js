@@ -258,7 +258,7 @@
     }
 
     expired(a, d) {
-      return !a.persistent && d > 140;
+      return !a.persistent && (d > 140 || (a.dead && a.deadTime > 30));
     }
   }
 
@@ -268,6 +268,11 @@
       this.engine = engine;
       this.to = to || null; // walk in through this door (else just away from Jay)
       this.t = 0;
+    }
+
+    /** Once the job is over (not persistent any more): gone when out of sight or inside. */
+    expired(a) {
+      return !a.persistent && (a.hidden || this.t > 45);
     }
 
     update(a, dt) {
@@ -639,7 +644,12 @@
         })
         .catch((err) => {
           if (err instanceof Aborted) return;
-          if (err instanceof MissionFailed) return; // _fail already handled it
+          // A waiter's failure was already handled by _failNow (this.run is
+          // null by now); one thrown between steps (a lost race) wasn't.
+          if (err instanceof MissionFailed) {
+            if (this.run === run) this._failNow(run, err.reason);
+            return;
+          }
           console.error('[missions] step error', err);
           if (this.run === run) this._failNow(run, 'Something went wrong (' + err.message + ')');
         });
@@ -1674,10 +1684,13 @@
         const r = 25 + Math.random() * 20;
         const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor, null, 4);
         if (Math.abs(s.y - floor) > 1.2 || Math.hypot(s.x - place.x, s.z - place.z) < 18) continue;
+        // (_standSpot hands back the raw point when nothing near is free: check it's real ground, not a wall or the bay.)
+        const gh = game.physics.groundHeight(s.x, s.z, floor + 0.7);
+        if (Math.abs(gh - floor) > 0.7 || game.physics.overlaps(s.x, s.z, 0.38, gh + 0.3, gh + 1.75)) continue;
         if (!game.isVisible(s.x, s.y + 1, s.z, 1.2)) return s;
         fallback = fallback || s;
       }
-      return fallback || this._standSpot(place.x + 25, place.z, floor, null, 10);
+      return fallback || this._standSpot(place.x, place.z, floor);
     }
 
     /** The fight is over: whoever is left of the attackers (list, or all of them) gives up and runs, and stops counting as a mission enemy. */
@@ -1688,7 +1701,9 @@
         a.missionHostile = false;
         a.persistent = false;
         if (a.brain && a.brain.hostile !== undefined) a.brain.hostile = false;
-        a.faction = 'civilian';
+        a.faction = 'fled'; // not a civilian: shooting one isn't murdering a passer-by
+        a.anim.aim = 0;
+        a.anim.weaponPose = null;
         a.brain = new FleeBrain(this, this.game.player.pos, 10);
       }
       run.targets = list ? (run.targets || []).filter((a) => !list.includes(a)) : [];
@@ -1718,6 +1733,7 @@
           if (boxT > 1.8 || car.health < 300) {
             car.controller = null;
             car.driver = null;
+            car.plow = false;
             car.input.accel = 0;
             car.input.handbrake = 1;
             // Caught, not wrecked: it's often the car Jay has to drive next.
@@ -2121,6 +2137,12 @@
       }
       for (const [, a] of run.actors) {
         if (a.removed) continue;
+        // Someone already walking off (a prisoner on their way into the
+        // precinct) finishes that walk, then goes (LeaveBrain.expired).
+        if (!failed && a.leaving && a.brain instanceof LeaveBrain) {
+          a.persistent = false;
+          continue;
+        }
         if (a.inCar && a.brain && a.brain._getOut) a.brain._getOut(a, a.inCar);
         a.persistent = false;
         a.brain = a.dead ? null : new FleeBrain(this, game.player.pos);
@@ -2144,6 +2166,8 @@
           v.driver = null;
           v.noEnter = false;
         }
+        // A job car Jay got out of along the way streams out like any other.
+        if (!v.keep) v.persistent = false;
       }
       for (const it of run.watchItems || []) if (!it.gone) it.dispose();
       if (!failed) this._standDown(run);
