@@ -1088,7 +1088,7 @@ body.reduced-flashing .chal-timer.critical {
 .hud-vehicle-name {
   position: absolute;
   right: 2.2rem;
-  bottom: 13.5rem;
+  bottom: 11.2rem; /* just above the speedometer, below the district name and radio */
   text-align: right;
   font-family: var(--vh-font-display);
   opacity: 0;
@@ -1528,10 +1528,10 @@ body.armed .hud-hints {
 }
 /* Notifications stop above the radar (on short screens fewer cards fit). */
 .hud-notify-stack {
-  max-height: calc(100vh - 8.6rem - 14rem - 3.4rem);
+  max-height: max(7rem, calc(100vh - 8.6rem - 14rem - 3.4rem));
   overflow: hidden;
 }
 /* Driving: the district name goes above the speedometer, not across it. */
 body.driving .hud-banner {
-  bottom: 15rem;
+  bottom: 15.2rem; /* above the car name / now-playing card too */
 }

@@ -2226,12 +2226,14 @@
           const p = game.player;
           if (p.inVehicle) game.vehicles.exitVehicle();
           p.teleport(r.pos.x, r.pos.z, r.pos.yaw);
-          if (game.resetCars) game.resetCars(); // every car back to fresh, like a reload
           if (r.pos.car) {
             const v = game.vehicles.spawn(r.pos.car.type, r.pos.car.x, r.pos.car.z, r.pos.car.yaw, { color: r.pos.car.color, persistent: true });
             game.vehicles.beginEnter({ v, side: 1, x: p.pos.x, z: p.pos.z });
             game.vehicles._finishEnter();
           }
+          // Every car back to fresh, like a reload (after Jay's car, so it's kept,
+          // and a gold King of the Road car he was in isn't doubled).
+          if (game.resetCars) game.resetCars();
           game.hud.setFade(0, 600);
           this.start(r.m, r.checkpoint);
         }, 350);
@@ -2255,8 +2257,7 @@
               if (game.player.inVehicle) game.vehicles.exitVehicle();
               game.player.teleport(place.x, place.z, place.yaw || 0);
             }
-            if (game.resetCars) game.resetCars();
-            if (pv && game.player.vehicle === pv && pv.repair) pv.repair();
+            if (game.resetCars) game.resetCars(); // (repairs the car Jay is in)
             game.hud.setFade(0, 600);
             this.start(r.m, 0);
           }, 350);

@@ -39,7 +39,7 @@
   // Stunt ramps: position, heading of the run-up, and a name.
   const JUMPS = [
     { x: 160, z: 510, yaw: 0, name: 'Over the stacks' },
-    { x: 110, z: 570, yaw: Math.PI / 2, name: 'Container hop' },
+    { x: 110, z: 568, yaw: Math.PI / 2, name: 'Container hop' },
     { x: 350, z: 440, yaw: -Math.PI / 2, name: 'Pier 9 leap' },
     { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
@@ -185,7 +185,7 @@
         const said = lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]).concat(lineList(t.win || []));
         const cast = [];
         for (const l of said) if (Array.isArray(l) && eng.story.characters[l[0]] && l[0] !== 'jay' && !cast.includes(l[0])) cast.push(l[0]);
-        const FIGHTERS = ['teo', 'wick', 'kostya', 'saff', 'deb'];
+        const FIGHTERS = ['teo', 'wick', 'kostya', 'deb'];
         const spawnCast = cast.map((c, k) => FIGHTERS.includes(c)
           ? { char: c, at: where, offset: [k % 2 ? -2.5 : 2.5, -2 - k], behavior: 'follow', weapon: 'pistol', health: 400 }
           : { char: c, at: where, offset: [k % 2 ? -4 : 4, -6 - k], behavior: 'idle', health: 400 });
@@ -525,6 +525,7 @@
     update(dt) {
       const g = this.game;
       if (!g.missions.run) this._taxiUpdate(dt);
+      else g.input.discard('phone'); // a P pressed during a job doesn't start taxi duty afterwards
       this._checkTakeoff();
       // Lanterns: spin, and collect by walking (or driving slowly) through them.
       const p = g.player.pos;

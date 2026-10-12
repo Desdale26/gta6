@@ -492,6 +492,8 @@
       this._resetWorld();
       this.player.respawn();
       this.missions.load(data);
+      // Lamps and neon match the loaded hour (the clock may be stopped, so the frame loop won't do it).
+      this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
       this._interrupted = data.interrupted && this.missions.all.get(data.interrupted) && !this.missions.completed[data.interrupted] ? this.missions.all.get(data.interrupted) : null;
       this._restoreHeat = data.heat > 0 && !data.interrupted ? data.heat : 0; // the police pick up the chase once playing
       this.cameraRig.snapBehind(this.player);
@@ -1022,6 +1024,7 @@
         if (v === keep || jobCars.includes(v)) continue;
         this.vehicles.remove(v);
       }
+      if (keep && keep.repair) keep.repair(); // Jay's car comes back fixed
       this.vehicles.lastPlayerCar = keep;
       if (this.activities && this.activities._spawnKingCar) {
         this.activities.kingCar = null;

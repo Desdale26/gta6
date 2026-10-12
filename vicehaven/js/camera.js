@@ -230,6 +230,9 @@
         const hitSide = this.physics.raycast(this.pivot.x, this.pivot.y, this.pivot.z, right.x, 0, right.z, side + 0.25,
           { inflate: 0.12, flags: VH.COLLIDE.CAMERA, ground: false, ignoreInside: true });
         if (hitSide) side = Math.max(0, hitSide.t - 0.25);
+        // ...nor into a van or truck beside Jay (cast from his head, which is never inside one).
+        const sideCar = this._carHit(this.pivot, right.x, 0, right.z, side + 0.25, player);
+        if (sideCar !== null) side = Math.min(side, Math.max(0, sideCar - 0.25));
         const shoulder = this._shoulder.copy(this.pivot).addScaledVector(right, side);
         shoulder.y += up;
 

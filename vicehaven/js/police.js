@@ -546,17 +546,23 @@
       // Somewhere ahead that Jay can't see yet (over a rise, past a bend, or
       // just far enough): never popping into view on a straight road.
       let center = null;
+      let farEnough = null; // the roads are straight and flat: a spot 200 m+ out is a dot on the horizon
       const fogged = 0.75 * (game.settings.get('graphics.drawDistance') || 600); // mostly lost in the haze by here
       for (const extra of [0, 40, 80, 120, 180]) {
         const along = lp.along + lp.dir * (120 + pv.speed * 2 + extra);
         if (along < lp.road.from + 20 || along > lp.road.to - 20) break;
         const c = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
         if (game.roadnet.junctionAt(c.x, c.z, 8)) continue;
+        if (!farEnough && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) >= 200) farEnough = c;
         if (game.isVisible(c.x, 1, c.z, 6) && this.canSee(c.x, 1.5, c.z) && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) < fogged) continue;
         center = c;
         break;
       }
-      if (!center) return;
+      if (!center) center = farEnough;
+      if (!center) {
+        this._blockT = 4; // try again soon, a little further on
+        return;
+      }
       const across = lp.road.axis === 'z' ? Math.PI / 2 : 0;
       const half = lp.road.width / 2;
       for (const off of [-half * 0.45, half * 0.45]) {

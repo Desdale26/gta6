@@ -1667,7 +1667,7 @@ body.reduced-flashing .chal-timer.critical {
 .hud-vehicle-name {
   position: absolute;
   right: 2.2rem;
-  bottom: 13.5rem;
+  bottom: 11.2rem; /* just above the speedometer, below the district name and radio */
   text-align: right;
   font-family: var(--vh-font-display);
   opacity: 0;
@@ -2107,12 +2107,12 @@ body.armed .hud-hints {
 }
 /* Notifications stop above the radar (on short screens fewer cards fit). */
 .hud-notify-stack {
-  max-height: calc(100vh - 8.6rem - 14rem - 3.4rem);
+  max-height: max(7rem, calc(100vh - 8.6rem - 14rem - 3.4rem));
   overflow: hidden;
 }
 /* Driving: the district name goes above the speedometer, not across it. */
 body.driving .hud-banner {
-  bottom: 15rem;
+  bottom: 15.2rem; /* above the car name / now-playing card too */
 }
 </style>
   <style data-src="css/menus.css">
@@ -3284,7 +3284,7 @@ body.cutscene .mm-radar {
      side is the notifications and the radar. */
   position: absolute;
   right: 1.8rem;
-  bottom: 21rem;
+  bottom: 20rem;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -3302,9 +3302,15 @@ body.cutscene .mm-radar {
   transform: translateX(12px);
 }
 
-@media (max-height: 650px) {
+/* A phone call's card sits on the right too: the captions go below it meanwhile. */
+.dlg.phone-on .dlg-radio {
+  bottom: auto;
+  top: calc(38% + 4.5rem);
+}
+
+@media (max-height: 720px) {
   .dlg-radio {
-    bottom: 19.5rem;
+    bottom: 19.6rem;
   }
   .dlg-radio-line:nth-child(n + 3) {
     display: none;
@@ -13871,11 +13877,12 @@ void main() {
       for (const t of this.canopies) {
         const dx = c.x - t.x;
         const dz = c.z - t.z;
-        const R = 4.2 * t.s;
+        const R = 3.5 * t.s;
         let inside = false;
-        if (Math.abs(dx) < R && Math.abs(dz) < R) {
-          const dy = c.y - (t.y + 4.7 * t.s);
-          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (3.3 * t.s * 3.3 * t.s);
+        // (A camera below the lowest leaves, walking under the tree, leaves it alone.)
+        if (Math.abs(dx) < R && Math.abs(dz) < R && c.y > t.y + 2.1 * t.s) {
+          const dy = c.y - (t.y + 4.5 * t.s);
+          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (2.5 * t.s * 2.5 * t.s);
           inside = k < (t.hidden ? 1.15 : 1);
         }
         if (inside === t.hidden) continue;
@@ -19093,6 +19100,9 @@ void main() {
         const hitSide = this.physics.raycast(this.pivot.x, this.pivot.y, this.pivot.z, right.x, 0, right.z, side + 0.25,
           { inflate: 0.12, flags: VH.COLLIDE.CAMERA, ground: false, ignoreInside: true });
         if (hitSide) side = Math.max(0, hitSide.t - 0.25);
+        // ...nor into a van or truck beside Jay (cast from his head, which is never inside one).
+        const sideCar = this._carHit(this.pivot, right.x, 0, right.z, side + 0.25, player);
+        if (sideCar !== null) side = Math.min(side, Math.max(0, sideCar - 0.25));
         const shoulder = this._shoulder.copy(this.pivot).addScaledVector(right, side);
         shoulder.y += up;
 
@@ -32169,17 +32179,23 @@ void main() {
       // Somewhere ahead that Jay can't see yet (over a rise, past a bend, or
       // just far enough): never popping into view on a straight road.
       let center = null;
+      let farEnough = null; // the roads are straight and flat: a spot 200 m+ out is a dot on the horizon
       const fogged = 0.75 * (game.settings.get('graphics.drawDistance') || 600); // mostly lost in the haze by here
       for (const extra of [0, 40, 80, 120, 180]) {
         const along = lp.along + lp.dir * (120 + pv.speed * 2 + extra);
         if (along < lp.road.from + 20 || along > lp.road.to - 20) break;
         const c = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
         if (game.roadnet.junctionAt(c.x, c.z, 8)) continue;
+        if (!farEnough && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) >= 200) farEnough = c;
         if (game.isVisible(c.x, 1, c.z, 6) && this.canSee(c.x, 1.5, c.z) && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) < fogged) continue;
         center = c;
         break;
       }
-      if (!center) return;
+      if (!center) center = farEnough;
+      if (!center) {
+        this._blockT = 4; // try again soon, a little further on
+        return;
+      }
       const across = lp.road.axis === 'z' ? Math.PI / 2 : 0;
       const half = lp.road.width / 2;
       for (const off of [-half * 0.45, half * 0.45]) {
@@ -33353,11 +33369,12 @@ void main() {
     _parkCorner() {
       const park = this.layout.blocks.find((b) => b.kind === 'park');
       if (!park) return null;
+      // Just inside the lawn by the kerb, so a car (or a race checkpoint) reaches it from the street.
       const corners = [
-        { x: park.minX + 14, z: park.minZ + 12, yaw: 0 },
-        { x: park.maxX - 14, z: park.minZ + 12, yaw: 0 },
-        { x: park.minX + 14, z: park.maxZ - 12, yaw: Math.PI },
-        { x: park.maxX - 14, z: park.maxZ - 12, yaw: Math.PI },
+        { x: park.minX + 8, z: park.minZ + 5, yaw: 0 },
+        { x: park.maxX - 8, z: park.minZ + 5, yaw: 0 },
+        { x: park.minX + 8, z: park.maxZ - 5, yaw: Math.PI },
+        { x: park.maxX - 8, z: park.maxZ - 5, yaw: Math.PI },
       ];
       const taken = Array.from(this.map.values());
       const c = corners.find((q) => !taken.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 25));
@@ -48687,12 +48704,14 @@ void main() {
           const p = game.player;
           if (p.inVehicle) game.vehicles.exitVehicle();
           p.teleport(r.pos.x, r.pos.z, r.pos.yaw);
-          if (game.resetCars) game.resetCars(); // every car back to fresh, like a reload
           if (r.pos.car) {
             const v = game.vehicles.spawn(r.pos.car.type, r.pos.car.x, r.pos.car.z, r.pos.car.yaw, { color: r.pos.car.color, persistent: true });
             game.vehicles.beginEnter({ v, side: 1, x: p.pos.x, z: p.pos.z });
             game.vehicles._finishEnter();
           }
+          // Every car back to fresh, like a reload (after Jay's car, so it's kept,
+          // and a gold King of the Road car he was in isn't doubled).
+          if (game.resetCars) game.resetCars();
           game.hud.setFade(0, 600);
           this.start(r.m, r.checkpoint);
         }, 350);
@@ -48716,8 +48735,7 @@ void main() {
               if (game.player.inVehicle) game.vehicles.exitVehicle();
               game.player.teleport(place.x, place.z, place.yaw || 0);
             }
-            if (game.resetCars) game.resetCars();
-            if (pv && game.player.vehicle === pv && pv.repair) pv.repair();
+            if (game.resetCars) game.resetCars(); // (repairs the car Jay is in)
             game.hud.setFade(0, 600);
             this.start(r.m, 0);
           }, 350);
@@ -49050,7 +49068,7 @@ void main() {
   // Stunt ramps: position, heading of the run-up, and a name.
   const JUMPS = [
     { x: 160, z: 510, yaw: 0, name: 'Over the stacks' },
-    { x: 110, z: 570, yaw: Math.PI / 2, name: 'Container hop' },
+    { x: 110, z: 568, yaw: Math.PI / 2, name: 'Container hop' },
     { x: 350, z: 440, yaw: -Math.PI / 2, name: 'Pier 9 leap' },
     { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
@@ -49196,7 +49214,7 @@ void main() {
         const said = lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]).concat(lineList(t.win || []));
         const cast = [];
         for (const l of said) if (Array.isArray(l) && eng.story.characters[l[0]] && l[0] !== 'jay' && !cast.includes(l[0])) cast.push(l[0]);
-        const FIGHTERS = ['teo', 'wick', 'kostya', 'saff', 'deb'];
+        const FIGHTERS = ['teo', 'wick', 'kostya', 'deb'];
         const spawnCast = cast.map((c, k) => FIGHTERS.includes(c)
           ? { char: c, at: where, offset: [k % 2 ? -2.5 : 2.5, -2 - k], behavior: 'follow', weapon: 'pistol', health: 400 }
           : { char: c, at: where, offset: [k % 2 ? -4 : 4, -6 - k], behavior: 'idle', health: 400 });
@@ -49536,6 +49554,7 @@ void main() {
     update(dt) {
       const g = this.game;
       if (!g.missions.run) this._taxiUpdate(dt);
+      else g.input.discard('phone'); // a P pressed during a job doesn't start taxi duty afterwards
       this._checkTakeoff();
       // Lanterns: spin, and collect by walking (or driving slowly) through them.
       const p = g.player.pos;
@@ -55059,6 +55078,8 @@ void main() {
       this._resetWorld();
       this.player.respawn();
       this.missions.load(data);
+      // Lamps and neon match the loaded hour (the clock may be stopped, so the frame loop won't do it).
+      this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
       this._interrupted = data.interrupted && this.missions.all.get(data.interrupted) && !this.missions.completed[data.interrupted] ? this.missions.all.get(data.interrupted) : null;
       this._restoreHeat = data.heat > 0 && !data.interrupted ? data.heat : 0; // the police pick up the chase once playing
       this.cameraRig.snapBehind(this.player);
@@ -55589,6 +55610,7 @@ void main() {
         if (v === keep || jobCars.includes(v)) continue;
         this.vehicles.remove(v);
       }
+      if (keep && keep.repair) keep.repair(); // Jay's car comes back fixed
       this.vehicles.lastPlayerCar = keep;
       if (this.activities && this.activities._spawnKingCar) {
         this.activities.kingCar = null;

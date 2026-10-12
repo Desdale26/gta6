@@ -500,11 +500,12 @@
       for (const t of this.canopies) {
         const dx = c.x - t.x;
         const dz = c.z - t.z;
-        const R = 4.2 * t.s;
+        const R = 3.5 * t.s;
         let inside = false;
-        if (Math.abs(dx) < R && Math.abs(dz) < R) {
-          const dy = c.y - (t.y + 4.7 * t.s);
-          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (3.3 * t.s * 3.3 * t.s);
+        // (A camera below the lowest leaves, walking under the tree, leaves it alone.)
+        if (Math.abs(dx) < R && Math.abs(dz) < R && c.y > t.y + 2.1 * t.s) {
+          const dy = c.y - (t.y + 4.5 * t.s);
+          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (2.5 * t.s * 2.5 * t.s);
           inside = k < (t.hidden ? 1.15 : 1);
         }
         if (inside === t.hidden) continue;

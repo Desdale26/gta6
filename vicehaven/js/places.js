@@ -307,11 +307,12 @@
     _parkCorner() {
       const park = this.layout.blocks.find((b) => b.kind === 'park');
       if (!park) return null;
+      // Just inside the lawn by the kerb, so a car (or a race checkpoint) reaches it from the street.
       const corners = [
-        { x: park.minX + 14, z: park.minZ + 12, yaw: 0 },
-        { x: park.maxX - 14, z: park.minZ + 12, yaw: 0 },
-        { x: park.minX + 14, z: park.maxZ - 12, yaw: Math.PI },
-        { x: park.maxX - 14, z: park.maxZ - 12, yaw: Math.PI },
+        { x: park.minX + 8, z: park.minZ + 5, yaw: 0 },
+        { x: park.maxX - 8, z: park.minZ + 5, yaw: 0 },
+        { x: park.minX + 8, z: park.maxZ - 5, yaw: Math.PI },
+        { x: park.maxX - 8, z: park.maxZ - 5, yaw: Math.PI },
       ];
       const taken = Array.from(this.map.values());
       const c = corners.find((q) => !taken.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 25));
