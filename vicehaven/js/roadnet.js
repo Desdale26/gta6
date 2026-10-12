@@ -264,9 +264,12 @@
     // ------------------------------------------------------------ queries
     /**
      * The nearest lane to a point, optionally preferring lanes whose heading
-     * agrees with `heading`. Returns { road, dir, lane, along, dist, x, z, heading }.
+     * agrees with `heading`. Only roads within `reach` metres of the kerb
+     * count (6 by default: the point is on or beside the road).
+     * Returns { road, dir, lane, along, dist, x, z, heading }.
      */
-    nearestLane(x, z, heading) {
+    nearestLane(x, z, heading, reach) {
+      const far = reach === undefined ? 6 : reach;
       let best = null;
       let bestScore = Infinity;
       const tmp = {};
@@ -274,7 +277,7 @@
         const along = r.axis === 'z' ? z : x;
         if (along < r.from - 5 || along > r.to + 5) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
-        if (Math.abs(across) > r.width / 2 + 6) continue;
+        if (Math.abs(across) > r.width / 2 + far) continue;
         for (const dir of [1, -1]) {
           for (let k = 0; k < r.lanesPerDirection; k++) {
             this.lanePoint(r, dir, k, clamp(along, r.from, r.to), tmp);

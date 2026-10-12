@@ -42,7 +42,9 @@
 .dlg-text i {
   color: var(--vh-muted);
   font-style: italic;
-  margin-right: 0.3em;
+  font-size: 0.86em;
+  opacity: 0.8;
+  margin: 0 0.35em 0 0.1em;
 }
 
 .dlg.scene .dlg-sub {

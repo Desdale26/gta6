@@ -101,36 +101,117 @@
       const want = c.voice.gender === 'female' ? FEMALE_HINTS : MALE_HINTS;
       let pool = this._voices.filter((v) => want.test(v.name));
       if (!pool.length) pool = this._voices;
-      // Spread characters over the available voices (stable per id).
-      let h = 0;
-      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
       const natural = pool.filter((v) => /natural|neural|online/i.test(v.name));
       const use = natural.length >= 2 ? natural : pool;
-      const v = use[h % use.length];
-      this._voiceMap.set(id, v);
-      return v;
+      // Each character gets the voice used least so far, so two people in the
+      // same scene don't sound the same; ties break by id, stable per session.
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+      const used = this._voiceUse || (this._voiceUse = new Map());
+      let best = null;
+      let bestN = Infinity;
+      for (let k = 0; k < use.length; k++) {
+        const v = use[(h + k) % use.length];
+        const n = used.get(v.name) || 0;
+        if (n < bestN) {
+          bestN = n;
+          best = v;
+        }
+      }
+      used.set(best.name, bestN + 1);
+      this._voiceMap.set(id, best);
+      return best;
     }
 
-    _speak(id, text, onEnd) {
-      if (!this.settings.get('gameplay.voicedDialogue') && id !== 'DISPATCH') return false;
-      if (!('speechSynthesis' in window) || !this._voices.length) return false;
+    /**
+     * How a line should sound, from its stage directions and punctuation:
+     * shouted lines are louder, higher and quicker, whispered ones softer and
+     * slower, (beat) and dashes become pauses. Browsers ignore SSML, so this
+     * is done with pitch, rate, volume and punctuation.
+     */
+    _prosody(text, voice) {
+      const dirs = (text.match(/\(([^)]*)\)/g) || []).join(' ').toLowerCase();
+      let words = text.replace(/\((beat|pause|a beat|long beat|a pause)\)/gi, ' … ');
+      words = this._clean(words, true).replace(/\s+[—–-]{1,2}\s+|—/g, ', ');
+      const has = (re) => re.test(dirs);
+      let pitch = voice.pitch || 1;
+      let rate = voice.rate || 1;
+      let volume = 1;
+      let energy = 0.5;
+      const bangs = (words.match(/!/g) || []).length;
+      const caps = (words.match(/\b[A-Z]{3,}\b/g) || []).length;
+      if (has(/shout|yell|scream|roar|bellow|furious|explod/)) {
+        pitch += 0.18; rate += 0.14; energy = 1;
+      } else if (bangs || caps) {
+        pitch += 0.08 + 0.04 * Math.min(2, bangs + caps); rate += 0.08; energy = 0.85;
+      }
+      if (has(/angry|snap|hiss|through his teeth|through her teeth|cold|hard/)) {
+        rate += 0.06; pitch -= 0.04; energy = Math.max(energy, 0.8);
+      }
+      if (has(/quiet|soft|whisper|barely|murmur|gentle|low|under (his|her) breath|to (him|her)self/)) {
+        rate -= 0.12; pitch -= 0.04; volume = 0.7; energy = 0.2;
+      }
+      if (has(/sad|tear|cry|crying|voice break|choked|thick|grief|wet/)) {
+        rate -= 0.16; pitch -= 0.08; volume = Math.min(volume, 0.85); energy = 0.25;
+      }
+      if (has(/laugh|grin|smil|amused|teas|delight|bright/)) {
+        pitch += 0.08; rate += 0.05; energy = Math.max(energy, 0.7);
+      }
+      if (has(/scared|panic|terrif|breathless|breathing hard|frantic|fast/)) {
+        rate += 0.14; pitch += 0.1; energy = Math.max(energy, 0.85);
+      }
+      if (has(/tired|exhaust|slow|drunk|slur|weary/)) {
+        rate -= 0.14; pitch -= 0.03; energy = Math.min(energy, 0.35);
+      }
+      if (/\?\s*$/.test(words)) pitch += 0.05;
+      if (/(\.\.\.|…)\s*$/.test(words)) rate -= 0.06;
+      return {
+        words,
+        pitch: VH.math.clamp(pitch, 0.5, 1.8),
+        rate: VH.math.clamp(rate, 0.65, 1.5),
+        volume,
+        energy,
+      };
+    }
+
+    /** cb = { onStart, onEnd, onWord }; returns the line's prosody, or null if it won't be spoken. */
+    _speak(id, text, cb) {
+      const o = cb || {};
+      if (!this.settings.get('gameplay.voicedDialogue') && id !== 'DISPATCH') return null;
+      if (!('speechSynthesis' in window) || !this._voices.length) return null;
       const c = this.cast[id];
-      if (!c || !c.voice) return false;
-      const spoken = this._clean(text, true);
-      if (!spoken.trim()) return false;
+      if (!c || !c.voice) return null;
+      const pros = this._prosody(text, c.voice);
+      if (!pros.words.replace(/[\s.…,]/g, '')) return null;
       try {
-        const u = new SpeechSynthesisUtterance(spoken);
+        // Never queue behind a line that is still being spoken: that is how
+        // the voice drifts behind the subtitles.
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(pros.words);
         const v = this._voiceFor(id);
         if (v) u.voice = v;
-        u.pitch = VH.math.clamp(c.voice.pitch || 1, 0.5, 1.6);
-        u.rate = VH.math.clamp(c.voice.rate || 1, 0.7, 1.4);
-        u.volume = VH.math.clamp(this.settings.get('audio.dialogue') * this.settings.get('audio.master'), 0, 1);
-        u.onend = () => onEnd && onEnd();
-        u.onerror = () => onEnd && onEnd();
+        u.pitch = pros.pitch;
+        u.rate = pros.rate;
+        u.volume = VH.math.clamp(this.settings.get('audio.dialogue') * this.settings.get('audio.master') * pros.volume, 0, 1);
+        let done = false;
+        const end = () => {
+          if (done) return;
+          done = true;
+          if (this._utter === u) this._utter = null;
+          if (o.onEnd) o.onEnd();
+        };
+        u.onstart = () => o.onStart && o.onStart();
+        u.onboundary = (e) => {
+          if (o.onWord && (!e.name || e.name === 'word')) o.onWord(e);
+        };
+        u.onend = end;
+        u.onerror = end;
+        // Keep a reference: Chromium drops onend for utterances it garbage-collects.
+        this._utter = u;
         window.speechSynthesis.speak(u);
-        return true;
+        return pros;
       } catch (err) {
-        return false;
+        return null;
       }
     }
 
@@ -156,7 +237,9 @@
 
     _html(text) {
       const safe = this._clean(text, false).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-      return safe.replace(/\(([^)]*)\)/g, '<i>$1</i>');
+      // Stage directions keep their brackets and sit apart from the spoken words,
+      // so it's clear which part the voice says.
+      return safe.replace(/\(([^)]*)\)/g, '<i>($1)</i>');
     }
 
     // ------------------------------------------------------------- lines
@@ -245,18 +328,43 @@
         void this.sub.offsetWidth;
         this.sub.classList.add('show');
       }
-      const chars = this._clean(text, true).length;
-      const base = VH.math.clamp(1.0 + chars * 0.058, 1.7, 9.5) * (job.mode === 'blackout' ? 1.25 : 1);
-      job.until = performance.now() + base * 1000;
+      // Long enough to read everything on screen, stage directions included
+      // (a caption is nothing but one): about 19 characters a second.
+      const chars = this._clean(text, false).replace(/[()]/g, '').length;
+      const base = VH.math.clamp(1.0 + chars * 0.052, 1.8, 12) * (job.mode === 'blackout' ? 1.1 : 1);
+      const now = performance.now();
+      job.until = now + base * 1000;
       job.spoken = false;
       job.speechDone = true;
+      job.speaking = false;
+      job.energy = 0.5;
+      this._wordPulse = 0;
       if (who !== 'caption' && job.mode !== 'blackout') {
-        job.speechDone = !this._speak(who, text, () => {
-          job.speechDone = true;
+        const pros = this._speak(who, text, {
+          // The reading time counts from when the voice actually starts
+          // (natural voices can take a moment to begin).
+          onStart: () => {
+            if (this.current !== job) return;
+            job.speaking = true;
+            job.until = Math.max(job.until, performance.now() + base * 700);
+          },
+          onWord: () => {
+            if (this.current === job) this._wordPulse = 1;
+          },
+          onEnd: () => {
+            job.speaking = false;
+            job.speechDone = true;
+            // A short breath before the next line, not a long silent wait
+            // (but long enough to finish reading a long stage direction).
+            if (this.current === job) job.until = Math.min(job.until, Math.max(performance.now() + 350, job.startedAt + base * 550));
+          },
         });
-        job.spoken = !job.speechDone;
+        job.spoken = !!pros;
+        job.speechDone = !pros;
+        if (pros) job.energy = pros.energy;
+        job.startedAt = now;
         // Never wait for a voice forever.
-        job.hardUntil = performance.now() + base * 1800;
+        job.hardUntil = now + Math.max(base * 2200, 5000) + 3000;
       }
       this._speaker = who;
       VH.events.emit('dialogue:line', { who, text, mode: job.mode });
@@ -264,6 +372,25 @@
 
     get speaker() {
       return this.current ? this._speaker : null;
+    }
+
+    /**
+     * How animated someone's talking gestures should be right now (0..1):
+     * only while their voice is actually playing (or their unvoiced line is
+     * up), bigger on shouted lines, with a little lift on each word.
+     */
+    talkLevel(id) {
+      const job = this.current;
+      if (!job || this._speaker !== id || job.i >= job.lines.length) return 0;
+      if (job.spoken && !job.speaking) return 0; // voice not started yet, or finished
+      const e = job.energy === undefined ? 0.5 : job.energy;
+      return Math.min(1, 0.45 + 0.45 * e + 0.25 * (this._wordPulse || 0));
+    }
+
+    /** 0..1 how excited the current line is (bigger gestures). */
+    talkEnergy(id) {
+      const job = this.current;
+      return job && this._speaker === id ? (job.energy === undefined ? 0.5 : job.energy) : 0;
     }
 
     update() {
@@ -277,6 +404,12 @@
         job.until += gap;
         if (job.hardUntil) job.hardUntil += gap;
       }
+      // A voice that stopped without telling us (it happens) counts as done.
+      if (job.spoken && !job.speechDone && now - job.startedAt > 1200 && 'speechSynthesis' in window && !window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        job.speechDone = true;
+        job.speaking = false;
+      }
+      this._wordPulse = Math.max(0, (this._wordPulse || 0) - gap / 220);
       const timeUp = now >= job.until && (job.speechDone || now >= job.hardUntil);
       if (timeUp) {
         job.i++;

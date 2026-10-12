@@ -6,8 +6,10 @@
  * resolved here to a real location of that kind: a building front on a
  * pavement, an alley, a car park, a rooftop, a corner, the waterfront, the
  * docks or a mansion. Each gets a sign with its name so it can be found
- * again. Resolution is deterministic (a hash of the id), so a place is
- * always in the same spot, and no two places share a building.
+ * again. Resolution is deterministic: every story place is resolved once,
+ * in id order, as soon as the story defines them (a hash of the id picks
+ * among the spots still free), so a place is in the same spot every session
+ * whatever the player does first, and no two places share a building.
  *
  * A place: { id, name, x, y, z, yaw (facing into the spot), kind, district,
  *            roof: bool (reached by stairs → a fade to the top) }
@@ -45,11 +47,23 @@
     /** Story places: { id: { district, kind, desc, name? } } */
     define(defs) {
       Object.assign(this.defs, defs || {});
+      if (this._finished) this._resolveAll();
+    }
+
+    /**
+     * Resolve every defined place now, in a fixed order. Lazily, each one took
+     * whichever spot was still free when something first asked for it, so the
+     * map depended on the order of play (and moved after loading a save).
+     */
+    _resolveAll() {
+      for (const id of Object.keys(this.defs).sort()) this.get(id);
     }
 
     add(id, p) {
       p.id = id;
-      if (p.y === undefined) p.y = this.game.physics.groundHeight(p.x, p.z, 60);
+      // Places are where people stand: the street, not the roof above it
+      // (rooftops say their own height).
+      if (p.y === undefined) p.y = this.game.physics.groundHeight(p.x, p.z, 2);
       this.map.set(id, p);
       return p;
     }
@@ -91,13 +105,15 @@
       if (tower) this.add('vicehaven_tower', { name: 'Vicehaven Tower', x: tower.cx + 8, z: tower.maxZ - 7.5, yaw: Math.PI, kind: 'storefront', district: 'downtown' });
       if (yard) this.add('meridian_yard', { name: 'Meridian Yard', x: yard.maxX + 3, z: yard.minZ + 15, yaw: -Math.PI / 2, kind: 'construction', district: 'downtown' });
       this.add('oceanview_pier', { name: 'Oceanview Pier', x: pier.x0 + 8, z: 0, yaw: Math.PI / 2, kind: 'pier', district: 'harborpoint' });
-      this.add('pier_end', { name: 'The end of the pier', x: pier.x1 - 10, z: 0, yaw: Math.PI / 2, kind: 'pier', district: 'harborpoint' });
+      // Past the Pier Café (landmarks.js), on the open deck by the end rail.
+      this.add('pier_end', { name: 'The end of the pier', x: pier.x1 - 4, z: 0, y: KERB, yaw: Math.PI / 2, kind: 'pier', district: 'harborpoint' });
       this.add('the_boardwalk', { name: 'The Boardwalk', x: 410, z: -60, yaw: Math.PI / 2, kind: 'boardwalk', district: 'harborpoint' });
       this.add('grand_avenue', { name: 'Grand Avenue', x: -9, z: -150, yaw: Math.PI, kind: 'street', district: 'downtown' });
       this.add('meridian_boulevard', { name: 'Meridian Boulevard', x: 150, z: -11, yaw: Math.PI / 2, kind: 'street', district: 'harborpoint' });
       this.add('old_market', { name: 'Old Market', x: -296, z: -150, yaw: 0, kind: 'street', district: 'oldmarket' });
-      this.add('palm_crescent', { name: 'Palm Crescent', x: -150, z: 250, yaw: 0, kind: 'street', district: 'palmcrescent' });
-      this.add('harbor_point', { name: 'Harbor Point', x: 300, z: 150, yaw: 0, kind: 'street', district: 'harborpoint' });
+      // On the pavements of Heron Street and Pelican Avenue (not on a roof mid-block).
+      this.add('palm_crescent', { name: 'Palm Crescent', x: -150, z: 297, yaw: 0, kind: 'street', district: 'palmcrescent' });
+      this.add('harbor_point', { name: 'Harbor Point', x: 297, z: 150, yaw: 0, kind: 'street', district: 'harborpoint' });
       this.add('downtown', { name: 'Downtown', x: 0, z: -250, yaw: 0, kind: 'street', district: 'downtown' });
     }
 
@@ -112,6 +128,14 @@
       if (this.extra.crestline.length && !this.map.has('crestline_estates')) this.add('crestline_estates', Object.assign({ name: 'Crestline Estates' }, this.extra.crestline[0]));
       if (!this.defs.vpd_central) this.defs.vpd_central = { district: 'downtown', kind: 'police_station_front', name: 'VPD Central Precinct' };
       if (!this.defs.mercy_general) this.defs.mercy_general = { district: 'palmcrescent', kind: 'hospital_front', name: 'St. Agnes Mercy General' };
+      // The docks and estates spots the fixed ids above took aren't free for story places.
+      for (const s of this.extra.saltmarsh.concat(this.extra.crestline)) {
+        for (const p of this.map.values()) if (Math.hypot(p.x - s.x, p.z - s.z) < 1) s.used = true;
+      }
+      // Built-in and fixed spots: not inside a lamp post, a gate pier or a kiosk.
+      for (const p of this.map.values()) if (!p.roof) this._clearOf(p);
+      this._finished = true;
+      this._resolveAll();
     }
 
     // ---------------------------------------------------------- resolving
@@ -122,8 +146,11 @@
       const name = def.name || Places.titleFromId(id);
       let p = null;
       if (district === 'saltmarsh' || district === 'crestline') {
-        const list = this.extra[district].filter((s) => !s.used && (!s.kinds || s.kinds.includes(kind)));
-        const pool = list.length ? list : this.extra[district].filter((s) => !s.used);
+        // A warehouse wants a warehouse door before a loading bay that could also pass for one.
+        const free = this.extra[district].filter((s) => !s.used);
+        const first = free.filter((s) => s.kinds && s.kinds[0] === kind);
+        const list = first.length ? first : free.filter((s) => !s.kinds || s.kinds.includes(kind));
+        const pool = list.length ? list : free;
         if (pool.length) {
           const s = pool[h % pool.length];
           s.used = true;
@@ -135,8 +162,10 @@
       if (!p && kind === 'parking') p = this._parking(h, district);
       if (!p && kind === 'rooftop') p = this._rooftop(h, district);
       if (!p && (kind === 'corner' || kind === 'street')) p = this._corner(h, district);
+      if (!p && kind === 'beach') p = this._beach();
+      if (!p && kind === 'overlook' && district === 'harborpoint') p = this._seawallBend();
       if (!p && (kind === 'park' || kind === 'overlook')) p = this.get(h % 2 ? 'founders_park' : 'civic_plaza') && Object.assign({}, this.get(h % 2 ? 'founders_park' : 'civic_plaza'));
-      if (!p && (kind === 'pier' || kind === 'beach')) p = this._waterfront(h, 'pier');
+      if (!p && kind === 'pier') p = this._waterfront(h, 'pier');
       if (!p && kind === 'boardwalk') p = this._waterfront(h, 'boardwalk');
       if (!p && kind === 'construction') p = Object.assign({}, this.get('meridian_yard'));
       if (!p && (kind === 'dock' || kind === 'warehouse' || kind === 'mansion')) p = this._front(h, district === 'crestline' ? 'palmcrescent' : 'harborpoint', kind, name);
@@ -147,6 +176,7 @@
       p.desc = def.desc;
       this.add(id, p);
       if (FRONT_KINDS.has(kind) || kind === 'rooftop') this._decorate(p, def);
+      if (!p.roof) this._clearOf(p); // after the sign, which belongs on the facade
       return p;
     }
 
@@ -259,12 +289,50 @@
     _waterfront(h, kind) {
       const pier = this.layout.waterfront.pier;
       if (kind === 'pier') {
-        const spots = [{ x: pier.x0 + 30, z: 4 }, { x: pier.x0 + 70, z: -4 }, { x: pier.x1 - 30, z: 3 }, { x: pier.x1 - 12, z: 0 }];
+        // Open deck only: the café fills pier.x1 - 20 .. pier.x1 - 8.
+        const spots = [{ x: pier.x0 + 30, z: 4 }, { x: pier.x0 + 70, z: -4 }, { x: pier.x1 - 30, z: 3 }, { x: pier.x1 - 4, z: 0 }];
         const s = spots[h % spots.length];
-        return { x: s.x, z: s.z, yaw: Math.PI / 2 };
+        return { x: s.x, z: s.z, y: KERB, yaw: Math.PI / 2 };
       }
       const z = -300 + (h % 12) * 50;
       return { x: 412, z, yaw: Math.PI / 2 };
+    }
+
+    /** Harbor Beach: on the sand by the bonfire (landmarks.js builds both), facing the water. */
+    _beach() {
+      const b = this.layout.waterfront.beach;
+      if (!b) return null;
+      return { x: b.spot.x, z: b.spot.z, y: b.sandY, yaw: Math.PI / 2 };
+    }
+
+    /** Where the boardwalk ends at the docks and the seawall bends towards Saltmarsh: open timber, the bay in front. */
+    _seawallBend() {
+      const wf = this.layout.waterfront;
+      return { x: wf.seawallX - 9, z: wf.boardwalk.maxZ - 20, y: KERB, yaw: Math.PI / 2 };
+    }
+
+    /**
+     * A spot that came out inside something (a kiosk on the pavement, the
+     * next building's corner) moves to the nearest clear ground at the same
+     * height, so a marker, a scene or a spawn there has room.
+     */
+    _clearOf(p) {
+      const ph = this.game.physics;
+      const y = p.y !== undefined ? p.y : ph.groundHeight(p.x, p.z, 2);
+      const clear = (x, z) => Math.abs(ph.groundHeight(x, z, y + 0.7) - y) < 0.7 && !ph.overlaps(x, z, 0.6, y + 0.3, y + 1.8);
+      if (clear(p.x, p.z)) return;
+      for (let r = 1; r <= 6; r += 1) {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const x = p.x + Math.cos(a) * r;
+          const z = p.z + Math.sin(a) * r;
+          if (clear(x, z)) {
+            p.x = x;
+            p.z = z;
+            return;
+          }
+        }
+      }
     }
 
     // ----------------------------------------------------------- signage

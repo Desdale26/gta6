@@ -195,7 +195,7 @@
         ['priya', "(sitting down hard on the plinth) He's been eating antacids like popcorn ever since. He keeps saying “the valet knows”. I thought it was a metaphor."],
         ['jay', "(nodding at the carrier) Who's that?"],
         ['priya', "Quorum. He's always present and he never does anything. He's the most qualified person in City Hall."],
-        ['priya', "(holding up a manila envelope; her hand is shaking so the paper rattles) The Phase Two whip count. Thirteen seats. He needs seven. He's got nine."],
+        ['priya', "(holding up a manila envelope; her hand is shaking so the paper rattles) The Phase Two whip count. Thirteen seats. Seven to win. He bought nine."],
         ['priya', "Every name, and next to every name, what it cost. In the chief of staff's handwriting. On City Hall paper. They used OUR paper. I order that paper."],
         ['jay', 'Why you?'],
         ['priya', "I write Pruitt's speeches. “Renewal is a promise we make to our grandchildren.” I wrote that. (beat) My grandmother lives on Tannery Row."],
@@ -215,7 +215,7 @@
       { join: ['priya'], weapon: 'fists' },
       { protect: 'priya' },
       { getIn: 'any', checkpoint: true, objective: 'Get Priya and Quorum into a car. Any car', say: [
-        ['halberd_guard', "(across the plaza, hand going under his polo) Ms. Venkataraman! Mr. Voss would like his paper back!"],
+        ['halberd_guard', "(across the plaza, hand going under his polo) Ms. Venkataraman! The company would like its paper back!"],
         ['priya', "(running, holding the carrier like a rugby ball) That's MY paper! I ordered it! There's a form!"],
         ['jay', 'Keep your head down. Stay behind me.'],
       ] },
@@ -298,6 +298,29 @@
   // =====================================================================
   // da3 — Jammer
   // =====================================================================
+  // Garza's scene is built from shared lines so each branch plays as one
+  // scene. Rourke goes off the crane in m30; after that the email comes
+  // from whoever has his desk.
+  const GARZA_VAN = [
+    ['caption', '(The fourth Porter is on its side against a bollard, its dish bent into a cupped hand. A man crawls out of the back with a pair of enormous headphones still round his neck.)'],
+    ['garza', '(seeing Jay) No. No no no. EVERY TIME. Every time, it is YOU.'],
+    ['garza', "They moved me to Signals. They said Signals was a DESK. (pointing at the van) The desk is IN the van. The desk MOVES. The desk is now on its SIDE."],
+    ['jay', 'Laptop.'],
+    ['garza', "(handing it over at once) Six weeks of her. Every place she parked. Her plate. A map with the drydock circled. I circled it. I'm sorry. It's a nice circle."],
+  ];
+  const GARZA_EMAIL_ROURKE = [
+    ['garza', "(beat) You should know Mr. Rourke sent an email today. It didn't say thank you. They always say thank you."],
+  ];
+  const GARZA_EMAIL_AFTER = [
+    ['garza', "(beat) You should know the new boss sent an email today. First one since Mr. Rourke. Since the crane. (beat) His always said thank you. This one didn't."],
+  ];
+  const GARZA_GO = [
+    ['garza', "It said: “Done listening.” That's it. Two words. That's not a Signals email, man. That's not a Signals email at all."],
+    ['jay', 'Then go home, Lucky.'],
+    ['garza', '(already backing away, then stopping) Hey. Tell her... (He touches the headphones.) For work, I listened. Every night. And then, after work. Also.'],
+    ['garza', "She did a whole hour on loneliness once. People called in. A man called in from a lighthouse. A real one. Tell her I liked the hour on loneliness."],
+    ['garza', "(to the sky, as he goes) I asked for a DESK!"],
+  ];
   chain.missions.push({
     id: 'da3_jammer',
     title: 'Jammer',
@@ -417,18 +440,10 @@
       ] },
       { music: 'off' },
       { spawn: [{ char: 'garza', at: 'jam4', behavior: 'idle' }] },
-      { scene: { at: 'jam4', cast: ['garza'] }, say: [
-        ['caption', '(The fourth Porter is on its side against a bollard, its dish bent into a cupped hand. A man crawls out of the back with a pair of enormous headphones still round his neck.)'],
-        ['garza', '(seeing Jay) No. No no no. EVERY TIME. Every time, it is YOU.'],
-        ['garza', "They moved me to Signals. They said Signals was a DESK. (pointing at the van) The desk is IN the van. The desk MOVES. The desk is now on its SIDE."],
-        ['jay', 'Laptop.'],
-        ['garza', "(handing it over at once) Six weeks of her. Every place she parked. Her plate. A map with the drydock circled. I circled it. I'm sorry. It's a nice circle."],
-        ['garza', "(beat) You should know Mr. Rourke sent an email today. It didn't say thank you. They always say thank you."],
-        ['garza', "It said: “Done listening.” That's it. Two words. That's not a Signals email, man. That's not a Signals email at all."],
-        ['jay', 'Then go home, Lucky.'],
-        ['garza', '(already backing away, then stopping) Hey. Tell her... (He touches the headphones.) For work, I listened. Every night. And then, after work. Also.'],
-        ['garza', "She did a whole hour on loneliness once. People called in. A man called in from a lighthouse. A real one. Tell her I liked the hour on loneliness."],
-        ['garza', "(to the sky, as he goes) I asked for a DESK!"],
+      { if: 'm30_salt_and_iron', then: [
+        { scene: { at: 'jam4', cast: ['garza'] }, say: GARZA_VAN.concat(GARZA_EMAIL_AFTER, GARZA_GO) },
+      ], else: [
+        { scene: { at: 'jam4', cast: ['garza'] }, say: GARZA_VAN.concat(GARZA_EMAIL_ROURKE, GARZA_GO) },
       ] },
       { phone: 'solace', say: [
         ['solace', "(off air, a little breathless) I narrated the explosions as fireworks for the Crown opening. Three people called in to complain about the noise. I've never been happier."],
@@ -518,7 +533,7 @@
         { say: [['jay', '(crouching behind the parapet as the first charcoal Ironclad slews to a stop below) Here we go.']] },
       ] },
       { survive: 30, checkpoint: true, objective: 'Hold the roof. Keep the mast standing', say: [
-        ['priya', '(on the radio) The Phase Two whip count. Thirteen seats on the council. Mr. Voss needs seven. This says he has nine. Next to each name is what it cost.'],
+        ['priya', '(on the radio) The Phase Two whip count. Thirteen seats on the council. Seven to win. This says nine were bought. Next to each name is what it cost.'],
         ['priya', '(on the radio) Seat one. Councilman Delmar Pruitt. My boss. Forty thousand in March, “for the zoning”, and a fountain. For the statue of his dog.'],
         ['halberd_guard', '(from the street, through a loudhailer) Fire escape, east side! Cut the mast! Cut the cable!'],
         ['priya', '(on the radio, her voice shaking and not stopping) Seat four. Councilwoman Ada Fenn. A berth at the new marina, and her husband\'s name on a bridge.'],
@@ -536,7 +551,7 @@
       { spawn: [{ id: 'roof_c', faction: 'halberd', at: 'roof_suv_c', count: 4, weapon: 'rifle', behavior: 'attack', group: 'roof_c' }] },
       { survive: 30, objective: "Last push. They're going for the cable", say: [
         ['solace', '(on the radio) To the gentlemen on the fire escapes: this next ninety seconds is a song just for you. It\'s called “Go Home”. It\'s mostly bass.'],
-        ['priya', "(on the radio) That's nine. Nine votes. I wrote the speech they'll read before they cast them. “Renewal is a promise we make to our grandchildren.”"],
+        ['priya', "(on the radio) That's nine. Nine votes. And the speech that goes with them, I wrote. “Renewal is a promise we make to our grandchildren.”"],
         ['priya', "(on the radio) Paati, if you're listening: I'm sorry about the line. You were right to circle it."],
         ['halberd_guard', "(into his radio, below) He's dug in up there! We can't get onto the roof! Somebody find the stairs!"],
         ['wick', "(on the radio, faint) The stairs are behind the noodle cart, man. Everybody knows that. (beat) Oh. I shouldn't have said that on the radio."],

@@ -1,9 +1,9 @@
 /*
  * tools/save-test.mjs — optional developer check. NOT needed to play.
  *
- * Checks that progress survives closing the tab: it plays a little, closes
- * the page the way a person does (beforeunload, then pagehide), opens the
- * game again in the same browser profile and presses Continue.
+ * Checks that progress survives closing the tab: it plays a little, leaves
+ * the page the way a person does (beforeunload, then pagehide — a reload),
+ * boots the game again in the same browser profile and presses Continue.
  *
  *   node vicehaven/tools/save-test.mjs
  *   TARGET=dist node vicehaven/tools/save-test.mjs   (tests dist/vicehaven.html)
@@ -55,8 +55,12 @@ const check = (cond, msg, extra) => {
 // A real on-disk browser profile, like Edge's: an in-memory (incognito) test
 // context can drop a file page's storage while no tab has it open.
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'vicehaven-save-'));
+// The full Chromium browser (what Edge is built on) in its real headless
+// mode: the cut-down headless shell can drop a page's last storage writes
+// when its tab closes, which no real browser does.
 const ctx = await playwright.chromium.launchPersistentContext(profile, {
   headless: true,
+  channel: process.env.CHROMIUM ? undefined : 'chromium',
   executablePath: process.env.CHROMIUM || undefined,
   viewport: { width: 960, height: 540 },
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'],
@@ -78,17 +82,25 @@ async function open() {
   await page.evaluate(() => VH.game.freeze(true));
   return page;
 }
-/**
- * Close the tab like a person: runs beforeunload (and the prompt), then
- * pagehide. A person never closes the tab within a split second of a burst
- * of scripted work; doing that in headless Chromium can drop the last
- * storage writes, so wait a moment first.
- */
+/** Close the tab like a person: runs beforeunload (and the prompt), then pagehide. */
 async function closeTab(page) {
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(2000);
   const closed = new Promise((r) => page.once('close', r));
   await page.close({ runBeforeUnload: true });
   await closed;
+}
+/**
+ * "Close the tab and open the game again": a reload runs the same
+ * beforeunload and pagehide handlers as closing the tab, then boots the game
+ * from scratch. (Closing one page and opening another can, in a headless
+ * test browser, hand the new page stale storage; a real browser doesn't.)
+ */
+async function reopen(page) {
+  await page.waitForTimeout(1500);
+  await page.reload({ waitUntil: 'load', timeout: 300000 });
+  await page.waitForFunction(() => window.VH && VH.game && VH.game.state === 'title', null, { timeout: 300000 });
+  await page.evaluate(() => VH.game.freeze(true));
+  return page;
 }
 const readSave = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), KEY);
 const near = (a, b, d = 1.5) => a && b && Math.hypot(a.x - b.x, a.z - b.z) < d;
@@ -113,8 +125,7 @@ const p1 = await page.evaluate(() => {
   return { state: g.state, x: g.player.pos.x, z: g.player.pos.z };
 });
 check(p1.state === 'playing', 'new game reaches free roam', p1);
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 let s = await readSave(page);
 check(s && s.money === 777 && near(s.pos, p1), 'play a little, close the tab: money and position are saved', s && { money: s.money, pos: s.pos });
 let c = await cont(page);
@@ -132,8 +143,7 @@ const p2 = await page.evaluate(() => {
   return { car: g.player.vehicle ? g.player.vehicle.type : null, stolen: g.player.stats.carsStolen };
 });
 check(p2.car === 'halcyon', 'Jay got into a car', p2);
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 s = await readSave(page);
 check(s && s.vehicle && s.vehicle.type === 'halcyon', 'the save remembers the car', s && s.vehicle);
 c = await cont(page);
@@ -188,8 +198,7 @@ await page.evaluate(() => {
   g._autoSaveSoon();
   g.advance(4);
 });
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 c = await cont(page);
 const heat = await page.evaluate(() => VH.game.police.level);
 check(heat === 3, 'closing the tab during a chase does not lose the police', heat);
@@ -226,8 +235,7 @@ const p5 = await page.evaluate(() => {
   return { before, run: g.missions.run ? g.missions.run.m.id : null };
 });
 check(p5.run === 'm01_homecoming', 'a job is running', p5);
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 s = await readSave(page);
 check(s && s.interrupted === 'm01_homecoming' && s.money === 1500 && near(s.pos, p5.before), 'quitting mid-job keeps the state from before the job', s && { interrupted: s.interrupted, money: s.money, pos: s.pos });
 c = await cont(page);
@@ -254,8 +262,7 @@ const p6 = await page.evaluate(() => {
   return { pending: m.markers.some((k) => k.m.id === 'm29_tidewater_again') };
 });
 check(!p6.pending, 'no marker while the chained job is about to start', p6);
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 c = await cont(page);
 const m6 = await page.evaluate(() => VH.game.missions.markers.map((m) => m.m.id));
 check(m6.includes('m29_tidewater_again'), 'after a quit, the chained finale job has a marker', m6);
@@ -286,8 +293,7 @@ await page.evaluate((k) => {
   d.money = 31337;
   localStorage.setItem(k, JSON.stringify(d));
 }, KEY);
-await closeTab(page);
-page = await open();
+page = await reopen(page);
 s = await readSave(page);
 check(saved8 && s && s.money === 31337, 'closing from the title screen leaves the save alone', s && s.money);
 await closeTab(page);

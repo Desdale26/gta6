@@ -146,9 +146,15 @@ const pos = () => game(() => ({ x: VH.game.player.pos.x, y: VH.game.player.pos.y
 const start = await pos();
 log('spawn', JSON.stringify(start));
 
-// Walk forward (camera faces north = -Z). Drop any mouse movement left over
-// from clicking New Game, which a busy machine can deliver after pointer lock.
-await game(() => { VH.game.input.takeMouseDelta(); VH.game.cameraRig.snapBehind(VH.game.player); });
+// Walk forward (camera faces north = -Z). The keyboard checks ignore the
+// mouse: a busy machine can deliver the mouse movement from clicking New Game
+// late, mid-walk, and Jay rightly follows the camera it turns.
+await game(() => {
+  const inp = VH.game.input;
+  inp._realTakeMouseDelta = inp.takeMouseDelta;
+  inp.takeMouseDelta = function () { this._realTakeMouseDelta(); return { x: 0, y: 0 }; };
+  VH.game.cameraRig.snapBehind(VH.game.player);
+});
 await page.keyboard.down('KeyW');
 await advance(1.5);
 const walked = await pos();
@@ -165,6 +171,7 @@ await hold(['KeyD'], 0.7);
 const afterD = await pos();
 // Facing north (-Z), the right of the screen is east (+X).
 check(afterD.x > beforeD.x + 1.5, 'D moves to the right of the screen (dx ' + (afterD.x - beforeD.x).toFixed(2) + ')');
+await game(() => { const inp = VH.game.input; inp.takeMouseDelta = inp._realTakeMouseDelta; });
 await advance(0.6);
 
 // Mouse look turns the camera, and W follows the camera.

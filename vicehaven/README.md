@@ -51,7 +51,10 @@ that file: the same file in the same browser keeps your save; a different
 browser or a private window starts fresh.
 
 **Voices.** Dialogue is read aloud by the browser's built-in speech voices.
-Edge has natural-sounding voices on Windows 10 and 11. Turn voices off under
+Edge has natural-sounding voices on Windows 10 and 11. Every main character
+gets their own voice, lines are delivered the way their stage directions say
+(shouted, whispered, breathless, close to tears), and the subtitles move on
+only when the voice has finished. Turn voices off under
 **Settings → Gameplay → Voiced dialogue**; subtitles are always available.
 **Settings → Accessibility → Strong language** bleeps the swearing.
 
@@ -130,6 +133,13 @@ look, RT accelerates and LT brakes in a car, RT fires and LT aims on foot,
 A jumps, Y talks and gets in and out of cars, the D-pad does taxi duty
 (up), horn (down) and lights (left), and Menu pauses. **Aim assist** (on by default,
 stronger on a controller) pulls near misses onto an enemy.
+
+**Bodies and blood.** People who die fall as ragdolls, thrown by whatever
+hit them, and bleed: sprays, splats and pools. **Settings → Gameplay →
+Blood** has Lots, Some and Off.
+
+**Failing a job** clears away its cars and people, so a retry starts on a
+clean street.
 
 **Health.** Get out of trouble for a few seconds and Jay's health refills
 on its own, all the way. **Settings → Gameplay → Difficulty** sets how much
@@ -317,7 +327,10 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Shoot (aim with right mouse); hold Tab for the weapon wheel; R reloads
 - [ ] Get hit by a thug: a short red flash, the picture stays clear, and health refills a few seconds after the fight
 - [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
-- [ ] Fail a job (die or get caught) and retry with E
+- [ ] Fail a job (die or get caught) and retry with E: the last attempt's cars and people are gone
+- [ ] Shoot someone: they fall as a ragdoll and bleed; Settings → Gameplay → Blood turns it down or off
+- [ ] With voices on, each line is spoken in full before the next subtitle, shouts and whispers sound different
+- [ ] Drive fast with a crew member in the car: they stay in their seat
 - [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done
 - [ ] Drive somewhere, close the tab, open the file again: Continue puts you back in the same car
 - [ ] Close the tab in the middle of a job: Continue says so and the job's marker is there to restart it

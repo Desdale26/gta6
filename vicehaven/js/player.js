@@ -755,6 +755,9 @@
         land: this._land,
         lookPitch,
         weaponPose: this.weaponPose,
+        // Jay talks with his hands in scenes too.
+        talk: this._talk = (this._talk || 0) + ((VH.game && VH.game.dialogue ? VH.game.dialogue.talkLevel('jay') : 0) - (this._talk || 0)) * Math.min(1, dt * 9),
+        talkEnergy: VH.game && VH.game.dialogue ? VH.game.dialogue.talkEnergy('jay') : 0,
         recoil: this._recoil || 0,
         swing: this._meleeSwing || 0,
       });

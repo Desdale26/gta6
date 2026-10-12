@@ -34,6 +34,11 @@
 
   class Aborted extends Error {}
 
+  // Steps a checkpoint replay rebuilds (they only set the world up).
+  const SETUP_STEPS = new Set(['spawnCar', 'spawn', 'join', 'leave', 'setFlag', 'protect', 'music', 'setTime']);
+  // Steps that wait for Jay to do something; their objective ends with them.
+  const OBJECTIVE_STEPS = new Set(['goto', 'getIn', 'kill', 'survive', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'loseHeat']);
+
   // ------------------------------------------------------------ brains
   /** A story character standing about: faces Jay, gestures when speaking. */
   // Story cars with names of their own ("Lulu", "Constance") don't take "the".
@@ -57,8 +62,7 @@
       const d = Math.hypot(p.pos.x - a.pos.x, p.pos.z - a.pos.z);
       if (a.lookAt) a.heading = dampAngle(a.heading, Math.atan2(a.lookAt.x - a.pos.x, a.lookAt.z - a.pos.z), 4, dt);
       else if (d < 9) a.heading = dampAngle(a.heading, Math.atan2(p.pos.x - a.pos.x, p.pos.z - a.pos.z), 3, dt);
-      const speaking = this.engine.game.dialogue.speaker === a.charId;
-      a.anim.talk = speaking ? 1 : Math.max(0, a.anim.talk - dt * 2);
+      talkAnim(a, this.engine.game.dialogue, dt);
       if (a.goal) {
         const gx = a.goal.x - a.pos.x;
         const gz = a.goal.z - a.pos.z;
@@ -70,6 +74,13 @@
         } else a.goal = null;
       }
     }
+  }
+
+  /** Talking gestures follow the voice: while it plays, bigger when shouting, a lift on each word. */
+  function talkAnim(a, dialogue, dt) {
+    const target = dialogue.talkLevel(a.charId);
+    a.anim.talk += (target - a.anim.talk) * Math.min(1, dt * 9);
+    a.anim.talkEnergy = dialogue.talkEnergy(a.charId);
   }
 
   /** Crew: follows Jay, rides in his car, fights beside him. */
@@ -161,7 +172,7 @@
         a.anim.sprint = d > 7;
       } else {
         a.moveSpeed = 0;
-        a.anim.talk = game.dialogue.speaker === a.charId ? 1 : 0;
+        talkAnim(a, game.dialogue, dt);
         if (d > 0.1) a.heading = dampAngle(a.heading, Math.atan2(dx, dz), 3, dt);
       }
       // Too far behind (Jay drove off on foot?): catch up.
@@ -226,7 +237,7 @@
     update(a, dt) {
       const game = this.engine.game;
       this.t += dt;
-      a.anim.talk = game.dialogue.speaker === a.charId ? 1 : Math.max(0, a.anim.talk - dt * 2);
+      talkAnim(a, game.dialogue, dt);
       if (this.t < 1.2) {
         a.moveSpeed = 0;
         return;
@@ -541,17 +552,16 @@
     }
 
     async _runSteps(steps, run, startAt) {
-      const setupOnly = new Set(['spawnCar', 'spawn', 'join', 'leave', 'setFlag', 'protect', 'music', 'setTime']);
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         if (run.token !== this._abort) throw new Aborted();
         if (startAt && i < startAt) {
           // Replaying up to a checkpoint: only rebuild the world state.
           const kind = MissionEngine.kindOf(step);
-          if (setupOnly.has(kind)) await this._exec(step, run, true);
+          if (SETUP_STEPS.has(kind)) await this._exec(step, run, true);
           continue;
         }
-        if (run.depth === undefined && steps === run.m.steps) run.stepIndex = i;
+        if (!run.depth && steps === run.m.steps) run.stepIndex = i; // depth is 0, not undefined, after a branch
         if (step.checkpoint && steps === run.m.steps) {
           run.checkpoint = i;
           this._checkpointPos = this._snapshotPlayer();
@@ -560,6 +570,9 @@
           run.cpMoney = run.midMoney || 0;
         }
         await this._exec(step, run, false);
+        // Done is done: "(0 left)" doesn't hang about through the scene that follows.
+        const kind = MissionEngine.kindOf(step);
+        if (this.run === run && (OBJECTIVE_STEPS.has(kind) || (step.objective && kind !== 'objective' && !SETUP_STEPS.has(kind)))) this._objective(null);
       }
     }
 
@@ -835,14 +848,21 @@
 
     _spawnPeople(list, run) {
       const game = this.game;
+      const placed = [];
       for (const e of [].concat(list)) {
         const place = this._place(e.at) || game.player.pos;
+        const floor = this._floorOf(place);
         const count = e.count || 1;
+        // Someone already in this job (a scene brought them on) isn't doubled: the earlier copy goes.
+        if (e.char) this._retire(e.id || e.char, run);
         for (let i = 0; i < count; i++) {
           const ang = (i / count) * Math.PI * 2 + (e.char ? 0 : Math.random() * 0.5);
           const r = count > 1 ? 1.5 + Math.random() * 3.5 : 0;
-          let x = place.x + Math.cos(ang) * r + (e.offset ? e.offset[0] : 0);
-          let z = place.z + Math.sin(ang) * r + (e.offset ? e.offset[1] : 0);
+          // On the floor of the place (a roof's people stand on the roof), clear of walls and cars.
+          const spot = this._standSpot(place.x + Math.cos(ang) * r + (e.offset ? e.offset[0] : 0), place.z + Math.sin(ang) * r + (e.offset ? e.offset[1] : 0), floor, placed);
+          placed.push(spot);
+          const x = spot.x;
+          const z = spot.z;
           const hostile = e.hostile !== undefined ? e.hostile : e.faction && e.faction !== 'civilian' && e.faction !== 'crew' && e.faction !== 'friendly';
           const look = e.char ? this.lookFor(e.char) : this.factionLook(e.faction, i);
           const opts = { look, faction: e.faction || (e.char ? 'story' : 'civilian'), role: 'story', persistent: true, health: e.health || (hostile ? 100 : 150), armor: e.armor || 0, heading: place.yaw || 0, name: e.char ? (this.story.characters[e.char] || {}).name : null };
@@ -857,6 +877,7 @@
             a.brain = behavior === 'flee' ? new FleeBrain(this, null, e.flee) : behavior === 'cower' ? { update: (ag) => { ag.moveSpeed = 0; ag.anim.cower = 1; } } : behavior === 'wander' ? null : new IdleBrain(this);
             if (behavior === 'follow') a.brain = new CrewBrain(this, e.weapon);
           }
+          a.pos.y = spot.y;
           a.charId = e.char || null;
           a.weapon = e.weapon || a.weapon || null;
           const id = e.char ? (e.id || e.char) : e.id ? (count > 1 ? e.id + '_' + i : e.id) : 'npc_' + a.id;
@@ -879,16 +900,41 @@
       }
     }
 
+    /** Take an earlier copy of a story character out of the world (it's about to be placed again). */
+    _retire(id, run) {
+      const a = run.actors.get(id);
+      this._retireStrays(id);
+      if (!a || a.dead || a.removed) return;
+      a.inCar = null;
+      this.game.crowd.remove(a);
+      run.actors.delete(id);
+    }
+
+    /**
+     * A finished job lets its cast wander off as pedestrians; when a later job
+     * brings the same character on (often at the same place), that leftover
+     * copy goes, so Mae isn't standing next to Mae.
+     */
+    _retireStrays(charId, keep) {
+      if (!charId) return;
+      for (const a of this.game.crowd.agents.slice()) {
+        if (a.charId === charId && a !== keep && !a.persistent && !a.dead) this.game.crowd.remove(a);
+      }
+    }
+
     _join(id, run, weapon) {
       let a = run.actors.get(id);
       if (!a && (this.story.characters || {})[id]) {
         // Not placed yet: bring them in next to Jay.
         const p = this.game.player;
-        a = this.game.crowd.spawn(p.pos.x - Math.sin(p.heading) * 2, p.pos.z - Math.cos(p.heading) * 2, { look: this.lookFor(id), faction: 'crew', role: 'story', persistent: true, health: 200, name: this.story.characters[id].name });
+        const spot = this._standSpot(p.pos.x - Math.sin(p.heading) * 2, p.pos.z - Math.cos(p.heading) * 2, p.pos.y, [p.pos], 6);
+        a = this.game.crowd.spawn(spot.x, spot.z, { look: this.lookFor(id), faction: 'crew', role: 'story', persistent: true, health: 200, name: this.story.characters[id].name });
+        a.pos.y = spot.y;
         a.charId = id;
         run.actors.set(id, a);
       }
       if (!a) return;
+      this._retireStrays(a.charId, a);
       a.brain = new CrewBrain(this, weapon || a.weapon || 'pistol');
       a.faction = 'crew';
       // Named crew are plot: losing the job because the AI wandered into a
@@ -922,32 +968,36 @@
 
     _spawnCar(step, run) {
       const game = this.game;
-      const place = this._place(step.at) || game.player.pos;
+      let place = this._place(step.at) || game.player.pos;
+      // A rooftop's cars wait in the street by its stairs, not up on the roof.
+      if (place.roof && place.door) place = place.door;
       let x = place.x;
       let z = place.z;
       let heading = step.heading !== undefined ? step.heading : place.yaw || 0;
       // Put it on the nearest lane (or kerbside) unless the place says otherwise.
+      let kerb = false;
       if (!step.exact) {
         const lp = game.roadnet.nearestLane(x, z);
         if (lp && lp.dist < 40) {
-          const pk = lp.road.parking ? game.roadnet.parkingPoint(lp.road, lp.dir, lp.along) : lp;
+          const pk = this._kerbPoint(lp);
           x = pk.x;
           z = pk.z;
           heading = pk.heading;
+          kerb = true;
         }
       }
+      const kx = x;
+      const kz = z;
       if (step.offset) {
         x += step.offset[0];
         z += step.offset[1];
       }
-      // Don't stack cars: slide along the kerb until the spot is free.
+      // Somewhere it fits: not on a roof, in a wall or on top of another car.
       if (!step.exact) {
-        for (let k = 0; k < 6; k++) {
-          const blocked = game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < 5.6);
-          if (!blocked) break;
-          x += Math.sin(heading) * 6.6;
-          z += Math.cos(heading) * 6.6;
-        }
+        const spot = this._carSpot(x, z, heading, kx, kz, kerb);
+        x = spot.x;
+        z = spot.z;
+        heading = spot.heading;
       }
       const type = VH.Vehicle.typeSpec(step.type) ? step.type : 'halcyon';
       const v = game.vehicles.spawn(type, x, z, heading, { color: step.color, role: 'mission', persistent: true });
@@ -961,6 +1011,117 @@
       if (run.failIf.includes('wrecked:' + step.spawnCar)) v.damageScale = 0.4;
       if (step.watch !== false) run.watchCars.push(v);
       return v;
+    }
+
+    _kerbPoint(lp) {
+      const pk = lp.road.parking ? this.game.roadnet.parkingPoint(lp.road, lp.dir, lp.along) : lp;
+      return { x: pk.x, z: pk.z, heading: pk.heading };
+    }
+
+    // ------------------------------------------------------- placement
+    /** Can a car stand here: on the street (not a roof, the sand or the bay), clear of walls and other cars? */
+    _carFits(x, z, heading) {
+      const ph = this.game.physics;
+      const g = ph.groundHeight(x, z, 50);
+      if (g > 0.8 || g < -0.1) return false;
+      const fx = Math.sin(heading);
+      const fz = Math.cos(heading);
+      for (const k of [-1.7, 0, 1.7]) if (ph.overlaps(x + fx * k, z + fz * k, 1.05, g + 0.35, g + 1.5)) return false;
+      return !this.game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < 5.6);
+    }
+
+    /**
+     * The nearest spot to (x, z) a car fits: back towards its base point
+     * (kx, kz) if an offset pushed it into a building, then along the kerb
+     * or yard it was put on (both ways); a place no car can stand on (the
+     * sand, a roof) sends it to the nearest kerb within 80 m instead.
+     */
+    _carSpot(x, z, heading, kx, kz, kerb) {
+      if (this._carFits(x, z, heading)) return { x, z, heading };
+      if (kx !== x || kz !== z) {
+        for (let i = 1; i <= 8; i++) {
+          const qx = x + ((kx - x) * i) / 8;
+          const qz = z + ((kz - z) * i) / 8;
+          if (this._carFits(qx, qz, heading)) return { x: qx, z: qz, heading };
+        }
+      }
+      // Slide in steps of a car length and a bit along `dir` (both ways), keeping heading h.
+      const along = (px, pz, h, dir) => {
+        const d = dir === undefined ? h : dir;
+        for (let k = 1; k <= 6; k++) {
+          for (const sgn of [1, -1]) {
+            const qx = px + Math.sin(d) * 6.6 * k * sgn;
+            const qz = pz + Math.cos(d) * 6.6 * k * sgn;
+            if (this._carFits(qx, qz, h)) return { x: qx, z: qz, heading: h };
+          }
+        }
+        return null;
+      };
+      // Along the kerb; or, on an open yard it was already standing on, along
+      // the frontage it faces (a car at a warehouse door shuffles up beside
+      // the next door, not out into the yard or off to the road).
+      const g0 = this.game.physics.groundHeight(kx, kz, 50);
+      if (kerb) {
+        const slid = along(kx, kz, heading);
+        if (slid) return slid;
+      } else if (g0 <= 0.8 && g0 >= -0.1) {
+        const slid = along(kx, kz, heading, heading + Math.PI / 2) || along(kx, kz, heading);
+        if (slid) return slid;
+      }
+      const lp = this.game.roadnet.nearestLane(kx, kz, undefined, 80);
+      if (lp) {
+        const pk = this._kerbPoint(lp);
+        if (this._carFits(pk.x, pk.z, pk.heading)) return pk;
+        const slid = along(pk.x, pk.z, pk.heading);
+        if (slid) return slid;
+      }
+      return along(kx, kz, heading) || { x: kx, z: kz, heading };
+    }
+
+    /** Is (x, z) inside (or within `pad` of) a car's body? */
+    _inCar(x, z, pad) {
+      const l = this._tmpLocal || (this._tmpLocal = {});
+      for (const v of this.game.vehicles.list) {
+        if (v.removed || Math.abs(v.pos.x - x) > 7 || Math.abs(v.pos.z - z) > 7) continue;
+        v.worldToLocal(x, z, l);
+        if (Math.abs(l.x) < v.hx + pad && Math.abs(l.z) < v.hz + pad) return true;
+      }
+      return false;
+    }
+
+    /** The floor people stand on at a place: its own height (a rooftop's is the roof), or the street. */
+    _floorOf(place) {
+      return place.y !== undefined ? place.y : this.game.physics.groundHeight(place.x, place.z, 2);
+    }
+
+    /**
+     * Somewhere a person can stand near (x, z): a floor within a step of `y`
+     * (so never off a roof edge, down on the sand or in the bay), clear of
+     * walls, cars and anyone in `avoid`. Rings outward when the spot is taken.
+     */
+    _standSpot(x, z, y, avoid, maxR) {
+      const ph = this.game.physics;
+      const test = (px, pz) => {
+        const g = ph.groundHeight(px, pz, y + 0.7);
+        if (Math.abs(g - y) > 0.7) return null;
+        if (ph.overlaps(px, pz, 0.38, g + 0.3, g + 1.75)) return null;
+        if (this._inCar(px, pz, 0.45)) return null;
+        if (avoid) for (const o of avoid) if (Math.hypot(o.x - px, o.z - pz) < 0.8) return null;
+        return g;
+      };
+      const g0 = test(x, z);
+      if (g0 !== null) return { x, y: g0, z };
+      for (let r = 0.8; r <= (maxR || 10); r += 0.8) {
+        const n = Math.max(8, Math.round(r * 5));
+        for (let i = 0; i < n; i++) {
+          const a = r * 1.7 + (i / n) * Math.PI * 2;
+          const px = x + Math.cos(a) * r;
+          const pz = z + Math.sin(a) * r;
+          const g = test(px, pz);
+          if (g !== null) return { x: px, y: g, z: pz };
+        }
+      }
+      return { x, y, z };
     }
 
     _place(id) {
@@ -1036,6 +1197,8 @@
       }
       const car = run.cars.get(id);
       if (!car) return;
+      // Whatever locked it earlier (a chase, a tail, `locked`), Jay is told to get in now.
+      car.noEnter = false;
       this._objective(step.objective || 'Get in ' + carRef(car));
       await this._until(() => {
         if (car.wrecked) throw new MissionFailed(carRef(car, true) + ' was wrecked.');
@@ -1060,30 +1223,36 @@
         game.hud.setFade(0, 500);
       }
       const place = this._place(sc.at) || p.pos;
+      // Everyone stands on the place's floor (a rooftop scene is up on the roof), clear of walls and cars.
+      const floor = this._floorOf(place);
       // A scene somewhere else: cut there.
       if (Math.hypot(place.x - p.pos.x, place.z - p.pos.z) > 40) {
         game.hud.setFade(1, 400);
         await this._sleep(0.45, run);
-        p.teleport(place.x - Math.sin(place.yaw || 0) * 3, place.z - Math.cos(place.yaw || 0) * 3, place.yaw || 0);
+        const js = this._standSpot(place.x - Math.sin(place.yaw || 0) * 3, place.z - Math.cos(place.yaw || 0) * 3, floor, null, 6);
+        p.teleport(js.x, js.z, place.yaw || 0, js.y);
         game.hud.setFade(0, 500);
       }
       const cast = [];
+      const taken = [p.pos];
       (sc.cast || []).forEach((c, i) => {
         const id = typeof c === 'string' ? c : c.id;
         if (id === 'jay') return;
         let a = run.actors.get(id);
         const ang = Math.PI * 0.6 + i * 0.9;
-        const cx = place.x + Math.sin((place.yaw || 0) + ang) * 2.2;
-        const cz = place.z + Math.cos((place.yaw || 0) + ang) * 2.2;
+        const spot = () => this._standSpot(place.x + Math.sin((place.yaw || 0) + ang) * 2.2, place.z + Math.cos((place.yaw || 0) + ang) * 2.2, floor, taken, 6);
         // Someone who walked off earlier, or is across town: they're here now.
         if (a && !a.dead && !a.inCar && (a.hidden || a.leaving || Math.hypot(a.pos.x - place.x, a.pos.z - place.z) > 30)) {
           a.hidden = false;
           a.leaving = false;
-          a.pos.set(cx, game.physics.groundHeight(cx, cz, a.pos.y + 20), cz);
+          const s = spot();
+          a.pos.set(s.x, s.y, s.z);
           if (!run.crew.includes(id)) a.brain = new IdleBrain(this);
         }
         if (!a || a.dead) {
-          a = game.crowd.spawn(cx, cz, { look: this.lookFor(id) || VH.Crowd.randomLook(), faction: 'story', role: 'story', persistent: true, health: 200, name: (this.story.characters[id] || {}).name });
+          const s = spot();
+          a = game.crowd.spawn(s.x, s.z, { look: this.lookFor(id) || VH.Crowd.randomLook(), faction: 'story', role: 'story', persistent: true, health: 200, name: (this.story.characters[id] || {}).name });
+          a.pos.y = s.y;
           a.charId = id;
           a.brain = new IdleBrain(this);
           run.actors.set(id, a);
@@ -1091,6 +1260,8 @@
         if (a.inCar) {
           a.brain._getOut && a.brain._getOut(a, a.inCar);
         }
+        this._retireStrays(id, a);
+        taken.push(a.pos);
         cast.push(a);
       });
       // Everyone faces the group's middle.
@@ -1132,7 +1303,7 @@
     async _establish(placeId, seconds, run) {
       const place = this._place(placeId);
       if (!place) return;
-      this.cinematic = { establish: place, t: 0, dur: seconds };
+      this.cinematic = Object.assign({ establish: place, t: 0, dur: seconds }, this._establishOrbit(place, seconds));
       document.body.classList.add('cutscene');
       this.game.dialogue.letterbox(true);
       await this._sleep(seconds, run);
@@ -1149,9 +1320,12 @@
       c.t += dt;
       if (c.establish) {
         const p = c.establish;
-        const a = c.t * 0.12 + 0.8;
-        cam.position.set(p.x + Math.cos(a) * 26, (p.y || 0) + 11 + c.t * 0.6, p.z + Math.sin(a) * 26);
-        cam.lookAt(p.x, (p.y || 0) + 2, p.z);
+        if (c.a0 === undefined) Object.assign(c, this._establishOrbit(p, c.dur || 4));
+        const look = this._v1 || (this._v1 = new THREE.Vector3());
+        look.set(p.x, (p.y || 0) + 2, p.z);
+        this._orbitPos(p, c, c.t, cam.position);
+        this._unblock(look, cam.position);
+        cam.lookAt(look);
         cam.updateMatrixWorld();
         return true;
       }
@@ -1168,6 +1342,11 @@
       }
       c.cut += dt;
       const sp = posOf(speaker);
+      const mode = c.shot === 0 && c.t < 3 ? 'wide' : 'close';
+      if (mode !== c.mode) {
+        c.mode = mode;
+        c.rot = null; // a new kind of shot looks for its own clear angle
+      }
       // Listener: someone else in the scene (Jay by default).
       const listener = speaker === game.player ? c.cast[c.shot % Math.max(1, c.cast.length)] || null : game.player;
       const headY = (speaker === game.player ? sp.y : sp.y) + 1.58;
@@ -1190,8 +1369,13 @@
       }
       // Slow push-in on each shot.
       const look = new THREE.Vector3(sp.x, headY - 0.05, sp.z);
+      // Each shot swings round (once, when it starts) to an angle with nothing
+      // between the camera and the speaker, and never sits inside a wall.
+      if (c.rot === null || c.rot === undefined || c.cut < dt * 1.5) c.rot = this._clearAngle(look, from);
+      if (c.rot) this._swing(look, from, c.rot);
       const push = smoothstep(0, 6, c.cut) * 0.35;
       from.lerp(look, push * 0.25);
+      this._unblock(look, from);
       if (!c.camPos || c.cut < dt * 1.5) c.camPos = from.clone();
       else c.camPos.lerp(from, 1 - Math.exp(-3 * dt));
       cam.position.copy(c.camPos);
@@ -1202,6 +1386,88 @@
       }
       cam.updateMatrixWorld();
       return true;
+    }
+
+    // --------------------------------------------------- camera clearance
+    /** Where the establishing orbit is at time t (radius, start angle and height from _establishOrbit). */
+    _orbitPos(p, o, t, out) {
+      const a = o.a0 + t * 0.12;
+      return out.set(p.x + Math.cos(a) * o.radius, (p.y || 0) + o.height + t * 0.6, p.z + Math.sin(a) * o.radius);
+    }
+
+    /** How much of the way from `look` to `from` the camera can see (1 = all of it), and it's not inside anything. */
+    _clearFrac(look, from) {
+      const ph = this.game.physics;
+      const dx = from.x - look.x;
+      const dy = from.y - look.y;
+      const dz = from.z - look.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < 0.01) return 1;
+      if (ph.overlaps(from.x, from.z, 0.3, from.y - 0.3, from.y + 0.3, VH.COLLIDE.CAMERA)) return 0;
+      const hit = ph.raycast(look.x, look.y, look.z, dx / d, dy / d, dz / d, d, { flags: VH.COLLIDE.CAMERA, inflate: 0.15, ignoreInside: true });
+      return hit ? hit.t / d : 1;
+    }
+
+    /**
+     * An establishing shot circles the place from 26 m out and 11 m up. Pick
+     * the first start angle (then a tighter radius) whose whole move keeps
+     * the place in view; boxed in on every side, look down from high above.
+     */
+    _establishOrbit(p, dur) {
+      const look = new THREE.Vector3(p.x, (p.y || 0) + 2, p.z);
+      const at = new THREE.Vector3();
+      let best = null;
+      for (const radius of [26, 18, 12]) {
+        for (let k = 0; k < 12; k++) {
+          const o = { a0: 0.8 + (k * Math.PI) / 6, radius, height: 11 };
+          let seen = 0;
+          for (const t of [0, dur * 0.5, dur]) seen += this._clearFrac(look, this._orbitPos(p, o, t, at)) > 0.97 ? 1 : 0;
+          if (seen === 3) return o;
+          if (!best || seen > best.seen) best = Object.assign(o, { seen });
+        }
+      }
+      return best && best.seen >= 2 ? best : { a0: 0.8, radius: 5, height: 34 };
+    }
+
+    /** Swing `from` round `look` by `rot` radians (level). */
+    _swing(look, from, rot) {
+      const dx = from.x - look.x;
+      const dz = from.z - look.z;
+      const c = Math.cos(rot);
+      const s = Math.sin(rot);
+      from.x = look.x + dx * c - dz * s;
+      from.z = look.z + dx * s + dz * c;
+      return from;
+    }
+
+    /** The smallest swing round `look` that gives `from` a clear view of it (0 if it already has one). */
+    _clearAngle(look, from) {
+      if (this._clearFrac(look, from) > 0.9) return 0;
+      const v = from.clone();
+      let best = 0;
+      let bestF = -1;
+      for (const r of [0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.5, -2.5, Math.PI]) {
+        const f = this._clearFrac(look, this._swing(look, v.copy(from), r));
+        if (f > 0.9) return r;
+        if (f > bestF) {
+          bestF = f;
+          best = r;
+        }
+      }
+      return best;
+    }
+
+    /** Pull the camera in front of whatever still stands between it and `look` (a wall, a parked van). */
+    _unblock(look, from) {
+      const dx = from.x - look.x;
+      const dy = from.y - look.y;
+      const dz = from.z - look.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < 0.5) return from;
+      const hit = this.game.physics.raycast(look.x, look.y, look.z, dx / d, dy / d, dz / d, d, { flags: VH.COLLIDE.CAMERA, inflate: 0.15, ignoreInside: true });
+      if (!hit) return from;
+      const k = Math.max(0.6, hit.t - 0.3) / d;
+      return from.set(look.x + dx * k, look.y + dy * k, look.z + dz * k);
     }
 
     // ----------------------------------------------------------- fights
@@ -1249,12 +1515,15 @@
           if (spawned.has(i) || t < (w.delay || 0)) return;
           spawned.add(i);
           const place = this._place(w.at) || game.player.pos;
+          const floor = this._floorOf(place);
           for (let k = 0; k < (w.count || 3); k++) {
             const ang = Math.random() * Math.PI * 2;
             const r = 2 + Math.random() * 4;
-            const a = game.combat.spawnEnemy(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, {
+            const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor);
+            const a = game.combat.spawnEnemy(s.x, s.z, {
               look: this.factionLook(w.faction || 'gang', k), faction: w.faction || 'gang', weapon: w.weapon || 'pistol', alert: true, accuracy: w.accuracy,
             });
+            a.pos.y = s.y;
             a.missionHostile = true;
             run.targets.push(a);
           }
@@ -1295,6 +1564,7 @@
             // Caught, not wrecked: it's often the car Jay has to drive next.
             car.health = Math.max(car.health, 550);
             car.burning = 0;
+            car.noEnter = false;
             return true;
           }
         }
@@ -1530,15 +1800,22 @@
       const p = game.player;
       if (p.inVehicle && withCar !== false) {
         const v = p.vehicle;
-        v.place(place.x, place.z, place.yaw || v.yaw);
+        const yaw = place.yaw || v.yaw;
+        // Jay's car among the others, never parked on a roof or in a shopfront.
+        const s = this._carFits(place.x, place.z, yaw) ? { x: place.x, z: place.z, heading: yaw } : this._carSpot(place.x, place.z, yaw, place.x, place.z);
+        v.place(s.x, s.z, s.heading);
       } else {
         if (p.inVehicle) game.vehicles.exitVehicle();
         p.teleport(place.x, place.z, place.yaw || 0, place.y);
       }
       game.cameraRig.snapBehind(p);
+      const taken = [p.pos];
       for (const id2 of this.run ? this.run.crew : []) {
         const a = this.run.actors.get(id2);
-        if (a && !a.inCar) a.pos.set(place.x + 1.5, place.y || 0.15, place.z + 1.5);
+        if (!a || a.inCar) continue;
+        const s = this._standSpot(place.x + 1.5, place.z + 1.5, p.pos.y, taken, 6);
+        a.pos.set(s.x, s.y, s.z);
+        taken.push(a.pos);
       }
     }
 
@@ -1558,6 +1835,7 @@
       document.body.classList.remove('on-mission');
       this._clearWaiters(run);
       this.run = null;
+      this._clearPresentation();
       this._cleanup(run, false);
       this.completed[m.id] = true;
       if (m._main) this.stats.missions++;
@@ -1608,11 +1886,8 @@
       this._clearWaiters(run, reason);
       this.run = null;
       this._abort = null;
-      this.cinematic = null;
       game.dialogue.stop();
-      document.body.classList.remove('cutscene');
-      game.player.frozen = false;
-      game.frozenControls = false;
+      this._clearPresentation();
       this._cleanup(run, true);
       game.hud.missionResult(false, run.m.title, reason, 'Press ' + game.input.labelFor('interact') + ' to retry' + (run.checkpoint ? ' from the checkpoint' : ''));
       if (game.audio.missionFailedSting) game.audio.missionFailedSting();
@@ -1626,6 +1901,17 @@
       if (run.midMoney) game.player.money = Math.max(0, game.player.money - run.midMoney);
       this._retry = { m: run.m, checkpoint: run.checkpoint, pos: this._checkpointPos, until: game.time + 14, cpFlags: run.cpFlags || null, cpMoney: run.cpMoney || 0 };
       setTimeout(() => this.refreshMarkers(), 1500);
+    }
+
+    /** A job never leaves the screen black, letterboxed or in a cutscene camera behind it. */
+    _clearPresentation() {
+      const game = this.game;
+      this.cinematic = null;
+      game.dialogue.letterbox(false);
+      document.body.classList.remove('cutscene');
+      game.player.frozen = false;
+      game.frozenControls = false;
+      game.hud.setFade(0, 900);
     }
 
     _clearWaiters(run, reason) {
@@ -1643,7 +1929,14 @@
 
     _cleanup(run, failed) {
       const game = this.game;
+      if (failed) {
+        // A failed job leaves nothing behind: the retry starts from a clean
+        // street instead of on top of the last attempt's cars and cast.
+        for (const [, a] of run.actors) if (!a.dead && !a.removed) game.crowd.remove(a);
+        for (const [, v] of run.cars) if (v.driver !== 'player' && !v.removed) game.vehicles.remove(v);
+      }
       for (const [, a] of run.actors) {
+        if (a.removed) continue;
         if (a.inCar && a.brain && a.brain._getOut) a.brain._getOut(a, a.inCar);
         a.persistent = false;
         a.brain = a.dead ? null : new FleeBrain(this, game.player.pos);

@@ -183,7 +183,7 @@
       ] },
       { leave: ['dex', 'birdie'] },
       { scene: { at: 'dex_garage', cast: ['dex', 'birdie', 'liaison', 'rafi'] }, say: [
-        ['caption', '(Calloway Auto. Roll-up doors, peeling paint, a neon sign reading CALLOWAY AUTO with the second L dead. Three men in charcoal polos are on the lot.)'],
+        ['caption', '(Calloway Auto. Roll-up doors, peeling paint, a neon sign reading CALLOWAY AUTO with the second L dead. Three men in charcoal polos are on the lot, and a fourth sits at the wheel of a gunmetal SUV at the kerb with the engine running.)'],
         ['liaison', "(snapping photos of the roll-up door with a tablet) Great. Lovely. That's very... authentic."],
         ['rafi', "(shoved up against the wall by a second polo) I told you, he's at a funeral, man! A FUNERAL!"],
         ['dex', 'Hey. HEY. Get your hands off my apprentice.'],
@@ -216,7 +216,7 @@
         ['jay', "(to the tow truck, pulling out after it) I know. I know you're a truck. Pretend you're not."],
       ] },
       { goto: 'halberd_suv', vehicle: false, radius: 5, objective: "Get Dex's cash box out of the wreck", say: [
-        ['caption', '(The SUV sits hissing against the kerb, bonnet folded like a letter. The liaison inside has decided to stay unconscious, the smartest thing he has done all day.)'],
+        ['caption', '(The SUV sits hissing against the kerb, bonnet folded like a letter. The polo at the wheel has decided to stay unconscious, the smartest thing he has done all day.)'],
       ] },
       { heat: 1, say: [
         ['jay', '(pulling a dented green cash box out of the footwell) Got you.'],

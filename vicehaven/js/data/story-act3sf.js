@@ -231,7 +231,8 @@
     failIf: ['wrecked:foxes_car'],
     steps: [
       foxesCar('tannery_row'),
-      { scene: { at: 'tannery_row', cast: ['lefty', 'duke', 'walt'] }, say: [
+      { spawn: [{ char: 'teague', at: 'tannery_row', offset: [6, 4], behavior: 'idle' }] },
+      { scene: { at: 'tannery_row', cast: ['lefty', 'duke', 'walt', 'teague'] }, say: [
         ['caption', '(Tannery Row, two o\'clock, Thursday. Three walking frames are lined up at the kerb like getaway bikes. Each one has tennis balls on its feet. One of them has a horn.)'],
         ['jay', 'What are those?'],
         ['lefty', 'Walkers.'],
@@ -264,7 +265,7 @@
         ['jay', '(watching him go) You planned that.'],
         ['lefty', '(gripping her walker) I\'ve been planning that since disco. Fox rules, boys. Nobody gets hurt and everybody gets home.'],
       ] },
-      { leave: ['lefty', 'duke', 'walt'] },
+      { leave: ['lefty', 'duke', 'walt', 'teague'] },
       { getIn: 'foxes_car', objective: 'Get behind the wheel and wait. Engine running.' },
       { music: 'tension' },
       { phone: 'lefty', say: [

@@ -6,7 +6,8 @@
  *                    Beacon monument, vending machines and a city guide kiosk
  *   Founders Park    lawns, paths, a fountain and a gazebo
  *   Vicehaven Tower  the tallest building in the city
- *   The waterfront   promenade, boardwalk, seawall, the bay and Oceanview Pier
+ *   The waterfront   promenade, boardwalk, seawall, Harbor Beach, the bay
+ *                    and Oceanview Pier
  *
  * All positions are derived from the block rectangles citygen.js produced,
  * so the landmarks follow the street grid if it changes.
@@ -370,16 +371,31 @@
       world.physics.addBox(road, -0.5, za, sea, KERB, zb, 'boardwalk');
     }
 
-    // Seawall with a raised coping, and the railing along it (open where the pier starts).
+    // Harbor Beach: a strip of sand under the seawall south of the pier, down
+    // a flight of steps from the boardwalk, with a bonfire ring and driftwood.
+    // places.js puts 'harbor_beach' at beach.spot.
+    const beach = (wf.beach = {
+      x0: sea + 0.5, x1: sea + 22, z0: -104, z1: -24, stairZ0: -64, stairZ1: -60, sandY: -0.45,
+      fire: { x: sea + 11, z: -50 }, spot: { x: sea + 8, z: -54 },
+    });
+
+    // Seawall with a raised coping, and the railing along it (open where the pier and the beach steps start).
+    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]];
     for (let z = b.minZ; z < b.maxZ; z += 48) {
       const za = z;
       const zb = Math.min(b.maxZ, z + 48);
       const ctx = world.ctxAt(sea, (za + zb) / 2);
-      const pieces = [];
-      if (zb <= pier.z0 || za >= pier.z1) pieces.push([za, zb]);
-      else {
-        if (za < pier.z0) pieces.push([za, pier.z0]);
-        if (zb > pier.z1) pieces.push([pier.z1, zb]);
+      let pieces = [[za, zb]];
+      for (const [ga, gb] of gaps) {
+        const next = [];
+        for (const [pa, pb] of pieces) {
+          if (pb <= ga || pa >= gb) next.push([pa, pb]);
+          else {
+            if (pa < ga) next.push([pa, ga]);
+            if (pb > gb) next.push([gb, pb]);
+          }
+        }
+        pieces = next;
       }
       ctx.concrete.box(sea - 0.3, -8, za, sea + 0.5, KERB + (pieces.length ? 0.02 : 0), zb, VH.col(0xa9a39a), { uvScale: 4 });
       for (const [pa, pb] of pieces) {
@@ -387,6 +403,43 @@
         railing(world, ctx, sea, pa, sea, pb, KERB + 0.14, { height: 1.0 });
         invisibleWall(world, sea + 0.25, pa, sea + 0.9, pb);
       }
+    }
+
+    // The beach: dry sand, a darker wet strip lower down, fenced off from the bay.
+    {
+      const ctx = world.ctxAt((beach.x0 + beach.x1) / 2, (beach.z0 + beach.z1) / 2);
+      const wet = beach.x1 - 5;
+      const sy = beach.sandY;
+      ctx.propMatte.box(beach.x0, -1.6, beach.z0, wet, sy, beach.z1, VH.col(0xe6d4a6));
+      ctx.propMatte.box(wet, -1.6, beach.z0, beach.x1, sy - 0.3, beach.z1, VH.col(0xc2a878));
+      world.physics.addBox(beach.x0, -2, beach.z0, wet, sy, beach.z1, 'sand');
+      world.physics.addBox(wet, -2, beach.z0, beach.x1, sy - 0.3, beach.z1, 'sand');
+      invisibleWall(world, beach.x1, beach.z0 - 1, beach.x1 + 1, beach.z1 + 1);
+      invisibleWall(world, sea, beach.z0 - 1, beach.x1 + 1, beach.z0);
+      invisibleWall(world, sea, beach.z1, beach.x1 + 1, beach.z1 + 1);
+      // Steps down from the gap in the railing (the seawall top bridges the boardwalk to them).
+      world.physics.addBox(sea, -1, beach.stairZ0, beach.x0, KERB + 0.02, beach.stairZ1, 'seawall');
+      for (let i = 0; i < 3; i++) {
+        const top = KERB - 0.15 * (i + 1);
+        const xa = beach.x0 + i * 0.6;
+        ctx.concrete.box(xa, -1.2, beach.stairZ0, xa + 0.6, top, beach.stairZ1, VH.col(0xbdb7ac), { uvScale: 4 });
+        world.physics.addBox(xa, -1.2, beach.stairZ0, xa + 0.6, top, beach.stairZ1, 'stairs');
+      }
+      // Bonfire ring: stones, charred logs and a bed of embers.
+      const f = beach.fire;
+      for (let i = 0; i < 11; i++) {
+        const a = (i / 11) * Math.PI * 2;
+        const sx = f.x + Math.cos(a) * 0.9;
+        const sz = f.z + Math.sin(a) * 0.9;
+        ctx.propMatte.box(sx - 0.16, sy, sz - 0.14, sx + 0.16, sy + 0.2 + (i % 3) * 0.04, sz + 0.14, VH.col(0x77726b));
+      }
+      ctx.propMatte.box(f.x - 0.6, sy, f.z - 0.09, f.x + 0.6, sy + 0.16, f.z + 0.09, VH.col(0x2b211b));
+      ctx.propMatte.box(f.x - 0.09, sy + 0.1, f.z - 0.55, f.x + 0.09, sy + 0.26, f.z + 0.55, VH.col(0x2b211b));
+      ctx.screen.box(f.x - 0.4, sy + 0.01, f.z - 0.4, f.x + 0.4, sy + 0.07, f.z + 0.4, VH.col(0xff6a20, 1.5));
+      // Driftwood to sit on round it (low enough to step over).
+      ctx.propMatte.box(f.x - 3.2, sy, f.z - 1.3, f.x - 2.8, sy + 0.36, f.z + 1.4, VH.col(0x9c8b74));
+      ctx.propMatte.box(f.x - 1.2, sy, f.z + 2.6, f.x + 1.5, sy + 0.34, f.z + 3.0, VH.col(0x8f7f69));
+      ctx.propMatte.box(f.x + 2.7, sy, f.z - 1.6, f.x + 3.1, sy + 0.32, f.z + 0.9, VH.col(0xa39079));
     }
 
     // Lamps, palms and benches along the boardwalk.

@@ -609,7 +609,7 @@
         { scene: { at: 'tavish', cast: [{ id: 'tavish' }] }, say: [
           ['tavish', 'He came at me with a broom handle! What was I supposed to do?'],
           ['jay', 'He\'s seventy-three.'],
-          ['tavish', 'I had orders. Clear the floor by noon. You don\'t know what Rourke\'s like when you miss noon.'],
+          ['tavish', 'I had orders. Clear the floor by noon. You don\'t know what Halberd\'s like when you miss noon.'],
           ['jay', 'I\'m learning. Get in.'],
           ['tavish', 'You think the cops will hold me? Halberd lawyers will have me out by dinner.'],
           ['jay', 'Then you\'ll have a nice dinner, Tavish. Mr Ruiz won\'t. He can\'t get down the stairs to the table.'],
@@ -748,7 +748,7 @@
         ['wick', 'He played at my cousin\'s funeral. And my cousin\'s other funeral. Different cousin.'],
         ['teo', 'Hold the boardwalk. Let the man play.'],
       ],
-      win: [['teo', '(as a steel drum starts up behind them) Hear that? That\'s the city.'], ['teo', '(beat) Don\'t tell my dad I said something nice.']] },
+      win: [['teo', '(as a steel drum starts up behind them) Hear that? That\'s the city.'], ['teo', '(beat) I didn\'t say anything nice. Don\'t make it a thing.']] },
   ];
 
   // ------------------------------------------------------- ambient texts
@@ -781,8 +781,13 @@
     { after: 'wc4_the_last_wedding', from: 'tasha', message: 'Grandpa hasn\'t stopped talking about how you took the corner onto Grand. He says you drive like his Constance danced.' },
     { after: 'da4_signal_boost', from: 'solace', message: 'Ratings are up 4000%. That\'s a made-up number. The truth is somebody\'s listening. That\'s enough.' },
   );
-  // Walt's death, only if the Silver Foxes chain is done.
-  S.texts.push({ after: 'm25_iron', from: 'lefty', requiresFlag: 'foxes_done', message: 'Walt passed in his sleep. He thought it was 1981 and Ruthie was making coffee. Good way to go. Funeral Tuesday. Wear the good shoes.' });
+  // Walt's death, once the Silver Foxes chain and m25 are both done, in
+  // whichever order: m27, da3 and m31 take him as gone from then on.
+  const waltText = 'Walt passed in his sleep. He thought it was 1981 and Ruthie was making coffee. Good way to go. Funeral Tuesday. Wear the good shoes.';
+  S.texts.push(
+    { after: 'm25_iron', from: 'lefty', requiresFlag: 'foxes_done', message: waltText },
+    { after: 'sf4_returns', from: 'lefty', requiresFlag: 'm25_iron', message: waltText },
+  );
 
   // ---------------------------------------------------------------- radio
   // Station index matches VH.Radio: 0 Sunset Drive, 1 Pulse, 2 Harbor Heat.

@@ -294,6 +294,7 @@
     /** Knock over with a velocity. */
     knock(vx, vy, vz, damage, source) {
       if (this.dead && this.down) return;
+      if (this.inCar) return; // riding in a car: the car takes the hit, not the passenger
       this.down = { t: 0, vx, vy, vz, spin: (Math.random() - 0.5) * 6, rest: false, flip: 0 };
       this.state = 'down';
       this.grounded = false;
@@ -359,6 +360,7 @@
       VH.events.on('explosion', (e) => {
         this.threat(e.x, e.z, 60, 'blast');
         for (const a of this.agents) {
+          if (a.inCar) continue; // inside a car; it gets out if the car is wrecked
           const d = Math.hypot(a.pos.x - e.x, a.pos.z - e.z);
           if (d > e.radius) continue;
           const k = 1 - d / e.radius;
@@ -794,6 +796,8 @@
 
     /** Cars hitting people. */
     _carCheck(a) {
+      // Passengers sit at their car's position: never "run over" by it (or any car).
+      if (a.hidden || a.inCar) return;
       const vs = this.game.vehicles;
       for (const v of vs.list) {
         const sp = v.speed;
@@ -938,6 +942,7 @@
           land: 0,
           lookPitch: an.lookPitch || 0,
           talk: an.talk,
+          talkEnergy: an.talkEnergy,
           handsUp: an.handsUp,
           phone: an.phone,
           cower: an.cower,

@@ -356,12 +356,17 @@
       const talk = s.talk || 0;
       if (talk > 0) {
         const t = this.time;
-        T.shoulderR = VH.math.lerp(T.shoulderR, 0.45 + 0.3 * Math.sin(t * 2.3), talk);
-        T.elbowR = VH.math.lerp(T.elbowR, 1.05 + 0.35 * Math.sin(t * 3.7 + 1), talk);
-        T.shoulderL = VH.math.lerp(T.shoulderL, 0.15 + 0.2 * Math.sin(t * 1.9 + 2), talk * 0.7);
-        T.elbowL = VH.math.lerp(T.elbowL, 0.5 + 0.3 * Math.sin(t * 2.9), talk * 0.7);
-        T.headYaw += 0.12 * Math.sin(t * 0.9) * talk;
-        T.headPitch += 0.06 * Math.sin(t * 2.2) * talk;
+        // A shouted line throws both arms about, quicker; a whisper barely moves.
+        const e = s.talkEnergy === undefined ? 0.5 : s.talkEnergy;
+        const amp = 0.55 + 0.95 * e;
+        const sp = 0.8 + 0.6 * e;
+        T.shoulderR = VH.math.lerp(T.shoulderR, 0.45 + 0.3 * amp * Math.sin(t * 2.3 * sp), talk);
+        T.elbowR = VH.math.lerp(T.elbowR, 1.05 + 0.35 * amp * Math.sin(t * 3.7 * sp + 1), talk);
+        T.shoulderL = VH.math.lerp(T.shoulderL, 0.15 + 0.2 * amp * Math.sin(t * 1.9 * sp + 2), talk * (0.35 + 0.6 * e));
+        T.elbowL = VH.math.lerp(T.elbowL, 0.5 + 0.3 * amp * Math.sin(t * 2.9 * sp), talk * (0.35 + 0.6 * e));
+        T.headYaw += 0.12 * amp * Math.sin(t * 0.9) * talk;
+        T.headPitch += (0.06 * amp * Math.sin(t * 2.2 * sp) - 0.04 * e) * talk;
+        T.lean += 0.05 * e * talk;
       }
       // On the phone: right hand at the ear, head tilted.
       const phone = s.phone || 0;
