@@ -22,8 +22,15 @@
 
   const UNITS = [0, 2, 3, 4, 5, 6];
   const SIGHT = [0, 62, 70, 78, 86, 95];
-  const EVADE_TIME = [0, 7, 10, 13, 16, 19];
-  const SEARCH_R = [0, 85, 110, 140, 165, 190];
+  const EVADE_TIME = [0, 7, 10, 12, 14, 16];
+  const SEARCH_R = [0, 85, 110, 135, 150, 165];
+  // The helicopter: how far out it can pick Jay up, how far it keeps him
+  // once it has him, and how fast it flies (a fast car can outrun it).
+  const HELI_ACQUIRE = 70;
+  const HELI_KEEP = 115;
+  const HELI_SPEED = 25; // 90 km/h: at 100 km/h+ a car slowly pulls away from it
+  const HELI_FUEL = 75; // seconds over the city before it goes back to refuel...
+  const HELI_REFUEL = 40; // ...and how long until the next one is up
 
   const COP_LOOK = { skin: 0xc68c64, hair: 0x16110d, top: 0x1c2a4a, trim: 0x1c2a4a, shirt: 0x2a3b61, bottom: 0x141c30, shoes: 0x0e0e0e, cap: true, longHair: false, height: 1.02, build: 1.05 };
 
@@ -518,10 +525,14 @@
       const game = this.game;
       const p = game.player;
       const vel = p.inVehicle ? p.vehicle.vel : p.vel;
-      // Prefer ahead of the player's travel, out of sight.
+      // Prefer ahead of the player's travel, out of sight. Once they've lost
+      // him, new units come to the search area: they don't know where he is.
+      const lost = !this.seen && this.searchArea;
+      const cx = lost ? this.searchArea.x : t.x + vel.x * 4;
+      const cz = lost ? this.searchArea.z : t.z + vel.z * 4;
       let best = null;
       for (let i = 0; i < 12; i++) {
-        const lp = game.roadnet.randomLanePoint(Math.random, t.x + vel.x * 4, t.z + vel.z * 4, 80, 170);
+        const lp = game.roadnet.randomLanePoint(Math.random, cx, cz, lost ? 30 : 80, lost ? 140 : 170);
         if (!lp) continue;
         if (game.isVisible(lp.x, 1, lp.z, 4) && lp.dist < 120) continue;
         best = lp;
@@ -647,6 +658,7 @@
     reset() {
       this.level = 0;
       this._clear(true);
+      this._heliWait = 0;
       if (this.heli) {
         this.heli.dispose();
         this.heli = null;
@@ -655,11 +667,22 @@
 
     // ------------------------------------------------------ helicopter
     _updateHeli(dt, wanted) {
-      if (wanted && !this.heli) {
+      this._heliWait = Math.max(0, (this._heliWait || 0) - dt);
+      if (wanted && !this.heli && this._heliWait <= 0) {
         this.heli = new PoliceHeli(this.game, this.heliSpot);
+        this._heliFuel = HELI_FUEL;
       }
       if (!this.heli) return;
-      this.heli.update(dt, wanted);
+      // Low on fuel: it heads home, and there's a gap before the next one.
+      if (!this.heli.leaving) {
+        this._heliFuel -= dt;
+        if (this._heliFuel <= 0) {
+          this.heli.leaving = true;
+          this._heliWait = HELI_REFUEL;
+          this._dispatch('refuel');
+        }
+      }
+      this.heli.update(dt, wanted && !this.heli.leaving);
       if (this.heli.gone) {
         this.heli.dispose();
         this.heli = null;
@@ -698,6 +721,9 @@
           break;
         case 'air':
           line = pick([`Air unit is up. Eyes in the sky over ${street}.`, `Air One en route. We'll light him up.`]);
+          break;
+        case 'refuel':
+          line = pick([`Air One is bingo fuel, returning to base. Ground units, keep on him.`, `Air unit breaking off to refuel. Next bird is forty out.`]);
           break;
         case 'lost':
           line = pick([`We've lost visual. All units, search the area around ${street}.`, `Suspect out of sight. Setting up a perimeter near ${street}.`, `Lost him! Last seen on ${street}.`]);
@@ -754,7 +780,7 @@
       this.root = PoliceHeli.buildModel();
       game.scene.add(this.root);
       const p = game.player.pos;
-      this.pos = new THREE.Vector3(p.x + 180, 60, p.z - 180);
+      this.pos = new THREE.Vector3(p.x + 85, 60, p.z - 85); // arrives within a few seconds
       this.vel = new THREE.Vector3();
       this.yaw = 0;
       this.tracking = false;
@@ -827,14 +853,35 @@
       const p = game.player;
       const t = p.inVehicle ? p.vehicle : p;
       if (!wanted) this.leaving = true;
+      const pol = game.police;
+      // Does it have Jay? Close enough, and nothing over his head: under a
+      // roof, a bridge or in a parkade it can't see him. Once lost, it doesn't
+      // know where he is: it circles where the search is until he shows up
+      // near it again.
+      const horiz0 = Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z);
+      const covered = game.physics.groundHeight(t.pos.x, t.pos.z, 400) > t.pos.y + 3;
+      this.tracking = !this.leaving && !covered && horiz0 < (this.tracking ? HELI_KEEP : HELI_ACQUIRE);
+      // While the units on the ground can see him they radio his position in;
+      // once nobody can, it only has the search area to go on.
+      if (this.tracking || pol.seen) this._last = { x: t.pos.x + t.vel.x * 1.5, z: t.pos.z + t.vel.z * 1.5 };
+      const search = (!this.tracking && !pol.seen && pol.searchArea) || this._last || { x: t.pos.x, z: t.pos.z };
+      this._aim = this.tracking ? null : search;
       let goal;
       if (this.leaving) goal = new THREE.Vector3(this.pos.x + 400, 90, this.pos.z - 400);
-      else {
+      else if (this.tracking) {
         // Orbit slowly around a point just ahead of the target.
         const a = this.t * 0.22;
         goal = new THREE.Vector3(t.pos.x + t.vel.x * 1.5 + Math.cos(a) * 30, 48, t.pos.z + t.vel.z * 1.5 + Math.sin(a) * 30);
+      } else if (pol.seen) {
+        // Heading for where the units say he is.
+        goal = new THREE.Vector3(search.x, 50, search.z);
+      } else {
+        // Sweep wide circles over the search area.
+        const a = this.t * 0.16;
+        const r = Math.min(80, (search.r || 60) * 0.6);
+        goal = new THREE.Vector3(search.x + Math.cos(a) * r, 52, search.z + Math.sin(a) * r);
       }
-      const maxSpeed = 30;
+      const maxSpeed = HELI_SPEED;
       const to = goal.clone().sub(this.pos);
       const desired = to.clampLength(0, maxSpeed);
       this.vel.lerp(desired, 1 - Math.exp(-0.8 * dt));
@@ -846,12 +893,11 @@
       this.root.userData.tailRotor.rotation.x += dt * 60;
       this.root.userData.beacon.visible = Math.floor(this.t * 1.4) % 2 === 0;
       const horiz = Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z);
-      this.tracking = !this.leaving && horiz < 150;
-      // Searchlight on the target (it wanders a little when far).
+      // Searchlight on Jay while it has him; otherwise sweeping the ground below it.
       const night = game.fx.night || 0;
-      const aimX = t.pos.x + (this.tracking ? 0 : Math.sin(this.t) * 12);
-      const aimZ = t.pos.z + (this.tracking ? 0 : Math.cos(this.t * 0.8) * 12);
-      const aimY = t.pos.y;
+      const aimX = this.tracking ? t.pos.x : this.pos.x + Math.sin(this.t * 0.9) * 14;
+      const aimZ = this.tracking ? t.pos.z : this.pos.z + Math.cos(this.t * 0.7) * 14;
+      const aimY = this.tracking ? t.pos.y : 0;
       const from = new THREE.Vector3(this.pos.x, this.pos.y - 1, this.pos.z);
       const dir = new THREE.Vector3(aimX - from.x, aimY - from.y, aimZ - from.z);
       const len = dir.length();

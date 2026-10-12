@@ -232,6 +232,12 @@ and from heat 4 a helicopter's searchlight follows you. Break line of sight
 and get out of the search area to lose them. Getting caught costs a fine
 and your ammo; getting knocked out costs a hospital bill.
 
+**Losing the helicopter.** It flies at about 90 km/h and only keeps you
+within about 115 m, so a fast car flat out (or on nitro) pulls away from
+it. Once it has lost you it doesn't know where you are: it circles the
+search area. After about 75 seconds it goes back to refuel, and the next
+one is 40 seconds away, which is your best window.
+
 **Weapons.** Fists, a baseball bat, a combat knife, the Kestrel 9 pistol,
 the Hammerhead .44, the Wasp SMG, the Gator 12 shotgun, the Mantis AC-7
 rifle, the Heron LR sniper rifle, frag grenades and molotovs. Guns have
