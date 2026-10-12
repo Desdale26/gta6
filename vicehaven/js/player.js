@@ -667,13 +667,28 @@
       this.teleport(this.spawnPoint.x, this.spawnPoint.z, this.spawnPoint.yaw);
     }
 
-    respawn() {
+    /** Back from a ragdoll: the animation only writes some axes of each joint, so clear what the ragdoll twisted. */
+    _clearRagdoll() {
       if (this._ragdoll) {
-        // The animation only writes some axes of each joint: clear what the ragdoll twisted.
         for (const k of Object.keys(this.model.joints)) this.model.joints[k].rotation.set(0, 0, 0);
+        this.model.root.rotation.set(0, this.heading, 0);
       }
       this._ragdoll = null;
       this._ragdollFinal = false;
+    }
+
+    /** Back on his feet where he is, at full health (retrying a job after being knocked out). */
+    revive() {
+      this._clearRagdoll();
+      this.state = 'ground';
+      this._deadTimer = 0;
+      this.health = this.maxHealth;
+      this.vel.set(0, 0, 0);
+      this.model.root.rotation.set(0, this.heading, 0);
+    }
+
+    respawn() {
+      this._clearRagdoll();
       this.spawn(this.spawnPoint);
       this.wantCrouch = false;
       this.crouched = false;
@@ -690,6 +705,9 @@
       this.aimAmount = damp(this.aimAmount, this.aiming ? 1 : 0, 14, dt);
 
       const root = this.model.root;
+      // Alive again by any route (a job retry, a checkpoint, bail, a teleport),
+      // not only the hospital: stand up straight, don't keep the ragdoll's pose.
+      if (this._ragdoll && this.state !== 'dead') this._clearRagdoll();
       root.position.set(rp.x, rp.y + this._stepOffset, rp.z);
       if (this.state === 'vehicle') {
         root.visible = false;

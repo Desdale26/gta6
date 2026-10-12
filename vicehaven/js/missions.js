@@ -2220,6 +2220,12 @@
       }
       this.game.hud.missionResult(null);
       const game = this.game;
+      // Knocked out when it failed: on his feet again for the retry (not left
+      // lying there, or in the ragdoll's pose, with no health).
+      if (game.player.isDead) {
+        game.player.revive();
+        if (game.police) game.police.reset();
+      }
       if (r.checkpoint && r.pos) {
         game.hud.setFade(1, 300);
         setTimeout(() => {
