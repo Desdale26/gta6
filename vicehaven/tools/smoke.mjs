@@ -462,6 +462,33 @@ const botRun = (id, waypoints) => game(({ id, waypoints }) => {
   g.challenges._closeResults();
   g.challenges.start(id);
   g.advance(3.5);
+  // The bot runs straight lines between waypoints and can't steer round a
+  // car (a respawn refills the kerbside spaces): clear cars off its lines.
+  const pts = [];
+  for (const k of Object.keys(waypoints || {})) for (const w of waypoints[k]) pts.push(w);
+  const nearLine = (x, z, r) => {
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1], [bx, bz] = pts[i];
+      const L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2));
+      if (Math.hypot(x - (ax + (bx - ax) * t), z - (az + (bz - az) * t)) < r) return true;
+    }
+    return false;
+  };
+  for (const sp of g.vehicles.spots) if (!sp.vehicle && nearLine(sp.x, sp.z, 4)) sp.used = true;
+  for (const v of g.vehicles.list.slice()) {
+    if (v.driver === 'player') continue;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1], [bx, bz] = pts[i];
+      const L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((v.pos.x - ax) * (bx - ax) + (v.pos.z - az) * (bz - az)) / L2));
+      if (Math.hypot(v.pos.x - (ax + (bx - ax) * t), v.pos.z - (az + (bz - az) * t)) < v.hz + 1.5) {
+        if (v.spot) v.spot.used = true; // and keep its kerbside space empty
+        g.vehicles.remove(v);
+        break;
+      }
+    }
+  }
   const log = [];
   inp.codesDown.add('KeyW');
   inp.codesDown.add('ShiftLeft');
@@ -589,6 +616,9 @@ if (takeShots) {
 const drive = await game(() => {
   const g = VH.game;
   g.player.teleport(-51, 86, Math.PI / 2);
+  // A clear run ahead (a parked car in the kerb lane would stop it short).
+  for (const s of g.vehicles.spots) if (Math.abs(s.z - 90.6) < 3 && s.x < -40 && s.x > -110) s.used = true;
+  for (const o of g.vehicles.list.slice()) if (Math.abs(o.pos.z - 90.6) < 3 && o.pos.x < -40 && o.pos.x > -110) g.vehicles.remove(o);
   const v = g.vehicles.spawn('vireo', -51, 90.6, -Math.PI / 2, { persistent: true });
   g.advance(0.2);
   const t = g.vehicles.findEnterable(g.player.pos.x, g.player.pos.z, 5);
