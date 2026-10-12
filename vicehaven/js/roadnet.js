@@ -275,7 +275,9 @@
       const tmp = {};
       for (const r of this.roads) {
         const along = r.axis === 'z' ? z : x;
-        if (along < r.from - 5 || along > r.to + 5) continue;
+        // (A long reach also finds the end of a road that stops short of the point.)
+        const pastEnd = Math.max(5, far);
+        if (along < r.from - pastEnd || along > r.to + pastEnd) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) > r.width / 2 + far) continue;
         for (const dir of [1, -1]) {

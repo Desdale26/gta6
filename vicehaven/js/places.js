@@ -164,6 +164,7 @@
       if (!p && (kind === 'corner' || kind === 'street')) p = this._corner(h, district);
       if (!p && kind === 'beach') p = this._beach();
       if (!p && kind === 'overlook' && district === 'harborpoint') p = this._seawallBend();
+      if (!p && kind === 'park') p = this._parkCorner();
       if (!p && (kind === 'park' || kind === 'overlook')) p = this.get(h % 2 ? 'founders_park' : 'civic_plaza') && Object.assign({}, this.get(h % 2 ? 'founders_park' : 'civic_plaza'));
       if (!p && kind === 'pier') p = this._waterfront(h, 'pier');
       if (!p && kind === 'boardwalk') p = this._waterfront(h, 'boardwalk');
@@ -299,6 +300,24 @@
     }
 
     /** Harbor Beach: on the sand by the bonfire (landmarks.js builds both), facing the water. */
+    /**
+     * Another park by name (Laurel Park) gets its own corner of the big green,
+     * away from Founders Park's fountain, instead of sharing its spot.
+     */
+    _parkCorner() {
+      const park = this.layout.blocks.find((b) => b.kind === 'park');
+      if (!park) return null;
+      const corners = [
+        { x: park.minX + 14, z: park.minZ + 12, yaw: 0 },
+        { x: park.maxX - 14, z: park.minZ + 12, yaw: 0 },
+        { x: park.minX + 14, z: park.maxZ - 12, yaw: Math.PI },
+        { x: park.maxX - 14, z: park.maxZ - 12, yaw: Math.PI },
+      ];
+      const taken = Array.from(this.map.values());
+      const c = corners.find((q) => !taken.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 25));
+      return c ? { x: c.x, z: c.z, yaw: c.yaw } : null;
+    }
+
     _beach() {
       const b = this.layout.waterfront.beach;
       if (!b) return null;

@@ -317,7 +317,7 @@
       v.lastContact = this.time;
       if (speed < 1.2 && (slide || 0) < 3) return;
       if (speed > 5.5) {
-        const mul = v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1;
+        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (v.plow ? 0.15 : 1);
         v.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), other && other.driver === 'player' ? 'player' : other ? other : null, 'crash');
         v.wake();
       }
@@ -360,8 +360,14 @@
 
     _resolvePair(a, b, r) {
       // Parked cars are heavy until hit (so they don't drift), then fully dynamic.
-      const ma = a.mass;
-      const mb = b.mass;
+      // A plough (a mission car that must get through) counts as six times as
+      // heavy as whatever it meets, so it shoves cars aside and keeps going.
+      const fa = a.plow && !b.plow && b.driver !== 'player' ? 6 : 1;
+      const fb = b.plow && !a.plow && a.driver !== 'player' ? 6 : 1;
+      const ma = a.mass * fa;
+      const mb = b.mass * fb;
+      const ia = a.inertia * fa;
+      const ib = b.inertia * fb;
       const total = ma + mb;
       a.pos.x += r.nx * r.depth * (mb / total);
       a.pos.z += r.nz * r.depth * (mb / total);
@@ -383,36 +389,47 @@
       b.wake();
       const rna = raz * r.nx - rax * r.nz;
       const rnb = rbz * r.nx - rbx * r.nz;
-      const k = 1 / ma + 1 / mb + (rna * rna) / a.inertia + (rnb * rnb) / b.inertia;
+      const k = 1 / ma + 1 / mb + (rna * rna) / ia + (rnb * rnb) / ib;
       const e = 0.22;
       const j = (-(1 + e) * vn) / k;
       a.vel.x += (r.nx * j) / ma;
       a.vel.z += (r.nz * j) / ma;
       b.vel.x -= (r.nx * j) / mb;
       b.vel.z -= (r.nz * j) / mb;
-      a.omega += (rna * j) / a.inertia;
-      b.omega -= (rnb * j) / b.inertia;
+      a.omega += (rna * j) / ia;
+      b.omega -= (rnb * j) / ib;
       // Friction.
       const tx = -r.nz;
       const tz = r.nx;
       const vt = rvx * tx + rvz * tz;
       const rta = raz * tx - rax * tz;
       const rtb = rbz * tx - rbx * tz;
-      const kt = 1 / ma + 1 / mb + (rta * rta) / a.inertia + (rtb * rtb) / b.inertia;
+      const kt = 1 / ma + 1 / mb + (rta * rta) / ia + (rtb * rtb) / ib;
       let jt = -vt / kt;
       jt = clamp(jt, -0.4 * j, 0.4 * j);
       a.vel.x += (tx * jt) / ma;
       a.vel.z += (tz * jt) / ma;
       b.vel.x -= (tx * jt) / mb;
       b.vel.z -= (tz * jt) / mb;
-      a.omega += (rta * jt) / a.inertia;
-      b.omega -= (rtb * jt) / b.inertia;
+      a.omega += (rta * jt) / ia;
+      b.omega -= (rtb * jt) / ib;
+      // The plough also pushes the other car out of its line (to whichever side it's already on).
+      const pl = fa > 1 ? a : fb > 1 ? b : null;
+      if (pl) {
+        const other = pl === a ? b : a;
+        const rx = Math.cos(pl.yaw);
+        const rz = -Math.sin(pl.yaw);
+        const side = (other.pos.x - pl.pos.x) * rx + (other.pos.z - pl.pos.z) * rz >= 0 ? 1 : -1;
+        other.vel.x += rx * side * 2.4 + Math.sin(pl.yaw) * 1.2;
+        other.vel.z += rz * side * 2.4 + Math.cos(pl.yaw) * 1.2;
+        other.wake();
+      }
       const speed = -vn;
       if (a.controller && a.controller.onBump) a.controller.onBump(a, b, speed);
       if (b.controller && b.controller.onBump) b.controller.onBump(b, a, speed);
       this._impact(a, b, speed, r.px, a.pos.y + 0.6, r.pz, r.nx, r.nz, Math.abs(vt));
       if (speed > 5.5) {
-        const mul = b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1;
+        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (b.plow ? 0.15 : 1);
         b.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), a.driver === 'player' ? 'player' : a, 'crash');
       }
       b.lastContact = this.time;
@@ -631,6 +648,10 @@
       v.input.handbrake = fast ? 0 : 1;
       v.horn = false;
       v.role = 'abandoned';
+      // Kept only while a job needs it (or it's a reward); otherwise it streams
+      // out like any other abandoned car once Jay is far away (the last one he
+      // drove is still kept by the traffic system).
+      v.persistent = !!(v.missionOwned || v.keep);
       p.state = 'ground';
       p.model.setVisible(true);
       p.teleport(spot.x, spot.z, v.yaw + (fast ? 0 : Math.PI / 2), spot.y);

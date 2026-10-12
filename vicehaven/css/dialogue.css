@@ -201,13 +201,35 @@ body.cutscene .mm-radar {
 
 /* Police radio */
 .dlg-radio {
+  /* Bottom right, above the speedometer and the district name: the left
+     side is the notifications and the radar. */
   position: absolute;
-  left: 1.8rem;
-  top: 30%;
+  right: 1.8rem;
+  bottom: 21rem;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 0.4rem;
-  width: min(420px, 40vw);
+  width: min(400px, 36vw);
+}
+
+/* On the right-hand side, the captions mirror: edge on the right, sliding in from it. */
+.dlg-radio .dlg-radio-line {
+  border-left: 0;
+  border-right: 3px solid #56b4ff;
+  background: linear-gradient(270deg, rgba(10, 22, 48, 0.82), rgba(10, 22, 48, 0.3));
+  text-align: right;
+  align-items: flex-end;
+  transform: translateX(12px);
+}
+
+@media (max-height: 650px) {
+  .dlg-radio {
+    bottom: 19.5rem;
+  }
+  .dlg-radio-line:nth-child(n + 3) {
+    display: none;
+  }
 }
 
 .dlg-radio-line {

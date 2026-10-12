@@ -461,10 +461,14 @@
       box.append(el('span', 'tag', '◉ ' + name), el('span', 'txt', this._clean(text, false)));
       this.radioBox.prepend(box);
       while (this.radioBox.children.length > 3) this.radioBox.lastChild.remove();
+      document.body.classList.add('radio-on'); // the checklist on the right steps aside
       requestAnimationFrame(() => box.classList.add('in'));
       setTimeout(() => {
         box.classList.remove('in');
-        setTimeout(() => box.remove(), 500);
+        setTimeout(() => {
+          box.remove();
+          if (!this.radioBox.children.length) document.body.classList.remove('radio-on');
+        }, 500);
       }, 5200);
       if (voiced && !this.active) this._speak('DISPATCH', text);
     }

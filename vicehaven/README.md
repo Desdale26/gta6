@@ -138,8 +138,15 @@ stronger on a controller) pulls near misses onto an enemy.
 hit them, and bleed: sprays, splats and pools. **Settings → Gameplay →
 Blood** has Lots, Some and Off.
 
-**Failing a job** clears away its cars and people, so a retry starts on a
-clean street.
+**Respawning resets every car.** Waking up at the hospital, getting out
+on bail or retrying a job puts the city's cars back as if it had just
+loaded: wrecks, abandoned and stolen cars, police, traffic and parked cars
+all go and fresh ones fill the streets. The car Jay is sitting in comes
+back repaired, and the King of the Road prize waits at Heron Corner.
+
+**Cars you tail or chase don't get stuck.** A van Jay is following, or a
+car running from him, runs red lights, swerves round queues and parked
+cars, and shoves through anything that's still in the way.
 
 **Health.** Get out of trouble for a few seconds and Jay's health refills
 on its own, all the way. **Settings → Gameplay → Difficulty** sets how much
@@ -182,8 +189,11 @@ last checkpoint if there was one.
 ### Between jobs
 
 - **Taxi fares** (after *Ten and Two*). Get in any cab and press **P**.
-  Pick up a fare, get them there before the meter runs out, and hear their
-  story. 25 passengers, some of whom only turn up later in the story.
+  Pick up a fare (on the radar and map, with a GPS route), get them there
+  before the meter runs out, and hear their story. 25 passengers, some of
+  whom only turn up later in the story.
+- **Esc → Stats** counts stunt jumps, lanterns and fares; **Job log** lists
+  the races, the list, bounties and turf wars.
 - **Street races** (after *Tick Tock*). Six races from Heron Corner to
   Crestline. Win all six for a gold Drifter.
 - **Dex's list** (after *The Toolbox*). Ten cars somebody wants. Steal them
@@ -327,7 +337,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Shoot (aim with right mouse); hold Tab for the weapon wheel; R reloads
 - [ ] Get hit by a thug: a short red flash, the picture stays clear, and health refills a few seconds after the fight
 - [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
-- [ ] Fail a job (die or get caught) and retry with E: the last attempt's cars and people are gone
+- [ ] Fail a job (die or get caught) and retry with E: every car is fresh, the last attempt's cars and people are gone
+- [ ] Tail the paint van in *Casa Palma*: it never sits stuck at a red light or behind a queue, it shoves through
 - [ ] Shoot someone: they fall as a ragdoll and bleed; Settings → Gameplay → Blood turns it down or off
 - [ ] With voices on, each line is spoken in full before the next subtitle, shouts and whispers sound different
 - [ ] Drive fast with a crew member in the car: they stay in their seat

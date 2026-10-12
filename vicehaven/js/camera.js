@@ -33,6 +33,7 @@
 
   class CameraRig {
     constructor(camera, physics, settings, input) {
+      this.vehicles = null; // set by the game: the camera keeps out of cars
       this.camera = camera;
       this.physics = physics;
       this.settings = settings;
@@ -125,6 +126,46 @@
     }
 
     /** Place the camera for this frame. `player` is drawn at player.renderPos. */
+    /** Nearest hit of a ray with any car near it (each car a box, slightly inflated), or null. */
+    _carHit(o, dx, dy, dz, maxT, player) {
+      const list = this.vehicles && this.vehicles.list;
+      if (!list) return null;
+      let best = null;
+      const pad = 0.2;
+      for (const v of list) {
+        if (v.removed || v === player.vehicle) continue;
+        const ox = o.x - v.pos.x;
+        const oz = o.z - v.pos.z;
+        const reach = maxT + v.hz + 1;
+        if (ox * ox + oz * oz > reach * reach) continue;
+        // Into the car's frame: right = (cos yaw, -sin yaw), forward = (sin yaw, cos yaw).
+        const c = Math.cos(v.yaw);
+        const sn = Math.sin(v.yaw);
+        const lo = [ox * c - oz * sn, o.y - v.pos.y, ox * sn + oz * c];
+        const ld = [dx * c - dz * sn, dy, dx * sn + dz * c];
+        const lo3 = [-v.hx - pad, -pad, -v.hz - pad];
+        const hi3 = [v.hx + pad, (v.height || 1.5) + pad, v.hz + pad];
+        let t0 = 0;
+        let t1 = maxT;
+        let ok = true;
+        for (let k = 0; k < 3 && ok; k++) {
+          if (Math.abs(ld[k]) < 1e-6) {
+            if (lo[k] < lo3[k] || lo[k] > hi3[k]) ok = false;
+          } else {
+            let a = (lo3[k] - lo[k]) / ld[k];
+            let b = (hi3[k] - lo[k]) / ld[k];
+            if (a > b) [a, b] = [b, a];
+            t0 = Math.max(t0, a);
+            t1 = Math.min(t1, b);
+            if (t0 > t1) ok = false;
+          }
+        }
+        // Starting inside a car (Jay pressed against it): leave it to the static test.
+        if (ok && t0 > 0 && (best === null || t0 < best)) best = t0;
+      }
+      return best;
+    }
+
     update(dt, player) {
       if (player.inVehicle) {
         this._inCar = true;
@@ -195,7 +236,10 @@
         // Leg 2: shoulder → back along the view direction.
         const hit = this.physics.raycast(shoulder.x, shoulder.y, shoulder.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
           { inflate: 0.2, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
-        const allowed = hit ? Math.max(0.3, hit.t - 0.15) : dist;
+        let allowed = hit ? Math.max(0.3, hit.t - 0.15) : dist;
+        // Cars aren't in the static world: keep the camera out of a parked van behind Jay.
+        const carT = this._carHit(shoulder, -fwd.x, -fwd.y, -fwd.z, allowed + 0.3, player);
+        if (carT !== null) allowed = Math.max(0.3, carT - 0.25);
         if (allowed < this.curDist) this.curDist = allowed;
         else this.curDist = damp(this.curDist, allowed, 4.5, dt);
 

@@ -2089,6 +2089,31 @@ body.driving .hud-hints {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ---------------------------------------------------------------- layout
+ * Things that share a corner make room for each other. */
+/* Toasts drop below the objective line instead of printing over it. */
+body.has-objtext .hud-toast {
+  top: 5.6rem;
+}
+/* Radio captions use the right-hand side: the checklist steps aside meanwhile. */
+body.radio-on .hud-hints {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+/* The weapon panel sits where the checklist starts: the checklist moves down. */
+body.armed .hud-hints {
+  top: 11.6rem;
+}
+/* Notifications stop above the radar (on short screens fewer cards fit). */
+.hud-notify-stack {
+  max-height: calc(100vh - 8.6rem - 14rem - 3.4rem);
+  overflow: hidden;
+}
+/* Driving: the district name goes above the speedometer, not across it. */
+body.driving .hud-banner {
+  bottom: 15rem;
+}
 </style>
   <style data-src="css/menus.css">
 /*
@@ -3255,13 +3280,35 @@ body.cutscene .mm-radar {
 
 /* Police radio */
 .dlg-radio {
+  /* Bottom right, above the speedometer and the district name: the left
+     side is the notifications and the radar. */
   position: absolute;
-  left: 1.8rem;
-  top: 30%;
+  right: 1.8rem;
+  bottom: 21rem;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 0.4rem;
-  width: min(420px, 40vw);
+  width: min(400px, 36vw);
+}
+
+/* On the right-hand side, the captions mirror: edge on the right, sliding in from it. */
+.dlg-radio .dlg-radio-line {
+  border-left: 0;
+  border-right: 3px solid #56b4ff;
+  background: linear-gradient(270deg, rgba(10, 22, 48, 0.82), rgba(10, 22, 48, 0.3));
+  text-align: right;
+  align-items: flex-end;
+  transform: translateX(12px);
+}
+
+@media (max-height: 650px) {
+  .dlg-radio {
+    bottom: 19.5rem;
+  }
+  .dlg-radio-line:nth-child(n + 3) {
+    display: none;
+  }
 }
 
 .dlg-radio-line {
@@ -11766,7 +11813,9 @@ void main() {
       const tmp = {};
       for (const r of this.roads) {
         const along = r.axis === 'z' ? z : x;
-        if (along < r.from - 5 || along > r.to + 5) continue;
+        // (A long reach also finds the end of a road that stops short of the point.)
+        const pastEnd = Math.max(5, far);
+        if (along < r.from - pastEnd || along > r.to + pastEnd) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) > r.width / 2 + far) continue;
         for (const dir of [1, -1]) {
@@ -13420,6 +13469,8 @@ void main() {
     return geo;
   }
 
+  const ZERO_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+
   function treeGeometry(seed) {
     const rng = new VH.RNG(seed);
     const b = new VH.GeometryBuilder();
@@ -13607,11 +13658,11 @@ void main() {
       },
       tree: {
         parts: [{ geo: treeGeometry(5), mat: M.foliage, depth: M.foliageDepth, shadow: true }],
-        collider: { r: 0.3, h: 3 }, maxDistance: 650,
+        collider: { r: 0.3, h: 3 }, maxDistance: 650, canopy: true,
       },
       treeB: {
         parts: [{ geo: treeGeometry(77), mat: M.foliage, depth: M.foliageDepth, shadow: true }],
-        collider: { r: 0.3, h: 3 }, maxDistance: 650,
+        collider: { r: 0.3, h: 3 }, maxDistance: 650, canopy: true,
       },
       bench: {
         parts: [{ geo: benchGeometry(), mat: M.propMatte, shadow: true }],
@@ -13663,6 +13714,7 @@ void main() {
       this.meshes = []; // { mesh, type, center, radius }
       this.signalLamps = []; // { mesh, entries: [{index, group, color}] }
       this.batches = new Map(); // "chunk|type" → the InstancedMeshes drawing it
+      this.canopies = []; // street trees, hidden while the camera is in their leaves
       this.count = 0;
       this._cullTimer = 0;
     }
@@ -13746,6 +13798,7 @@ void main() {
               sc.set(it.s, it.s, it.s);
               m.compose(p, q, sc);
               mesh.setMatrixAt(i, m);
+              if (def.canopy) this.canopies.push({ mesh, i, x: it.x, y: it.y, z: it.z, s: it.s, mat: m.clone(), hidden: false });
             });
             mesh.instanceMatrix.needsUpdate = true;
             mesh.castShadow = !!part.shadow;
@@ -13808,7 +13861,34 @@ void main() {
     }
 
     /** Hide batches that are further away than their type's draw distance. */
+    /**
+     * A tree whose leaves the camera is inside is hidden (otherwise the whole
+     * screen goes dark green next to a street tree). The canopy is roughly
+     * an ellipsoid 3.8 m wide and 2.9 m tall around 4.7 m up, times the scale.
+     */
+    _cullCanopies(c) {
+      let changed = null;
+      for (const t of this.canopies) {
+        const dx = c.x - t.x;
+        const dz = c.z - t.z;
+        const R = 4.2 * t.s;
+        let inside = false;
+        if (Math.abs(dx) < R && Math.abs(dz) < R) {
+          const dy = c.y - (t.y + 4.7 * t.s);
+          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (3.3 * t.s * 3.3 * t.s);
+          inside = k < (t.hidden ? 1.15 : 1);
+        }
+        if (inside === t.hidden) continue;
+        t.hidden = inside;
+        t.mesh.setMatrixAt(t.i, inside ? ZERO_MATRIX : t.mat);
+        t.mesh.instanceMatrix.needsUpdate = true;
+        changed = true;
+      }
+      return changed;
+    }
+
     update(dt, camPos) {
+      if (this.canopies.length) this._cullCanopies(camPos);
       this._cullTimer -= dt;
       if (this._cullTimer > 0) return;
       this._cullTimer = 0.25;
@@ -15149,14 +15229,18 @@ void main() {
     for (const [x0, z0, x1, z1] of yards) apron(world, x0, z0, x1, z1, 0xb0aea8);
     for (const [fx, fz] of [[60, 448], [136, 448], [212, 448], [145, 500], [145, 552]]) floodMast(world, fx, fz, 26);
     // Kerbside lamps along the dock roads.
+    // (Not where a cross street runs through the kerb line.)
+    const lamp = (x, z, yaw, axis) => {
+      if (!world.onRoad(x, z, 1, axis)) world.addProp('streetlight', x, 0, z, yaw, 1);
+    };
     for (let x = 20; x < 405; x += 32) {
-      world.addProp('streetlight', x, 0, 461.3, Math.PI, 1);
-      world.addProp('streetlight', x + 16, 0, 478.7, 0, 1);
-      world.addProp('streetlight', x, 0, 572.3, Math.PI, 1);
+      lamp(x, 461.3, Math.PI, 'x');
+      lamp(x + 16, 478.7, 0, 'x');
+      lamp(x, 572.3, Math.PI, 'x');
     }
     for (let z = 400; z < 620; z += 34) {
-      world.addProp('streetlight', 280.3, 0, z, Math.PI / 2, 1);
-      world.addProp('streetlight', 295.7, 0, z + 17, -Math.PI / 2, 1);
+      lamp(280.3, z, Math.PI / 2, 'z');
+      lamp(295.7, z + 17, -Math.PI / 2, 'z');
     }
 
     // Yard A: Saltmarsh Freight sheds.
@@ -15275,9 +15359,10 @@ void main() {
     }
     // Lamps along Crestline Drive.
     for (let z = -370; z < 375; z += 30) {
-      world.addProp('streetlight', -502.3, 0, z, Math.PI / 2, 1);
-      world.addProp('streetlight', -517.7, 0, z + 15, -Math.PI / 2, 1);
-      if (Math.abs(z) % 60 < 30) world.addProp('palmTall', -510, 0, z + 7, z, 1);
+      if (!world.onRoad(-502.3, z, 1, 'z')) world.addProp('streetlight', -502.3, 0, z, Math.PI / 2, 1);
+      if (!world.onRoad(-517.7, z + 15, 1, 'z')) world.addProp('streetlight', -517.7, 0, z + 15, -Math.PI / 2, 1);
+      // Median palms, but not in a junction.
+      if (Math.abs(z) % 60 < 30 && !world.onRoad(-510, z + 7, 4, 'z')) world.addProp('palmTall', -510, 0, z + 7, z, 1);
     }
     // Barriers at the dead ends.
     for (const z of [-379, 379]) for (let x = -515; x <= -505; x += 3.4) world.addProp('barrier', x, 0, z, 0, 1);
@@ -15978,6 +16063,23 @@ void main() {
       }
     }
 
+    /**
+     * Is (x, z) on a carriageway (widened by `margin`)? `skipAxis` leaves out
+     * roads running that way: a lamp at the kerb of an x-running road only
+     * cares about the cross streets it might stand in.
+     */
+    onRoad(x, z, margin, skipAxis) {
+      const m = margin || 0;
+      for (const r of this.layout.roads) {
+        if (skipAxis && r.axis === skipAxis) continue;
+        const along = r.axis === 'z' ? z : x;
+        if (along < r.from - m || along > r.to + m) continue;
+        const across = r.axis === 'z' ? x - r.coord : z - r.coord;
+        if (Math.abs(across) < r.width / 2 + m) return true;
+      }
+      return false;
+    }
+
     _buildOutskirtsTrees(layout) {
       const rng = new VH.RNG('outskirts-trees');
       const b = layout.config.bounds;
@@ -15988,8 +16090,9 @@ void main() {
         const z = rng.range(b.minZ + 4, b.maxZ - 4);
         if (Math.abs(x) < edge && Math.abs(z) < edge) continue;
         if (x > 380) continue;
-        // Keep clear of the roads leading out of town.
+        // Keep clear of the roads leading out of town, and of every other road.
         if (Math.abs(x) < 20 || Math.abs(z) < 16) continue;
+        if (this.onRoad(x, z, 3)) continue;
         const type = rng.chance(0.7) ? (rng.chance(0.5) ? 'tree' : 'treeB') : 'palm';
         this.addProp(type, x, 0, z, rng.range(0, 6.28), rng.range(0.8, 1.35));
         placed++;
@@ -17685,7 +17788,7 @@ void main() {
         a.visible = dist < 115 && (dist < 12 || game.isVisible(a.pos.x, a.pos.y + 1, a.pos.z, 1.2)) && !a.hidden;
         if (a.visible) this._animate(a, dt, dist);
       }
-      this._separate();
+      this._separate(dt);
       if (player && !player.inVehicle) this._scareNearCars();
       this.renderer.draw(this.agents);
     }
@@ -17774,7 +17877,7 @@ void main() {
       }
     }
 
-    _separate() {
+    _separate(dt) {
       // Cheap pairwise push between people close to each other (and to Jay).
       const grid = this._grid;
       grid.clear();
@@ -17798,6 +17901,20 @@ void main() {
               const dx = b.pos.x - a.pos.x;
               const dz = b.pos.z - a.pos.z;
               const d2 = dx * dx + dz * dz;
+              if (d2 < 4.84 && d2 > 1e-6 && dt && a.moveSpeed > 0.3 && b.moveSpeed > 0.3) {
+                // Walking at each other: both keep to their right and pass,
+                // instead of locking face to face and shuffling along as one.
+                const fax = Math.sin(a.heading);
+                const faz = Math.cos(a.heading);
+                const facing = fax * Math.sin(b.heading) + faz * Math.cos(b.heading);
+                if (facing < -0.5 && fax * dx + faz * dz > 0) {
+                  const step = 1.1 * dt;
+                  a.pos.x -= Math.cos(a.heading) * step;
+                  a.pos.z += Math.sin(a.heading) * step;
+                  b.pos.x -= Math.cos(b.heading) * step;
+                  b.pos.z += Math.sin(b.heading) * step;
+                }
+              }
               if (d2 > 0.36 || d2 < 1e-6) continue;
               const d = Math.sqrt(d2);
               const push = (0.6 - d) * 0.5;
@@ -18779,6 +18896,7 @@ void main() {
 
   class CameraRig {
     constructor(camera, physics, settings, input) {
+      this.vehicles = null; // set by the game: the camera keeps out of cars
       this.camera = camera;
       this.physics = physics;
       this.settings = settings;
@@ -18871,6 +18989,46 @@ void main() {
     }
 
     /** Place the camera for this frame. `player` is drawn at player.renderPos. */
+    /** Nearest hit of a ray with any car near it (each car a box, slightly inflated), or null. */
+    _carHit(o, dx, dy, dz, maxT, player) {
+      const list = this.vehicles && this.vehicles.list;
+      if (!list) return null;
+      let best = null;
+      const pad = 0.2;
+      for (const v of list) {
+        if (v.removed || v === player.vehicle) continue;
+        const ox = o.x - v.pos.x;
+        const oz = o.z - v.pos.z;
+        const reach = maxT + v.hz + 1;
+        if (ox * ox + oz * oz > reach * reach) continue;
+        // Into the car's frame: right = (cos yaw, -sin yaw), forward = (sin yaw, cos yaw).
+        const c = Math.cos(v.yaw);
+        const sn = Math.sin(v.yaw);
+        const lo = [ox * c - oz * sn, o.y - v.pos.y, ox * sn + oz * c];
+        const ld = [dx * c - dz * sn, dy, dx * sn + dz * c];
+        const lo3 = [-v.hx - pad, -pad, -v.hz - pad];
+        const hi3 = [v.hx + pad, (v.height || 1.5) + pad, v.hz + pad];
+        let t0 = 0;
+        let t1 = maxT;
+        let ok = true;
+        for (let k = 0; k < 3 && ok; k++) {
+          if (Math.abs(ld[k]) < 1e-6) {
+            if (lo[k] < lo3[k] || lo[k] > hi3[k]) ok = false;
+          } else {
+            let a = (lo3[k] - lo[k]) / ld[k];
+            let b = (hi3[k] - lo[k]) / ld[k];
+            if (a > b) [a, b] = [b, a];
+            t0 = Math.max(t0, a);
+            t1 = Math.min(t1, b);
+            if (t0 > t1) ok = false;
+          }
+        }
+        // Starting inside a car (Jay pressed against it): leave it to the static test.
+        if (ok && t0 > 0 && (best === null || t0 < best)) best = t0;
+      }
+      return best;
+    }
+
     update(dt, player) {
       if (player.inVehicle) {
         this._inCar = true;
@@ -18941,7 +19099,10 @@ void main() {
         // Leg 2: shoulder → back along the view direction.
         const hit = this.physics.raycast(shoulder.x, shoulder.y, shoulder.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
           { inflate: 0.2, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
-        const allowed = hit ? Math.max(0.3, hit.t - 0.15) : dist;
+        let allowed = hit ? Math.max(0.3, hit.t - 0.15) : dist;
+        // Cars aren't in the static world: keep the camera out of a parked van behind Jay.
+        const carT = this._carHit(shoulder, -fwd.x, -fwd.y, -fwd.z, allowed + 0.3, player);
+        if (carT !== null) allowed = Math.max(0.3, carT - 0.25);
         if (allowed < this.curDist) this.curDist = allowed;
         else this.curDist = damp(this.curDist, allowed, 4.5, dt);
 
@@ -24777,7 +24938,7 @@ void main() {
     }
   }
 
-  // 6. Mesa Hauler: pickup with an open bed.
+  // 6. Mesa: pickup with an open bed.
   (function () {
     const gh = greenhouse({ zb: 0.95, yb: 1.28, top: [0.25, 1.86], mid: [-0.3, 1.88, 0.2], rear: [-0.78, 1.87], base: [-0.84, 1.32], bot: 1.2, r: [0.03, 0.14, 0.06, 0.02], baseOut: 0.02 });
     DEFS.mesa = {
@@ -25200,7 +25361,7 @@ void main() {
     pipit: ['Pipit', 'Kobo', 'compact', 1050, 46, 0.4, 0.56, 4, [0xf2c61f, 0x9fe0c4, 0xc8202a, 0x78b8e8, 0xf2f2ee]],
     ironclad: ['Ironclad 68', 'Dunmore', 'muscle', 1650, 66, 0.8, 0.5, 4, [0x0e0e10, 0xa8101c, 0x3b1558, 0xd29a1c]],
     porter: ['Porter', 'Hask', 'van', 2400, 40, 0.22, 0.42, 2, [0xf1f1ee, 0xb9bcbf, 0x6b4a32]],
-    mesa: ['Mesa Hauler', 'Dunmore', 'pickup', 2150, 50, 0.45, 0.5, 4, [0xa8161c, 0x1f3a26, 0xb59a70, 0x111214]],
+    mesa: ['Mesa', 'Dunmore', 'pickup', 2150, 50, 0.45, 0.5, 4, [0xa8161c, 0x1f3a26, 0xb59a70, 0x111214]],
     cab: ['Halcyon Cab', 'Merrow', 'taxi', 1520, 52, 0.45, 0.56, 4, [0xf5b800]],
     interceptor: ['Halcyon Interceptor', 'Merrow', 'police', 1620, 64, 0.72, 0.68, 4, [0x0d0e10]],
     zephyr: ['Zephyr RS', 'Aurel', 'sports', 1350, 72, 1.0, 0.95, 2, [0xe8e6e0, 0x1a1c20, 0xd4ff1e, 0x2a55d8, 0xb81c1c]],
@@ -26032,6 +26193,14 @@ void main() {
       void kind;
     }
 
+    /** Good as new (a respawn hands Jay his car back fixed). Not for wrecks. */
+    repair() {
+      if (this.wrecked) return;
+      this.health = 1000;
+      this.burning = 0;
+      this.model.setDamage(0);
+    }
+
     explode() {
       if (this.wrecked) return;
       this.wrecked = true;
@@ -26411,7 +26580,7 @@ void main() {
       v.lastContact = this.time;
       if (speed < 1.2 && (slide || 0) < 3) return;
       if (speed > 5.5) {
-        const mul = v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1;
+        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (v.plow ? 0.15 : 1);
         v.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), other && other.driver === 'player' ? 'player' : other ? other : null, 'crash');
         v.wake();
       }
@@ -26454,8 +26623,14 @@ void main() {
 
     _resolvePair(a, b, r) {
       // Parked cars are heavy until hit (so they don't drift), then fully dynamic.
-      const ma = a.mass;
-      const mb = b.mass;
+      // A plough (a mission car that must get through) counts as six times as
+      // heavy as whatever it meets, so it shoves cars aside and keeps going.
+      const fa = a.plow && !b.plow && b.driver !== 'player' ? 6 : 1;
+      const fb = b.plow && !a.plow && a.driver !== 'player' ? 6 : 1;
+      const ma = a.mass * fa;
+      const mb = b.mass * fb;
+      const ia = a.inertia * fa;
+      const ib = b.inertia * fb;
       const total = ma + mb;
       a.pos.x += r.nx * r.depth * (mb / total);
       a.pos.z += r.nz * r.depth * (mb / total);
@@ -26477,36 +26652,47 @@ void main() {
       b.wake();
       const rna = raz * r.nx - rax * r.nz;
       const rnb = rbz * r.nx - rbx * r.nz;
-      const k = 1 / ma + 1 / mb + (rna * rna) / a.inertia + (rnb * rnb) / b.inertia;
+      const k = 1 / ma + 1 / mb + (rna * rna) / ia + (rnb * rnb) / ib;
       const e = 0.22;
       const j = (-(1 + e) * vn) / k;
       a.vel.x += (r.nx * j) / ma;
       a.vel.z += (r.nz * j) / ma;
       b.vel.x -= (r.nx * j) / mb;
       b.vel.z -= (r.nz * j) / mb;
-      a.omega += (rna * j) / a.inertia;
-      b.omega -= (rnb * j) / b.inertia;
+      a.omega += (rna * j) / ia;
+      b.omega -= (rnb * j) / ib;
       // Friction.
       const tx = -r.nz;
       const tz = r.nx;
       const vt = rvx * tx + rvz * tz;
       const rta = raz * tx - rax * tz;
       const rtb = rbz * tx - rbx * tz;
-      const kt = 1 / ma + 1 / mb + (rta * rta) / a.inertia + (rtb * rtb) / b.inertia;
+      const kt = 1 / ma + 1 / mb + (rta * rta) / ia + (rtb * rtb) / ib;
       let jt = -vt / kt;
       jt = clamp(jt, -0.4 * j, 0.4 * j);
       a.vel.x += (tx * jt) / ma;
       a.vel.z += (tz * jt) / ma;
       b.vel.x -= (tx * jt) / mb;
       b.vel.z -= (tz * jt) / mb;
-      a.omega += (rta * jt) / a.inertia;
-      b.omega -= (rtb * jt) / b.inertia;
+      a.omega += (rta * jt) / ia;
+      b.omega -= (rtb * jt) / ib;
+      // The plough also pushes the other car out of its line (to whichever side it's already on).
+      const pl = fa > 1 ? a : fb > 1 ? b : null;
+      if (pl) {
+        const other = pl === a ? b : a;
+        const rx = Math.cos(pl.yaw);
+        const rz = -Math.sin(pl.yaw);
+        const side = (other.pos.x - pl.pos.x) * rx + (other.pos.z - pl.pos.z) * rz >= 0 ? 1 : -1;
+        other.vel.x += rx * side * 2.4 + Math.sin(pl.yaw) * 1.2;
+        other.vel.z += rz * side * 2.4 + Math.cos(pl.yaw) * 1.2;
+        other.wake();
+      }
       const speed = -vn;
       if (a.controller && a.controller.onBump) a.controller.onBump(a, b, speed);
       if (b.controller && b.controller.onBump) b.controller.onBump(b, a, speed);
       this._impact(a, b, speed, r.px, a.pos.y + 0.6, r.pz, r.nx, r.nz, Math.abs(vt));
       if (speed > 5.5) {
-        const mul = b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1;
+        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (b.plow ? 0.15 : 1);
         b.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), a.driver === 'player' ? 'player' : a, 'crash');
       }
       b.lastContact = this.time;
@@ -26725,6 +26911,10 @@ void main() {
       v.input.handbrake = fast ? 0 : 1;
       v.horn = false;
       v.role = 'abandoned';
+      // Kept only while a job needs it (or it's a reward); otherwise it streams
+      // out like any other abandoned car once Jay is far away (the last one he
+      // drove is still kept by the traffic system).
+      v.persistent = !!(v.missionOwned || v.keep);
       p.state = 'ground';
       p.model.setVisible(true);
       p.teleport(spot.x, spot.z, v.yaw + (fast ? 0 : Math.PI / 2), spot.y);
@@ -26903,6 +27093,10 @@ void main() {
       this.maxSpeed = opts.maxSpeed || null;
       this.aggressive = !!opts.aggressive;
       this.ignoreRed = !!opts.ignoreRed;
+      // A plough (the van Jay tails, a car fleeing him) never queues: it runs
+      // the lights, swerves round anything stopped and shoves through the rest.
+      this.plow = !!opts.plow;
+      if (this.plow) this.ignoreRed = true;
     }
 
     /** Start on a lane position { road, dir, lane, along }. */
@@ -26917,9 +27111,9 @@ void main() {
       this._fill();
     }
 
-    /** Re-acquire the nearest lane (after being knocked off the road). */
-    reacquire(v) {
-      const lp = this.net.nearestLane(v.pos.x, v.pos.z, v.yaw);
+    /** Re-acquire the nearest lane (after being knocked off the road); reach: how far to look. */
+    reacquire(v, reach) {
+      const lp = this.net.nearestLane(v.pos.x, v.pos.z, v.yaw, reach);
       if (!lp) return false;
       // Start a little ahead so the target isn't behind us.
       lp.along = clamp(lp.along + lp.dir * 4, lp.road.from, lp.road.to);
@@ -27015,8 +27209,11 @@ void main() {
 
     update(v, dt) {
       if (!this.pieces.length) {
-        if (!this.reacquire(v)) {
-          v.input.accel = -0.5;
+        if (!this.reacquire(v, 80)) {
+          // Nowhere near a road at all: sit still rather than reverse forever.
+          v.input.accel = 0;
+          v.input.steer = 0;
+          v.input.handbrake = 1;
           return;
         }
       }
@@ -27041,14 +27238,21 @@ void main() {
       const here = RoadNet().pointOn(p, this.t, this._tmp || (this._tmp = {}));
       const off = Math.hypot(here.x - v.pos.x, here.z - v.pos.z);
       if (off > 9) {
-        this.reacquire(v);
+        this._rejoin(v, dt);
         return;
       }
+      this._rejoinT = 0;
 
       // Steering: pure pursuit on a point ahead.
       const speed = Math.max(0, v.vF);
       const look = 3.2 + speed * 0.5;
       const target = this._ahead(look, this._tmp2 || (this._tmp2 = {}));
+      const by = this._bypassStep(v, dt);
+      if (by) {
+        // Round a stopped car: aim a lane-width to the side of the path.
+        target.x += Math.cos(target.heading) * by;
+        target.z -= Math.sin(target.heading) * by;
+      }
       const l = v.worldToLocal(target.x, target.z, this._tmp3 || (this._tmp3 = {}));
       const d2 = l.x * l.x + l.z * l.z;
       const curvature = d2 > 0.01 ? (2 * l.x) / d2 : 0;
@@ -27059,6 +27263,7 @@ void main() {
       // Speed: the limit, slowing for bends and red lights, and IDM behind whatever is ahead.
       let desired = p.limit * this.speedMul;
       if (this.maxSpeed) desired = Math.min(desired, this.maxSpeed);
+      if (this._bypass) desired = Math.min(desired, 7);
       const next = this.pieces[1];
       const distToEnd = (1 - this.t) * p.length;
       if (next && next.type === 'curve') {
@@ -27085,6 +27290,11 @@ void main() {
       }
       let gap = Math.min(this._gapAhead, stopDist);
       const vLead = this._gapAhead <= stopDist ? this._speedAhead : 0;
+      if (this.plow) {
+        // Barge on at a shoving pace into whatever is ahead instead of waiting behind it.
+        if (this._gapAhead < 14) desired = Math.min(desired, 9);
+        gap = Infinity;
+      }
 
       // Intelligent Driver Model.
       const a = 2.2 * (this.aggressive ? 1.6 : 1);
@@ -27111,7 +27321,7 @@ void main() {
         v.input.handbrake = 0;
         return;
       }
-      if (this._stuckT > (this._gapAhead < 8 ? 7 : 2.5)) {
+      if (this._stuckT > (this.plow ? 1.6 : this._gapAhead < 8 ? 7 : 2.5)) {
         this._stuckT = 0;
         this._reverseT = 1.4;
       }
@@ -27134,6 +27344,103 @@ void main() {
       }
     }
 
+    /**
+     * Knocked (or put down) well away from the lane: find the nearest lane
+     * going our way and drive back to it, backing out if wedged. Always
+     * writes the controls, so a car never coasts on stale pedals.
+     */
+    _rejoin(v, dt) {
+      this._rejoinT = (this._rejoinT || 0) - dt;
+      if (this._rejoinT <= 0) {
+        this._rejoinT = 0.6;
+        this.reacquire(v, 80);
+      }
+      const p = this.pieces[0];
+      if (!p) {
+        v.input.accel = 0;
+        v.input.handbrake = 1;
+        return;
+      }
+      const tgt = RoadNet().pointOn(p, Math.min(1, this.t + 0.05), this._tmp6 || (this._tmp6 = {}));
+      const l = v.worldToLocal(tgt.x, tgt.z, this._tmp3 || (this._tmp3 = {}));
+      const speed = Math.max(0, v.vF);
+      if (speed < 0.5) this._stuckT += dt;
+      else this._stuckT = 0;
+      if (this._reverseT > 0 || this._stuckT > 2.5) {
+        if (this._stuckT > 2.5) {
+          this._stuckT = 0;
+          this._reverseT = 1.3;
+        }
+        this._reverseT -= dt;
+        v.input.accel = -0.6;
+        v.input.steer = -clamp(Math.sign(l.x || 1), -1, 1);
+        v.input.handbrake = 0;
+        return;
+      }
+      const d2 = l.x * l.x + l.z * l.z;
+      v.input.steer = l.z < 1 ? Math.sign(l.x || 1) : clamp((2 * l.x * v.wheelbase) / Math.max(1, d2) / 0.35, -1, 1);
+      v.input.accel = speed > 8 ? 0 : 0.5;
+      v.input.handbrake = 0;
+      v.horn = false;
+    }
+
+    /**
+     * A car stopped in our lane that isn't going anywhere (parked, wrecked,
+     * abandoned, a finished racer, Jay's car left in the road): after a short
+     * wait, pull round it on whichever side is clear. Returns the sideways
+     * offset to steer by (0 when not bypassing).
+     */
+    _bypassStep(v, dt) {
+      const b = this._bypass;
+      if (b) {
+        b.t += dt;
+        const car = b.car;
+        const l = car.removed ? { z: -99 } : v.worldToLocal(car.pos.x, car.pos.z, this._tmp7 || (this._tmp7 = {}));
+        if (l.z < -(car.hz + v.hz + 2) || b.t > 9) b.leaving = (b.leaving || 0) + dt;
+        if (b.leaving > 1.2) {
+          this._bypass = null;
+          return 0;
+        }
+        return b.side * 3.3 * (b.leaving ? 1 - b.leaving / 1.2 : Math.min(1, b.t / 0.8));
+      }
+      const o = this._blockedBy;
+      const plow = this.plow;
+      // A plough goes round anything slow (a queue at the lights too); others only round a parked or broken-down car.
+      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
+      if (!parkedish || this._gapAhead > (plow ? 18 : 12) || v.speed > (plow ? 7 : 1.5)) {
+        this._waitT = 0;
+        return 0;
+      }
+      this._waitT = (this._waitT || 0) + dt;
+      if (this._waitT < (plow ? 0.25 : o.driver === 'player' ? 4 : 1.5)) return 0;
+      this._waitT = 0;
+      // Which side has room: no car in the way and no wall for the next 20 m.
+      const ph = this.sys.game.physics;
+      const h = v.yaw;
+      const fx = Math.sin(h), fz = Math.cos(h);
+      const lx = Math.cos(h), lz = -Math.sin(h);
+      for (const side of [1, -1]) {
+        let clear = true;
+        for (let s = 0; s <= 20 && clear; s += 4) {
+          const x = v.pos.x + fx * s + lx * side * 3.3;
+          const z = v.pos.z + fz * s + lz * side * 3.3;
+          if (ph.overlaps(x, z, 1.0, v.pos.y + 0.35, v.pos.y + 1.4)) clear = false;
+          // (A plough only minds walls: cars on that side get shoved.)
+          if (!plow) {
+            for (const c of this.sys.vehicles.list) {
+              if (c !== v && c !== o && Math.hypot(c.pos.x - x, c.pos.z - z) < 4) clear = false;
+            }
+          }
+        }
+        if (clear) {
+          this._bypass = { car: o, side, t: 0 };
+          return 0;
+        }
+      }
+      // Walls both sides: a plough just goes straight through the car.
+      return 0;
+    }
+
     /** Nearest obstacle along the path ahead: cars, Jay on foot, pedestrians on the road. */
     _senseAhead(v, speed) {
       const reach = Math.min(48, 10 + speed * 2.4);
@@ -27147,7 +27454,7 @@ void main() {
       for (let s = 2; s <= reach; s += 2.6) {
         this._ahead(s, pt);
         for (const o of list) {
-          if (o === v) continue;
+          if (o === v || (this._bypass && o === this._bypass.car)) continue;
           const dx = o.pos.x - pt.x;
           const dz = o.pos.z - pt.z;
           const r = o.hx + 1.1;
@@ -27275,6 +27582,24 @@ void main() {
       }
     }
   }
+
+  /**
+   * After everything was cleared (a respawn): fill the streets around (x, z)
+   * straight away. The screen is faded, so cars may appear in view.
+   */
+  TrafficSystem.prototype.repopulate = function (x, z) {
+    const list = this.vehicles.list;
+    const want = this.targetCount;
+    let count = list.filter((v) => v.role === 'traffic').length;
+    for (let tries = 0; tries < want * 4 && count < want; tries++) {
+      const lp = this.net.randomLanePoint(this._rng, x, z, 30, 190);
+      if (!lp) continue;
+      if (list.some((v) => Math.hypot(v.pos.x - lp.x, v.pos.z - lp.z) < 14)) continue;
+      this.spawnAt(lp);
+      count++;
+    }
+    this._timer = 0;
+  };
 
   TrafficSystem.TYPES = TRAFFIC_TYPES;
   VH.LaneDriver = LaneDriver;
@@ -31808,11 +32133,20 @@ void main() {
       const game = this.game;
       const lp = game.roadnet.nearestLane(pv.pos.x, pv.pos.z, pv.yaw);
       if (!lp) return;
-      const along = lp.along + lp.dir * (120 + pv.speed * 2);
-      if (along < lp.road.from + 20 || along > lp.road.to - 20) return;
-      const center = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
-      if (game.isVisible(center.x, 1, center.z, 6) && Math.hypot(center.x - pv.pos.x, center.z - pv.pos.z) < 90) return;
-      if (game.roadnet.junctionAt(center.x, center.z, 8)) return;
+      // Somewhere ahead that Jay can't see yet (over a rise, past a bend, or
+      // just far enough): never popping into view on a straight road.
+      let center = null;
+      const fogged = 0.75 * (game.settings.get('graphics.drawDistance') || 600); // mostly lost in the haze by here
+      for (const extra of [0, 40, 80, 120, 180]) {
+        const along = lp.along + lp.dir * (120 + pv.speed * 2 + extra);
+        if (along < lp.road.from + 20 || along > lp.road.to - 20) break;
+        const c = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
+        if (game.roadnet.junctionAt(c.x, c.z, 8)) continue;
+        if (game.isVisible(c.x, 1, c.z, 6) && this.canSee(c.x, 1.5, c.z) && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) < fogged) continue;
+        center = c;
+        break;
+      }
+      if (!center) return;
       const across = lp.road.axis === 'z' ? Math.PI / 2 : 0;
       const half = lp.road.width / 2;
       for (const off of [-half * 0.45, half * 0.45]) {
@@ -32604,10 +32938,14 @@ void main() {
       box.append(el('span', 'tag', '◉ ' + name), el('span', 'txt', this._clean(text, false)));
       this.radioBox.prepend(box);
       while (this.radioBox.children.length > 3) this.radioBox.lastChild.remove();
+      document.body.classList.add('radio-on'); // the checklist on the right steps aside
       requestAnimationFrame(() => box.classList.add('in'));
       setTimeout(() => {
         box.classList.remove('in');
-        setTimeout(() => box.remove(), 500);
+        setTimeout(() => {
+          box.remove();
+          if (!this.radioBox.children.length) document.body.classList.remove('radio-on');
+        }, 500);
       }, 5200);
       if (voiced && !this.active) this._speak('DISPATCH', text);
     }
@@ -32839,6 +33177,7 @@ void main() {
       if (!p && (kind === 'corner' || kind === 'street')) p = this._corner(h, district);
       if (!p && kind === 'beach') p = this._beach();
       if (!p && kind === 'overlook' && district === 'harborpoint') p = this._seawallBend();
+      if (!p && kind === 'park') p = this._parkCorner();
       if (!p && (kind === 'park' || kind === 'overlook')) p = this.get(h % 2 ? 'founders_park' : 'civic_plaza') && Object.assign({}, this.get(h % 2 ? 'founders_park' : 'civic_plaza'));
       if (!p && kind === 'pier') p = this._waterfront(h, 'pier');
       if (!p && kind === 'boardwalk') p = this._waterfront(h, 'boardwalk');
@@ -32974,6 +33313,24 @@ void main() {
     }
 
     /** Harbor Beach: on the sand by the bonfire (landmarks.js builds both), facing the water. */
+    /**
+     * Another park by name (Laurel Park) gets its own corner of the big green,
+     * away from Founders Park's fountain, instead of sharing its spot.
+     */
+    _parkCorner() {
+      const park = this.layout.blocks.find((b) => b.kind === 'park');
+      if (!park) return null;
+      const corners = [
+        { x: park.minX + 14, z: park.minZ + 12, yaw: 0 },
+        { x: park.maxX - 14, z: park.minZ + 12, yaw: 0 },
+        { x: park.minX + 14, z: park.maxZ - 12, yaw: Math.PI },
+        { x: park.maxX - 14, z: park.maxZ - 12, yaw: Math.PI },
+      ];
+      const taken = Array.from(this.map.values());
+      const c = corners.find((q) => !taken.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 25));
+      return c ? { x: c.x, z: c.z, yaw: c.yaw } : null;
+    }
+
     _beach() {
       const b = this.layout.waterfront.beach;
       if (!b) return null;
@@ -45516,7 +45873,7 @@ void main() {
       rhea: [['rhea', 'The silver hypercar at Heron Corner. Somebody\'s sponsor will cry. I\'ll survive.']],
       birdie: 'The shiny silver race car at the corner store. Saff\'s. Daddy says she has too many stickers anyway.' },
     { type: 'medic', color: 0xf2f2f2, place: 'mercy_general', pay: 1200,
-      reason: 'A decommissioned Medic. Not a real ambulance any more. I want the lights. Don\'t ask what for.',
+      reason: 'A decommissioned Medic One. Not a real ambulance any more. I want the lights. Don\'t ask what for.',
       lines: [
         ['dex', 'There\'s a decommissioned ambulance behind Mercy General. Not a real one any more. Nobody\'s in it, nobody needs it. I checked twice.'],
         ['jay', 'What do you want an ambulance for?'],
@@ -45538,9 +45895,9 @@ void main() {
       rhea: [['rhea', 'The black coupe at the Voss tower. Take it slowly past the lobby windows. I want them to watch.']],
       birdie: 'A black car at the big tower. Daddy says the lady writes "community" on her phone but she has never been to ours.' },
     { type: 'beater', color: 0x9fd8b8, place: 'bayview_gardens', pay: 900,
-      reason: 'A mint Beater at Bayview Gardens. An old man called me. It\'s his, it\'s stolen, and he wants it back from his grandson.',
+      reason: 'A mint Rustbucket at Bayview Gardens. An old man called me. It\'s his, it\'s stolen, and he wants it back from his grandson.',
       lines: [
-        ['dex', 'This one\'s different. Old fella called the garage. Mint-green Beater, his. His grandson took it to Bayview and won\'t give it back.'],
+        ['dex', 'This one\'s different. Old fella called the garage. Mint-green Pipit Rustbucket, his. His grandson took it to Bayview and won\'t give it back.'],
         ['dex', 'He cried on the phone, Jay. Grown man. Eighty-two. Said it was the car he drove his wife home from the hospital in. Both kids.'],
         ['jay', 'So we\'re stealing it back.'],
         ['dex', 'We\'re returning it. With extreme prejudice. Pay\'s rubbish. I don\'t care. Go.'],
@@ -45548,9 +45905,9 @@ void main() {
       rhea: [['rhea', 'An old man wants his car back from his grandson. Bayview. Mint green. This one\'s free. Don\'t tell anyone I do free.']],
       birdie: 'An old man wants his green car back. Daddy said this one is for being a good person. I said is that a real job and he said sometimes.' },
     { type: 'lowrider', color: 0xd4a017, place: 'lantern_alley', pay: 2000,
-      reason: 'Teo\'s gold Lowrider, Lantern Alley. Teo owes me for a gearbox. Teo knows. Tell Teo I said hi.',
+      reason: 'Teo\'s gold Duchess, Lantern Alley. Teo owes me for a gearbox. Teo knows. Tell Teo I said hi.',
       lines: [
-        ['dex', 'Gold lowrider in Lantern Alley. Kings\' car. Teo owes me for a gearbox, a clutch and an apology.'],
+        ['dex', 'Gold Duchess in Lantern Alley. Kings\' car. Teo owes me for a gearbox, a clutch and an apology.'],
         ['dex', 'Teo knows. Tell Teo I said hi.'],
         ['jay', 'You want me to steal a car from the Lantern Kings. On their street.'],
         ['dex', 'I want you to collect on a debt with style. If anyone can do it without getting stabbed, it\'s you. Probably.'],
@@ -45649,7 +46006,7 @@ void main() {
           ['dimples', 'Hey, if you see a bus, could you just open my door a little? For old times\' sake?'],
           ['jay', 'No.'],
         ] },
-        { leave: ['dimples'] },
+        { leave: ['dimples'], into: 'vpd_central' },
         { say: [['dimples', '(walking up the precinct steps, then a perfect stumble on the top one) Ow! These steps are a liability!']] },
       ] },
     { name: 'Veronika Stahl', reward: 6000, place: 'pruitt_house',
@@ -45682,7 +46039,7 @@ void main() {
           ['jay', 'Why are you telling me this?'],
           ['veronika', 'Because you drove past three cops without blinking, and you looked at Pruitt\'s house like you wanted to set it on fire. We\'re colleagues.'],
         ] },
-        { leave: ['veronika'] },
+        { leave: ['veronika'], into: 'vpd_central' },
       ] },
     { name: 'The Buckley Brothers', reward: 4000, place: 'crane_row',
       dossier: 'Lou and Ray Buckley, 33 and 29. Produce-truck hijackings. Bail $20,000 each. Driving a stolen box truck round Crane Row.',
@@ -45721,7 +46078,7 @@ void main() {
           ['lou_buckley', 'How long ago?'],
           ['jay', '(a beat) A while.'],
         ] },
-        { leave: ['lou_buckley', 'ray_buckley'] },
+        { leave: ['lou_buckley', 'ray_buckley'], into: 'vpd_central' },
       ] },
     { name: '"Pastor" Declan Moody', reward: 2500, place: 'st_brigid_church',
       dossier: '"Pastor" Declan Moody, 50. A fake orphans\' charity run from the steps of St. Brigid\'s. Bail $12,000. Usually found preaching to tourists.',
@@ -45754,7 +46111,7 @@ void main() {
           ['moody', 'I got a better bucket.'],
           ['moody', '(after a while) I was sorry to hear. She was the only one who ever looked me in the eye when she put money in.'],
         ] },
-        { leave: ['moody'] },
+        { leave: ['moody'], into: 'vpd_central' },
       ] },
     { name: 'Leon "The Magician" Castillo', reward: 4000, place: 'harbor_beach',
       dossier: 'Leon Castillo, 44, "the Magician". Escaped custody eleven times. Bail $25,000. Seen doing card tricks on Harbor Beach.',
@@ -45782,7 +46139,7 @@ void main() {
           ['jay', '(beat) We\'re not stopping at any red lights.'],
           ['leon', 'Then you\'ll get pulled over, and you\'ll look at the cop. Same thing. Patience.'],
         ] },
-        { leave: ['leon'] },
+        { leave: ['leon'], vanish: true },
         { say: [
           ['caption', '(The back door clicks at the lights. When Jay turns, the seat is empty. The seatbelt is still buckled.)'],
           ['jay', '...Leon? LEON.'],
@@ -45808,7 +46165,7 @@ void main() {
           ['leon', 'For the record, I\'m staying because I want to, not because of your locks. Your locks are a disgrace.'],
           ['jay', 'Noted.'],
         ] },
-        { leave: ['leon'] },
+        { leave: ['leon'], into: 'vpd_central' },
       ] },
     { name: 'Tavish Groom', reward: 5000, place: 'halberd_depot',
       dossier: 'Tavish Groom, 38. Former Halberd guard. Wanted for beating a Casa Palma tenant during an eviction. Bail $30,000. His old friends are hiding him at the depot.',
@@ -45849,7 +46206,7 @@ void main() {
           ['jay', 'No.'],
           ['tavish', '(quietly) Yeah. Okay.'],
         ] },
-        { leave: ['tavish'] },
+        { leave: ['tavish'], into: 'vpd_central' },
         { text: 'lourdes', message: 'Hector says thank you. He made you a domino set. I am keeping it until you come for dinner.' },
       ] },
     { name: 'Mona "Bumper" Kessel', reward: 3500, place: 'heron_corner',
@@ -45885,7 +46242,7 @@ void main() {
           ['mona', 'That\'s it? That\'s the secret?'],
           ['jay', 'Heart at twelve. That\'s the part you skipped.'],
         ] },
-        { leave: ['mona'] },
+        { leave: ['mona'], into: 'vpd_central' },
       ] },
     { name: 'Otis Wembley', reward: 0, place: 'bayview_gardens',
       dossier: 'Otis Wembley, 62. Pelican Home Equity\'s former loan officer. Wanted for embezzlement — he stole from Pelican. Bail $50,000. Hiding at Bayview Gardens.',
@@ -45919,7 +46276,7 @@ void main() {
               ['jay', '(after a while) It\'s still pink.'],
               ['otis', 'Good. Good. I\'m glad.'],
             ] },
-            { leave: ['otis'] },
+            { leave: ['otis'], into: 'vpd_central' },
             { reward: { money: 10000 } },
           ] },
           { label: 'Let the Foxes keep him.', flag: 'otis_free', then: [
@@ -46288,20 +46645,56 @@ void main() {
       this.t -= dt;
       const p = this.from || this.engine.game.player.pos;
       if (this.t > 0) {
-        a.heading = dampAngle(a.heading, Math.atan2(a.pos.x - p.x, a.pos.z - p.z), 5, dt);
+        // Away from the threat, but round walls: every so often pick the most
+        // open heading near "straight away" instead of sprinting into a wall.
+        this._pick = (this._pick || 0) - dt;
+        if (this._pick <= 0 || this._want === undefined) {
+          this._pick = 0.4;
+          const away = Math.atan2(a.pos.x - p.x, a.pos.z - p.z);
+          const ph = this.engine.game.physics;
+          let best = away;
+          let bestScore = -Infinity;
+          for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.1, -2.1]) {
+            const h = away + off;
+            let free = 0;
+            for (let s = 1.5; s <= 7.5; s += 1.5) {
+              if (ph.overlaps(a.pos.x + Math.sin(h) * s, a.pos.z + Math.cos(h) * s, 0.35, a.pos.y + 0.3, a.pos.y + 1.6)) break;
+              free = s;
+            }
+            const score = free * 2 - Math.abs(off) * 1.2;
+            if (score > bestScore) {
+              bestScore = score;
+              best = h;
+            }
+          }
+          this._want = best;
+        }
+        a.heading = dampAngle(a.heading, this._want, 6, dt);
         a.moveSpeed = 5;
         a.anim.sprint = true;
+      } else if (!a.persistent && this.t < -3) {
+        // Nobody needs them any more (a stood-down gang member): back to
+        // being a pedestrian, who streams out like any other.
+        a.anim.cower = 0;
+        a.anim.sprint = false;
+        a.brain = null;
+        a.walk = null;
       } else {
         a.moveSpeed = 0;
         a.anim.cower = 1;
       }
     }
+
+    expired(a, d) {
+      return !a.persistent && d > 140;
+    }
   }
 
   /** Someone who has left the crew: they walk off and fade out of the scene. */
   class LeaveBrain {
-    constructor(engine) {
+    constructor(engine, to) {
       this.engine = engine;
+      this.to = to || null; // walk in through this door (else just away from Jay)
       this.t = 0;
     }
 
@@ -46314,6 +46707,15 @@ void main() {
         return;
       }
       const p = game.player.pos;
+      if (this.to) {
+        a.heading = dampAngle(a.heading, Math.atan2(this.to.x - a.pos.x, this.to.z - a.pos.z), 3, dt);
+        a.moveSpeed = 1.5;
+        if (Math.hypot(this.to.x - a.pos.x, this.to.z - a.pos.z) < 1.6 || this.t > 30) {
+          a.hidden = true;
+          a.moveSpeed = 0;
+        }
+        return;
+      }
       a.heading = dampAngle(a.heading, Math.atan2(a.pos.x - p.x, a.pos.z - p.z), 2, dt);
       a.moveSpeed = 1.4;
       const d = Math.hypot(a.pos.x - p.x, a.pos.z - p.z);
@@ -46330,8 +46732,9 @@ void main() {
     constructor(engine, v, route) {
       this.engine = engine;
       this.game = engine.game;
-      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.4, ignoreRed: true, gap: 0.7 });
+      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.4, ignoreRed: true, gap: 0.7, plow: true });
       this.lane.maxSpeed = 31;
+      v.plow = true; // nothing in the street stops a car running from Jay
       this.route = route || null;
       this.ri = 0;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
@@ -46365,9 +46768,12 @@ void main() {
   class TourDriver {
     constructor(engine, v, dest, opts) {
       this.game = engine.game;
-      this.lane = new VH.LaneDriver(this.game.traffic, Object.assign({ speedMul: 0.95 }, opts || {}));
+      // The car Jay tails never gets stuck in a queue or behind a parked car:
+      // it ploughs through (see LaneDriver.plow).
+      this.lane = new VH.LaneDriver(this.game.traffic, Object.assign({ speedMul: 0.95, plow: true }, opts || {}));
       this.lane.destination = dest;
       this.dest = dest;
+      v.plow = true;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
     }
@@ -46414,11 +46820,35 @@ void main() {
         return;
       }
       if (this.finished) {
-        v.input.accel = v.speed > 1 ? -0.6 : 0;
+        // Over the line: ease off and cruise on with the traffic, not park in the lane.
+        if (!this._cruising) {
+          this._cruising = true;
+          this.lane.destination = null;
+          this.lane.aggressive = false;
+          this.lane.ignoreRed = false;
+          this.lane.speedMul = 0.7;
+          this.lane.maxSpeed = 14;
+        }
+        this.lane.update(v, dt);
+        v.input.boost = 0;
         return;
       }
       const cp = this.cps[this.i];
-      if (Math.hypot(cp.x - v.pos.x, cp.z - v.pos.z) < 14) {
+      const dCp = Math.hypot(cp.x - v.pos.x, cp.z - v.pos.z);
+      // Lost (knocked off line, looping a block): if the checkpoint hasn't got
+      // closer for a while, re-plan from the lane that heads its way.
+      if (this._bestD === undefined || dCp < this._bestD - 5) {
+        this._bestD = dCp;
+        this._noProgress = 0;
+      } else this._noProgress = (this._noProgress || 0) + dt;
+      if (this._noProgress > 6) {
+        this._noProgress = 0;
+        this._bestD = dCp;
+        const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, Math.atan2(cp.x - v.pos.x, cp.z - v.pos.z), 30);
+        if (lp) this.lane.initAt(lp);
+        this.lane.destination = cp;
+      }
+      if (dCp < 14) {
         this.i++;
         if (this.i >= this.cps.length) {
           this.finished = true;
@@ -46426,6 +46856,7 @@ void main() {
           return;
         }
         this.lane.destination = this.cps[this.i];
+        this._bestD = undefined;
         const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
         if (lp) this.lane.initAt(lp);
       }
@@ -46527,11 +46958,28 @@ void main() {
       this.game.scene.add(this._objArrow);
     }
 
-    _markerFor(m) {
+    _markerFor(m, taken) {
       // A chained job normally starts by itself; if that moment was missed
       // (quit, or a failed attempt) it waits at its resumeAt place instead.
-      const place = this._place(MissionEngine.selfStarting(m) ? m.resumeAt : m.start);
+      let place = this._place(MissionEngine.selfStarting(m) ? m.resumeAt : m.start);
       if (!place) return null;
+      // Two jobs starting at one place get a ring each, side by side.
+      if (taken && taken.some((t) => Math.hypot(t.x - place.x, t.z - place.z) < 4)) {
+        const ph = this.game.physics;
+        const yaw = place.yaw || 0;
+        const y = place.y || 0;
+        for (const d of [4.5, -4.5, 9, -9, 13.5, -13.5]) {
+          const x = place.x + Math.cos(yaw) * d;
+          const z = place.z - Math.sin(yaw) * d;
+          if (taken.some((t) => Math.hypot(t.x - x, t.z - z) < 4)) continue;
+          const gh = ph.groundHeight(x, z, y + 1);
+          if (Math.abs(gh - y) > 0.8 && !(y === 0 && gh < 0.8)) continue;
+          if (ph.overlaps(x, z, 0.6, gh + 0.3, gh + 1.8)) continue;
+          place = Object.assign({}, place, { x, z });
+          break;
+        }
+      }
+      if (taken) taken.push(place);
       const color = m._main ? new THREE.Color(3, 1.3, 0.35) : new THREE.Color(0.4, 1.6, 3);
       const g = new THREE.Group();
       const ring = new THREE.Mesh(this._ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -46556,9 +47004,12 @@ void main() {
       this.game.interaction.items = this.game.interaction.items.filter((it) => it.kind !== 'mission');
       this.markers = [];
       if (this.run) return;
-      for (const m of this.available()) {
+      const taken = [];
+      // Story jobs first, so they keep the spot and the side job moves over.
+      const list = this.available().slice().sort((a, b) => (b._main ? 1 : 0) - (a._main ? 1 : 0));
+      for (const m of list) {
         if (MissionEngine.selfStarting(m) && (!m.resumeAt || this._chainPending === m.id)) continue;
-        const mk = this._markerFor(m);
+        const mk = this._markerFor(m, taken);
         if (mk) this.markers.push(mk);
       }
     }
@@ -46566,7 +47017,7 @@ void main() {
     /** Minimap blips for jobs and the current objective. */
     blips(out) {
       if (!this.run) {
-        for (const mk of this.markers) out.push({ x: mk.place.x, z: mk.place.z, type: mk.m._main ? 'mission' : 'challenge', label: mk.m.title });
+        for (const mk of this.markers) out.push({ x: mk.place.x, z: mk.place.z, type: mk.m._main ? 'mission' : mk.m.giver === 'race' ? 'race' : 'challenge', label: mk.m.title });
         return;
       }
       const r = this.run;
@@ -46701,7 +47152,7 @@ void main() {
           for (const id of [].concat(step.join)) this._join(id, run, step.weapon);
           return;
         case 'leave':
-          for (const id of [].concat(step.leave)) this._leave(id, run);
+          for (const id of [].concat(step.leave)) this._leave(id, run, step);
           return;
         case 'protect':
           for (const id of [].concat(step.protect)) run.protect.add(id);
@@ -47023,15 +47474,25 @@ void main() {
       }
     }
 
-    _leave(id, run) {
+    /**
+     * Someone leaves the job. { vanish: true } is gone at once (a disappearing
+     * act); { into: place } walks to that place's door and goes inside (a
+     * prisoner handed in); otherwise they get out and stroll off.
+     */
+    _leave(id, run, opts) {
       const a = run.actors.get(id);
       run.crew = run.crew.filter((c) => c !== id);
       if (!a) return;
+      if (opts && opts.vanish) {
+        this._retire(id, run);
+        return;
+      }
       if (a.inCar) {
         const car = a.inCar;
         a.brain._getOut && a.brain._getOut(a, car);
       }
-      a.brain = new LeaveBrain(this);
+      const into = opts && opts.into ? this._place(opts.into) : null;
+      a.brain = new LeaveBrain(this, into && (into.door || into));
       a.faction = 'story';
       a.damageScale = 0;
       a.leaving = true;
@@ -47048,9 +47509,19 @@ void main() {
       // Put it on the nearest lane (or kerbside) unless the place says otherwise.
       let kerb = false;
       if (!step.exact) {
-        const lp = game.roadnet.nearestLane(x, z);
-        if (lp && lp.dist < 40) {
-          const pk = this._kerbPoint(lp);
+        // A car the job will hand to an AI driver (a chase, a tail) starts in a
+        // lane, even from a yard or a quay, so it can drive off at once.
+        const driven = this._drivenLater(run, step.spawnCar);
+        const lp = game.roadnet.nearestLane(x, z, undefined, driven ? 100 : undefined);
+        if (lp && lp.dist < (driven ? 100 : 40)) {
+          let pk = this._kerbPoint(lp);
+          if (driven) {
+            // In the lane, facing the way with more road ahead (not into a dead end).
+            const r = lp.road;
+            const ahead = lp.dir > 0 ? r.to - lp.along : lp.along - r.from;
+            const dir = ahead < 80 ? -lp.dir : lp.dir;
+            pk = game.roadnet.lanePoint(r, dir, lp.lane, Math.min(r.to - 6, Math.max(r.from + 6, lp.along)), {});
+          }
           x = pk.x;
           z = pk.z;
           heading = pk.heading;
@@ -47084,6 +47555,14 @@ void main() {
       return v;
     }
 
+    /** Does a later step of this job give car `id` an AI driver? */
+    _drivenLater(run, id) {
+      const walk = (list) => (list || []).some((st) => st && typeof st === 'object' && (st.chase === id || st.follow === id ||
+        (st.spawn || []).some((e) => e && e.car === id && e.behavior === 'drive') ||
+        ['steps', 'then', 'else', 'branch'].some((k) => Array.isArray(st[k]) && walk(st[k]))));
+      return !!(id && run && run.m && walk(run.m.steps));
+    }
+
     _kerbPoint(lp) {
       const pk = lp.road.parking ? this.game.roadnet.parkingPoint(lp.road, lp.dir, lp.along) : lp;
       return { x: pk.x, z: pk.z, heading: pk.heading };
@@ -47091,14 +47570,15 @@ void main() {
 
     // ------------------------------------------------------- placement
     /** Can a car stand here: on the street (not a roof, the sand or the bay), clear of walls and other cars? */
-    _carFits(x, z, heading) {
+    _carFits(x, z, heading, clearance) {
       const ph = this.game.physics;
       const g = ph.groundHeight(x, z, 50);
       if (g > 0.8 || g < -0.1) return false;
       const fx = Math.sin(heading);
       const fz = Math.cos(heading);
       for (const k of [-1.7, 0, 1.7]) if (ph.overlaps(x + fx * k, z + fz * k, 1.05, g + 0.35, g + 1.5)) return false;
-      return !this.game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < 5.6);
+      const c = clearance || 5.6;
+      return !this.game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < c);
     }
 
     /**
@@ -47576,6 +48056,7 @@ void main() {
       const waves = step.waves || [];
       let t = 0;
       const spawned = new Set();
+      const mine = []; // this step's waves (other enemies in the job may still have work to do)
       this._objective(step.objective || 'Hold out');
       this._track(() => this._nearestOf(run.targets));
       run.timer = { left: step.survive };
@@ -47586,17 +48067,21 @@ void main() {
           if (spawned.has(i) || t < (w.delay || 0)) return;
           spawned.add(i);
           const place = this._place(w.at) || game.player.pos;
-          const floor = this._floorOf(place);
+          // Waves arrive from out of sight, 25–45 m out, then close in.
+          const from = this._waveSpot(place);
+          const taken = [];
           for (let k = 0; k < (w.count || 3); k++) {
             const ang = Math.random() * Math.PI * 2;
-            const r = 2 + Math.random() * 4;
-            const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor);
+            const r = 1.5 + Math.random() * 3;
+            const s = this._standSpot(from.x + Math.cos(ang) * r, from.z + Math.sin(ang) * r, from.y, taken, 6);
+            taken.push(s);
             const a = game.combat.spawnEnemy(s.x, s.z, {
               look: this.factionLook(w.faction || 'gang', k), faction: w.faction || 'gang', weapon: w.weapon || 'pistol', alert: true, accuracy: w.accuracy,
             });
             a.pos.y = s.y;
             a.missionHostile = true;
             run.targets.push(a);
+            mine.push(a);
           }
         });
         run.timer.left = Math.max(0, step.survive - t);
@@ -47604,6 +48089,37 @@ void main() {
       }, run, 0);
       game.hud.setMissionTimer(null);
       run.timer = null;
+      this._standDown(run, mine);
+    }
+
+    /** Where a wave comes from: 25–45 m out, on the same level, somewhere Jay can't see it appear. */
+    _waveSpot(place) {
+      const game = this.game;
+      const floor = this._floorOf(place);
+      let fallback = null;
+      for (let k = 0; k < 16; k++) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = 25 + Math.random() * 20;
+        const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor, null, 4);
+        if (Math.abs(s.y - floor) > 1.2 || Math.hypot(s.x - place.x, s.z - place.z) < 18) continue;
+        if (!game.isVisible(s.x, s.y + 1, s.z, 1.2)) return s;
+        fallback = fallback || s;
+      }
+      return fallback || this._standSpot(place.x + 25, place.z, floor, null, 10);
+    }
+
+    /** The fight is over: whoever is left of the attackers (list, or all of them) gives up and runs, and stops counting as a mission enemy. */
+    _standDown(run, list) {
+      const who = list || run.targets || [];
+      for (const a of who) {
+        if (a.dead || a.removed) continue;
+        a.missionHostile = false;
+        a.persistent = false;
+        if (a.brain && a.brain.hostile !== undefined) a.brain.hostile = false;
+        a.faction = 'civilian';
+        a.brain = new FleeBrain(this, this.game.player.pos, 10);
+      }
+      run.targets = list ? (run.targets || []).filter((a) => !list.includes(a)) : [];
     }
 
     async _chase(step, run) {
@@ -47694,13 +48210,34 @@ void main() {
       const rivals = [];
       const v0 = p.vehicle;
       const base = v0 ? { x: v0.pos.x, z: v0.pos.z, yaw: v0.yaw } : { x: p.pos.x, z: p.pos.z, yaw: p.heading };
+      // The grid is on the lanes going the race's way (two abreast where there
+      // are two, else single file), behind the line: a rival put off the road
+      // or on the oncoming side would never get going.
+      const lp0 = game.roadnet.nearestLane(base.x, base.z, base.yaw, 30);
       (r.rivals || []).forEach((rv, i) => {
-        const side = (i % 2 ? -1 : 1) * 3.4;
-        const back = Math.floor(i / 2) * 7 + (i % 2 ? 0 : 3.5);
-        const x = base.x + Math.cos(base.yaw) * side - Math.sin(base.yaw) * back;
-        const z = base.z - Math.sin(base.yaw) * side - Math.cos(base.yaw) * back;
+        let x;
+        let z;
+        let yaw = base.yaw;
+        if (lp0) {
+          const two = lp0.road.lanesPerDirection > 1;
+          const other = lp0.lane === 0 ? 1 : 0;
+          const lane = two && i % 2 === 0 ? other : lp0.lane;
+          const row = two ? (i % 2 === 0 ? i / 2 : (i + 1) / 2) : i + 1;
+          for (let k = 0; k < 6; k++) {
+            const along = VH.math.clamp(lp0.along - lp0.dir * (row + k) * 7.5, lp0.road.from, lp0.road.to);
+            const pt = game.roadnet.lanePoint(lp0.road, lp0.dir, lane, along);
+            x = pt.x;
+            z = pt.z;
+            yaw = pt.heading;
+            if (this._carFits(x, z, yaw, 3)) break;
+          }
+        } else {
+          const spot = this._carSpot(base.x - Math.sin(base.yaw) * 7.5 * (i + 1), base.z - Math.cos(base.yaw) * 7.5 * (i + 1), base.yaw, base.x, base.z, true);
+          x = spot.x;
+          z = spot.z;
+        }
         const type = VH.Vehicle.typeSpec(rv.car) ? rv.car : 'vireo';
-        const v = game.vehicles.spawn(type, x, z, base.yaw, { color: rv.color, role: 'mission', persistent: true });
+        const v = game.vehicles.spawn(type, x, z, yaw, { color: rv.color, role: 'mission', persistent: true });
         v.driver = 'ai';
         v.noEnter = true;
         v.controller = new RaceDriver(this, v, valid, rv.skill || 0.85 + i * 0.05);
@@ -47751,8 +48288,11 @@ void main() {
       this._setMarker(null);
       const place = run.racePlace;
       const secs = game.time - startT;
-      game.hud.centerBanner(place === 1 ? 'FIRST PLACE' : 'FINISHED ' + ['1ST', '2ND', '3RD', '4TH', '5TH', '6TH'][place - 1], Math.floor(secs / 60) + ':' + String(Math.floor(secs % 60)).padStart(2, '0'));
-      if (r.mustWin !== false && place !== 1) throw new MissionFailed('You didn\'t win the race.');
+      // The place and time go in the result panel (a banner here would print under it).
+      const time = Math.floor(secs / 60) + ':' + String(Math.floor(secs % 60)).padStart(2, '0');
+      const nth = ['1st', '2nd', '3rd', '4th', '5th', '6th'][place - 1] || place + 'th';
+      run.raceResult = (place === 1 ? 'First place' : 'Finished ' + nth) + ' · ' + time;
+      if (r.mustWin !== false && place !== 1) throw new MissionFailed('You finished ' + nth + ' (' + time + '). Only a win counts.');
       for (const v of rivals) v.controller.finished = true;
     }
 
@@ -47913,7 +48453,7 @@ void main() {
       else this.stats.side++;
       this._reward(m.reward, false);
       const money = (m.reward && m.reward.money) || 0;
-      game.hud.missionResult(true, m.title, money ? '+' + VH.util.formatMoney(money) : '', m.reward && m.reward.weapons ? 'New: ' + m.reward.weapons.map((w) => (VH.Combat.def(w) || { name: w }).name).join(', ') : '');
+      game.hud.missionResult(true, m.title, [run.raceResult, money ? '+' + VH.util.formatMoney(money) : ''].filter(Boolean).join('  ·  '), m.reward && m.reward.weapons ? 'New: ' + m.reward.weapons.map((w) => (VH.Combat.def(w) || { name: w }).name).join(', ') : '');
       if (game.audio.missionPassed) game.audio.missionPassed();
       VH.events.emit('mission:pass', { m });
       this._music('off');
@@ -48004,6 +48544,7 @@ void main() {
         // A failed job leaves nothing behind: the retry starts from a clean
         // street instead of on top of the last attempt's cars and cast.
         for (const [, a] of run.actors) if (!a.dead && !a.removed) game.crowd.remove(a);
+        for (const a of run.targets || []) if (!a.dead && !a.removed) game.crowd.remove(a);
         for (const [, v] of run.cars) if (v.driver !== 'player' && !v.removed) game.vehicles.remove(v);
       }
       for (const [, a] of run.actors) {
@@ -48018,6 +48559,8 @@ void main() {
         }
       }
       for (const [, v] of run.cars) {
+        v.missionOwned = false; // the job's over: once Jay leaves it, it's just a car
+        v.plow = false;
         if (v.driver === 'player') {
           v.persistent = true;
           continue;
@@ -48031,6 +48574,7 @@ void main() {
         }
       }
       for (const it of run.watchItems || []) if (!it.gone) it.dispose();
+      if (!failed) this._standDown(run);
       if (failed) game.police.reset();
     }
 
@@ -48052,6 +48596,7 @@ void main() {
           const p = game.player;
           if (p.inVehicle) game.vehicles.exitVehicle();
           p.teleport(r.pos.x, r.pos.z, r.pos.yaw);
+          if (game.resetCars) game.resetCars(); // every car back to fresh, like a reload
           if (r.pos.car) {
             const v = game.vehicles.spawn(r.pos.car.type, r.pos.car.x, r.pos.car.z, r.pos.car.yaw, { color: r.pos.car.color, persistent: true });
             game.vehicles.beginEnter({ v, side: 1, x: p.pos.x, z: p.pos.z });
@@ -48065,12 +48610,35 @@ void main() {
         if (place && Math.hypot(place.x - game.player.pos.x, place.z - game.player.pos.z) > 60) {
           game.hud.setFade(1, 300);
           setTimeout(() => {
-            if (game.player.inVehicle) game.vehicles.exitVehicle();
-            game.player.teleport(place.x, place.z, place.yaw || 0);
+            // A job that wants Jay in a car (a race) takes the car back to the start with him.
+            const pv = game.player.vehicle;
+            const steps = r.m.steps || [];
+            const wantsCar = steps.slice(0, 2).some((st) => st && (st.getIn || (st.goto && st.vehicle === true)));
+            if (pv && wantsCar && !pv.wrecked && !pv.burning && !pv.removed) {
+              const lp = game.roadnet.nearestLane(place.x, place.z, place.yaw || 0, 30);
+              const at = lp ? { x: lp.x, z: lp.z, heading: lp.heading } : { x: place.x, z: place.z, heading: place.yaw || 0 };
+              const spot = this._carSpot(at.x, at.z, at.heading, at.x, at.z, !!lp);
+              pv.place(spot.x, spot.z, spot.heading);
+              game.player.pos.copy(pv.pos);
+              if (game.cameraRig.snapToCar) game.cameraRig.snapToCar(pv);
+            } else {
+              if (game.player.inVehicle) game.vehicles.exitVehicle();
+              game.player.teleport(place.x, place.z, place.yaw || 0);
+            }
+            if (game.resetCars) game.resetCars();
+            if (pv && game.player.vehicle === pv && pv.repair) pv.repair();
             game.hud.setFade(0, 600);
             this.start(r.m, 0);
           }, 350);
-        } else this.start(r.m, 0);
+        } else {
+          // Close by: still a fade, and every car back to fresh.
+          game.hud.setFade(1, 250);
+          setTimeout(() => {
+            if (game.resetCars) game.resetCars();
+            game.hud.setFade(0, 600);
+            this.start(r.m, 0);
+          }, 300);
+        }
       }
       return true;
     }
@@ -48317,6 +48885,7 @@ void main() {
           g.player.stats.carsStolen = stolen; // getting back in isn't a theft
         }
       }
+      if (g.activities && g.activities._spawnKingCar) g.activities._spawnKingCar();
     }
 
     reset() {
@@ -48389,10 +48958,10 @@ void main() {
 
   // Stunt ramps: position, heading of the run-up, and a name.
   const JUMPS = [
-    { x: 145, z: 500, yaw: Math.PI, name: 'Over the stacks' },
-    { x: 60, z: 550, yaw: Math.PI / 2, name: 'Container hop' },
+    { x: 160, z: 510, yaw: 0, name: 'Over the stacks' },
+    { x: 110, z: 570, yaw: Math.PI / 2, name: 'Container hop' },
     { x: 350, z: 440, yaw: -Math.PI / 2, name: 'Pier 9 leap' },
-    { x: 200, z: 615, yaw: -Math.PI / 2, name: 'Boatyard launch' },
+    { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
     { x: -250, z: 520, yaw: 0, name: 'Hedge jumper' },
     { x: 150, z: -470, yaw: Math.PI, name: 'North pasture' },
@@ -48466,7 +49035,7 @@ void main() {
           setTimeout(() => {
             this.game.dialogue.play([d.raceWinAll.text], { mode: 'phone', from: d.raceWinAll.text[0] });
             this.game.hud.centerBanner('KING OF THE ROAD', 'All six races won · a gold ' + carName(d.raceWinAll.car) + ' is waiting at Heron Corner');
-            this.game.vehicles.spawn(d.raceWinAll.car, -89, 296, Math.PI / 2, { color: d.raceWinAll.color, role: 'parked', persistent: true });
+            this._spawnKingCar();
             eng.save();
           }, 6000);
         });
@@ -48531,11 +49100,21 @@ void main() {
         const where = t.place || ['lantern_alley', 'tannery_row', 'heron_corner', 'crane_row', 'the_boardwalk'][i % 5];
         const foe = t.faction || 'halberd';
         const hold = t.survive || 75 + i * 10;
+        // The people who talk are there: the Kings hold the spot with Jay,
+        // everyone else stands back.
+        const said = lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]).concat(lineList(t.win || []));
+        const cast = [];
+        for (const l of said) if (Array.isArray(l) && eng.story.characters[l[0]] && l[0] !== 'jay' && !cast.includes(l[0])) cast.push(l[0]);
+        const FIGHTERS = ['teo', 'wick', 'kostya', 'saff', 'deb'];
+        const spawnCast = cast.map((c, k) => FIGHTERS.includes(c)
+          ? { char: c, at: where, offset: [k % 2 ? -2.5 : 2.5, -2 - k], behavior: 'follow', weapon: 'pistol', health: 400 }
+          : { char: c, at: where, offset: [k % 2 ? -4 : 4, -6 - k], behavior: 'idle', health: 400 });
         addJob({
           id, title: t.name || 'Turf war: ' + VH.Places.titleFromId(where), giver: 'teo', start: where, estMinutes: 5, repeatable: false,
           summary: t.desc || 'Hold the corner.', requires: [t.requires || 'm10_sons'],
           reward: { money: t.reward || 900 + i * 300, armor: 50 },
           steps: [
+            spawnCast.length ? { spawn: spawnCast } : { wait: 0.1 },
             { say: lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]) },
             { music: 'action' },
             { survive: hold, objective: 'Hold ' + VH.Places.titleFromId(where), waves: t.waves || [
@@ -48562,7 +49141,7 @@ void main() {
         const L = 9;
         const W = 5;
         const H = 2.1;
-        const y0 = ph.groundHeight(j.x, j.z, 50);
+        const y0 = ph.groundHeight(j.x, j.z, 1); // the yard, not a roof or a stack over it
         // Wedge rising along the run-up direction (local +Z).
         const shape = new THREE.Shape();
         shape.moveTo(-L / 2, 0);
@@ -48655,14 +49234,61 @@ void main() {
       this.lanterns = [];
       const geo = new THREE.SphereGeometry(0.28, 12, 10).scale(1, 1.25, 1);
       const mat = new THREE.MeshStandardMaterial({ color: 0x8a1010, emissive: new THREE.Color(2.4, 0.35, 0.12), roughness: 0.6 });
+      // Street level only: a spot over a roof or inside a shed moves to the
+      // nearest clear ground (spiralling out up to 16 m).
+      const ph = g.physics;
+      const clearAt = (x, z) => {
+        const gh = ph.groundHeight(x, z, 1);
+        if (gh > 1 || gh < -0.3 || ph.groundHeight(x, z, 50) > gh + 0.5) return null;
+        return ph.overlaps(x, z, 0.5, gh + 0.3, gh + 2.2) ? null : gh;
+      };
+      for (const s of spots) {
+        if (clearAt(s.x, s.z) !== null) continue;
+        let found = false;
+        for (let r = 2; r <= 16 && !found; r += 2) {
+          for (let k = 0; k < 12 && !found; k++) {
+            const a = (k / 12) * Math.PI * 2;
+            if (clearAt(s.x + Math.cos(a) * r, s.z + Math.sin(a) * r) === null) continue;
+            s.x += Math.cos(a) * r;
+            s.z += Math.sin(a) * r;
+            found = true;
+          }
+        }
+      }
       spots.slice(0, 30).forEach((s, i) => {
-        const y = g.physics.groundHeight(s.x, s.z, 40) + 1.1;
+        const y = ph.groundHeight(s.x, s.z, 1) + 1.1;
         const m = new THREE.Mesh(geo, mat);
         m.position.set(s.x, y, s.z);
         m.name = 'lantern ' + i;
         g.scene.add(m);
         this.lanterns.push({ id: 'lantern_' + i, m, x: s.x, y, z: s.z });
       });
+    }
+
+    /**
+     * The King of the Road prize: a gold car kept at Heron Corner. It's part
+     * of the save (a reload puts it back unless Jay is sitting in it).
+     */
+    _spawnKingCar() {
+      const g = this.game;
+      const w = this.data.raceWinAll;
+      if (!w || !g.missions.flags[w.flag]) return null;
+      const mine = (v) => v && !v.removed && v.type === w.car && v.keep;
+      if (mine(this.kingCar) || g.vehicles.list.some(mine)) return this.kingCar;
+      const pv = g.player.vehicle;
+      if (pv && pv.type === w.car && (w.color === undefined || (pv.model && pv.model.color) === w.color)) {
+        pv.keep = true;
+        return (this.kingCar = pv);
+      }
+      const lp = g.roadnet.nearestLane(-89, 296, undefined, 40);
+      const pk = lp ? g.missions._kerbPoint(lp) : { x: -89, z: 296, heading: Math.PI / 2 };
+      const spot = g.missions._carSpot(pk.x, pk.z, pk.heading, pk.x, pk.z, !!lp);
+      const v = g.vehicles.spawn(w.car, spot.x, spot.z, spot.heading, { color: w.color, role: 'parked', persistent: true });
+      if (v) {
+        v.keep = true;
+        v.storyName = 'Gold ' + ((VH.Vehicle.typeSpec(w.car) || {}).name || w.car);
+      }
+      return (this.kingCar = v);
     }
 
     // ------------------------------------------------------------ taxi
@@ -48673,7 +49299,9 @@ void main() {
       const T = this.taxi;
       const inCab = v && (v.type === 'cab');
       const taxiOpen = !this.data.taxiRequires || g.missions.completed[this.data.taxiRequires];
-      if (inCab && g.input.consume('phone') && !g.missions.run) {
+      // Read the key every frame, so a press outside a cab isn't saved up for the next one.
+      const pressed = g.input.consume('phone');
+      if (inCab && pressed && !g.missions.run) {
         if (!taxiOpen) {
           g.hud.showToast('The dispatcher doesn\'t know you yet. (Taxi jobs open later in the story.)');
           return;
@@ -48686,10 +49314,25 @@ void main() {
         if (T.fare && (!v || v.type !== 'cab')) this._endFare(false, 'You left the cab.');
         return;
       }
-      if (!T.fare) this._newFare();
+      if (!T.fare) {
+        T.wait = (T.wait || 0) - dt;
+        if (T.wait <= 0) this._newFare();
+      }
       const f = T.fare;
       if (!f) return;
       f.t -= dt;
+      // GPS route to the pickup / drop-off (the mission engine does this for jobs).
+      f.routeT = (f.routeT || 0) - dt;
+      if (f.routeT <= 0 && VH.Minimap) {
+        f.routeT = 1;
+        const goal = f.stage === 'pickup' ? f.from : f.to;
+        g.route = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 30 ? VH.Minimap.route(g.layout, v.pos.x, v.pos.z, goal.x, goal.z) : null;
+      }
+      if (f.stage === 'pickup' && f.agent && (f.agent.dead || f.agent.removed || f.agent.down)) {
+        this._endFare(false, f.agent.dead || f.agent.removed ? 'Your fare won\'t be needing a ride now.' : 'Your fare isn\'t getting in after that.');
+        T.wait = 8;
+        return;
+      }
       if (f.stage === 'pickup') {
         g.hud.trackObjective({ x: f.from.x, y: 0.2, z: f.from.z }, g.renderer.camera);
         g.hud.setObjectiveText('Pick up the fare');
@@ -48716,6 +49359,12 @@ void main() {
         } else if (f.t <= 0 && !f.late) {
           f.late = true;
           g.dialogue.play([[f.who, 'Forget the tip, man.']], { mode: 'ambient' });
+        } else if (f.t < -90) {
+          // Ninety seconds past the meter: the fare gives up and walks.
+          g.dialogue.play([[f.who, 'You know what? I\'ll walk from here.']], { mode: 'ambient' });
+          this._endFare(true);
+          g.hud.showToast('The fare got out. No pay.');
+          T.wait = 5;
         }
       }
     }
@@ -48734,8 +49383,20 @@ void main() {
         if (d > 80 && d < 260) best = { x, z };
       }
       if (!best) return;
-      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
-      const to = dests[Math.floor(Math.random() * dests.length)];
+      // Somewhere a cab can actually pull up: not a roof, the end of the pier
+      // or a race start, and with a kerb within 40 m to stop at.
+      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && !pl.roof && !(pl.y > 1) && !/\((race|stunt)\)|roof/i.test(pl.name) && pl.kind !== 'pier' &&
+        Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
+      let to = null;
+      for (let i = 0; i < 12 && !to && dests.length; i++) {
+        const pl = dests.splice(Math.floor(Math.random() * dests.length), 1)[0];
+        const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+        if (!lp) continue;
+        const pk = g.missions._kerbPoint(lp);
+        const gh = g.physics.groundHeight(pk.x, pk.z, 50);
+        if (gh > 0.8 || gh < -0.1) continue;
+        to = { x: pk.x, z: pk.z, name: pl.name };
+      }
       if (!to) return;
       const who = 'passenger';
       // Fares unlock with the story; the ones you haven't heard yet come first.
@@ -48773,6 +49434,7 @@ void main() {
         f.agent.brain = null;
       }
       this.taxi.fare = null;
+      g.route = null;
       g.hud.trackObjective(null);
       g.hud.setObjectiveText(null);
       g.hud.setMissionTimer(null);
@@ -48799,6 +49461,14 @@ void main() {
           if (g.audio.pickup) g.audio.pickup();
         }
       }
+    }
+
+    /** The current fare's pickup or drop-off, for the radar and the map. */
+    blips(out) {
+      const f = this.taxi && this.taxi.fare;
+      if (!f) return;
+      if (f.stage === 'pickup') out.push({ x: f.from.x, z: f.from.z, type: 'objective', label: 'Taxi fare' });
+      else out.push({ x: f.to.x, z: f.to.z, type: 'objective', label: 'Drop-off: ' + f.toName });
     }
 
     reset() {
@@ -52360,6 +53030,7 @@ void main() {
       this._set('objText', text || '', (v) => {
         this.objText.textContent = v;
         this.objText.classList.toggle('visible', !!v);
+        document.body.classList.toggle('has-objtext', !!v); // toasts move down out of its way
         if (v) {
           this.objText.classList.remove('flash');
           void this.objText.offsetWidth;
@@ -52452,6 +53123,7 @@ void main() {
       this._set('weapon', key, () => {
         const armed = w && w.slot !== 'unarmed';
         this.weaponBox.classList.toggle('visible', !!armed);
+        document.body.classList.toggle('armed', !!armed); // the checklist moves down out of its way
         if (!armed) return;
         if (this._weaponIconFor !== w.slot && VH.WeaponWheel && VH.WeaponWheel.icon) {
           this.weaponIcon.innerHTML = VH.WeaponWheel.icon(w.slot);
@@ -52663,6 +53335,12 @@ void main() {
       card.append(body);
       this.notifyStack.prepend(card);
       while (this.notifyStack.children.length > 4) this.notifyStack.lastChild.remove();
+      // The stack stops above the radar (a max-height in the CSS): older cards
+      // that would be cut off by it go now rather than show half a card.
+      requestAnimationFrame(() => {
+        const max = this.notifyStack.clientHeight;
+        for (const c of Array.from(this.notifyStack.children)) if (c !== card && c.offsetTop + c.offsetHeight > max + 1) c.remove();
+      });
       requestAnimationFrame(() => card.classList.add('in'));
       setTimeout(() => {
         card.classList.remove('in');
@@ -52785,6 +53463,12 @@ void main() {
         { path: 'gameplay.gamepadSensitivity', label: 'Controller look speed', type: 'range', min: 0.3, max: 2.5, step: 0.05, format: (v) => v.toFixed(2) + '×' },
         { path: 'gameplay.aimAssist', label: 'Aim assist', type: 'toggle', help: 'Near misses on enemies are pulled onto target (more on a controller).' },
         { path: 'gameplay.cameraShake', label: 'Camera shake', type: 'toggle' },
+        { path: 'gameplay.voicedDialogue', label: 'Voiced dialogue', type: 'toggle',
+          help: 'Characters speak their lines with your browser\'s built-in voices (Edge\'s online voices sound best).' },
+        { path: 'gameplay.policeVoice', label: 'Police radio voice', type: 'toggle', help: 'Dispatch reads its calls out loud during a chase.' },
+        { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
+        { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
+          help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
           help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
@@ -52810,6 +53494,8 @@ void main() {
         { path: 'accessibility.colorBlind', label: 'Colour-blind friendly HUD', type: 'toggle',
           help: 'Health, armour and warnings use a blue/amber palette that reads for all common types.' },
         { path: 'accessibility.reducedFlashing', label: 'Reduce flashing effects', type: 'toggle' },
+        { path: 'accessibility.strongLanguage', label: 'Strong language', type: 'toggle',
+          help: 'Off masks the swearing in subtitles (f**k) and leaves it out of voiced lines.' },
       ],
     },
     controls: { label: 'Controls', custom: true },
@@ -53987,6 +54673,7 @@ void main() {
       };
       this.player.extraGround = (x, z, maxY) => this.vehicles.roofHeight(x, z, maxY);
       this.cameraRig = new VH.CameraRig(this.renderer.camera, this.physics, settings, this.input);
+      this.cameraRig.vehicles = this.vehicles;
       this.cameraRig.snapBehind(this.player);
       this.interaction = new VH.InteractionSystem(this.player, this.input);
       this.interaction.registerAll(this.world.interactables);
@@ -54160,6 +54847,8 @@ void main() {
       });
       VH.events.on('settings:changed', () => {
         this._needsRender = true;
+        // The clock follows the Time of day setting straight away, not on the next load.
+        if (this.environment && this.state !== 'title' && this.state !== 'loading') this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
       });
       VH.events.on('renderer:resize', () => {
         this._needsRender = true;
@@ -54378,6 +55067,18 @@ void main() {
         if (!next && doneN) rows.push({ title: chain.title, text: 'Complete', state: 'done' });
         else if (next && m.isAvailable(next)) rows.push({ title: chain.title + ' (' + doneN + '/' + chain.missions.length + ')', text: next.title + ' at ' + ((this.places.get(next.start) || {}).name || '?'), state: 'next' });
       }
+      // Jobs between jobs: street races, Dex's list, bounties, turf wars.
+      const jobs = (this.activities && this.activities.jobs) || [];
+      for (const [prefix, title] of [['race_', 'Street races'], ['list_', 'Dex\'s list'], ['bounty_', 'Bounties'], ['turf_', 'Turf wars']]) {
+        const group = jobs.filter((j) => j.id.indexOf(prefix) === 0);
+        if (!group.length) continue;
+        const doneN = group.filter((j) => m.completed[j.id]).length;
+        const next = group.find((j) => !m.completed[j.id] && m.isAvailable(j));
+        const label = title + ' (' + doneN + '/' + group.length + ')';
+        if (next) rows.push({ title: label, text: next.title + ' at ' + ((this.places.get(next.start) || {}).name || 'see the map'), state: 'next' });
+        else if (doneN === group.length) rows.push({ title: label, text: 'Complete', state: 'done' });
+        else if (doneN) rows.push({ title: label, text: 'More later in the story', state: 'done' });
+      }
       return { kicker: pr.done + ' of ' + pr.total + ' jobs · ' + Math.round(pr.pct * 100) + '% complete', rows };
     },
 
@@ -54455,8 +55156,16 @@ void main() {
         ['Longest fall', s.longestFall.toFixed(1) + ' m'],
         ['Times knocked out', String(s.deaths)],
         ['Challenges finished', String(s.challengesCompleted || 0)],
+      ].concat(this.activities ? (() => {
+        const c = this.activities.completion;
+        return [
+          ['Stunt jumps', c.jumps + ' / ' + c.jumpsTotal],
+          ['Lost lanterns', c.lanterns + ' / ' + c.lanternsTotal],
+          ['Taxi fares', String(c.fares)],
+        ];
+      })() : []).concat([
         ['Money', VH.util.formatMoney(this.player.money)],
-      ];
+      ]);
     },
 
     // ------------------------------------------------- test/debug hooks
@@ -54738,6 +55447,7 @@ void main() {
       }
       if (this.police.heli) out.push({ x: this.police.heli.pos.x, z: this.police.heli.pos.z, type: 'police', flash: true, label: 'Air unit' });
       if (this.missions && this.missions.blips) this.missions.blips(out);
+      if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
       return out;
     },
 
@@ -54762,6 +55472,7 @@ void main() {
         p.teleport(sp.x, sp.z, sp.yaw || 0);
         p.state = 'ground';
         p.health = Math.max(p.health, 60);
+        this.resetCars();
         this.cameraRig.snapBehind(p);
         if (this.combat) this.combat.onArrested();
         this.hud.setFade(0, 900);
@@ -54769,6 +55480,39 @@ void main() {
         VH.events.emit('money:changed', { delta: -fine, reason: 'bail' });
         this._arresting = false;
       }, 2300);
+    },
+
+    /**
+     * Every respawn (the hospital, release on bail, retrying a job) puts the
+     * cars back as if the city had just loaded: wrecks, abandoned and stolen
+     * cars, police, traffic and parked cars all go, and fresh ones fill the
+     * streets around Jay. Kept: the car Jay is sitting in, the cars of a job
+     * that is running, and the King of the Road prize (back at its spot).
+     */
+    resetCars() {
+      const keep = this.player.vehicle || null;
+      const run = this.missions && this.missions.run;
+      const jobCars = run ? Array.from(run.cars.values()) : [];
+      if (this.police) this.police.reset();
+      for (const v of this.vehicles.list.slice()) {
+        if (v === keep || jobCars.includes(v)) continue;
+        this.vehicles.remove(v);
+      }
+      this.vehicles.lastPlayerCar = keep;
+      if (this.activities && this.activities._spawnKingCar) {
+        this.activities.kingCar = null;
+        this.activities._spawnKingCar();
+      }
+      // Kerbside spaces are free again, except where a car still stands.
+      for (const s of this.vehicles.spots || []) {
+        if (s.vehicle && !s.vehicle.removed) continue;
+        s.vehicle = null;
+        s.used = this.vehicles.list.some((v) => Math.hypot(v.pos.x - s.x, v.pos.z - s.z) < 6);
+      }
+      this.vehicles._streamTimer = 0;
+      const at = this.player.pos;
+      if (this.traffic && this.traffic.repopulate) this.traffic.repopulate(at.x, at.z);
+      VH.events.emit('cars:reset', {});
     },
 
     giveMoney(amount, reason, quiet) {
@@ -54821,6 +55565,7 @@ void main() {
             const hosp = this.places && this.places.get('hospital');
             p.respawn();
             if (hosp) p.teleport(hosp.x, hosp.z, hosp.yaw || 0);
+            this.resetCars();
             const fee = Math.min(p.money, 300);
             p.money -= fee;
             if (this.combat) this.combat.onHospital();

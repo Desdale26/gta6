@@ -568,6 +568,14 @@
       void kind;
     }
 
+    /** Good as new (a respawn hands Jay his car back fixed). Not for wrecks. */
+    repair() {
+      if (this.wrecked) return;
+      this.health = 1000;
+      this.burning = 0;
+      this.model.setDamage(0);
+    }
+
     explode() {
       if (this.wrecked) return;
       this.wrecked = true;

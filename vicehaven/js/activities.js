@@ -38,10 +38,10 @@
 
   // Stunt ramps: position, heading of the run-up, and a name.
   const JUMPS = [
-    { x: 145, z: 500, yaw: Math.PI, name: 'Over the stacks' },
-    { x: 60, z: 550, yaw: Math.PI / 2, name: 'Container hop' },
+    { x: 160, z: 510, yaw: 0, name: 'Over the stacks' },
+    { x: 110, z: 570, yaw: Math.PI / 2, name: 'Container hop' },
     { x: 350, z: 440, yaw: -Math.PI / 2, name: 'Pier 9 leap' },
-    { x: 200, z: 615, yaw: -Math.PI / 2, name: 'Boatyard launch' },
+    { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
     { x: -250, z: 520, yaw: 0, name: 'Hedge jumper' },
     { x: 150, z: -470, yaw: Math.PI, name: 'North pasture' },
@@ -115,7 +115,7 @@
           setTimeout(() => {
             this.game.dialogue.play([d.raceWinAll.text], { mode: 'phone', from: d.raceWinAll.text[0] });
             this.game.hud.centerBanner('KING OF THE ROAD', 'All six races won · a gold ' + carName(d.raceWinAll.car) + ' is waiting at Heron Corner');
-            this.game.vehicles.spawn(d.raceWinAll.car, -89, 296, Math.PI / 2, { color: d.raceWinAll.color, role: 'parked', persistent: true });
+            this._spawnKingCar();
             eng.save();
           }, 6000);
         });
@@ -180,11 +180,21 @@
         const where = t.place || ['lantern_alley', 'tannery_row', 'heron_corner', 'crane_row', 'the_boardwalk'][i % 5];
         const foe = t.faction || 'halberd';
         const hold = t.survive || 75 + i * 10;
+        // The people who talk are there: the Kings hold the spot with Jay,
+        // everyone else stands back.
+        const said = lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]).concat(lineList(t.win || []));
+        const cast = [];
+        for (const l of said) if (Array.isArray(l) && eng.story.characters[l[0]] && l[0] !== 'jay' && !cast.includes(l[0])) cast.push(l[0]);
+        const FIGHTERS = ['teo', 'wick', 'kostya', 'saff', 'deb'];
+        const spawnCast = cast.map((c, k) => FIGHTERS.includes(c)
+          ? { char: c, at: where, offset: [k % 2 ? -2.5 : 2.5, -2 - k], behavior: 'follow', weapon: 'pistol', health: 400 }
+          : { char: c, at: where, offset: [k % 2 ? -4 : 4, -6 - k], behavior: 'idle', health: 400 });
         addJob({
           id, title: t.name || 'Turf war: ' + VH.Places.titleFromId(where), giver: 'teo', start: where, estMinutes: 5, repeatable: false,
           summary: t.desc || 'Hold the corner.', requires: [t.requires || 'm10_sons'],
           reward: { money: t.reward || 900 + i * 300, armor: 50 },
           steps: [
+            spawnCast.length ? { spawn: spawnCast } : { wait: 0.1 },
             { say: lineList(t.lines || [['teo', 'They\'re coming for the corner. Hold it with us.']]) },
             { music: 'action' },
             { survive: hold, objective: 'Hold ' + VH.Places.titleFromId(where), waves: t.waves || [
@@ -211,7 +221,7 @@
         const L = 9;
         const W = 5;
         const H = 2.1;
-        const y0 = ph.groundHeight(j.x, j.z, 50);
+        const y0 = ph.groundHeight(j.x, j.z, 1); // the yard, not a roof or a stack over it
         // Wedge rising along the run-up direction (local +Z).
         const shape = new THREE.Shape();
         shape.moveTo(-L / 2, 0);
@@ -304,14 +314,61 @@
       this.lanterns = [];
       const geo = new THREE.SphereGeometry(0.28, 12, 10).scale(1, 1.25, 1);
       const mat = new THREE.MeshStandardMaterial({ color: 0x8a1010, emissive: new THREE.Color(2.4, 0.35, 0.12), roughness: 0.6 });
+      // Street level only: a spot over a roof or inside a shed moves to the
+      // nearest clear ground (spiralling out up to 16 m).
+      const ph = g.physics;
+      const clearAt = (x, z) => {
+        const gh = ph.groundHeight(x, z, 1);
+        if (gh > 1 || gh < -0.3 || ph.groundHeight(x, z, 50) > gh + 0.5) return null;
+        return ph.overlaps(x, z, 0.5, gh + 0.3, gh + 2.2) ? null : gh;
+      };
+      for (const s of spots) {
+        if (clearAt(s.x, s.z) !== null) continue;
+        let found = false;
+        for (let r = 2; r <= 16 && !found; r += 2) {
+          for (let k = 0; k < 12 && !found; k++) {
+            const a = (k / 12) * Math.PI * 2;
+            if (clearAt(s.x + Math.cos(a) * r, s.z + Math.sin(a) * r) === null) continue;
+            s.x += Math.cos(a) * r;
+            s.z += Math.sin(a) * r;
+            found = true;
+          }
+        }
+      }
       spots.slice(0, 30).forEach((s, i) => {
-        const y = g.physics.groundHeight(s.x, s.z, 40) + 1.1;
+        const y = ph.groundHeight(s.x, s.z, 1) + 1.1;
         const m = new THREE.Mesh(geo, mat);
         m.position.set(s.x, y, s.z);
         m.name = 'lantern ' + i;
         g.scene.add(m);
         this.lanterns.push({ id: 'lantern_' + i, m, x: s.x, y, z: s.z });
       });
+    }
+
+    /**
+     * The King of the Road prize: a gold car kept at Heron Corner. It's part
+     * of the save (a reload puts it back unless Jay is sitting in it).
+     */
+    _spawnKingCar() {
+      const g = this.game;
+      const w = this.data.raceWinAll;
+      if (!w || !g.missions.flags[w.flag]) return null;
+      const mine = (v) => v && !v.removed && v.type === w.car && v.keep;
+      if (mine(this.kingCar) || g.vehicles.list.some(mine)) return this.kingCar;
+      const pv = g.player.vehicle;
+      if (pv && pv.type === w.car && (w.color === undefined || (pv.model && pv.model.color) === w.color)) {
+        pv.keep = true;
+        return (this.kingCar = pv);
+      }
+      const lp = g.roadnet.nearestLane(-89, 296, undefined, 40);
+      const pk = lp ? g.missions._kerbPoint(lp) : { x: -89, z: 296, heading: Math.PI / 2 };
+      const spot = g.missions._carSpot(pk.x, pk.z, pk.heading, pk.x, pk.z, !!lp);
+      const v = g.vehicles.spawn(w.car, spot.x, spot.z, spot.heading, { color: w.color, role: 'parked', persistent: true });
+      if (v) {
+        v.keep = true;
+        v.storyName = 'Gold ' + ((VH.Vehicle.typeSpec(w.car) || {}).name || w.car);
+      }
+      return (this.kingCar = v);
     }
 
     // ------------------------------------------------------------ taxi
@@ -322,7 +379,9 @@
       const T = this.taxi;
       const inCab = v && (v.type === 'cab');
       const taxiOpen = !this.data.taxiRequires || g.missions.completed[this.data.taxiRequires];
-      if (inCab && g.input.consume('phone') && !g.missions.run) {
+      // Read the key every frame, so a press outside a cab isn't saved up for the next one.
+      const pressed = g.input.consume('phone');
+      if (inCab && pressed && !g.missions.run) {
         if (!taxiOpen) {
           g.hud.showToast('The dispatcher doesn\'t know you yet. (Taxi jobs open later in the story.)');
           return;
@@ -335,10 +394,25 @@
         if (T.fare && (!v || v.type !== 'cab')) this._endFare(false, 'You left the cab.');
         return;
       }
-      if (!T.fare) this._newFare();
+      if (!T.fare) {
+        T.wait = (T.wait || 0) - dt;
+        if (T.wait <= 0) this._newFare();
+      }
       const f = T.fare;
       if (!f) return;
       f.t -= dt;
+      // GPS route to the pickup / drop-off (the mission engine does this for jobs).
+      f.routeT = (f.routeT || 0) - dt;
+      if (f.routeT <= 0 && VH.Minimap) {
+        f.routeT = 1;
+        const goal = f.stage === 'pickup' ? f.from : f.to;
+        g.route = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 30 ? VH.Minimap.route(g.layout, v.pos.x, v.pos.z, goal.x, goal.z) : null;
+      }
+      if (f.stage === 'pickup' && f.agent && (f.agent.dead || f.agent.removed || f.agent.down)) {
+        this._endFare(false, f.agent.dead || f.agent.removed ? 'Your fare won\'t be needing a ride now.' : 'Your fare isn\'t getting in after that.');
+        T.wait = 8;
+        return;
+      }
       if (f.stage === 'pickup') {
         g.hud.trackObjective({ x: f.from.x, y: 0.2, z: f.from.z }, g.renderer.camera);
         g.hud.setObjectiveText('Pick up the fare');
@@ -365,6 +439,12 @@
         } else if (f.t <= 0 && !f.late) {
           f.late = true;
           g.dialogue.play([[f.who, 'Forget the tip, man.']], { mode: 'ambient' });
+        } else if (f.t < -90) {
+          // Ninety seconds past the meter: the fare gives up and walks.
+          g.dialogue.play([[f.who, 'You know what? I\'ll walk from here.']], { mode: 'ambient' });
+          this._endFare(true);
+          g.hud.showToast('The fare got out. No pay.');
+          T.wait = 5;
         }
       }
     }
@@ -383,8 +463,20 @@
         if (d > 80 && d < 260) best = { x, z };
       }
       if (!best) return;
-      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
-      const to = dests[Math.floor(Math.random() * dests.length)];
+      // Somewhere a cab can actually pull up: not a roof, the end of the pier
+      // or a race start, and with a kerb within 40 m to stop at.
+      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && !pl.roof && !(pl.y > 1) && !/\((race|stunt)\)|roof/i.test(pl.name) && pl.kind !== 'pier' &&
+        Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
+      let to = null;
+      for (let i = 0; i < 12 && !to && dests.length; i++) {
+        const pl = dests.splice(Math.floor(Math.random() * dests.length), 1)[0];
+        const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+        if (!lp) continue;
+        const pk = g.missions._kerbPoint(lp);
+        const gh = g.physics.groundHeight(pk.x, pk.z, 50);
+        if (gh > 0.8 || gh < -0.1) continue;
+        to = { x: pk.x, z: pk.z, name: pl.name };
+      }
       if (!to) return;
       const who = 'passenger';
       // Fares unlock with the story; the ones you haven't heard yet come first.
@@ -422,6 +514,7 @@
         f.agent.brain = null;
       }
       this.taxi.fare = null;
+      g.route = null;
       g.hud.trackObjective(null);
       g.hud.setObjectiveText(null);
       g.hud.setMissionTimer(null);
@@ -448,6 +541,14 @@
           if (g.audio.pickup) g.audio.pickup();
         }
       }
+    }
+
+    /** The current fare's pickup or drop-off, for the radar and the map. */
+    blips(out) {
+      const f = this.taxi && this.taxi.fare;
+      if (!f) return;
+      if (f.stage === 'pickup') out.push({ x: f.from.x, z: f.from.z, type: 'objective', label: 'Taxi fare' });
+      else out.push({ x: f.to.x, z: f.to.z, type: 'objective', label: 'Drop-off: ' + f.toName });
     }
 
     reset() {

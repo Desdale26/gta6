@@ -307,6 +307,7 @@
       this._set('objText', text || '', (v) => {
         this.objText.textContent = v;
         this.objText.classList.toggle('visible', !!v);
+        document.body.classList.toggle('has-objtext', !!v); // toasts move down out of its way
         if (v) {
           this.objText.classList.remove('flash');
           void this.objText.offsetWidth;
@@ -399,6 +400,7 @@
       this._set('weapon', key, () => {
         const armed = w && w.slot !== 'unarmed';
         this.weaponBox.classList.toggle('visible', !!armed);
+        document.body.classList.toggle('armed', !!armed); // the checklist moves down out of its way
         if (!armed) return;
         if (this._weaponIconFor !== w.slot && VH.WeaponWheel && VH.WeaponWheel.icon) {
           this.weaponIcon.innerHTML = VH.WeaponWheel.icon(w.slot);
@@ -610,6 +612,12 @@
       card.append(body);
       this.notifyStack.prepend(card);
       while (this.notifyStack.children.length > 4) this.notifyStack.lastChild.remove();
+      // The stack stops above the radar (a max-height in the CSS): older cards
+      // that would be cut off by it go now rather than show half a card.
+      requestAnimationFrame(() => {
+        const max = this.notifyStack.clientHeight;
+        for (const c of Array.from(this.notifyStack.children)) if (c !== card && c.offsetTop + c.offsetHeight > max + 1) c.remove();
+      });
       requestAnimationFrame(() => card.classList.add('in'));
       setTimeout(() => {
         card.classList.remove('in');

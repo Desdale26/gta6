@@ -305,14 +305,18 @@
     for (const [x0, z0, x1, z1] of yards) apron(world, x0, z0, x1, z1, 0xb0aea8);
     for (const [fx, fz] of [[60, 448], [136, 448], [212, 448], [145, 500], [145, 552]]) floodMast(world, fx, fz, 26);
     // Kerbside lamps along the dock roads.
+    // (Not where a cross street runs through the kerb line.)
+    const lamp = (x, z, yaw, axis) => {
+      if (!world.onRoad(x, z, 1, axis)) world.addProp('streetlight', x, 0, z, yaw, 1);
+    };
     for (let x = 20; x < 405; x += 32) {
-      world.addProp('streetlight', x, 0, 461.3, Math.PI, 1);
-      world.addProp('streetlight', x + 16, 0, 478.7, 0, 1);
-      world.addProp('streetlight', x, 0, 572.3, Math.PI, 1);
+      lamp(x, 461.3, Math.PI, 'x');
+      lamp(x + 16, 478.7, 0, 'x');
+      lamp(x, 572.3, Math.PI, 'x');
     }
     for (let z = 400; z < 620; z += 34) {
-      world.addProp('streetlight', 280.3, 0, z, Math.PI / 2, 1);
-      world.addProp('streetlight', 295.7, 0, z + 17, -Math.PI / 2, 1);
+      lamp(280.3, z, Math.PI / 2, 'z');
+      lamp(295.7, z + 17, -Math.PI / 2, 'z');
     }
 
     // Yard A: Saltmarsh Freight sheds.
@@ -431,9 +435,10 @@
     }
     // Lamps along Crestline Drive.
     for (let z = -370; z < 375; z += 30) {
-      world.addProp('streetlight', -502.3, 0, z, Math.PI / 2, 1);
-      world.addProp('streetlight', -517.7, 0, z + 15, -Math.PI / 2, 1);
-      if (Math.abs(z) % 60 < 30) world.addProp('palmTall', -510, 0, z + 7, z, 1);
+      if (!world.onRoad(-502.3, z, 1, 'z')) world.addProp('streetlight', -502.3, 0, z, Math.PI / 2, 1);
+      if (!world.onRoad(-517.7, z + 15, 1, 'z')) world.addProp('streetlight', -517.7, 0, z + 15, -Math.PI / 2, 1);
+      // Median palms, but not in a junction.
+      if (Math.abs(z) % 60 < 30 && !world.onRoad(-510, z + 7, 4, 'z')) world.addProp('palmTall', -510, 0, z + 7, z, 1);
     }
     // Barriers at the dead ends.
     for (const z of [-379, 379]) for (let x = -515; x <= -505; x += 3.4) world.addProp('barrier', x, 0, z, 0, 1);

@@ -98,6 +98,8 @@
     return geo;
   }
 
+  const ZERO_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+
   function treeGeometry(seed) {
     const rng = new VH.RNG(seed);
     const b = new VH.GeometryBuilder();
@@ -285,11 +287,11 @@
       },
       tree: {
         parts: [{ geo: treeGeometry(5), mat: M.foliage, depth: M.foliageDepth, shadow: true }],
-        collider: { r: 0.3, h: 3 }, maxDistance: 650,
+        collider: { r: 0.3, h: 3 }, maxDistance: 650, canopy: true,
       },
       treeB: {
         parts: [{ geo: treeGeometry(77), mat: M.foliage, depth: M.foliageDepth, shadow: true }],
-        collider: { r: 0.3, h: 3 }, maxDistance: 650,
+        collider: { r: 0.3, h: 3 }, maxDistance: 650, canopy: true,
       },
       bench: {
         parts: [{ geo: benchGeometry(), mat: M.propMatte, shadow: true }],
@@ -341,6 +343,7 @@
       this.meshes = []; // { mesh, type, center, radius }
       this.signalLamps = []; // { mesh, entries: [{index, group, color}] }
       this.batches = new Map(); // "chunk|type" → the InstancedMeshes drawing it
+      this.canopies = []; // street trees, hidden while the camera is in their leaves
       this.count = 0;
       this._cullTimer = 0;
     }
@@ -424,6 +427,7 @@
               sc.set(it.s, it.s, it.s);
               m.compose(p, q, sc);
               mesh.setMatrixAt(i, m);
+              if (def.canopy) this.canopies.push({ mesh, i, x: it.x, y: it.y, z: it.z, s: it.s, mat: m.clone(), hidden: false });
             });
             mesh.instanceMatrix.needsUpdate = true;
             mesh.castShadow = !!part.shadow;
@@ -486,7 +490,34 @@
     }
 
     /** Hide batches that are further away than their type's draw distance. */
+    /**
+     * A tree whose leaves the camera is inside is hidden (otherwise the whole
+     * screen goes dark green next to a street tree). The canopy is roughly
+     * an ellipsoid 3.8 m wide and 2.9 m tall around 4.7 m up, times the scale.
+     */
+    _cullCanopies(c) {
+      let changed = null;
+      for (const t of this.canopies) {
+        const dx = c.x - t.x;
+        const dz = c.z - t.z;
+        const R = 4.2 * t.s;
+        let inside = false;
+        if (Math.abs(dx) < R && Math.abs(dz) < R) {
+          const dy = c.y - (t.y + 4.7 * t.s);
+          const k = (dx * dx + dz * dz) / (R * R) + (dy * dy) / (3.3 * t.s * 3.3 * t.s);
+          inside = k < (t.hidden ? 1.15 : 1);
+        }
+        if (inside === t.hidden) continue;
+        t.hidden = inside;
+        t.mesh.setMatrixAt(t.i, inside ? ZERO_MATRIX : t.mat);
+        t.mesh.instanceMatrix.needsUpdate = true;
+        changed = true;
+      }
+      return changed;
+    }
+
     update(dt, camPos) {
+      if (this.canopies.length) this._cullCanopies(camPos);
       this._cullTimer -= dt;
       if (this._cullTimer > 0) return;
       this._cullTimer = 0.25;

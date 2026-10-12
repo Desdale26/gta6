@@ -543,11 +543,20 @@
       const game = this.game;
       const lp = game.roadnet.nearestLane(pv.pos.x, pv.pos.z, pv.yaw);
       if (!lp) return;
-      const along = lp.along + lp.dir * (120 + pv.speed * 2);
-      if (along < lp.road.from + 20 || along > lp.road.to - 20) return;
-      const center = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
-      if (game.isVisible(center.x, 1, center.z, 6) && Math.hypot(center.x - pv.pos.x, center.z - pv.pos.z) < 90) return;
-      if (game.roadnet.junctionAt(center.x, center.z, 8)) return;
+      // Somewhere ahead that Jay can't see yet (over a rise, past a bend, or
+      // just far enough): never popping into view on a straight road.
+      let center = null;
+      const fogged = 0.75 * (game.settings.get('graphics.drawDistance') || 600); // mostly lost in the haze by here
+      for (const extra of [0, 40, 80, 120, 180]) {
+        const along = lp.along + lp.dir * (120 + pv.speed * 2 + extra);
+        if (along < lp.road.from + 20 || along > lp.road.to - 20) break;
+        const c = lp.road.axis === 'z' ? { x: lp.road.coord, z: along } : { x: along, z: lp.road.coord };
+        if (game.roadnet.junctionAt(c.x, c.z, 8)) continue;
+        if (game.isVisible(c.x, 1, c.z, 6) && this.canSee(c.x, 1.5, c.z) && Math.hypot(c.x - pv.pos.x, c.z - pv.pos.z) < fogged) continue;
+        center = c;
+        break;
+      }
+      if (!center) return;
       const across = lp.road.axis === 'z' ? Math.PI / 2 : 0;
       const half = lp.road.width / 2;
       for (const off of [-half * 0.45, half * 0.45]) {

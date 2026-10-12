@@ -1510,3 +1510,28 @@ body.driving .hud-hints {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ---------------------------------------------------------------- layout
+ * Things that share a corner make room for each other. */
+/* Toasts drop below the objective line instead of printing over it. */
+body.has-objtext .hud-toast {
+  top: 5.6rem;
+}
+/* Radio captions use the right-hand side: the checklist steps aside meanwhile. */
+body.radio-on .hud-hints {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+/* The weapon panel sits where the checklist starts: the checklist moves down. */
+body.armed .hud-hints {
+  top: 11.6rem;
+}
+/* Notifications stop above the radar (on short screens fewer cards fit). */
+.hud-notify-stack {
+  max-height: calc(100vh - 8.6rem - 14rem - 3.4rem);
+  overflow: hidden;
+}
+/* Driving: the district name goes above the speedometer, not across it. */
+body.driving .hud-banner {
+  bottom: 15rem;
+}

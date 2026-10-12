@@ -741,7 +741,7 @@
         a.visible = dist < 115 && (dist < 12 || game.isVisible(a.pos.x, a.pos.y + 1, a.pos.z, 1.2)) && !a.hidden;
         if (a.visible) this._animate(a, dt, dist);
       }
-      this._separate();
+      this._separate(dt);
       if (player && !player.inVehicle) this._scareNearCars();
       this.renderer.draw(this.agents);
     }
@@ -830,7 +830,7 @@
       }
     }
 
-    _separate() {
+    _separate(dt) {
       // Cheap pairwise push between people close to each other (and to Jay).
       const grid = this._grid;
       grid.clear();
@@ -854,6 +854,20 @@
               const dx = b.pos.x - a.pos.x;
               const dz = b.pos.z - a.pos.z;
               const d2 = dx * dx + dz * dz;
+              if (d2 < 4.84 && d2 > 1e-6 && dt && a.moveSpeed > 0.3 && b.moveSpeed > 0.3) {
+                // Walking at each other: both keep to their right and pass,
+                // instead of locking face to face and shuffling along as one.
+                const fax = Math.sin(a.heading);
+                const faz = Math.cos(a.heading);
+                const facing = fax * Math.sin(b.heading) + faz * Math.cos(b.heading);
+                if (facing < -0.5 && fax * dx + faz * dz > 0) {
+                  const step = 1.1 * dt;
+                  a.pos.x -= Math.cos(a.heading) * step;
+                  a.pos.z += Math.sin(a.heading) * step;
+                  b.pos.x -= Math.cos(b.heading) * step;
+                  b.pos.z += Math.sin(b.heading) * step;
+                }
+              }
               if (d2 > 0.36 || d2 < 1e-6) continue;
               const d = Math.sqrt(d2);
               const push = (0.6 - d) * 0.5;

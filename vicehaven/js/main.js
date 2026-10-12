@@ -197,6 +197,7 @@
       };
       this.player.extraGround = (x, z, maxY) => this.vehicles.roofHeight(x, z, maxY);
       this.cameraRig = new VH.CameraRig(this.renderer.camera, this.physics, settings, this.input);
+      this.cameraRig.vehicles = this.vehicles;
       this.cameraRig.snapBehind(this.player);
       this.interaction = new VH.InteractionSystem(this.player, this.input);
       this.interaction.registerAll(this.world.interactables);
@@ -370,6 +371,8 @@
       });
       VH.events.on('settings:changed', () => {
         this._needsRender = true;
+        // The clock follows the Time of day setting straight away, not on the next load.
+        if (this.environment && this.state !== 'title' && this.state !== 'loading') this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
       });
       VH.events.on('renderer:resize', () => {
         this._needsRender = true;
@@ -588,6 +591,18 @@
         if (!next && doneN) rows.push({ title: chain.title, text: 'Complete', state: 'done' });
         else if (next && m.isAvailable(next)) rows.push({ title: chain.title + ' (' + doneN + '/' + chain.missions.length + ')', text: next.title + ' at ' + ((this.places.get(next.start) || {}).name || '?'), state: 'next' });
       }
+      // Jobs between jobs: street races, Dex's list, bounties, turf wars.
+      const jobs = (this.activities && this.activities.jobs) || [];
+      for (const [prefix, title] of [['race_', 'Street races'], ['list_', 'Dex\'s list'], ['bounty_', 'Bounties'], ['turf_', 'Turf wars']]) {
+        const group = jobs.filter((j) => j.id.indexOf(prefix) === 0);
+        if (!group.length) continue;
+        const doneN = group.filter((j) => m.completed[j.id]).length;
+        const next = group.find((j) => !m.completed[j.id] && m.isAvailable(j));
+        const label = title + ' (' + doneN + '/' + group.length + ')';
+        if (next) rows.push({ title: label, text: next.title + ' at ' + ((this.places.get(next.start) || {}).name || 'see the map'), state: 'next' });
+        else if (doneN === group.length) rows.push({ title: label, text: 'Complete', state: 'done' });
+        else if (doneN) rows.push({ title: label, text: 'More later in the story', state: 'done' });
+      }
       return { kicker: pr.done + ' of ' + pr.total + ' jobs · ' + Math.round(pr.pct * 100) + '% complete', rows };
     },
 
@@ -665,8 +680,16 @@
         ['Longest fall', s.longestFall.toFixed(1) + ' m'],
         ['Times knocked out', String(s.deaths)],
         ['Challenges finished', String(s.challengesCompleted || 0)],
+      ].concat(this.activities ? (() => {
+        const c = this.activities.completion;
+        return [
+          ['Stunt jumps', c.jumps + ' / ' + c.jumpsTotal],
+          ['Lost lanterns', c.lanterns + ' / ' + c.lanternsTotal],
+          ['Taxi fares', String(c.fares)],
+        ];
+      })() : []).concat([
         ['Money', VH.util.formatMoney(this.player.money)],
-      ];
+      ]);
     },
 
     // ------------------------------------------------- test/debug hooks
@@ -948,6 +971,7 @@
       }
       if (this.police.heli) out.push({ x: this.police.heli.pos.x, z: this.police.heli.pos.z, type: 'police', flash: true, label: 'Air unit' });
       if (this.missions && this.missions.blips) this.missions.blips(out);
+      if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
       return out;
     },
 
@@ -972,6 +996,7 @@
         p.teleport(sp.x, sp.z, sp.yaw || 0);
         p.state = 'ground';
         p.health = Math.max(p.health, 60);
+        this.resetCars();
         this.cameraRig.snapBehind(p);
         if (this.combat) this.combat.onArrested();
         this.hud.setFade(0, 900);
@@ -979,6 +1004,39 @@
         VH.events.emit('money:changed', { delta: -fine, reason: 'bail' });
         this._arresting = false;
       }, 2300);
+    },
+
+    /**
+     * Every respawn (the hospital, release on bail, retrying a job) puts the
+     * cars back as if the city had just loaded: wrecks, abandoned and stolen
+     * cars, police, traffic and parked cars all go, and fresh ones fill the
+     * streets around Jay. Kept: the car Jay is sitting in, the cars of a job
+     * that is running, and the King of the Road prize (back at its spot).
+     */
+    resetCars() {
+      const keep = this.player.vehicle || null;
+      const run = this.missions && this.missions.run;
+      const jobCars = run ? Array.from(run.cars.values()) : [];
+      if (this.police) this.police.reset();
+      for (const v of this.vehicles.list.slice()) {
+        if (v === keep || jobCars.includes(v)) continue;
+        this.vehicles.remove(v);
+      }
+      this.vehicles.lastPlayerCar = keep;
+      if (this.activities && this.activities._spawnKingCar) {
+        this.activities.kingCar = null;
+        this.activities._spawnKingCar();
+      }
+      // Kerbside spaces are free again, except where a car still stands.
+      for (const s of this.vehicles.spots || []) {
+        if (s.vehicle && !s.vehicle.removed) continue;
+        s.vehicle = null;
+        s.used = this.vehicles.list.some((v) => Math.hypot(v.pos.x - s.x, v.pos.z - s.z) < 6);
+      }
+      this.vehicles._streamTimer = 0;
+      const at = this.player.pos;
+      if (this.traffic && this.traffic.repopulate) this.traffic.repopulate(at.x, at.z);
+      VH.events.emit('cars:reset', {});
     },
 
     giveMoney(amount, reason, quiet) {
@@ -1031,6 +1089,7 @@
             const hosp = this.places && this.places.get('hospital');
             p.respawn();
             if (hosp) p.teleport(hosp.x, hosp.z, hosp.yaw || 0);
+            this.resetCars();
             const fee = Math.min(p.money, 300);
             p.money -= fee;
             if (this.combat) this.combat.onHospital();

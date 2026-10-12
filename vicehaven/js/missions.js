@@ -217,20 +217,56 @@
       this.t -= dt;
       const p = this.from || this.engine.game.player.pos;
       if (this.t > 0) {
-        a.heading = dampAngle(a.heading, Math.atan2(a.pos.x - p.x, a.pos.z - p.z), 5, dt);
+        // Away from the threat, but round walls: every so often pick the most
+        // open heading near "straight away" instead of sprinting into a wall.
+        this._pick = (this._pick || 0) - dt;
+        if (this._pick <= 0 || this._want === undefined) {
+          this._pick = 0.4;
+          const away = Math.atan2(a.pos.x - p.x, a.pos.z - p.z);
+          const ph = this.engine.game.physics;
+          let best = away;
+          let bestScore = -Infinity;
+          for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.1, -2.1]) {
+            const h = away + off;
+            let free = 0;
+            for (let s = 1.5; s <= 7.5; s += 1.5) {
+              if (ph.overlaps(a.pos.x + Math.sin(h) * s, a.pos.z + Math.cos(h) * s, 0.35, a.pos.y + 0.3, a.pos.y + 1.6)) break;
+              free = s;
+            }
+            const score = free * 2 - Math.abs(off) * 1.2;
+            if (score > bestScore) {
+              bestScore = score;
+              best = h;
+            }
+          }
+          this._want = best;
+        }
+        a.heading = dampAngle(a.heading, this._want, 6, dt);
         a.moveSpeed = 5;
         a.anim.sprint = true;
+      } else if (!a.persistent && this.t < -3) {
+        // Nobody needs them any more (a stood-down gang member): back to
+        // being a pedestrian, who streams out like any other.
+        a.anim.cower = 0;
+        a.anim.sprint = false;
+        a.brain = null;
+        a.walk = null;
       } else {
         a.moveSpeed = 0;
         a.anim.cower = 1;
       }
     }
+
+    expired(a, d) {
+      return !a.persistent && d > 140;
+    }
   }
 
   /** Someone who has left the crew: they walk off and fade out of the scene. */
   class LeaveBrain {
-    constructor(engine) {
+    constructor(engine, to) {
       this.engine = engine;
+      this.to = to || null; // walk in through this door (else just away from Jay)
       this.t = 0;
     }
 
@@ -243,6 +279,15 @@
         return;
       }
       const p = game.player.pos;
+      if (this.to) {
+        a.heading = dampAngle(a.heading, Math.atan2(this.to.x - a.pos.x, this.to.z - a.pos.z), 3, dt);
+        a.moveSpeed = 1.5;
+        if (Math.hypot(this.to.x - a.pos.x, this.to.z - a.pos.z) < 1.6 || this.t > 30) {
+          a.hidden = true;
+          a.moveSpeed = 0;
+        }
+        return;
+      }
       a.heading = dampAngle(a.heading, Math.atan2(a.pos.x - p.x, a.pos.z - p.z), 2, dt);
       a.moveSpeed = 1.4;
       const d = Math.hypot(a.pos.x - p.x, a.pos.z - p.z);
@@ -259,8 +304,9 @@
     constructor(engine, v, route) {
       this.engine = engine;
       this.game = engine.game;
-      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.4, ignoreRed: true, gap: 0.7 });
+      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.4, ignoreRed: true, gap: 0.7, plow: true });
       this.lane.maxSpeed = 31;
+      v.plow = true; // nothing in the street stops a car running from Jay
       this.route = route || null;
       this.ri = 0;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
@@ -294,9 +340,12 @@
   class TourDriver {
     constructor(engine, v, dest, opts) {
       this.game = engine.game;
-      this.lane = new VH.LaneDriver(this.game.traffic, Object.assign({ speedMul: 0.95 }, opts || {}));
+      // The car Jay tails never gets stuck in a queue or behind a parked car:
+      // it ploughs through (see LaneDriver.plow).
+      this.lane = new VH.LaneDriver(this.game.traffic, Object.assign({ speedMul: 0.95, plow: true }, opts || {}));
       this.lane.destination = dest;
       this.dest = dest;
+      v.plow = true;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
     }
@@ -343,11 +392,35 @@
         return;
       }
       if (this.finished) {
-        v.input.accel = v.speed > 1 ? -0.6 : 0;
+        // Over the line: ease off and cruise on with the traffic, not park in the lane.
+        if (!this._cruising) {
+          this._cruising = true;
+          this.lane.destination = null;
+          this.lane.aggressive = false;
+          this.lane.ignoreRed = false;
+          this.lane.speedMul = 0.7;
+          this.lane.maxSpeed = 14;
+        }
+        this.lane.update(v, dt);
+        v.input.boost = 0;
         return;
       }
       const cp = this.cps[this.i];
-      if (Math.hypot(cp.x - v.pos.x, cp.z - v.pos.z) < 14) {
+      const dCp = Math.hypot(cp.x - v.pos.x, cp.z - v.pos.z);
+      // Lost (knocked off line, looping a block): if the checkpoint hasn't got
+      // closer for a while, re-plan from the lane that heads its way.
+      if (this._bestD === undefined || dCp < this._bestD - 5) {
+        this._bestD = dCp;
+        this._noProgress = 0;
+      } else this._noProgress = (this._noProgress || 0) + dt;
+      if (this._noProgress > 6) {
+        this._noProgress = 0;
+        this._bestD = dCp;
+        const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, Math.atan2(cp.x - v.pos.x, cp.z - v.pos.z), 30);
+        if (lp) this.lane.initAt(lp);
+        this.lane.destination = cp;
+      }
+      if (dCp < 14) {
         this.i++;
         if (this.i >= this.cps.length) {
           this.finished = true;
@@ -355,6 +428,7 @@
           return;
         }
         this.lane.destination = this.cps[this.i];
+        this._bestD = undefined;
         const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
         if (lp) this.lane.initAt(lp);
       }
@@ -456,11 +530,28 @@
       this.game.scene.add(this._objArrow);
     }
 
-    _markerFor(m) {
+    _markerFor(m, taken) {
       // A chained job normally starts by itself; if that moment was missed
       // (quit, or a failed attempt) it waits at its resumeAt place instead.
-      const place = this._place(MissionEngine.selfStarting(m) ? m.resumeAt : m.start);
+      let place = this._place(MissionEngine.selfStarting(m) ? m.resumeAt : m.start);
       if (!place) return null;
+      // Two jobs starting at one place get a ring each, side by side.
+      if (taken && taken.some((t) => Math.hypot(t.x - place.x, t.z - place.z) < 4)) {
+        const ph = this.game.physics;
+        const yaw = place.yaw || 0;
+        const y = place.y || 0;
+        for (const d of [4.5, -4.5, 9, -9, 13.5, -13.5]) {
+          const x = place.x + Math.cos(yaw) * d;
+          const z = place.z - Math.sin(yaw) * d;
+          if (taken.some((t) => Math.hypot(t.x - x, t.z - z) < 4)) continue;
+          const gh = ph.groundHeight(x, z, y + 1);
+          if (Math.abs(gh - y) > 0.8 && !(y === 0 && gh < 0.8)) continue;
+          if (ph.overlaps(x, z, 0.6, gh + 0.3, gh + 1.8)) continue;
+          place = Object.assign({}, place, { x, z });
+          break;
+        }
+      }
+      if (taken) taken.push(place);
       const color = m._main ? new THREE.Color(3, 1.3, 0.35) : new THREE.Color(0.4, 1.6, 3);
       const g = new THREE.Group();
       const ring = new THREE.Mesh(this._ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -485,9 +576,12 @@
       this.game.interaction.items = this.game.interaction.items.filter((it) => it.kind !== 'mission');
       this.markers = [];
       if (this.run) return;
-      for (const m of this.available()) {
+      const taken = [];
+      // Story jobs first, so they keep the spot and the side job moves over.
+      const list = this.available().slice().sort((a, b) => (b._main ? 1 : 0) - (a._main ? 1 : 0));
+      for (const m of list) {
         if (MissionEngine.selfStarting(m) && (!m.resumeAt || this._chainPending === m.id)) continue;
-        const mk = this._markerFor(m);
+        const mk = this._markerFor(m, taken);
         if (mk) this.markers.push(mk);
       }
     }
@@ -495,7 +589,7 @@
     /** Minimap blips for jobs and the current objective. */
     blips(out) {
       if (!this.run) {
-        for (const mk of this.markers) out.push({ x: mk.place.x, z: mk.place.z, type: mk.m._main ? 'mission' : 'challenge', label: mk.m.title });
+        for (const mk of this.markers) out.push({ x: mk.place.x, z: mk.place.z, type: mk.m._main ? 'mission' : mk.m.giver === 'race' ? 'race' : 'challenge', label: mk.m.title });
         return;
       }
       const r = this.run;
@@ -630,7 +724,7 @@
           for (const id of [].concat(step.join)) this._join(id, run, step.weapon);
           return;
         case 'leave':
-          for (const id of [].concat(step.leave)) this._leave(id, run);
+          for (const id of [].concat(step.leave)) this._leave(id, run, step);
           return;
         case 'protect':
           for (const id of [].concat(step.protect)) run.protect.add(id);
@@ -952,15 +1046,25 @@
       }
     }
 
-    _leave(id, run) {
+    /**
+     * Someone leaves the job. { vanish: true } is gone at once (a disappearing
+     * act); { into: place } walks to that place's door and goes inside (a
+     * prisoner handed in); otherwise they get out and stroll off.
+     */
+    _leave(id, run, opts) {
       const a = run.actors.get(id);
       run.crew = run.crew.filter((c) => c !== id);
       if (!a) return;
+      if (opts && opts.vanish) {
+        this._retire(id, run);
+        return;
+      }
       if (a.inCar) {
         const car = a.inCar;
         a.brain._getOut && a.brain._getOut(a, car);
       }
-      a.brain = new LeaveBrain(this);
+      const into = opts && opts.into ? this._place(opts.into) : null;
+      a.brain = new LeaveBrain(this, into && (into.door || into));
       a.faction = 'story';
       a.damageScale = 0;
       a.leaving = true;
@@ -977,9 +1081,19 @@
       // Put it on the nearest lane (or kerbside) unless the place says otherwise.
       let kerb = false;
       if (!step.exact) {
-        const lp = game.roadnet.nearestLane(x, z);
-        if (lp && lp.dist < 40) {
-          const pk = this._kerbPoint(lp);
+        // A car the job will hand to an AI driver (a chase, a tail) starts in a
+        // lane, even from a yard or a quay, so it can drive off at once.
+        const driven = this._drivenLater(run, step.spawnCar);
+        const lp = game.roadnet.nearestLane(x, z, undefined, driven ? 100 : undefined);
+        if (lp && lp.dist < (driven ? 100 : 40)) {
+          let pk = this._kerbPoint(lp);
+          if (driven) {
+            // In the lane, facing the way with more road ahead (not into a dead end).
+            const r = lp.road;
+            const ahead = lp.dir > 0 ? r.to - lp.along : lp.along - r.from;
+            const dir = ahead < 80 ? -lp.dir : lp.dir;
+            pk = game.roadnet.lanePoint(r, dir, lp.lane, Math.min(r.to - 6, Math.max(r.from + 6, lp.along)), {});
+          }
           x = pk.x;
           z = pk.z;
           heading = pk.heading;
@@ -1013,6 +1127,14 @@
       return v;
     }
 
+    /** Does a later step of this job give car `id` an AI driver? */
+    _drivenLater(run, id) {
+      const walk = (list) => (list || []).some((st) => st && typeof st === 'object' && (st.chase === id || st.follow === id ||
+        (st.spawn || []).some((e) => e && e.car === id && e.behavior === 'drive') ||
+        ['steps', 'then', 'else', 'branch'].some((k) => Array.isArray(st[k]) && walk(st[k]))));
+      return !!(id && run && run.m && walk(run.m.steps));
+    }
+
     _kerbPoint(lp) {
       const pk = lp.road.parking ? this.game.roadnet.parkingPoint(lp.road, lp.dir, lp.along) : lp;
       return { x: pk.x, z: pk.z, heading: pk.heading };
@@ -1020,14 +1142,15 @@
 
     // ------------------------------------------------------- placement
     /** Can a car stand here: on the street (not a roof, the sand or the bay), clear of walls and other cars? */
-    _carFits(x, z, heading) {
+    _carFits(x, z, heading, clearance) {
       const ph = this.game.physics;
       const g = ph.groundHeight(x, z, 50);
       if (g > 0.8 || g < -0.1) return false;
       const fx = Math.sin(heading);
       const fz = Math.cos(heading);
       for (const k of [-1.7, 0, 1.7]) if (ph.overlaps(x + fx * k, z + fz * k, 1.05, g + 0.35, g + 1.5)) return false;
-      return !this.game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < 5.6);
+      const c = clearance || 5.6;
+      return !this.game.vehicles.list.some((o) => !o.removed && Math.hypot(o.pos.x - x, o.pos.z - z) < c);
     }
 
     /**
@@ -1505,6 +1628,7 @@
       const waves = step.waves || [];
       let t = 0;
       const spawned = new Set();
+      const mine = []; // this step's waves (other enemies in the job may still have work to do)
       this._objective(step.objective || 'Hold out');
       this._track(() => this._nearestOf(run.targets));
       run.timer = { left: step.survive };
@@ -1515,17 +1639,21 @@
           if (spawned.has(i) || t < (w.delay || 0)) return;
           spawned.add(i);
           const place = this._place(w.at) || game.player.pos;
-          const floor = this._floorOf(place);
+          // Waves arrive from out of sight, 25–45 m out, then close in.
+          const from = this._waveSpot(place);
+          const taken = [];
           for (let k = 0; k < (w.count || 3); k++) {
             const ang = Math.random() * Math.PI * 2;
-            const r = 2 + Math.random() * 4;
-            const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor);
+            const r = 1.5 + Math.random() * 3;
+            const s = this._standSpot(from.x + Math.cos(ang) * r, from.z + Math.sin(ang) * r, from.y, taken, 6);
+            taken.push(s);
             const a = game.combat.spawnEnemy(s.x, s.z, {
               look: this.factionLook(w.faction || 'gang', k), faction: w.faction || 'gang', weapon: w.weapon || 'pistol', alert: true, accuracy: w.accuracy,
             });
             a.pos.y = s.y;
             a.missionHostile = true;
             run.targets.push(a);
+            mine.push(a);
           }
         });
         run.timer.left = Math.max(0, step.survive - t);
@@ -1533,6 +1661,37 @@
       }, run, 0);
       game.hud.setMissionTimer(null);
       run.timer = null;
+      this._standDown(run, mine);
+    }
+
+    /** Where a wave comes from: 25–45 m out, on the same level, somewhere Jay can't see it appear. */
+    _waveSpot(place) {
+      const game = this.game;
+      const floor = this._floorOf(place);
+      let fallback = null;
+      for (let k = 0; k < 16; k++) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = 25 + Math.random() * 20;
+        const s = this._standSpot(place.x + Math.cos(ang) * r, place.z + Math.sin(ang) * r, floor, null, 4);
+        if (Math.abs(s.y - floor) > 1.2 || Math.hypot(s.x - place.x, s.z - place.z) < 18) continue;
+        if (!game.isVisible(s.x, s.y + 1, s.z, 1.2)) return s;
+        fallback = fallback || s;
+      }
+      return fallback || this._standSpot(place.x + 25, place.z, floor, null, 10);
+    }
+
+    /** The fight is over: whoever is left of the attackers (list, or all of them) gives up and runs, and stops counting as a mission enemy. */
+    _standDown(run, list) {
+      const who = list || run.targets || [];
+      for (const a of who) {
+        if (a.dead || a.removed) continue;
+        a.missionHostile = false;
+        a.persistent = false;
+        if (a.brain && a.brain.hostile !== undefined) a.brain.hostile = false;
+        a.faction = 'civilian';
+        a.brain = new FleeBrain(this, this.game.player.pos, 10);
+      }
+      run.targets = list ? (run.targets || []).filter((a) => !list.includes(a)) : [];
     }
 
     async _chase(step, run) {
@@ -1623,13 +1782,34 @@
       const rivals = [];
       const v0 = p.vehicle;
       const base = v0 ? { x: v0.pos.x, z: v0.pos.z, yaw: v0.yaw } : { x: p.pos.x, z: p.pos.z, yaw: p.heading };
+      // The grid is on the lanes going the race's way (two abreast where there
+      // are two, else single file), behind the line: a rival put off the road
+      // or on the oncoming side would never get going.
+      const lp0 = game.roadnet.nearestLane(base.x, base.z, base.yaw, 30);
       (r.rivals || []).forEach((rv, i) => {
-        const side = (i % 2 ? -1 : 1) * 3.4;
-        const back = Math.floor(i / 2) * 7 + (i % 2 ? 0 : 3.5);
-        const x = base.x + Math.cos(base.yaw) * side - Math.sin(base.yaw) * back;
-        const z = base.z - Math.sin(base.yaw) * side - Math.cos(base.yaw) * back;
+        let x;
+        let z;
+        let yaw = base.yaw;
+        if (lp0) {
+          const two = lp0.road.lanesPerDirection > 1;
+          const other = lp0.lane === 0 ? 1 : 0;
+          const lane = two && i % 2 === 0 ? other : lp0.lane;
+          const row = two ? (i % 2 === 0 ? i / 2 : (i + 1) / 2) : i + 1;
+          for (let k = 0; k < 6; k++) {
+            const along = VH.math.clamp(lp0.along - lp0.dir * (row + k) * 7.5, lp0.road.from, lp0.road.to);
+            const pt = game.roadnet.lanePoint(lp0.road, lp0.dir, lane, along);
+            x = pt.x;
+            z = pt.z;
+            yaw = pt.heading;
+            if (this._carFits(x, z, yaw, 3)) break;
+          }
+        } else {
+          const spot = this._carSpot(base.x - Math.sin(base.yaw) * 7.5 * (i + 1), base.z - Math.cos(base.yaw) * 7.5 * (i + 1), base.yaw, base.x, base.z, true);
+          x = spot.x;
+          z = spot.z;
+        }
         const type = VH.Vehicle.typeSpec(rv.car) ? rv.car : 'vireo';
-        const v = game.vehicles.spawn(type, x, z, base.yaw, { color: rv.color, role: 'mission', persistent: true });
+        const v = game.vehicles.spawn(type, x, z, yaw, { color: rv.color, role: 'mission', persistent: true });
         v.driver = 'ai';
         v.noEnter = true;
         v.controller = new RaceDriver(this, v, valid, rv.skill || 0.85 + i * 0.05);
@@ -1680,8 +1860,11 @@
       this._setMarker(null);
       const place = run.racePlace;
       const secs = game.time - startT;
-      game.hud.centerBanner(place === 1 ? 'FIRST PLACE' : 'FINISHED ' + ['1ST', '2ND', '3RD', '4TH', '5TH', '6TH'][place - 1], Math.floor(secs / 60) + ':' + String(Math.floor(secs % 60)).padStart(2, '0'));
-      if (r.mustWin !== false && place !== 1) throw new MissionFailed('You didn\'t win the race.');
+      // The place and time go in the result panel (a banner here would print under it).
+      const time = Math.floor(secs / 60) + ':' + String(Math.floor(secs % 60)).padStart(2, '0');
+      const nth = ['1st', '2nd', '3rd', '4th', '5th', '6th'][place - 1] || place + 'th';
+      run.raceResult = (place === 1 ? 'First place' : 'Finished ' + nth) + ' · ' + time;
+      if (r.mustWin !== false && place !== 1) throw new MissionFailed('You finished ' + nth + ' (' + time + '). Only a win counts.');
       for (const v of rivals) v.controller.finished = true;
     }
 
@@ -1842,7 +2025,7 @@
       else this.stats.side++;
       this._reward(m.reward, false);
       const money = (m.reward && m.reward.money) || 0;
-      game.hud.missionResult(true, m.title, money ? '+' + VH.util.formatMoney(money) : '', m.reward && m.reward.weapons ? 'New: ' + m.reward.weapons.map((w) => (VH.Combat.def(w) || { name: w }).name).join(', ') : '');
+      game.hud.missionResult(true, m.title, [run.raceResult, money ? '+' + VH.util.formatMoney(money) : ''].filter(Boolean).join('  ·  '), m.reward && m.reward.weapons ? 'New: ' + m.reward.weapons.map((w) => (VH.Combat.def(w) || { name: w }).name).join(', ') : '');
       if (game.audio.missionPassed) game.audio.missionPassed();
       VH.events.emit('mission:pass', { m });
       this._music('off');
@@ -1933,6 +2116,7 @@
         // A failed job leaves nothing behind: the retry starts from a clean
         // street instead of on top of the last attempt's cars and cast.
         for (const [, a] of run.actors) if (!a.dead && !a.removed) game.crowd.remove(a);
+        for (const a of run.targets || []) if (!a.dead && !a.removed) game.crowd.remove(a);
         for (const [, v] of run.cars) if (v.driver !== 'player' && !v.removed) game.vehicles.remove(v);
       }
       for (const [, a] of run.actors) {
@@ -1947,6 +2131,8 @@
         }
       }
       for (const [, v] of run.cars) {
+        v.missionOwned = false; // the job's over: once Jay leaves it, it's just a car
+        v.plow = false;
         if (v.driver === 'player') {
           v.persistent = true;
           continue;
@@ -1960,6 +2146,7 @@
         }
       }
       for (const it of run.watchItems || []) if (!it.gone) it.dispose();
+      if (!failed) this._standDown(run);
       if (failed) game.police.reset();
     }
 
@@ -1981,6 +2168,7 @@
           const p = game.player;
           if (p.inVehicle) game.vehicles.exitVehicle();
           p.teleport(r.pos.x, r.pos.z, r.pos.yaw);
+          if (game.resetCars) game.resetCars(); // every car back to fresh, like a reload
           if (r.pos.car) {
             const v = game.vehicles.spawn(r.pos.car.type, r.pos.car.x, r.pos.car.z, r.pos.car.yaw, { color: r.pos.car.color, persistent: true });
             game.vehicles.beginEnter({ v, side: 1, x: p.pos.x, z: p.pos.z });
@@ -1994,12 +2182,35 @@
         if (place && Math.hypot(place.x - game.player.pos.x, place.z - game.player.pos.z) > 60) {
           game.hud.setFade(1, 300);
           setTimeout(() => {
-            if (game.player.inVehicle) game.vehicles.exitVehicle();
-            game.player.teleport(place.x, place.z, place.yaw || 0);
+            // A job that wants Jay in a car (a race) takes the car back to the start with him.
+            const pv = game.player.vehicle;
+            const steps = r.m.steps || [];
+            const wantsCar = steps.slice(0, 2).some((st) => st && (st.getIn || (st.goto && st.vehicle === true)));
+            if (pv && wantsCar && !pv.wrecked && !pv.burning && !pv.removed) {
+              const lp = game.roadnet.nearestLane(place.x, place.z, place.yaw || 0, 30);
+              const at = lp ? { x: lp.x, z: lp.z, heading: lp.heading } : { x: place.x, z: place.z, heading: place.yaw || 0 };
+              const spot = this._carSpot(at.x, at.z, at.heading, at.x, at.z, !!lp);
+              pv.place(spot.x, spot.z, spot.heading);
+              game.player.pos.copy(pv.pos);
+              if (game.cameraRig.snapToCar) game.cameraRig.snapToCar(pv);
+            } else {
+              if (game.player.inVehicle) game.vehicles.exitVehicle();
+              game.player.teleport(place.x, place.z, place.yaw || 0);
+            }
+            if (game.resetCars) game.resetCars();
+            if (pv && game.player.vehicle === pv && pv.repair) pv.repair();
             game.hud.setFade(0, 600);
             this.start(r.m, 0);
           }, 350);
-        } else this.start(r.m, 0);
+        } else {
+          // Close by: still a fade, and every car back to fresh.
+          game.hud.setFade(1, 250);
+          setTimeout(() => {
+            if (game.resetCars) game.resetCars();
+            game.hud.setFade(0, 600);
+            this.start(r.m, 0);
+          }, 300);
+        }
       }
       return true;
     }
@@ -2246,6 +2457,7 @@
           g.player.stats.carsStolen = stolen; // getting back in isn't a theft
         }
       }
+      if (g.activities && g.activities._spawnKingCar) g.activities._spawnKingCar();
     }
 
     reset() {

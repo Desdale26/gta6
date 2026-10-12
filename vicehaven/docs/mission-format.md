@@ -152,6 +152,8 @@ ambient lines that play while the step runs (car banter), and `objective:
 | `{ getIn: 'getaway' }` or `{ getIn: 'any' }` | Jay gets into that car, or any car |
 | `{ spawn: [{ id?, char?, faction?, at, count?, weapon?, behavior }] }` | Place people. `behavior`: `idle`, `guard`, `patrol`, `attack`, `flee`, `cower`, `follow`, `drive` (in a spawned car, with `car: 'carId'`), `wander`. `hostile` defaults from the faction |
 | `{ join: ['rico'] }` / `{ leave: ['rico'] }` | Characters become crew: they follow Jay, ride in his car and fight |
+| `{ leave: ['leon'], vanish: true }` | Gone at once, no getting out (a disappearing act) |
+| `{ leave: ['otis'], into: 'vpd_central' }` | Gets out and walks in through that place's door (a prisoner handed in) |
 | `{ kill: ['goon1','goon2'] }` or `{ kill: 'group:docks_crew' }` | Take them down. `spawn` entries with `group: 'docks_crew'` form a group |
 | `{ survive: 90, waves: [{ at, count, weapon, faction, delay }] }` | Hold out |
 | `{ protect: 'mae' }` | Adds a fail condition for the rest of the mission |

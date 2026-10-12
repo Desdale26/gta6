@@ -553,6 +553,23 @@
       }
     }
 
+    /**
+     * Is (x, z) on a carriageway (widened by `margin`)? `skipAxis` leaves out
+     * roads running that way: a lamp at the kerb of an x-running road only
+     * cares about the cross streets it might stand in.
+     */
+    onRoad(x, z, margin, skipAxis) {
+      const m = margin || 0;
+      for (const r of this.layout.roads) {
+        if (skipAxis && r.axis === skipAxis) continue;
+        const along = r.axis === 'z' ? z : x;
+        if (along < r.from - m || along > r.to + m) continue;
+        const across = r.axis === 'z' ? x - r.coord : z - r.coord;
+        if (Math.abs(across) < r.width / 2 + m) return true;
+      }
+      return false;
+    }
+
     _buildOutskirtsTrees(layout) {
       const rng = new VH.RNG('outskirts-trees');
       const b = layout.config.bounds;
@@ -563,8 +580,9 @@
         const z = rng.range(b.minZ + 4, b.maxZ - 4);
         if (Math.abs(x) < edge && Math.abs(z) < edge) continue;
         if (x > 380) continue;
-        // Keep clear of the roads leading out of town.
+        // Keep clear of the roads leading out of town, and of every other road.
         if (Math.abs(x) < 20 || Math.abs(z) < 16) continue;
+        if (this.onRoad(x, z, 3)) continue;
         const type = rng.chance(0.7) ? (rng.chance(0.5) ? 'tree' : 'treeB') : 'palm';
         this.addProp(type, x, 0, z, rng.range(0, 6.28), rng.range(0.8, 1.35));
         placed++;

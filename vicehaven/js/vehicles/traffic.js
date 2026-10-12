@@ -47,6 +47,10 @@
       this.maxSpeed = opts.maxSpeed || null;
       this.aggressive = !!opts.aggressive;
       this.ignoreRed = !!opts.ignoreRed;
+      // A plough (the van Jay tails, a car fleeing him) never queues: it runs
+      // the lights, swerves round anything stopped and shoves through the rest.
+      this.plow = !!opts.plow;
+      if (this.plow) this.ignoreRed = true;
     }
 
     /** Start on a lane position { road, dir, lane, along }. */
@@ -61,9 +65,9 @@
       this._fill();
     }
 
-    /** Re-acquire the nearest lane (after being knocked off the road). */
-    reacquire(v) {
-      const lp = this.net.nearestLane(v.pos.x, v.pos.z, v.yaw);
+    /** Re-acquire the nearest lane (after being knocked off the road); reach: how far to look. */
+    reacquire(v, reach) {
+      const lp = this.net.nearestLane(v.pos.x, v.pos.z, v.yaw, reach);
       if (!lp) return false;
       // Start a little ahead so the target isn't behind us.
       lp.along = clamp(lp.along + lp.dir * 4, lp.road.from, lp.road.to);
@@ -159,8 +163,11 @@
 
     update(v, dt) {
       if (!this.pieces.length) {
-        if (!this.reacquire(v)) {
-          v.input.accel = -0.5;
+        if (!this.reacquire(v, 80)) {
+          // Nowhere near a road at all: sit still rather than reverse forever.
+          v.input.accel = 0;
+          v.input.steer = 0;
+          v.input.handbrake = 1;
           return;
         }
       }
@@ -185,14 +192,21 @@
       const here = RoadNet().pointOn(p, this.t, this._tmp || (this._tmp = {}));
       const off = Math.hypot(here.x - v.pos.x, here.z - v.pos.z);
       if (off > 9) {
-        this.reacquire(v);
+        this._rejoin(v, dt);
         return;
       }
+      this._rejoinT = 0;
 
       // Steering: pure pursuit on a point ahead.
       const speed = Math.max(0, v.vF);
       const look = 3.2 + speed * 0.5;
       const target = this._ahead(look, this._tmp2 || (this._tmp2 = {}));
+      const by = this._bypassStep(v, dt);
+      if (by) {
+        // Round a stopped car: aim a lane-width to the side of the path.
+        target.x += Math.cos(target.heading) * by;
+        target.z -= Math.sin(target.heading) * by;
+      }
       const l = v.worldToLocal(target.x, target.z, this._tmp3 || (this._tmp3 = {}));
       const d2 = l.x * l.x + l.z * l.z;
       const curvature = d2 > 0.01 ? (2 * l.x) / d2 : 0;
@@ -203,6 +217,7 @@
       // Speed: the limit, slowing for bends and red lights, and IDM behind whatever is ahead.
       let desired = p.limit * this.speedMul;
       if (this.maxSpeed) desired = Math.min(desired, this.maxSpeed);
+      if (this._bypass) desired = Math.min(desired, 7);
       const next = this.pieces[1];
       const distToEnd = (1 - this.t) * p.length;
       if (next && next.type === 'curve') {
@@ -229,6 +244,11 @@
       }
       let gap = Math.min(this._gapAhead, stopDist);
       const vLead = this._gapAhead <= stopDist ? this._speedAhead : 0;
+      if (this.plow) {
+        // Barge on at a shoving pace into whatever is ahead instead of waiting behind it.
+        if (this._gapAhead < 14) desired = Math.min(desired, 9);
+        gap = Infinity;
+      }
 
       // Intelligent Driver Model.
       const a = 2.2 * (this.aggressive ? 1.6 : 1);
@@ -255,7 +275,7 @@
         v.input.handbrake = 0;
         return;
       }
-      if (this._stuckT > (this._gapAhead < 8 ? 7 : 2.5)) {
+      if (this._stuckT > (this.plow ? 1.6 : this._gapAhead < 8 ? 7 : 2.5)) {
         this._stuckT = 0;
         this._reverseT = 1.4;
       }
@@ -278,6 +298,103 @@
       }
     }
 
+    /**
+     * Knocked (or put down) well away from the lane: find the nearest lane
+     * going our way and drive back to it, backing out if wedged. Always
+     * writes the controls, so a car never coasts on stale pedals.
+     */
+    _rejoin(v, dt) {
+      this._rejoinT = (this._rejoinT || 0) - dt;
+      if (this._rejoinT <= 0) {
+        this._rejoinT = 0.6;
+        this.reacquire(v, 80);
+      }
+      const p = this.pieces[0];
+      if (!p) {
+        v.input.accel = 0;
+        v.input.handbrake = 1;
+        return;
+      }
+      const tgt = RoadNet().pointOn(p, Math.min(1, this.t + 0.05), this._tmp6 || (this._tmp6 = {}));
+      const l = v.worldToLocal(tgt.x, tgt.z, this._tmp3 || (this._tmp3 = {}));
+      const speed = Math.max(0, v.vF);
+      if (speed < 0.5) this._stuckT += dt;
+      else this._stuckT = 0;
+      if (this._reverseT > 0 || this._stuckT > 2.5) {
+        if (this._stuckT > 2.5) {
+          this._stuckT = 0;
+          this._reverseT = 1.3;
+        }
+        this._reverseT -= dt;
+        v.input.accel = -0.6;
+        v.input.steer = -clamp(Math.sign(l.x || 1), -1, 1);
+        v.input.handbrake = 0;
+        return;
+      }
+      const d2 = l.x * l.x + l.z * l.z;
+      v.input.steer = l.z < 1 ? Math.sign(l.x || 1) : clamp((2 * l.x * v.wheelbase) / Math.max(1, d2) / 0.35, -1, 1);
+      v.input.accel = speed > 8 ? 0 : 0.5;
+      v.input.handbrake = 0;
+      v.horn = false;
+    }
+
+    /**
+     * A car stopped in our lane that isn't going anywhere (parked, wrecked,
+     * abandoned, a finished racer, Jay's car left in the road): after a short
+     * wait, pull round it on whichever side is clear. Returns the sideways
+     * offset to steer by (0 when not bypassing).
+     */
+    _bypassStep(v, dt) {
+      const b = this._bypass;
+      if (b) {
+        b.t += dt;
+        const car = b.car;
+        const l = car.removed ? { z: -99 } : v.worldToLocal(car.pos.x, car.pos.z, this._tmp7 || (this._tmp7 = {}));
+        if (l.z < -(car.hz + v.hz + 2) || b.t > 9) b.leaving = (b.leaving || 0) + dt;
+        if (b.leaving > 1.2) {
+          this._bypass = null;
+          return 0;
+        }
+        return b.side * 3.3 * (b.leaving ? 1 - b.leaving / 1.2 : Math.min(1, b.t / 0.8));
+      }
+      const o = this._blockedBy;
+      const plow = this.plow;
+      // A plough goes round anything slow (a queue at the lights too); others only round a parked or broken-down car.
+      const parkedish = o && o.pos && !o.removed && (plow ? o.speed < 2 : o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd));
+      if (!parkedish || this._gapAhead > (plow ? 18 : 12) || v.speed > (plow ? 7 : 1.5)) {
+        this._waitT = 0;
+        return 0;
+      }
+      this._waitT = (this._waitT || 0) + dt;
+      if (this._waitT < (plow ? 0.25 : o.driver === 'player' ? 4 : 1.5)) return 0;
+      this._waitT = 0;
+      // Which side has room: no car in the way and no wall for the next 20 m.
+      const ph = this.sys.game.physics;
+      const h = v.yaw;
+      const fx = Math.sin(h), fz = Math.cos(h);
+      const lx = Math.cos(h), lz = -Math.sin(h);
+      for (const side of [1, -1]) {
+        let clear = true;
+        for (let s = 0; s <= 20 && clear; s += 4) {
+          const x = v.pos.x + fx * s + lx * side * 3.3;
+          const z = v.pos.z + fz * s + lz * side * 3.3;
+          if (ph.overlaps(x, z, 1.0, v.pos.y + 0.35, v.pos.y + 1.4)) clear = false;
+          // (A plough only minds walls: cars on that side get shoved.)
+          if (!plow) {
+            for (const c of this.sys.vehicles.list) {
+              if (c !== v && c !== o && Math.hypot(c.pos.x - x, c.pos.z - z) < 4) clear = false;
+            }
+          }
+        }
+        if (clear) {
+          this._bypass = { car: o, side, t: 0 };
+          return 0;
+        }
+      }
+      // Walls both sides: a plough just goes straight through the car.
+      return 0;
+    }
+
     /** Nearest obstacle along the path ahead: cars, Jay on foot, pedestrians on the road. */
     _senseAhead(v, speed) {
       const reach = Math.min(48, 10 + speed * 2.4);
@@ -291,7 +408,7 @@
       for (let s = 2; s <= reach; s += 2.6) {
         this._ahead(s, pt);
         for (const o of list) {
-          if (o === v) continue;
+          if (o === v || (this._bypass && o === this._bypass.car)) continue;
           const dx = o.pos.x - pt.x;
           const dz = o.pos.z - pt.z;
           const r = o.hx + 1.1;
@@ -419,6 +536,24 @@
       }
     }
   }
+
+  /**
+   * After everything was cleared (a respawn): fill the streets around (x, z)
+   * straight away. The screen is faded, so cars may appear in view.
+   */
+  TrafficSystem.prototype.repopulate = function (x, z) {
+    const list = this.vehicles.list;
+    const want = this.targetCount;
+    let count = list.filter((v) => v.role === 'traffic').length;
+    for (let tries = 0; tries < want * 4 && count < want; tries++) {
+      const lp = this.net.randomLanePoint(this._rng, x, z, 30, 190);
+      if (!lp) continue;
+      if (list.some((v) => Math.hypot(v.pos.x - lp.x, v.pos.z - lp.z) < 14)) continue;
+      this.spawnAt(lp);
+      count++;
+    }
+    this._timer = 0;
+  };
 
   TrafficSystem.TYPES = TRAFFIC_TYPES;
   VH.LaneDriver = LaneDriver;

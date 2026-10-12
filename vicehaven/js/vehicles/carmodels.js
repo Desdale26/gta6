@@ -1771,7 +1771,7 @@
     }
   }
 
-  // 6. Mesa Hauler: pickup with an open bed.
+  // 6. Mesa: pickup with an open bed.
   (function () {
     const gh = greenhouse({ zb: 0.95, yb: 1.28, top: [0.25, 1.86], mid: [-0.3, 1.88, 0.2], rear: [-0.78, 1.87], base: [-0.84, 1.32], bot: 1.2, r: [0.03, 0.14, 0.06, 0.02], baseOut: 0.02 });
     DEFS.mesa = {
@@ -2194,7 +2194,7 @@
     pipit: ['Pipit', 'Kobo', 'compact', 1050, 46, 0.4, 0.56, 4, [0xf2c61f, 0x9fe0c4, 0xc8202a, 0x78b8e8, 0xf2f2ee]],
     ironclad: ['Ironclad 68', 'Dunmore', 'muscle', 1650, 66, 0.8, 0.5, 4, [0x0e0e10, 0xa8101c, 0x3b1558, 0xd29a1c]],
     porter: ['Porter', 'Hask', 'van', 2400, 40, 0.22, 0.42, 2, [0xf1f1ee, 0xb9bcbf, 0x6b4a32]],
-    mesa: ['Mesa Hauler', 'Dunmore', 'pickup', 2150, 50, 0.45, 0.5, 4, [0xa8161c, 0x1f3a26, 0xb59a70, 0x111214]],
+    mesa: ['Mesa', 'Dunmore', 'pickup', 2150, 50, 0.45, 0.5, 4, [0xa8161c, 0x1f3a26, 0xb59a70, 0x111214]],
     cab: ['Halcyon Cab', 'Merrow', 'taxi', 1520, 52, 0.45, 0.56, 4, [0xf5b800]],
     interceptor: ['Halcyon Interceptor', 'Merrow', 'police', 1620, 64, 0.72, 0.68, 4, [0x0d0e10]],
     zephyr: ['Zephyr RS', 'Aurel', 'sports', 1350, 72, 1.0, 0.95, 2, [0xe8e6e0, 0x1a1c20, 0xd4ff1e, 0x2a55d8, 0xb81c1c]],
