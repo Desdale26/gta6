@@ -144,9 +144,12 @@ loaded: wrecks, abandoned and stolen cars, police, traffic and parked cars
 all go and fresh ones fill the streets. The car Jay is sitting in comes
 back repaired, and the King of the Road prize waits at Heron Corner.
 
-**Cars you tail or chase don't get stuck.** A van Jay is following, or a
-car running from him, runs red lights, swerves round queues and parked
-cars, and shoves through anything that's still in the way.
+**Cars you tail or chase don't get stuck, and don't go on forever.** A van
+Jay is following, or a car running from him, runs red lights, swerves round
+queues and parked cars, and shoves through anything that's still in the
+way. A car you tail pulls up at the kerb by where it's going, and the tail
+ends. A car you chase gives up and pulls over if you stay on its tail for
+about a minute (sooner if you've knocked it about): get alongside to stop it.
 
 **Health.** Get out of trouble for a few seconds and Jay's health refills
 on its own, all the way. **Settings → Gameplay → Difficulty** sets how much

@@ -321,7 +321,20 @@
 
     onBump() {}
 
+    /** Out of road and nerve: pull over and stop (the chase step decides when). */
+    giveUp(v) {
+      this.gaveUp = true;
+      v.plow = false;
+    }
+
     update(v, dt) {
+      if (this.gaveUp) {
+        v.input.accel = v.speed > 0.5 ? -1 : 0;
+        v.input.steer = 0;
+        v.input.boost = 0;
+        v.input.handbrake = v.speed < 4 ? 1 : 0;
+        return;
+      }
       this._t -= dt;
       if (this._t <= 0) {
         this._t = 2;
@@ -348,8 +361,14 @@
       // The car Jay tails never gets stuck in a queue or behind a parked car:
       // it ploughs through (see LaneDriver.plow).
       this.lane = new VH.LaneDriver(this.game.traffic, Object.assign({ speedMul: 0.95, plow: true }, opts || {}));
-      this.lane.destination = dest;
       this.dest = dest;
+      // Where it actually pulls up: the lane nearest the destination (a place
+      // like a shop front or a loading bay is often 15-30 m off the road).
+      const stop = this.game.roadnet.nearestLane(dest.x, dest.z, undefined, 80);
+      this.stopAt = stop ? { x: stop.x, z: stop.z } : dest;
+      this.lane.destination = this.stopAt;
+      this.t = 0;
+      this._nearT = 0;
       v.plow = true;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
@@ -360,12 +379,19 @@
     }
 
     update(v, dt) {
+      this.t += dt;
       const d = Math.hypot(this.dest.x - v.pos.x, this.dest.z - v.pos.z);
-      if (d < 14) {
+      const dStop = Math.hypot(this.stopAt.x - v.pos.x, this.stopAt.z - v.pos.z);
+      // Circling the block near the destination counts as being there.
+      if (d < 90) this._nearT += dt;
+      // It always gets somewhere: at the kerb by the destination, close to it
+      // for a while, or (never driving forever) after five minutes.
+      if (this.arrived || d < 14 || dStop < 16 || this._nearT > 20 || this.t > 300) {
         v.input.accel = v.speed > 0.5 ? -1 : 0;
         v.input.steer = 0;
-        v.input.handbrake = 1;
+        v.input.handbrake = v.speed < 4 ? 1 : 0;
         this.arrived = true;
+        v.plow = false;
         return;
       }
       this.lane.update(v, dt);
@@ -1723,10 +1749,18 @@
       this._track(() => (car.wrecked || car.removed ? null : car));
       let lostT = 0;
       let boxT = 0;
+      let onTail = 0;
       await this._until(() => {
         const p = game.player;
         const d = Math.hypot(car.pos.x - p.pos.x, car.pos.z - p.pos.z);
         if (car.wrecked || car.health < 60) return true;
+        // Keep on their tail long enough and they give up and pull over, so a
+        // chase always ends (sooner the more Jay has knocked them about).
+        if (d < 90) onTail += this._dt * (car.health < 600 ? 2 : 1);
+        if (car.controller && !car.controller.gaveUp && car.controller.giveUp && onTail > (step.giveUpAfter || 60)) {
+          car.controller.giveUp(car);
+          this._objective(mode === 'catch' ? 'They\'re pulling over. Get alongside to stop them.' : 'They\'ve stopped. Finish it.');
+        }
         if (mode === 'catch') {
           if (car.speed < 2.5 && d < car.hz + 9) boxT += this._dt;
           else boxT = Math.max(0, boxT - this._dt);
