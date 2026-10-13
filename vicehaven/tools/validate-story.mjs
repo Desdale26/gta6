@@ -41,7 +41,7 @@ const bad = (where, msg) => problems.push(where + ': ' + msg);
 const soft = (where, msg) => warn.push(where + ': ' + msg);
 
 const BUILTIN_PLACES = new Set(['civic_plaza', 'meridian_yard', 'founders_park', 'vicehaven_tower', 'oceanview_pier', 'pier_end', 'the_boardwalk', 'grand_avenue', 'meridian_boulevard', 'old_market', 'palm_crescent', 'harbor_point', 'downtown', 'saltmarsh_docks', 'crestline_estates',
-  'pier9_gate', 'bay_14', 'container_maze', 'the_quay', 'freighter_berth', 'fish_market', 'boatworks', 'quay_end', 'voss_estate', 'voss_forecourt', 'voss_pool', 'voss_helipad', 'voss_fountain', 'police_station', 'hospital', 'vpd_central', 'mercy_general', 'tidewater_lot', 'crane_row']);
+  'pier9_gate', 'bay_14', 'container_maze', 'the_quay', 'freighter_berth', 'fish_market', 'boatworks', 'quay_end', 'voss_estate', 'voss_forecourt', 'voss_pool', 'voss_helipad', 'voss_fountain', 'police_station', 'hospital', 'vpd_central', 'mercy_general', 'tidewater_lot', 'crane_row', 'velvet_tide', 'velvet_tide_floor', 'velvet_tide_bar']);
 const KINDS = new Set(['garage', 'alley', 'rooftop', 'parking', 'storefront', 'bank', 'diner', 'bar', 'motel', 'corner', 'park', 'pier', 'boardwalk', 'warehouse', 'dock', 'mansion', 'construction', 'church', 'hospital_front', 'police_station_front', 'apartment_front', 'beach', 'overlook', 'street']);
 const DISTRICTS = new Set(['downtown', 'oldmarket', 'palmcrescent', 'harborpoint', 'saltmarsh_docks', 'crestline_estates']);
 const CARS = new Set(['vireo', 'halcyon', 'pipit', 'ironclad', 'porter', 'mesa', 'cab', 'interceptor', 'zephyr', 'tern', 'sovereign', 'bulwark', 'hauler', 'medic', 'drifter', 'lowrider', 'beater', 'unmarked']);

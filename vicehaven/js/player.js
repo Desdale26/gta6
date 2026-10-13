@@ -776,6 +776,11 @@
         // Jay talks with his hands in scenes too.
         talk: this._talk = (this._talk || 0) + ((VH.game && VH.game.dialogue ? VH.game.dialogue.talkLevel('jay') : 0) - (this._talk || 0)) * Math.min(1, dt * 9),
         talkEnergy: VH.game && VH.game.dialogue ? VH.game.dialogue.talkEnergy('jay') : 0,
+        // On the dance floor (club.js sets this.dancing to { style, beat, beatN }).
+        dance: this.dancing ? 1 : 0,
+        danceStyle: this.dancing ? this.dancing.style : 0,
+        beat: this.dancing ? this.dancing.beat : undefined,
+        beatN: this.dancing ? this.dancing.beatN : undefined,
         recoil: this._recoil || 0,
         swing: this._meleeSwing || 0,
       });

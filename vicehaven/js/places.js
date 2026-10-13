@@ -108,6 +108,14 @@
       // Past the Pier Café (landmarks.js), on the open deck by the end rail.
       this.add('pier_end', { name: 'The end of the pier', x: pier.x1 - 4, z: 0, y: KERB, yaw: Math.PI / 2, kind: 'pier', district: 'harborpoint' });
       this.add('the_boardwalk', { name: 'The Boardwalk', x: 410, z: -60, yaw: Math.PI / 2, kind: 'boardwalk', district: 'harborpoint' });
+      // The Velvet Tide (landmarks.js builds it; club.js runs it).
+      const club = L.waterfront.club;
+      if (club) {
+        const dz = (club.doorZ0 + club.doorZ1) / 2;
+        this.add('velvet_tide', { name: 'The Velvet Tide', x: club.x0 - 2.6, z: dz, yaw: Math.PI / 2, kind: 'storefront', district: 'harborpoint' });
+        this.add('velvet_tide_floor', { name: 'The Velvet Tide dance floor', x: (club.floor.x0 + club.floor.x1) / 2, z: (club.floor.z0 + club.floor.z1) / 2, yaw: Math.PI / 2, kind: 'club', district: 'harborpoint' });
+        this.add('velvet_tide_bar', { name: 'The Velvet Tide bar', x: (club.bar.x0 + club.bar.x1) / 2, z: club.bar.z0 - 1.4, yaw: 0, kind: 'club', district: 'harborpoint' });
+      }
       this.add('grand_avenue', { name: 'Grand Avenue', x: -9, z: -150, yaw: Math.PI, kind: 'street', district: 'downtown' });
       this.add('meridian_boulevard', { name: 'Meridian Boulevard', x: 150, z: -11, yaw: Math.PI / 2, kind: 'street', district: 'harborpoint' });
       this.add('old_market', { name: 'Old Market', x: -296, z: -150, yaw: 0, kind: 'street', district: 'oldmarket' });

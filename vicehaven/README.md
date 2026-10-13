@@ -12,7 +12,7 @@ padlocked, his mentor is about to walk out of prison, and a developer is
 buying the city block by block with money Jay once helped steal.
 
 - **The story:** 31 main jobs in four acts, four side stories of four jobs
-  each, five big choices that change who lives, who leaves and how it ends,
+  each (plus *The Velvet Tide*, three jobs at the boardwalk club), five big choices that change who lives, who leaves and how it ends,
   and three endings: over 7,000 lines of dialogue, about 5½ hours of story
   and 2¼ hours of side stories.
 - **Between jobs:** 25 taxi fares, 6 street races, 10 cars on Dex's list,
@@ -178,6 +178,8 @@ nights with Mae on Medic 12), *The Silver Foxes* (three robbers in their
 seventies and one last job), *Dead Air* (a pirate DJ and the city's voice)
 and *The Wedding Car* (a chauffeur, his late wife's car, and his
 granddaughter's wedding). Each one changes something about the endings.
+*The Velvet Tide* (three jobs at the boardwalk dance club) opens after
+*The Toolbox*.
 
 **Choices.** Five decisions are remembered for the rest of the game: what
 Jay does with the money in the toolbox, whether he trusts the detective,
@@ -197,6 +199,24 @@ last checkpoint if there was one.
   whom only turn up later in the story.
 - **Esc → Stats** counts stunt jumps, lanterns and fares; **Job log** lists
   the races, the list, bounties and turf wars.
+
+### The Velvet Tide
+
+An open-air dance club on the boardwalk just north of the pier (the pink
+neon sign on Seawall Drive; it's on the map). Inside: a light-up dance
+floor and sweeping beams in time with the club's own house track, a DJ on
+the decks, a juice bar (**E**: a Tide Fizz, $5, +40 health) and a VIP
+balcony. Tuli on the door won't let you in with the police after you.
+
+- **Dance.** Stand on the floor and press **E**. Arrows fall on the beat:
+  hit them with the **arrow keys** (or **W A S D**) as they reach the
+  targets. Perfect, Good and OK hits score more with a combo; you get paid
+  for your score and your best goes in **Esc → Stats**. Jay's moves change
+  as the combo builds.
+- **The Velvet Tide** (side story, after *The Toolbox*): the owner, Mars
+  Okonjo, has Halberd leaning on her. Three jobs: throw out the collectors,
+  get DJ Lowtide's records back, and hold the club on closing night. Finish
+  it and you're on the list for the VIP balcony.
 - **Street races** (after *Tick Tock*). Six races from Heron Corner to
   Crestline. Win all six for a gold Drifter.
 - **Dex's list** (after *The Toolbox*). Ten cars somebody wants. Steal them
@@ -356,6 +376,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Close the tab in the middle of a job: Continue says so and the job's marker is there to restart it
 - [ ] M opens the map with job icons and the route
 - [ ] In a cab, P starts taxi duty and a fare tells you their story
+- [ ] The Velvet Tide: neon outside, music gets louder at the door, the floor and beams flash on the beat; E on the floor starts the dance game and pays out
 - [ ] Night falls: street-light pools, headlights, lit windows, the helicopter's searchlight; Jay, cars and roads stay easy to see
 - [ ] Settings → Graphics → Night brightness changes how bright nights are, live
 - [ ] Settings change live and persist (quality presets, voices, strong language)

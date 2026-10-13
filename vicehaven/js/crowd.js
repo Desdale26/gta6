@@ -960,6 +960,10 @@
           handsUp: an.handsUp,
           phone: an.phone,
           cower: an.cower,
+          dance: an.dance,
+          danceStyle: an.danceStyle,
+          beat: an.beat,
+          beatN: an.beatN,
           dead: a.dead,
         });
         a._animAcc = 0;

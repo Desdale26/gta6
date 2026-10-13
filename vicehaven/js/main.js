@@ -254,6 +254,7 @@
         return 1.5;
       });
       if (VH.Activities) this.activities = new VH.Activities(this);
+      if (VH.Club) this.club = new VH.Club(this);
       if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
       if (this.radio) this.radio.onSongChange = (e) => {
@@ -432,6 +433,7 @@
       this.fx.clearDebris();
       this.combat.load(null);
       if (this.activities) this.activities.reset();
+      if (this.club) this.club.reset();
       this.player.state = 'ground';
       this.player.vehicle = null;
       this.player.model.setVisible(true);
@@ -688,6 +690,7 @@
           ['Stunt jumps', c.jumps + ' / ' + c.jumpsTotal],
           ['Lost lanterns', c.lanterns + ' / ' + c.lanternsTotal],
           ['Taxi fares', String(c.fares)],
+          ['Best dance score', String(this.player.stats.bestDance || 0)],
         ];
       })() : []).concat([
         ['Money', VH.util.formatMoney(this.player.money)],
@@ -734,6 +737,7 @@
           this.police.update(FIXED_DT);
           this.missions.update(FIXED_DT);
           if (this.activities) this.activities.update(FIXED_DT);
+          if (this.club) this.club.update(FIXED_DT);
         }
         this.dialogue.update();
         this.vehicleFeedback.update(FIXED_DT);
@@ -974,6 +978,7 @@
       if (this.police.heli) out.push({ x: this.police.heli.pos.x, z: this.police.heli.pos.z, type: 'police', flash: true, label: 'Air unit' });
       if (this.missions && this.missions.blips) this.missions.blips(out);
       if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
+      if (this.club && !(this.missions && this.missions.run)) this.club.blips(out);
       return out;
     },
 
@@ -1143,6 +1148,7 @@
         this.police.update(sdt);
         this.missions.update(sdt);
         if (this.activities) this.activities.update(sdt);
+        if (this.club) this.club.update(sdt);
       }
       this.dialogue.update();
       const cw = this.combat.weapon;

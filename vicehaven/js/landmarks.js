@@ -447,8 +447,19 @@
       world.addProp('streetlight', sea - 1.4, KERB, z, -Math.PI / 2, 1);
       if (Math.abs(z) > 12) world.addProp('bench', sea - 2.2, KERB, z + 12, Math.PI / 2, 1);
     }
+    // The Velvet Tide: an open-air club on the boardwalk just north of the pier.
+    const club = (wf.club = {
+      x0: road + 6, x1: sea - 6, z0: 15, z1: 45, doorZ0: 28, doorZ1: 31, wallH: 6,
+    });
+    club.floor = { x0: club.x0 + 5, x1: club.x0 + 15, z0: 24.5, z1: 34.5 };
+    club.stage = { x0: club.x1 - 4, x1: club.x1 - 0.4, z0: 22, z1: 37, top: KERB + 0.9 };
+    club.bar = { x0: club.x0 + 3, x1: club.x0 + 14, z0: 40.6, z1: 41.4 };
+    club.vip = { x1: club.x0 + 15, z1: 19.2, top: 2.8, stairW: 2.2, stairZ: 23.4 };
+    buildClub(world, club);
+
     for (let z = z0 + 4; z < z1 - 4; z += 22) {
       if (Math.abs(z) < 10) continue;
+      if (z > club.z0 - 2 && z < club.z1 + 2) continue; // the club stands here
       world.addProp('palmTall', road + 17, KERB, z, z * 0.37, 0.9 + ((z * 7) % 3) * 0.08);
     }
     for (let z = z0 + 8; z < z1 - 7; z += 30) world.addProp('streetlight', road + 0.7, KERB, z, -Math.PI / 2, 1);
@@ -515,6 +526,134 @@
     water.receiveShadow = false;
     world.root.add(water);
     world.water = water;
+  }
+
+
+  // ----------------------------------------------------- The Velvet Tide
+  /**
+   * An open-air dance club on the boardwalk north of the pier: walls with a
+   * door onto Seawall Drive, a DJ stage, a juice bar under a canopy, and a
+   * VIP balcony up a flight of stairs. The moving parts (the light-up dance
+   * floor, the beams, the music, the people) are club.js.
+   */
+  function buildClub(world, c) {
+    const ctx = world.ctxAt((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2);
+    const y0 = KERB;
+    const H = c.wallH;
+    const T = 0.4;
+    const wall = VH.col(0x1b1630);
+    const trim = VH.col(0x2c2448);
+    const add = (x0, ya, z0, x1, yb, z1, color, solid) => {
+      ctx.propMatte.box(x0, ya, z0, x1, yb, z1, color);
+      if (solid) world.physics.addBox(x0, Math.min(ya, 0), z0, x1, yb, z1, 'club');
+    };
+    // Walls (the west one has the door, under a header).
+    add(c.x0, 0, c.z0, c.x0 + T, H, c.doorZ0, wall, true);
+    add(c.x0, 0, c.doorZ1, c.x0 + T, H, c.z1, wall, true);
+    ctx.propMatte.box(c.x0, 3.3, c.doorZ0, c.x0 + T, H, c.doorZ1, wall);
+    world.physics.addBox(c.x0, 3.3, c.doorZ0, c.x0 + T, H, c.doorZ1, 'club');
+    add(c.x1 - T, 0, c.z0, c.x1, H, c.z1, wall, true);
+    add(c.x0, 0, c.z1 - T, c.x1, H, c.z1, wall, true);
+    add(c.x0, 0, c.z0, c.x1, H, c.z0 + T, wall, true);
+    // A cap along the top of the walls.
+    for (const [a, b, d, e] of [[c.x0 - 0.1, c.z0 - 0.1, c.x1 + 0.1, c.z0 + T + 0.1], [c.x0 - 0.1, c.z1 - T - 0.1, c.x1 + 0.1, c.z1 + 0.1], [c.x0 - 0.1, c.z0, c.x0 + T + 0.1, c.z1], [c.x1 - T - 0.1, c.z0, c.x1 + 0.1, c.z1]]) {
+      ctx.propMatte.box(a, H, b, d, H + 0.25, e, trim);
+    }
+    // A dark floor over the boardwalk boards.
+    ctx.propMatte.box(c.x0 + T, y0, c.z0 + T, c.x1 - T, y0 + 0.012, c.z1 - T, VH.col(0x14111d));
+
+    const ix0 = c.x0 + T;
+    const ix1 = c.x1 - T;
+    const iz0 = c.z0 + T;
+    const iz1 = c.z1 - T;
+    const neonPink = VH.col(0xff3d8b);
+    const neonCyan = VH.col(0x37e6ff);
+    const neonGold = VH.col(0xffc247);
+    // Neon strips round the inside of the walls, and round the door outside.
+    // (Corners listed left to right as seen from behind the glow: wound so the lit face points along n.)
+    const strip = (pts, n, col) => ctx.screen.quad(pts[1], pts[0], pts[3], pts[2], n, col);
+    const ny = 4.6;
+    const nh = 0.12;
+    strip([[ix0, ny, iz1 - 0.01], [ix1, ny, iz1 - 0.01], [ix1, ny + nh, iz1 - 0.01], [ix0, ny + nh, iz1 - 0.01]], [0, 0, -1], neonPink);
+    strip([[ix1, ny, iz0 + 0.01], [ix0, ny, iz0 + 0.01], [ix0, ny + nh, iz0 + 0.01], [ix1, ny + nh, iz0 + 0.01]], [0, 0, 1], neonPink);
+    strip([[ix1 - 0.01, ny, iz1], [ix1 - 0.01, ny, iz0], [ix1 - 0.01, ny + nh, iz0], [ix1 - 0.01, ny + nh, iz1]], [-1, 0, 0], neonCyan);
+    strip([[ix0 + 0.01, ny, iz0], [ix0 + 0.01, ny, iz1], [ix0 + 0.01, ny + nh, iz1], [ix0 + 0.01, ny + nh, iz0]], [1, 0, 0], neonCyan);
+    const ox = c.x0 - 0.01;
+    for (const [za, zb, ya, yb] of [[c.doorZ0 - 0.25, c.doorZ0 - 0.1, y0, 3.45], [c.doorZ1 + 0.1, c.doorZ1 + 0.25, y0, 3.45], [c.doorZ0 - 0.25, c.doorZ1 + 0.25, 3.3, 3.45]]) {
+      strip([[ox, ya, zb], [ox, ya, za], [ox, yb, za], [ox, yb, zb]], [-1, 0, 0], neonPink);
+    }
+    sign(world, { x: c.x0 - 0.17, y: H + 1.1, z: (c.doorZ0 + c.doorZ1) / 2, yaw: -Math.PI / 2, w: 9, h: 1.9, lines: ['VELVET TIDE'], style: 'neon' });
+    ctx.propMatte.box(c.x0 - 0.12, H - 0.2, (c.doorZ0 + c.doorZ1) / 2 - 4.7, c.x0, H + 2.2, (c.doorZ0 + c.doorZ1) / 2 + 4.7, VH.col(0x0b0d18));
+    // A cyan band along the front, and neon up the two front corners.
+    for (const [za, zb] of [[c.z0, c.doorZ0 - 0.4], [c.doorZ1 + 0.4, c.z1]]) {
+      strip([[ox, 4.9, zb], [ox, 4.9, za], [ox, 5.04, za], [ox, 5.04, zb]], [-1, 0, 0], neonCyan);
+      strip([[ox, 1.0, zb], [ox, 1.0, za], [ox, 1.08, za], [ox, 1.08, zb]], [-1, 0, 0], neonPink);
+    }
+    for (const z of [c.z0 + 0.05, c.z1 - 0.2]) strip([[ox, y0, z + 0.15], [ox, y0, z], [ox, H, z], [ox, H, z + 0.15]], [-1, 0, 0], neonPink);
+    // An awning over the door.
+    ctx.propMatte.box(c.x0 - 1.6, 3.55, c.doorZ0 - 1.2, c.x0, 3.75, c.doorZ1 + 1.2, VH.col(0x6b1f3d));
+    strip([[c.x0 - 1.61, 3.55, c.doorZ1 + 1.2], [c.x0 - 1.61, 3.55, c.doorZ0 - 1.2], [c.x0 - 1.61, 3.75, c.doorZ0 - 1.2], [c.x0 - 1.61, 3.75, c.doorZ1 + 1.2]], [-1, 0, 0], neonGold);
+
+    // The DJ stage at the back, a console, and stacks of speakers.
+    const st = c.stage;
+    add(st.x0, 0, st.z0, st.x1, st.top, st.z1, VH.col(0x221b38), true);
+    strip([[st.x0 - 0.01, st.top - 0.12, st.z1], [st.x0 - 0.01, st.top - 0.12, st.z0], [st.x0 - 0.01, st.top - 0.02, st.z0], [st.x0 - 0.01, st.top - 0.02, st.z1]], [-1, 0, 0], neonGold);
+    const cz = (st.z0 + st.z1) / 2;
+    add(st.x0 + 0.6, st.top, cz - 2, st.x0 + 1.4, st.top + 1.0, cz + 2, VH.col(0x0f0f14), true);
+    strip([[st.x0 + 0.59, st.top + 0.55, cz + 1.8], [st.x0 + 0.59, st.top + 0.55, cz - 1.8], [st.x0 + 0.59, st.top + 0.9, cz - 1.8], [st.x0 + 0.59, st.top + 0.9, cz + 1.8]], [-1, 0, 0], neonCyan);
+    for (const z of [st.z0 + 0.2, st.z1 - 1.6]) {
+      add(st.x1 - 2.0, st.top, z, st.x1 - 0.2, st.top + 2.8, z + 1.4, VH.col(0x101014), true);
+      for (const yy of [0.55, 1.45, 2.3]) ctx.propMatte.box(st.x1 - 2.06, st.top + yy - 0.32, z + 0.38, st.x1 - 2.0, st.top + yy + 0.32, z + 1.02, VH.col(0x2a2a33));
+    }
+
+    // The juice bar along the north wall, under a canopy.
+    const bar = c.bar;
+    add(bar.x0, 0, bar.z0, bar.x1, y0 + 1.1, bar.z1, VH.col(0x3a2a55), true);
+    ctx.propMatte.box(bar.x0 - 0.1, y0 + 1.1, bar.z0 - 0.15, bar.x1 + 0.1, y0 + 1.16, bar.z1 + 0.1, VH.col(0xd9d2e8));
+    strip([[bar.x0, y0 + 0.9, bar.z0 - 0.01], [bar.x1, y0 + 0.9, bar.z0 - 0.01], [bar.x1, y0 + 1.0, bar.z0 - 0.01], [bar.x0, y0 + 1.0, bar.z0 - 0.01]], [0, 0, -1], neonPink);
+    add(bar.x0, 0, iz1 - 0.6, bar.x1, 2.5, iz1, VH.col(0x241c36), true);
+    // Rows of bright bottles on the back shelf.
+    for (const yy of [1.25, 1.85]) {
+      for (let x = bar.x0 + 0.3; x < bar.x1 - 0.2; x += 0.42) {
+        const col = [neonCyan, neonGold, neonPink, VH.col(0x9dff6b)][Math.floor(x * 7 + yy * 3) % 4];
+        strip([[x, yy, iz1 - 0.61], [x + 0.18, yy, iz1 - 0.61], [x + 0.18, yy + 0.38, iz1 - 0.61], [x, yy + 0.38, iz1 - 0.61]], [0, 0, -1], col);
+      }
+    }
+    ctx.propMatte.box(ix0, 5.0, bar.z0 - 1.2, ix1, 5.2, iz1, VH.col(0x2a2240));
+
+    // The VIP balcony on the south side, up a flight of stairs by the door.
+    const v = c.vip;
+    add(ix0, 0, iz0, v.x1, v.top, v.z1, VH.col(0x201a33), true);
+    strip([[v.x1, v.top - 0.14, v.z1 + 0.01], [ix0 + v.stairW, v.top - 0.14, v.z1 + 0.01], [ix0 + v.stairW, v.top - 0.04, v.z1 + 0.01], [v.x1, v.top - 0.04, v.z1 + 0.01]], [0, 0, 1], neonGold);
+    railing(world, ctx, ix0 + v.stairW, v.z1 - 0.1, v.x1 - 0.1, v.z1 - 0.1, v.top, { color: 0xc9a45c });
+    railing(world, ctx, v.x1 - 0.1, iz0, v.x1 - 0.1, v.z1 - 0.1, v.top, { color: 0xc9a45c });
+    // The stairs: a ramp underfoot, steps to look at.
+    const s0 = v.z1;
+    const s1 = v.stairZ;
+    world.physics.addRamp(ix0 + v.stairW / 2, (s0 + s1) / 2, v.stairW / 2, (s1 - s0) / 2, Math.PI, 0, y0, v.top, 'club');
+    const steps = 8;
+    for (let i = 0; i < steps; i++) {
+      const za = s1 - ((i + 1) * (s1 - s0)) / steps;
+      ctx.propMatte.box(ix0, 0, za, ix0 + v.stairW, y0 + ((i + 1) * (v.top - y0)) / steps, za + (s1 - s0) / steps, VH.col(i % 2 ? 0x2a2342 : 0x302848));
+    }
+    // Lounge sofas and a low table up there.
+    for (const x of [v.x1 - 9, v.x1 - 5]) {
+      add(x, v.top, iz0 + 0.1, x + 3, v.top + 0.45, iz0 + 1.0, VH.col(0x6b1f3d), true);
+      ctx.propMatte.box(x, v.top + 0.45, iz0 + 0.1, x + 3, v.top + 1.0, iz0 + 0.3, VH.col(0x6b1f3d));
+    }
+    add(v.x1 - 7.2, v.top, iz0 + 1.6, v.x1 - 5.8, v.top + 0.4, iz0 + 2.4, VH.col(0x111015), true);
+    sign(world, { x: (ix0 + v.x1) / 2 + 2, y: v.top + 1.6, z: iz0 + 0.02, yaw: 0, w: 2.6, h: 0.8, lines: ['VIP'], style: 'neon' });
+
+    // A lighting truss across the top.
+    for (const z of [c.floor.z0 + 1, (c.floor.z0 + c.floor.z1) / 2, c.floor.z1 - 1]) {
+      ctx.propMatte.box(c.floor.x0 - 1.5, 5.55, z - 0.1, c.floor.x1 + 1.5, 5.75, z + 0.1, VH.col(0x4a4a55));
+    }
+    // Velvet ropes along the queue outside.
+    for (const z of [c.doorZ0 - 3.5, c.doorZ0 - 2, c.doorZ1 + 2, c.doorZ1 + 3.5]) {
+      ctx.prop.cylinder(c.x0 - 1.3, y0, z, 0.05, 0.05, 1.0, 8, VH.col(0xd4af37), false);
+    }
+    ctx.propMatte.box(c.x0 - 1.33, y0 + 0.82, c.doorZ0 - 3.5, c.x0 - 1.27, y0 + 0.88, c.doorZ0 - 2, VH.col(0x8b0f2e));
+    ctx.propMatte.box(c.x0 - 1.33, y0 + 0.82, c.doorZ1 + 2, c.x0 - 1.27, y0 + 0.88, c.doorZ1 + 3.5, VH.col(0x8b0f2e));
   }
 
   VH.Landmarks = { buildPlaza, buildPark, buildTowerBlock, buildWaterfront };

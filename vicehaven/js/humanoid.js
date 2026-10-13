@@ -394,6 +394,62 @@
         T.lean += 0.35 * cower;
         T.headPitch += 0.3 * cower;
       }
+      // Dancing, on the beat. s.beat runs 0..1 through each beat, s.beatN counts
+      // them, and s.danceStyle picks the moves (fist pump, hands up, a side
+      // step with swinging arms, pointing at the DJ).
+      const dance = s.dance || 0;
+      if (dance > 0) {
+        const L = VH.math.lerp;
+        const b = s.beat !== undefined ? s.beat : (this.time * 2.07) % 1;
+        const n = s.beatN !== undefined ? s.beatN : Math.floor(this.time * 2.07);
+        const ph = b * Math.PI * 2;
+        const bounce = 0.5 + 0.5 * Math.cos(ph); // 1 right on the beat
+        const side = n % 2 ? -1 : 1;
+        const swing = Math.sin((n % 2 + b) * Math.PI); // across two beats
+        T.kneeL = L(T.kneeL, 0.12 + 0.38 * bounce, dance);
+        T.kneeR = L(T.kneeR, 0.12 + 0.38 * bounce, dance);
+        T.hipL = L(T.hipL, -0.14 * bounce, dance);
+        T.hipR = L(T.hipR, -0.14 * bounce, dance);
+        T.ankleL = L(T.ankleL, 0.1 * bounce, dance);
+        T.ankleR = L(T.ankleR, 0.1 * bounce, dance);
+        T.pelvisY = L(T.pelvisY, 0.955 - 0.06 * bounce, dance);
+        T.headPitch += 0.12 * bounce * dance;
+        switch ((s.danceStyle || 0) % 4) {
+          case 0: // fist pump
+            T.shoulderR = L(T.shoulderR, 2.45 + 0.4 * bounce, dance);
+            T.elbowR = L(T.elbowR, 0.35 + 0.5 * (1 - bounce), dance);
+            T.shoulderL = L(T.shoulderL, 0.45 + 0.2 * swing, dance);
+            T.elbowL = L(T.elbowL, 1.5, dance);
+            T.twist = L(T.twist, 0.12 * side, dance);
+            break;
+          case 1: // hands up, swaying
+            T.shoulderL = L(T.shoulderL, 2.5 + 0.25 * swing, dance);
+            T.shoulderR = L(T.shoulderR, 2.5 - 0.25 * swing, dance);
+            T.elbowL = L(T.elbowL, 0.7, dance);
+            T.elbowR = L(T.elbowR, 0.7, dance);
+            T.splay = L(T.splay, 0.35, dance);
+            T.lean = L(T.lean, 0.04, dance);
+            T.twist = L(T.twist, 0.3 * swing, dance);
+            break;
+          case 2: // side step, arms swinging
+            T.shoulderL = L(T.shoulderL, 0.55 + 0.6 * swing, dance);
+            T.shoulderR = L(T.shoulderR, 0.55 - 0.6 * swing, dance);
+            T.elbowL = L(T.elbowL, 1.6, dance);
+            T.elbowR = L(T.elbowR, 1.6, dance);
+            T.hipL = L(T.hipL, 0.25 * swing, dance);
+            T.hipR = L(T.hipR, -0.25 * swing, dance);
+            T.twist = L(T.twist, 0.35 * swing, dance);
+            T.headYaw += 0.15 * swing * dance;
+            break;
+          default: // pointing at the DJ on the beat
+            T.shoulderR = L(T.shoulderR, 1.6 + 0.7 * bounce, dance);
+            T.elbowR = L(T.elbowR, 0.15, dance);
+            T.shoulderL = L(T.shoulderL, 0.35 + 0.25 * swing, dance);
+            T.elbowL = L(T.elbowL, 1.2, dance);
+            T.headYaw += 0.2 * side * dance;
+            break;
+        }
+      }
       // Limp.
       if (s.dead) {
         T.hipL = 0.1;
