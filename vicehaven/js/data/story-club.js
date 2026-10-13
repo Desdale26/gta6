@@ -51,6 +51,11 @@
           ['caption', '(The DJ, very sensibly, ducks behind the decks. The music keeps going.)'],
           ['jay', '(cracking his knuckles) Twenty percent. Of a juice bar.'],
         ] },
+        // Mars and Tuli come in off the door; everyone on the floor together.
+        { fade: 'out' },
+        { spawn: [{ char: 'mars', at: 'velvet_tide_floor', offset: [-1.5, 1] }, { char: 'tuli', at: 'velvet_tide_floor', offset: [-1.5, -1] }] },
+        { teleport: 'velvet_tide_floor' },
+        { fade: 'in' },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'tuli'] }, say: [
           ['caption', '(The floor is empty. One of the light-up tiles is cracked and flickering in a way Mars clearly takes personally.)'],
           ['mars', 'Well. That\'s my "safe" taken care of.'],
@@ -124,6 +129,9 @@
       reward: { money: 3000 },
       steps: [
         { music: 'off' },
+        { fade: 'out' },
+        { teleport: 'velvet_tide_floor' },
+        { fade: 'in' },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'lowtide', 'tuli'] }, say: [
           ['caption', '(Two in the morning. The last of the crowd heading home along the boardwalk, shoes in their hands. Tuli is stacking stools. He stops.)'],
           ['tuli', 'Cars. Three of them. Charcoal.'],
@@ -147,6 +155,8 @@
           ['mars', 'Kip, if you stand up I will kill you myself.'],
         ] },
         { music: 'triumph' },
+        // Out from behind the bar (fresh copies, no longer cowering).
+        { spawn: [{ char: 'mars', at: 'velvet_tide_bar', health: 300 }, { char: 'lowtide', at: 'velvet_tide_bar', offset: [2, 0], health: 300 }] },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'lowtide', 'tuli'] }, say: [
           ['caption', '(Quiet. Somewhere out on the bay, a boat horn. The dance floor tiles keep cycling through their colours for nobody.)'],
           ['tuli', '(at the door, slightly out of breath) They\'re gone. One of them left a shoe.'],

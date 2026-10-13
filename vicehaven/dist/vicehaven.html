@@ -14833,8 +14833,11 @@ void main() {
     const steps = 8;
     for (let i = 0; i < steps; i++) {
       const za = s1 - ((i + 1) * (s1 - s0)) / steps;
-      ctx.propMatte.box(ix0, 0, za, ix0 + v.stairW, y0 + ((i + 1) * (v.top - y0)) / steps, za + (s1 - s0) / steps, VH.col(i % 2 ? 0x2a2342 : 0x302848));
+      ctx.propMatte.box(ix0, 0, za, ix0 + v.stairW, y0 + ((i + 0.5) * (v.top - y0)) / steps, za + (s1 - s0) / steps, VH.col(i % 2 ? 0x2a2342 : 0x302848));
     }
+    // A solid side to the stairs, so the VIP rope at the bottom can't just be walked round.
+    add(ix0 + v.stairW, 0, s0, ix0 + v.stairW + 0.12, v.top + 1.05, s1 + 0.1, VH.col(0x2a2342), true);
+    strip([[ix0 + v.stairW + 0.13, v.top + 0.9, s0], [ix0 + v.stairW + 0.13, v.top + 0.9, s1 + 0.1], [ix0 + v.stairW + 0.13, v.top + 1.0, s1 + 0.1], [ix0 + v.stairW + 0.13, v.top + 1.0, s0]], [1, 0, 0], neonGold);
     // Lounge sofas and a low table up there.
     for (const x of [v.x1 - 9, v.x1 - 5]) {
       add(x, v.top, iz0 + 0.1, x + 3, v.top + 0.45, iz0 + 1.0, VH.col(0x6b1f3d), true);
@@ -33580,7 +33583,8 @@ void main() {
         const dz = (club.doorZ0 + club.doorZ1) / 2;
         this.add('velvet_tide', { name: 'The Velvet Tide', x: club.x0 - 2.6, z: dz, yaw: Math.PI / 2, kind: 'storefront', district: 'harborpoint' });
         this.add('velvet_tide_floor', { name: 'The Velvet Tide dance floor', x: (club.floor.x0 + club.floor.x1) / 2, z: (club.floor.z0 + club.floor.z1) / 2, yaw: Math.PI / 2, kind: 'club', district: 'harborpoint' });
-        this.add('velvet_tide_bar', { name: 'The Velvet Tide bar', x: (club.bar.x0 + club.bar.x1) / 2, z: club.bar.z0 - 1.4, yaw: 0, kind: 'club', district: 'harborpoint' });
+        // Behind the counter (where the bartender stands): somewhere to take cover.
+        this.add('velvet_tide_bar', { name: 'The Velvet Tide bar', x: (club.bar.x0 + club.bar.x1) / 2, z: club.bar.z1 + 1.3, yaw: Math.PI, kind: 'club', district: 'harborpoint' });
       }
       this.add('grand_avenue', { name: 'Grand Avenue', x: -9, z: -150, yaw: Math.PI, kind: 'street', district: 'downtown' });
       this.add('meridian_boulevard', { name: 'Meridian Boulevard', x: 150, z: -11, yaw: Math.PI / 2, kind: 'street', district: 'harborpoint' });
@@ -46941,6 +46945,11 @@ void main() {
           ['caption', '(The DJ, very sensibly, ducks behind the decks. The music keeps going.)'],
           ['jay', '(cracking his knuckles) Twenty percent. Of a juice bar.'],
         ] },
+        // Mars and Tuli come in off the door; everyone on the floor together.
+        { fade: 'out' },
+        { spawn: [{ char: 'mars', at: 'velvet_tide_floor', offset: [-1.5, 1] }, { char: 'tuli', at: 'velvet_tide_floor', offset: [-1.5, -1] }] },
+        { teleport: 'velvet_tide_floor' },
+        { fade: 'in' },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'tuli'] }, say: [
           ['caption', '(The floor is empty. One of the light-up tiles is cracked and flickering in a way Mars clearly takes personally.)'],
           ['mars', 'Well. That\'s my "safe" taken care of.'],
@@ -47014,6 +47023,9 @@ void main() {
       reward: { money: 3000 },
       steps: [
         { music: 'off' },
+        { fade: 'out' },
+        { teleport: 'velvet_tide_floor' },
+        { fade: 'in' },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'lowtide', 'tuli'] }, say: [
           ['caption', '(Two in the morning. The last of the crowd heading home along the boardwalk, shoes in their hands. Tuli is stacking stools. He stops.)'],
           ['tuli', 'Cars. Three of them. Charcoal.'],
@@ -47037,6 +47049,8 @@ void main() {
           ['mars', 'Kip, if you stand up I will kill you myself.'],
         ] },
         { music: 'triumph' },
+        // Out from behind the bar (fresh copies, no longer cowering).
+        { spawn: [{ char: 'mars', at: 'velvet_tide_bar', health: 300 }, { char: 'lowtide', at: 'velvet_tide_bar', offset: [2, 0], health: 300 }] },
         { scene: { at: 'velvet_tide_floor', cast: ['mars', 'lowtide', 'tuli'] }, say: [
           ['caption', '(Quiet. Somewhere out on the bay, a boat horn. The dance floor tiles keep cycling through their colours for nobody.)'],
           ['tuli', '(at the door, slightly out of breath) They\'re gone. One of them left a shoe.'],
@@ -49248,6 +49262,7 @@ void main() {
           a.brain.t = 0;
           a.brain = null; // back to being an ordinary pedestrian
           a.walk = null;
+          a.anim.cower = 0; // (a job's 'cower' would otherwise stay on as they walk off)
         }
       }
       for (const [, v] of run.cars) {
@@ -50409,8 +50424,8 @@ void main() {
       const it = g.interaction;
       it.register({ id: 'club_bar', kind: 'clubbar', x: (c.bar.x0 + c.bar.x1) / 2, y: 1.15, z: c.bar.z0 - 0.9, radius: 3.2, label: 'Buy a Tide Fizz (juice bar)', price: 5 });
       it.register({ id: 'club_dance', kind: 'clubdance', x: (c.floor.x0 + c.floor.x1) / 2, y: 1.15, z: (c.floor.z0 + c.floor.z1) / 2, radius: 5.5, label: 'Dance' });
-      this.vipItem = { id: 'club_vip', kind: 'clubvip', x: c.x0 + 0.4 + c.vip.stairW / 2, y: 1.15, z: c.vip.stairZ + 1.0, radius: 1.8, label: 'VIP balcony' };
-      it.register(this.vipItem);
+      it.register({ id: 'club_vip', kind: 'clubvip', x: c.x0 + 0.4 + c.vip.stairW / 2, y: 1.15, z: c.vip.stairZ + 1.0, radius: 1.8, label: 'VIP balcony' });
+      this.vipItem = it.items[it.items.length - 1]; // (register() keeps its own copy)
       it.on('clubbar', (item, player) => {
         if (player.money < item.price) {
           VH.events.emit('notify', { title: 'Not enough cash', text: 'A Tide Fizz is ' + VH.util.formatMoney(item.price) + '.', icon: '✕', tone: 'bad' });
@@ -50486,7 +50501,10 @@ void main() {
           a.anim.talk = 0;
           if (g.crowd._flee) g.crowd._flee(a, fx, fz, 6 + Math.random() * 4);
         } else if (!a.dead) g.crowd.remove(a);
-        else a.persistent = false;
+        else {
+          a.persistent = false;
+          a.brain = null; // a plain body: the crowd clears it away later
+        }
       }
       this.people = [];
     }
@@ -50509,9 +50527,13 @@ void main() {
       this._gain.gain.value = 0;
       this._gain.connect(this._lp);
       this._lp.connect(a.musicBus);
-      this._musicT0 = ctx.currentTime + 0.1;
-      this._next = this._musicT0;
-      this._step = 0;
+      // Carry on from the beat the floor is already on (the beat clock has
+      // been running on game time): the next whole beat is the music's
+      // first, so nothing freezes or jumps back when the music comes in.
+      const first = Math.ceil(this.beat) + 1;
+      this._next = ctx.currentTime + 0.1;
+      this._musicT0 = this._next - first * SPB;
+      this._step = first * 4;
       this._music = true;
       this._timer = setInterval(() => this._schedule(), 25);
     }
@@ -50668,7 +50690,16 @@ void main() {
       const busy = run && /^vt\d/.test(run.m.id);
       this.people = this.people.filter((a) => !a.removed);
       const want = near < 120 && this.panicT <= 0 && !busy;
-      if (want && !this.people.length) this._spawnPeople();
+      if (want && !this.people.length) {
+        // Last time's scattered clubbers (or a finished job's cast) can get
+        // stuck against the walls inside; and a job's Tuli or Lowtide left
+        // standing about would be doubled by the club's own.
+        for (const a of g.crowd.agents.slice()) {
+          if (!a.persistent && !a.brain && !a.dead && this._distOutside(a.pos.x, a.pos.z) === 0) g.crowd.remove(a);
+        }
+        if (g.missions && g.missions._retireStrays) for (const id of ['tuli', 'lowtide']) g.missions._retireStrays(id);
+        this._spawnPeople();
+      }
       else if (!want && this.people.length && (near > 140 || busy)) this._clearPeople(false);
 
       // The VIP rope.
@@ -50677,8 +50708,7 @@ void main() {
         this._ropeOpen = open;
         this.rope.visible = !open;
         this.ropeCol.flags = open ? 0 : this._ropeFlags;
-        this.vipItem.label = open ? 'VIP balcony (you\'re on the list)' : 'VIP balcony';
-        this.vipItem.enabled = !open;
+        this.vipItem.enabled = !open; // once you're on the list there's nothing to ask
       }
 
       // Tuli doesn't let anybody in with the police after them.
@@ -50745,9 +50775,12 @@ void main() {
       if (!d) return;
       const lane = LANES.findIndex((l) => l.codes.includes(e.code));
       if (lane < 0) return;
+      // Paused (rebinding keys in the menu) or typing in the console: leave the key alone.
+      const t = e.target;
+      if (this.game.state !== 'playing' || (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.repeat || this.game.state !== 'playing') return;
+      if (e.repeat) return;
       let best = null;
       let bestDt = Infinity;
       for (const n of d.notes) {
@@ -50846,10 +50879,18 @@ void main() {
       out.push({ x: this.c.x0 - 2, z: (this.c.doorZ0 + this.c.doorZ1) / 2, type: 'shop', label: 'The Velvet Tide (club)' });
     }
 
-    reset() {
+    /** Quit to title: the music, and a dance in progress, end now (update() isn't running). */
+    stop() {
       if (!this.c) return;
       if (this.dance) this.endDance(false, null);
-      this._clearPeople(false);
+      this._stopMusic();
+    }
+
+    reset() {
+      if (!this.c) return;
+      this.stop();
+      for (const a of this.people) if (!a.removed) this.game.crowd.remove(a);
+      this.people = [];
       this.panicT = 0;
       this._ropeOpen = undefined;
     }
@@ -56238,6 +56279,7 @@ void main() {
 
     // ------------------------------------------------------------ states
     toTitle() {
+      if (this.club) this.club.stop();
       this.state = 'title';
       this.environment.setShadowExtent(260);
       this.input.enabled = false;

@@ -2184,6 +2184,7 @@
           a.brain.t = 0;
           a.brain = null; // back to being an ordinary pedestrian
           a.walk = null;
+          a.anim.cower = 0; // (a job's 'cower' would otherwise stay on as they walk off)
         }
       }
       for (const [, v] of run.cars) {

@@ -114,7 +114,8 @@
         const dz = (club.doorZ0 + club.doorZ1) / 2;
         this.add('velvet_tide', { name: 'The Velvet Tide', x: club.x0 - 2.6, z: dz, yaw: Math.PI / 2, kind: 'storefront', district: 'harborpoint' });
         this.add('velvet_tide_floor', { name: 'The Velvet Tide dance floor', x: (club.floor.x0 + club.floor.x1) / 2, z: (club.floor.z0 + club.floor.z1) / 2, yaw: Math.PI / 2, kind: 'club', district: 'harborpoint' });
-        this.add('velvet_tide_bar', { name: 'The Velvet Tide bar', x: (club.bar.x0 + club.bar.x1) / 2, z: club.bar.z0 - 1.4, yaw: 0, kind: 'club', district: 'harborpoint' });
+        // Behind the counter (where the bartender stands): somewhere to take cover.
+        this.add('velvet_tide_bar', { name: 'The Velvet Tide bar', x: (club.bar.x0 + club.bar.x1) / 2, z: club.bar.z1 + 1.3, yaw: Math.PI, kind: 'club', district: 'harborpoint' });
       }
       this.add('grand_avenue', { name: 'Grand Avenue', x: -9, z: -150, yaw: Math.PI, kind: 'street', district: 'downtown' });
       this.add('meridian_boulevard', { name: 'Meridian Boulevard', x: 150, z: -11, yaw: Math.PI / 2, kind: 'street', district: 'harborpoint' });

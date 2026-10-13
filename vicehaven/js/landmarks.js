@@ -634,8 +634,11 @@
     const steps = 8;
     for (let i = 0; i < steps; i++) {
       const za = s1 - ((i + 1) * (s1 - s0)) / steps;
-      ctx.propMatte.box(ix0, 0, za, ix0 + v.stairW, y0 + ((i + 1) * (v.top - y0)) / steps, za + (s1 - s0) / steps, VH.col(i % 2 ? 0x2a2342 : 0x302848));
+      ctx.propMatte.box(ix0, 0, za, ix0 + v.stairW, y0 + ((i + 0.5) * (v.top - y0)) / steps, za + (s1 - s0) / steps, VH.col(i % 2 ? 0x2a2342 : 0x302848));
     }
+    // A solid side to the stairs, so the VIP rope at the bottom can't just be walked round.
+    add(ix0 + v.stairW, 0, s0, ix0 + v.stairW + 0.12, v.top + 1.05, s1 + 0.1, VH.col(0x2a2342), true);
+    strip([[ix0 + v.stairW + 0.13, v.top + 0.9, s0], [ix0 + v.stairW + 0.13, v.top + 0.9, s1 + 0.1], [ix0 + v.stairW + 0.13, v.top + 1.0, s1 + 0.1], [ix0 + v.stairW + 0.13, v.top + 1.0, s0]], [1, 0, 0], neonGold);
     // Lounge sofas and a low table up there.
     for (const x of [v.x1 - 9, v.x1 - 5]) {
       add(x, v.top, iz0 + 0.1, x + 3, v.top + 0.45, iz0 + 1.0, VH.col(0x6b1f3d), true);

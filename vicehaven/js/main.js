@@ -414,6 +414,7 @@
 
     // ------------------------------------------------------------ states
     toTitle() {
+      if (this.club) this.club.stop();
       this.state = 'title';
       this.environment.setShadowExtent(260);
       this.input.enabled = false;

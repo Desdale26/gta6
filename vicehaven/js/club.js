@@ -192,8 +192,8 @@
       const it = g.interaction;
       it.register({ id: 'club_bar', kind: 'clubbar', x: (c.bar.x0 + c.bar.x1) / 2, y: 1.15, z: c.bar.z0 - 0.9, radius: 3.2, label: 'Buy a Tide Fizz (juice bar)', price: 5 });
       it.register({ id: 'club_dance', kind: 'clubdance', x: (c.floor.x0 + c.floor.x1) / 2, y: 1.15, z: (c.floor.z0 + c.floor.z1) / 2, radius: 5.5, label: 'Dance' });
-      this.vipItem = { id: 'club_vip', kind: 'clubvip', x: c.x0 + 0.4 + c.vip.stairW / 2, y: 1.15, z: c.vip.stairZ + 1.0, radius: 1.8, label: 'VIP balcony' };
-      it.register(this.vipItem);
+      it.register({ id: 'club_vip', kind: 'clubvip', x: c.x0 + 0.4 + c.vip.stairW / 2, y: 1.15, z: c.vip.stairZ + 1.0, radius: 1.8, label: 'VIP balcony' });
+      this.vipItem = it.items[it.items.length - 1]; // (register() keeps its own copy)
       it.on('clubbar', (item, player) => {
         if (player.money < item.price) {
           VH.events.emit('notify', { title: 'Not enough cash', text: 'A Tide Fizz is ' + VH.util.formatMoney(item.price) + '.', icon: '✕', tone: 'bad' });
@@ -269,7 +269,10 @@
           a.anim.talk = 0;
           if (g.crowd._flee) g.crowd._flee(a, fx, fz, 6 + Math.random() * 4);
         } else if (!a.dead) g.crowd.remove(a);
-        else a.persistent = false;
+        else {
+          a.persistent = false;
+          a.brain = null; // a plain body: the crowd clears it away later
+        }
       }
       this.people = [];
     }
@@ -292,9 +295,13 @@
       this._gain.gain.value = 0;
       this._gain.connect(this._lp);
       this._lp.connect(a.musicBus);
-      this._musicT0 = ctx.currentTime + 0.1;
-      this._next = this._musicT0;
-      this._step = 0;
+      // Carry on from the beat the floor is already on (the beat clock has
+      // been running on game time): the next whole beat is the music's
+      // first, so nothing freezes or jumps back when the music comes in.
+      const first = Math.ceil(this.beat) + 1;
+      this._next = ctx.currentTime + 0.1;
+      this._musicT0 = this._next - first * SPB;
+      this._step = first * 4;
       this._music = true;
       this._timer = setInterval(() => this._schedule(), 25);
     }
@@ -451,7 +458,16 @@
       const busy = run && /^vt\d/.test(run.m.id);
       this.people = this.people.filter((a) => !a.removed);
       const want = near < 120 && this.panicT <= 0 && !busy;
-      if (want && !this.people.length) this._spawnPeople();
+      if (want && !this.people.length) {
+        // Last time's scattered clubbers (or a finished job's cast) can get
+        // stuck against the walls inside; and a job's Tuli or Lowtide left
+        // standing about would be doubled by the club's own.
+        for (const a of g.crowd.agents.slice()) {
+          if (!a.persistent && !a.brain && !a.dead && this._distOutside(a.pos.x, a.pos.z) === 0) g.crowd.remove(a);
+        }
+        if (g.missions && g.missions._retireStrays) for (const id of ['tuli', 'lowtide']) g.missions._retireStrays(id);
+        this._spawnPeople();
+      }
       else if (!want && this.people.length && (near > 140 || busy)) this._clearPeople(false);
 
       // The VIP rope.
@@ -460,8 +476,7 @@
         this._ropeOpen = open;
         this.rope.visible = !open;
         this.ropeCol.flags = open ? 0 : this._ropeFlags;
-        this.vipItem.label = open ? 'VIP balcony (you\'re on the list)' : 'VIP balcony';
-        this.vipItem.enabled = !open;
+        this.vipItem.enabled = !open; // once you're on the list there's nothing to ask
       }
 
       // Tuli doesn't let anybody in with the police after them.
@@ -528,9 +543,12 @@
       if (!d) return;
       const lane = LANES.findIndex((l) => l.codes.includes(e.code));
       if (lane < 0) return;
+      // Paused (rebinding keys in the menu) or typing in the console: leave the key alone.
+      const t = e.target;
+      if (this.game.state !== 'playing' || (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.repeat || this.game.state !== 'playing') return;
+      if (e.repeat) return;
       let best = null;
       let bestDt = Infinity;
       for (const n of d.notes) {
@@ -629,10 +647,18 @@
       out.push({ x: this.c.x0 - 2, z: (this.c.doorZ0 + this.c.doorZ1) / 2, type: 'shop', label: 'The Velvet Tide (club)' });
     }
 
-    reset() {
+    /** Quit to title: the music, and a dance in progress, end now (update() isn't running). */
+    stop() {
       if (!this.c) return;
       if (this.dance) this.endDance(false, null);
-      this._clearPeople(false);
+      this._stopMusic();
+    }
+
+    reset() {
+      if (!this.c) return;
+      this.stop();
+      for (const a of this.people) if (!a.removed) this.game.crowd.remove(a);
+      this.people = [];
       this.panicT = 0;
       this._ropeOpen = undefined;
     }
