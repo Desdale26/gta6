@@ -260,9 +260,12 @@ one is 40 seconds away, which is your best window.
 
 **Weapons.** Fists, a baseball bat, a combat knife, the Kestrel 9 pistol,
 the Hammerhead .44, the Wasp SMG, the Gator 12 shotgun, the Mantis AC-7
-rifle, the Heron LR sniper rifle, frag grenades and molotovs. Guns have
-recoil, spread that grows as you fire, damage that falls off with range,
-and headshots. Enemies take cover, flank and shoot back.
+rifle, the Heron LR sniper rifle, frag grenades and molotovs. Shots go
+exactly where the crosshair is; only the automatics (the Wasp and the
+Mantis) wander a little, more the longer you hold the trigger, and a
+shotgun's pellets spread round the centre. Recoil kicks the view up and
+settles back. Damage falls off with range, and headshots count extra.
+Enemies take cover, flank and shoot back.
 
 **The radio.** Three stations of original, procedurally composed music:
 **VHR 88.1 Sunset Drive** (synthwave, with Del Starr), **Pulse 96.4**

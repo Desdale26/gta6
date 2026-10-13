@@ -23,9 +23,10 @@
  *   headshotMult              multiplier for a hit to the head
  *   fireRate, auto            shots (or swings) per second; hold to keep firing
  *   range                     max hitscan range, or melee reach
- *   spread, aimSpread         cone half-angle from the hip / while aiming
- *   bloom, bloomMax           extra spread per shot and its cap (automatics);
- *                             it recovers at bloomRecover rad/s
+ *   spread, aimSpread         (no longer used for Jay's shots: combat.js puts
+ *   bloom, bloomMax            single shots dead on the crosshair, gives the
+ *                              automatics a small spread and the shotgun a
+ *                              pellet pattern round the centre)
  *   pellets                   pellets per shell (shotgun)
  *   magSize, reloadTime       0 for melee; a grenade's "mag" is one grenade
  *   shellReload, shellTime    loads one shell at a time (shotgun)

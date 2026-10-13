@@ -538,6 +538,13 @@
       const p = g.player;
       this._cool -= dt;
       this._bloom = Math.max(0, this._bloom - dt * 2.2);
+      // The recoil kick comes back down, so the crosshair returns to what
+      // you were aiming at (the shots go wherever it points).
+      if (this._kick > 0) {
+        const back = Math.min(this._kick, dt * (0.12 + this._kick * 9));
+        g.cameraRig.pitch -= back;
+        this._kick -= back;
+      }
       if (this.hitMarkerT > 0) this.hitMarkerT -= dt;
 
       // Weapon wheel.
@@ -682,6 +689,8 @@
     _aimAssist(dir, origin) {
       const g = this.game;
       if (!g.settings.get('gameplay.aimAssist')) return;
+      // Already on someone: shoot exactly there (a head stays a headshot).
+      if (g.crowd.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, 90)) return;
       const pad = g.input.lastDevice === 'gamepad';
       let cone = pad ? 0.1 : 0.04;
       let best = null;
@@ -761,10 +770,16 @@
       inv.mag--;
       this._cool = 1 / (w.fireRate || 3);
       const p = g.player;
-      const moving = p.inVehicle ? 0.6 : clamp(p.speed / 4.6, 0, 1);
-      const base = p.aiming ? w.aimSpread || 0.01 : w.spread || 0.05;
-      const spread = base * (1 + moving * 1.4 + this._bloom * 2.2) * (driveby ? 1.6 : 1);
-      this._bloom = Math.min(1, this._bloom + 0.25);
+      // Where the bullets go: exactly through the middle of the crosshair,
+      // walking or standing, aimed or from the hip. Only the automatics (the
+      // Wasp, the Mantis) wander a little, more the longer you hold the
+      // trigger; a shotgun's pellets spread in a pattern round the centre.
+      let spread = 0;
+      if ((w.pellets || 1) > 1) spread = p.aiming ? 0.045 : 0.065;
+      else if (w.auto) {
+        spread = (p.aiming ? 0.005 : 0.01) + this._bloom * (p.aiming ? 0.008 : 0.014) + (driveby ? 0.008 : 0);
+        this._bloom = Math.min(1, this._bloom + 0.2);
+      }
       const pellets = w.pellets || 1;
       // Muzzle position (world).
       const muzzle = this._muzzleWorld();
@@ -819,10 +834,11 @@
       }
       if (g.audio.gunshot) g.audio.gunshot(w.id, 0, 1, false);
       // Kick.
-      const rec = (w.recoil || 0.02) * (p.aiming ? 0.7 : 1);
+      // A kick straight up that settles back (no random sideways jerk).
+      const rec = (w.recoil || 0.02) * (p.aiming ? 0.5 : 0.7) * (w.auto ? 0.6 : 1);
       g.cameraRig.pitch += rec;
-      g.cameraRig.yaw += (Math.random() - 0.5) * rec * 0.6;
-      g.cameraRig.addShake(w.shake || 0.08);
+      this._kick = (this._kick || 0) + rec;
+      g.cameraRig.addShake((w.shake || 0.08) * 0.7);
       this._recoil = 1;
       p._recoil = 1;
       VH.events.emit('gunshot', { x: p.pos.x, z: p.pos.z, byPlayer: true, loud: w.slot !== 'pistol' });
