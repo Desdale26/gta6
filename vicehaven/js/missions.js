@@ -118,18 +118,16 @@
         }
       }
       if (v && !a.inCar) {
-        // Get in: run to the car, then hop in.
+        // Get in: run to the car, then hop in. The crew always fit, whatever
+        // Jay is driving (the back of a van, three across in a two-seater):
+        // being left on the kerb because Jay likes his sports car isn't a job.
         const d = Math.hypot(v.pos.x - a.pos.x, v.pos.z - a.pos.z);
         if (d < v.hx + 1.8 || (d < 25 && this._waitCar > 6)) {
-          const seats = (v.spec.seats || 4) - 1;
-          const riders = this.engine.crewIn(v).length;
-          if (riders < seats) {
-            a.inCar = v;
-            a.hidden = true;
-            this._waitCar = 0;
-            VH.events.emit('vehicle:door', { v, open: true });
-            return;
-          }
+          a.inCar = v;
+          a.hidden = true;
+          this._waitCar = 0;
+          VH.events.emit('vehicle:door', { v, open: true });
+          return;
         }
         this._waitCar = (this._waitCar || 0) + dt;
         a.heading = dampAngle(a.heading, Math.atan2(v.pos.x - a.pos.x, v.pos.z - a.pos.z), 8, dt);

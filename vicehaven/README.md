@@ -374,6 +374,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Shoot someone: they fall as a ragdoll and bleed; Settings → Gameplay → Blood turns it down or off
 - [ ] With voices on, each line is spoken in full before the next subtitle, shouts and whispers sound different
 - [ ] Drive fast with a crew member in the car: they stay in their seat
+- [ ] In *Your Home, Our Future*, pick Noor and Ansel up in a two-seat sports car: both climb in, nobody is left on the roof
 - [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done
 - [ ] Drive somewhere, close the tab, open the file again: Continue puts you back in the same car
 - [ ] Close the tab in the middle of a job: Continue says so and the job's marker is there to restart it
