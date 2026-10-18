@@ -312,9 +312,9 @@
         c3.screen.box(x + 0.5, 6.15, cz1 - 2, x1 - 0.5, 6.2, cz1 - 1.4, VH.col(0xfff1d8, 1.6));
       }
       for (let x = T.x0 + 25; x < T.x1 - 20; x += 25) solid(world, world.ctxAt(x, cz1).prop, x - 0.3, KERB, cz1 - 1, x + 0.3, 6.2, cz1 - 0.4, 0xd8d4cb, null, 'pole');
-      world.signs.push({ x: cx, y: 9.3, z: T.z1 + 0.12, yaw: 0, w: 46, h: 3.4, lines: ['VICEHAVEN INTERNATIONAL'], style: 'monolith' });
-      world.signs.push({ x: T.x0 + 60, y: 5.2, z: cz1 + 0.05, yaw: 0, w: 12, h: 1.2, lines: ['DEPARTURES  ✈'], style: 'info' });
-      world.signs.push({ x: T.x1 - 60, y: 5.2, z: cz1 + 0.05, yaw: 0, w: 12, h: 1.2, lines: ['ARRIVALS  ✈'], style: 'info' });
+      (world.signs || (world.signs = [])).push({ x: cx, y: 9.3, z: T.z1 + 0.12, yaw: 0, w: 46, h: 3.4, lines: ['VICEHAVEN INTERNATIONAL'], style: 'monolith' });
+      (world.signs || (world.signs = [])).push({ x: T.x0 + 60, y: 5.2, z: cz1 + 0.05, yaw: 0, w: 12, h: 1.2, lines: ['DEPARTURES  ✈'], style: 'info' });
+      (world.signs || (world.signs = [])).push({ x: T.x1 - 60, y: 5.2, z: cz1 + 0.05, yaw: 0, w: 12, h: 1.2, lines: ['ARRIVALS  ✈'], style: 'info' });
       // Jet bridges out to the two stands.
       for (const s of STANDS) {
         const c4 = world.ctxAt(s.x, T.z0 - 12);
@@ -371,7 +371,7 @@
         for (let x = hg.x0 + 4; x < hg.x1 - 2; x += 6) ctx.prop.box(x - 0.1, 0, z1 + 0.0, x + 0.1, H, z1 + 0.15, trim);
         ctx.concrete.topRect(hg.x0 + 0.5, z0, hg.x1 - 0.5, z1 - 0.5, 0.02, VH.col(0x9d9b95), 6);
         for (let x = hg.x0 + 10; x < hg.x1 - 5; x += 15) ctx.screen.box(x - 2, H - 0.25, (z0 + z1) / 2 - 0.4, x + 2, H - 0.1, (z0 + z1) / 2 + 0.4, VH.col(0xf4f7ff, 1.8));
-        world.signs.push({ x: (hg.x0 + hg.x1) / 2, y: 12.2, z: z0 - 0.1, yaw: Math.PI, w: 20, h: 1.8, lines: [i ? 'HANGAR 2  ·  CHARTER' : 'HANGAR 1  ·  ARDEA FLYING CLUB'], style: 'info' });
+        (world.signs || (world.signs = [])).push({ x: (hg.x0 + hg.x1) / 2, y: 12.2, z: z0 - 0.1, yaw: Math.PI, w: 20, h: 1.8, lines: [i ? 'HANGAR 2  ·  CHARTER' : 'HANGAR 1  ·  ARDEA FLYING CLUB'], style: 'info' });
       }
     }
 
@@ -395,7 +395,7 @@
         world.addProp('streetlight', x, 0, -1191.5, 0, 1);
         world.addProp('streetlight', x + 20, 0, -1168.5, Math.PI, 1);
       }
-      world.signs.push({ x: 26, y: 3.2, z: -1150, yaw: -Math.PI / 2, w: 9, h: 3, lines: ['VICEHAVEN', 'INTERNATIONAL ✈'], style: 'welcome' });
+      (world.signs || (world.signs = [])).push({ x: 26, y: 3.2, z: -1150, yaw: -Math.PI / 2, w: 9, h: 3, lines: ['VICEHAVEN', 'INTERNATIONAL ✈'], style: 'welcome' });
       const ctx = world.ctxAt(26, -1150);
       ctx.prop.box(25.8, 0, -1154.2, 26.2, 1.7, -1153.8, VH.col(0x5a5f66));
       ctx.prop.box(25.8, 0, -1146.2, 26.2, 1.7, -1145.8, VH.col(0x5a5f66));
@@ -419,7 +419,7 @@
       ctx.screen.box(SERVICE.x0 - 1.02, 1.2, z + 1.5, SERVICE.x0 - 0.98, 2.2, z + 3.5, VH.col(0xfff1d8, 1.0));
       ctx.prop.box(SERVICE.x0 - 0.3, 0, z - 0.3, SERVICE.x0 + 0.3, 1.1, z + 0.3, VH.col(0xe0b12e));
       ctx.prop.box(SERVICE.x0 - 0.08, 1.0, z - 0.08, SERVICE.x0 + 0.08, 7.5, z + 0.08, VH.col(0xd8262e));
-      world.signs.push({ x: SERVICE.x1 + 6, y: 2.4, z: z + 0.5, yaw: 0, w: 8, h: 1.6, lines: ['AIRSIDE', 'Authorised vehicles only'], style: 'info' });
+      (world.signs || (world.signs = [])).push({ x: SERVICE.x1 + 6, y: 2.4, z: z + 0.5, yaw: 0, w: 8, h: 1.6, lines: ['AIRSIDE', 'Authorised vehicles only'], style: 'info' });
     }
 
     static registerPlaces(world, places) {
