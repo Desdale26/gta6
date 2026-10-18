@@ -375,6 +375,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] With voices on, each line is spoken in full before the next subtitle, shouts and whispers sound different
 - [ ] Drive fast with a crew member in the car: they stay in their seat
 - [ ] In *Your Home, Our Future*, pick Noor and Ansel up in a two-seat sports car: both climb in, nobody is left on the roof
+- [ ] In *The Gate*, the Halberd SUVs come after Lulu and ram it; pull the lead SUV's driver out and take it: the objective completes and the driver runs off
+- [ ] Steal any car with someone in it: the driver lands on the road by the door and runs (a cop gets out and fights)
 - [ ] Esc → Save game; reload the page; Continue resumes with the same jobs done
 - [ ] Drive somewhere, close the tab, open the file again: Continue puts you back in the same car
 - [ ] Close the tab in the middle of a job: Continue says so and the job's marker is there to restart it

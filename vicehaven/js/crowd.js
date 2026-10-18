@@ -372,7 +372,22 @@
       VH.events.on('vehicle:impact', (e) => {
         if (e.speed > 9) this.threat(e.x, e.z, 22, 'crash');
       });
-      VH.events.on('vehicle:jack', (e) => this.threat(e.x, e.z, 14, 'jack'));
+      VH.events.on('vehicle:jack', (e) => {
+        // The driver Jay pulls out lands by the door: a job's driver is the
+        // job's to place (missions.ejectDriver); a cop gets out to fight; an
+        // ordinary driver runs for it.
+        const g = this.game;
+        const v = e.v;
+        if (!(g.missions && g.missions.ejectDriver && g.missions.ejectDriver(v, e.side))) {
+          if (v.isPolice && g.police) g.police.deployOfficers(v, 1);
+          else {
+            const w = v.localToWorld((e.side || 1) * (v.hx + 1.1), v.hz * 0.1, {});
+            const a = this.spawn(w.x, w.z, { y: v.pos.y, heading: v.yaw + (e.side || 1) * Math.PI / 2 });
+            this._flee(a, v.pos.x, v.pos.z, 6 + Math.random() * 3);
+          }
+        }
+        this.threat(e.x, e.z, 14, 'jack');
+      });
     }
 
     /** Something scary happened here: people nearby run. */

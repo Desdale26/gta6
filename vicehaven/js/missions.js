@@ -378,6 +378,26 @@
 
     update(v, dt) {
       this.t += dt;
+      // Following another car (an escort): the stop point moves with it, and
+      // pulling up behind it is a pause, not the end of the drive.
+      if (this.follow) {
+        this._followT = (this._followT || 0) - dt;
+        if (this._followT <= 0) {
+          this._followT = 1;
+          this.stopAt = { x: this.dest.x, z: this.dest.z };
+          this.lane.destination = this.stopAt;
+          const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
+          if (lp && lp.dist > 7) this.lane.initAt(lp);
+        }
+        if (Math.hypot(this.dest.x - v.pos.x, this.dest.z - v.pos.z) < 12) {
+          v.input.accel = v.speed > 0.5 ? -1 : 0;
+          v.input.steer = 0;
+          v.input.handbrake = v.speed < 4 ? 1 : 0;
+          return;
+        }
+        this.lane.update(v, dt);
+        return;
+      }
       const d = Math.hypot(this.dest.x - v.pos.x, this.dest.z - v.pos.z);
       const dStop = Math.hypot(this.stopAt.x - v.pos.x, this.stopAt.z - v.pos.z);
       // Circling the block near the destination counts as being there.
@@ -393,6 +413,105 @@
         return;
       }
       this.lane.update(v, dt);
+    }
+  }
+
+  /**
+   * Comes after Jay (Halberd boxing in Lulu): through traffic on the roads
+   * while he's far, then straight at his car to ram it. Jay on foot: pulls
+   * up short of him.
+   */
+  class HuntDriver {
+    constructor(engine, v) {
+      this.game = engine.game;
+      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.3, ignoreRed: true, gap: 0.7, plow: true });
+      this.lane.maxSpeed = 30;
+      v.plow = true; // through traffic; it's never heavier than Jay's car (see vehicles._resolvePair)
+      this._routeT = 0;
+      this._stuckT = 0;
+      this._reverseT = 0;
+      this._feelT = 0;
+      this._avoid = 0;
+      this._l = {};
+      const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
+      if (lp) this.lane.initAt(lp);
+    }
+
+    onBump() {}
+
+    update(v, dt) {
+      const p = this.game.player;
+      const tgt = p.inVehicle ? p.vehicle : p;
+      const dist = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
+      v.input.boost = 0;
+      if (this._reverseT > 0) {
+        this._reverseT -= dt;
+        v.input.accel = -0.8;
+        v.input.steer = this._revSteer;
+        v.input.handbrake = 0;
+        return;
+      }
+      if (!p.inVehicle && dist < 16) {
+        v.input.accel = v.vF > 0.5 ? -1 : 0;
+        v.input.steer = 0;
+        v.input.handbrake = v.speed < 1 ? 1 : 0;
+        return;
+      }
+      if (dist > 45 || !p.inVehicle) {
+        this._routeT -= dt;
+        if (this._routeT <= 0) {
+          this._routeT = 1;
+          this.lane.destination = { x: tgt.pos.x + (tgt.vel ? tgt.vel.x * 2 : 0), z: tgt.pos.z + (tgt.vel ? tgt.vel.z * 2 : 0) };
+          const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
+          if (lp && lp.dist > 6) this.lane.initAt(lp);
+        }
+        this.lane.update(v, dt);
+        this._checkStuck(v, dt);
+        return;
+      }
+      // Close: aim where his car will be and drive into it.
+      const closing = Math.max(8, v.speed - (tgt.vel.x * v.forwardX + tgt.vel.z * v.forwardZ) + 6);
+      const lead = clamp(dist / closing, 0, 1.2);
+      const l = v.worldToLocal(tgt.pos.x + tgt.vel.x * lead, tgt.pos.z + tgt.vel.z * lead, this._l);
+      let angle = Math.atan2(l.x, Math.max(0.1, l.z));
+      if (l.z < 0) angle = l.x >= 0 ? 1.2 : -1.2;
+      this._feelT -= dt;
+      if (this._feelT <= 0) {
+        this._feelT = 0.1;
+        this._avoid = this._feelers(v, tgt);
+      }
+      angle += this._avoid;
+      v.input.steer = clamp(angle / 0.5, -1, 1);
+      v.input.accel = Math.abs(angle) > 1.1 && v.speed > 12 ? -0.4 : 1;
+      v.input.handbrake = Math.abs(angle) > 1.3 && v.speed > 8 ? 1 : 0;
+      v.topSpeedBoost = dist > 30 ? 1.1 : 1;
+      this._checkStuck(v, dt);
+    }
+
+    /** Walls ahead push the steering away (Jay's car doesn't count). */
+    _feelers(v, tgt) {
+      const ph = this.game.physics;
+      const y = v.pos.y + 0.7;
+      const len = 6 + v.speed * 0.6;
+      let push = 0;
+      for (const [a, w] of [[-0.45, 1], [0.45, -1]]) {
+        const yaw = v.yaw + a;
+        const dx = Math.sin(yaw);
+        const dz = Math.cos(yaw);
+        const hit = ph.raycast(v.pos.x + dx * v.hz, y, v.pos.z + dz * v.hz, dx, 0, dz, len, { flags: VH.COLLIDE.SOLID, ground: false });
+        if (hit && hit.t < Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z)) push += w * 0.7 * (1 - hit.t / len);
+      }
+      return clamp(push, -0.9, 0.9);
+    }
+
+    _checkStuck(v, dt) {
+      if (v.speed < 1 && v.input.accel > 0.3) this._stuckT += dt;
+      else this._stuckT = Math.max(0, this._stuckT - dt);
+      if (this._stuckT > 1.6) {
+        this._stuckT = 0;
+        this._reverseT = 1.1;
+        this._revSteer = -Math.sign(v.input.steer || 1);
+      }
     }
   }
 
@@ -970,6 +1089,28 @@
       return out;
     }
 
+    /**
+     * Jay pulled the driver out of a job car (vehicles.js 'vehicle:jack'):
+     * whoever the job put at the wheel lands on the road by the door and runs
+     * (an armed enemy stays to fight). Returns false if the car had no such
+     * driver, so the crowd can put an ordinary one there.
+     */
+    ejectDriver(v, side) {
+      const run = this.run;
+      if (!run) return false;
+      for (const [id, a] of run.actors) {
+        if (a.inCar !== v || a.dead || run.crew.includes(id)) continue;
+        a.inCar = null;
+        a.hidden = false;
+        const w = v.localToWorld((side || 1) * (v.hx + 1.1), v.hz * 0.1, {});
+        a.pos.set(w.x, this.game.physics.groundHeight(w.x, w.z, v.pos.y + 1.5), w.z);
+        a.heading = v.yaw + (side || 1) * Math.PI / 2;
+        if (!(a.brain instanceof VH.CombatBrain)) a.brain = new FleeBrain(this, { x: v.pos.x, z: v.pos.z }, 8);
+        return true;
+      }
+      return false;
+    }
+
     crewIndex(a) {
       return this.run ? Math.max(0, this.run.crew.indexOf(a.charId)) : 0;
     }
@@ -1020,7 +1161,12 @@
               a.hidden = true;
               a.inCar = car;
               car.driver = 'ai';
-              car.controller = new TourDriver(this, car, this._place(e.to) || { x: car.pos.x, z: car.pos.z });
+              const after = run.cars.get(e.to);
+              if (after && after === game.player.vehicle) car.controller = new HuntDriver(this, car);
+              else {
+                car.controller = new TourDriver(this, car, this._place(e.to) || { x: car.pos.x, z: car.pos.z });
+                if (after) car.controller.follow = true;
+              }
             }
           }
           if (behavior === 'follow') this._join(id, run, e.weapon);
@@ -1976,9 +2122,21 @@
     async _destroy(step, run) {
       const cars = [].concat(step.destroy).map((id) => run.cars.get(id)).filter(Boolean);
       run.targetCars = cars;
+      // "Take out" a car somebody is driving: wrecking it counts, and so does
+      // its driver being dead or out of it (Jay pulled them out and took it).
+      // Parked targets (a jammer, a barricade) still have to be wrecked.
+      const drivers = new Map();
+      for (const [id, a] of run.actors) {
+        if (a.inCar && cars.includes(a.inCar) && !run.crew.includes(id)) drivers.set(a.inCar, a);
+      }
+      const out = (c) => {
+        if (c.wrecked || c.removed) return true;
+        const a = drivers.get(c);
+        return !!a && (a.dead || a.removed || a.inCar !== c || c.driver === 'player');
+      };
       this._objective(step.objective || 'Destroy the ' + (cars.length === 1 ? cars[0].name : 'cars'));
-      this._track(() => this._nearestOf(cars));
-      await this._until(() => cars.every((c) => c.wrecked || c.removed), run);
+      this._track(() => this._nearestOf(cars.filter((c) => !out(c))));
+      await this._until(() => cars.every(out), run);
       run.targetCars = [];
     }
 
