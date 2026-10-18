@@ -37,6 +37,7 @@
     streetlight: { speed: 8, keep: 0.72, dmg: 45, pole: true },
   };
 
+  const TANK_SMASH = { speed: 0, keep: 0.97, dmg: 0 };
   const PARKED_TYPES = [
     ['halcyon', 38], ['pipit', 20], ['mesa', 12], ['porter', 9], ['ironclad', 8], ['vireo', 5], ['cab', 5],
   ];
@@ -238,14 +239,11 @@
       for (const col of hits) {
         const r = this._satBox(v.pos.x, v.pos.z, c, s, v.hx, v.hz, col.cx, col.cz, col.cos, col.sin, col.hx, col.hz);
         if (!r) continue;
-        // Street furniture gets knocked over instead.
-        if (col.propType && SMASH[col.propType] && !col.disabled) {
-          const def = SMASH[col.propType];
-          const speed = v.speed;
-          if (speed > def.speed) {
-            this._smash(v, col, def);
-            continue;
-          }
+        // Street furniture gets knocked over instead (a tank flattens trees too).
+        const smash = col.propType && !col.disabled ? SMASH[col.propType] || (v.kind === 'tank' ? TANK_SMASH : null) : null;
+        if (smash && (v.speed > smash.speed || v.kind === 'tank')) {
+          this._smash(v, col, smash);
+          continue;
         }
         this._resolveStatic(v, r, col);
       }

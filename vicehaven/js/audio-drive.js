@@ -362,6 +362,9 @@
     pickup: { idle: 29, red: 185, osc: [[1, 'sawtooth', 0.5], [0.5, 'sawtooth', 0.38], [2, 'square', 0.15]], drive: 2.6, lp: 0.75, q: 2.0, flutter: 0.25, fdepth: 0.26, noise: 1.1, nf: 2.0, gain: 0.92 },
     taxi: { idle: 32, red: 195, osc: [[1, 'sawtooth', 0.5], [2, 'square', 0.2], [0.5, 'sine', 0.3]], drive: 2.0, lp: 0.85, q: 1.0, flutter: 0.5, fdepth: 0.13, noise: 0.8, nf: 2.4, gain: 0.85 },
     police: { idle: 30, red: 215, osc: [[1, 'sawtooth', 0.5], [0.5, 'sawtooth', 0.36], [2, 'square', 0.24]], drive: 3.0, lp: 1.0, q: 2.0, flutter: 0.25, fdepth: 0.24, noise: 1.2, nf: 2.2, gain: 0.95 },
+    // A light aircraft's flat-four and propeller, and a tank's big diesel.
+    prop: { idle: 26, red: 120, osc: [[1, 'sawtooth', 0.5], [2, 'square', 0.25], [0.5, 'sawtooth', 0.3]], drive: 2.2, lp: 0.7, q: 1.4, flutter: 0.6, fdepth: 0.2, noise: 1.0, nf: 3.0, gain: 0.95 },
+    tank: { idle: 18, red: 95, osc: [[1, 'sawtooth', 0.5], [0.5, 'square', 0.45], [2, 'sawtooth', 0.2]], drive: 3.4, lp: 0.55, q: 2.4, flutter: 0.3, fdepth: 0.3, noise: 1.6, nf: 1.6, gain: 1.0 },
   };
   const POPPY = { sports: 1, muscle: 1, police: 1 };
 
@@ -742,6 +745,57 @@
     }
   }
 
+  // ------------------------------------------------------------------- jet
+  /**
+   * Jet engines: a low roar (brown noise), a turbine whine that rises with
+   * thrust, and the afterburner's crackle. p = { gain, pan, thrust 0..1, burner 0..1 }.
+   */
+  class JetVoice extends Voice {
+    _build(ctx, n, e) {
+      const roar = this._loop(ctx, e.brown);
+      n.rlp = this._filter(ctx, 'lowpass', 420, 0.8);
+      n.roar = this._gain(ctx, 0.8);
+      roar.connect(n.rlp);
+      n.rlp.connect(n.roar);
+      n.roar.connect(n.out);
+      const hiss = this._loop(ctx, e.white);
+      n.hbp = this._filter(ctx, 'bandpass', 1800, 0.6);
+      n.hiss = this._gain(ctx, 0.12);
+      hiss.connect(n.hbp);
+      n.hbp.connect(n.hiss);
+      n.hiss.connect(n.out);
+      n.whine = this._gain(ctx, 0);
+      n.w1 = this._osc(ctx, 'sine', 1400);
+      n.w2 = this._osc(ctx, 'triangle', 2950);
+      const w2g = this._gain(ctx, 0.3);
+      n.w1.connect(n.whine);
+      n.w2.connect(w2g);
+      w2g.connect(n.whine);
+      n.whine.connect(n.out);
+      const burn = this._loop(ctx, e.brown);
+      n.blp = this._filter(ctx, 'lowpass', 160, 1.2);
+      n.burn = this._gain(ctx, 0);
+      burn.connect(n.blp);
+      n.blp.connect(n.burn);
+      n.burn.connect(n.out);
+    }
+
+    _apply(p, t, gain) {
+      const n = this.n;
+      const th = clamp(num(p.thrust, 0.3), 0, 1);
+      const burner = clamp(num(p.burner, 0), 0, 1);
+      this._to(n.rlp.frequency, 'rf', 260 + th * 900, t, 0.15, true);
+      this._to(n.roar.gain, 'rg', 0.45 + th * 0.7, t, 0.15);
+      this._to(n.hbp.frequency, 'hf', 1100 + th * 2400, t, 0.15, true);
+      this._to(n.w1.frequency, 'w1', 900 + th * 1400, t, 0.2, true);
+      this._to(n.w2.frequency, 'w2', 2100 + th * 2600, t, 0.2, true);
+      const near = Math.pow(Math.min(1, gain), 0.5);
+      this._to(n.whine.gain, 'wh', (0.025 + th * 0.05) * near, t, 0.15);
+      this._to(n.burn.gain, 'bg', burner * 1.4, t, 0.1);
+      this._mix(p, t, gain);
+    }
+  }
+
   // ------------------------------------------------------------------ fire
   class FireVoice extends Voice {
     _build(ctx, n, e) {
@@ -796,6 +850,9 @@
   };
   AE.createHelicopter = function () {
     return new HeliVoice(this);
+  };
+  AE.createJet = function () {
+    return new JetVoice(this);
   };
   AE.createFire = function () {
     return new FireVoice(this);
