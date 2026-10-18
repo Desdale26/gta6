@@ -33,7 +33,8 @@
   }
 
   function paint(spec, anisotropy) {
-    const style = STYLES[spec.style] || STYLES.info;
+    // A spec may recolour its style (a shop chain's own colours): { colors: { bg: [...], fg } }.
+    const style = spec.colors ? Object.assign({}, STYLES[spec.style] || STYLES.info, spec.colors) : STYLES[spec.style] || STYLES.info;
     const ppm = 120;
     let W = Math.round(spec.w * ppm);
     let H = Math.round(spec.h * ppm);

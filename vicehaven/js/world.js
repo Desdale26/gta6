@@ -36,6 +36,8 @@
     propMatte: { opts: {}, mat: 'propMatte', cast: true, receive: true },
     hedge: { opts: {}, mat: 'foliage', cast: true, receive: true },
     screen: { opts: {}, mat: 'emissiveScreen', cast: false, receive: false },
+    // Inside a roofed room (the corner shops): lit like the street, never in the roof's shadow.
+    interior: { opts: {}, mat: 'prop', cast: false, receive: false },
   };
 
   function chunkIndex(v) {
@@ -142,6 +144,7 @@
         propMatte: lazy('propMatte'),
         hedge: lazy('hedge'),
         screen: lazy('screen'),
+        interior: lazy('interior'),
       });
       chunk.ctx = ctx;
       return ctx;
