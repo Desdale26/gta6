@@ -18,8 +18,10 @@
   const SIDEWALK = 4;
   const LANE = 3.5;
 
-  /** Roads outside the downtown grid (the docks and the estates). */
+  /** Roads outside the downtown grid (the docks, the estates, the airport, Northgate). */
   const EXTRA_ROADS = [
+    { id: 'airport_rd', kind: 'street', axis: 'x', coord: -1180, width: 18, median: 2, name: 'Airport Road', from: -760, to: 340, isNew: true },
+    { id: 'skyline_dr', kind: 'street', axis: 'x', coord: -512, width: 14, name: 'Skyline Drive', from: -96, to: 288, isNew: true },
     { id: 'crestline', kind: 'avenue', axis: 'z', coord: -510, width: 14, name: 'Crestline Drive', from: -380, to: 380 },
     { id: 'harbor_rd', kind: 'street', axis: 'x', coord: 470, width: 16, name: 'Harbor Road', from: 0, to: 410 },
     { id: 'quay_st', kind: 'street', axis: 'x', coord: 580, width: 14, name: 'Quay Street', from: 0, to: 410 },
@@ -36,7 +38,18 @@
     streetMedian: (z) => (z === 0 ? 3 : 0),
     seawallX: 424,
     waterLevel: -1.1,
-    bounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
+    // The playable world: the city, the airport to the north, Fort Breakwater to the west.
+    bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
+    // The old city limits (its outskirts trees and road-end barriers were laid out in these).
+    cityBounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
+    // Ground kept clear of trees for the big new places (airfield.js, skyline.js, fort.js).
+    zones: {
+      northgate: { minX: -96, maxX: 300, minZ: -650, maxZ: -391 },
+      airport: { minX: -1080, maxX: 380, minZ: -1560, maxZ: -1090 },
+      fort: { minX: -1520, maxX: -1080, minZ: -420, maxZ: 420 },
+      // The two stunt ramps north of Northgate Heights (activities.js).
+      pasture: { minX: 30, maxX: 185, minZ: -840, maxZ: -765 },
+    },
     pier: { x0: 424, x1: 588, z0: -7, z1: 7 },
   };
 
@@ -103,10 +116,17 @@
         id: 'ave' + x, kind: 'avenue', axis: 'z', coord: x, width: w, median: CONFIG.avenueMedian(x),
         name: names.avenues[String(x)] || 'Avenue', from: minLine, to: maxLine,
       };
-      // Grand Avenue carries on out of the grid to the north and south.
+      // Grand Avenue carries on out of the grid: south to the docks, north
+      // through Northgate Heights to the airport.
       if (x === 0) {
-        road.from = -620;
+        road.cityFrom = -620;
+        road.from = -1180;
         road.to = 620;
+      }
+      // Coral and Pelican Avenues run north to Skyline Drive.
+      if (x === -96 || x === 288) {
+        road.cityFrom = road.from;
+        road.from = -512;
       }
       layout.roads.push(road);
     }
@@ -116,7 +136,12 @@
         id: 'st' + z, kind: 'street', axis: 'x', coord: z, width: w, median: CONFIG.streetMedian(z),
         name: names.streets[String(z)] || 'Street', from: minLine, to: maxLine,
       };
-      if (z === 0) road.from = -620; // Meridian Boulevard leads west out of town
+      if (z === 0) {
+        // Meridian Boulevard leads west out of town, to the gate of Fort Breakwater.
+        road.cityFrom = -620;
+        road.from = -1100;
+        road.openStart = true; // the fort's gate, not a row of barriers
+      }
       // Anchor and Heron Streets run west to Crestline Estates.
       if (z === -288 || z === 288) road.from = -620;
       layout.roads.push(road);
@@ -128,6 +153,7 @@
     for (const extra of EXTRA_ROADS) {
       layout.roads.push(Object.assign({ median: 0 }, extra));
     }
+    layout.zones = CONFIG.zones;
     for (const r of layout.roads) {
       const perDir = Math.max(1, Math.floor((r.width - r.median - 1) / 2 / LANE));
       r.lanesPerDirection = perDir;

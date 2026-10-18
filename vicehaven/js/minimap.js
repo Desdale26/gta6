@@ -11,8 +11,9 @@
  * state = {
  *   x, z, heading, camYaw,      player position, player/vehicle yaw, camera yaw
  *   speed,                      m/s; the radar zooms out as it rises (90 m → 190 m radius at 40 m/s)
- *   blips: [{ x, z, type, label?, heading?, flash? }],
+ *   blips: [{ x, z, type, label?, heading?, flash?, noRim? }],
  *          type: police | objective | mission | car | shop | safehouse | race | challenge | enemy
+ *                | store | plane | heli | tank   (noRim: not pinned to the radar's rim when far)
  *   searchArea: { x, z, r } | null,   route: [[x, z], ...] | null,
  *   heat: 0..5,                 visible: bool
  * }
@@ -85,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -102,6 +103,9 @@
     ['race', 'Race'],
     ['challenge', 'Challenge'],
     ['landmark', 'Landmark'],
+    ['store', 'Corner shop'],
+    ['plane', 'Aircraft'],
+    ['tank', 'Military vehicle'],
   ];
   const ALWAYS_ON = { player: true, route: true, landmark: true };
 
@@ -193,9 +197,23 @@
     return {
       paint: { minX: b.minX - 70, maxX: east + 210, minZ: b.minZ - 70, maxZ: b.maxZ + 70 },
       land: { minX: b.minX - 24, maxX: east + 40, minZ: b.minZ - 24, maxZ: b.maxZ + 24 },
-      fit: { minX: Math.max(b.minX, lo - 70), maxX: east + 36, minZ: Math.max(b.minZ, lo - 60), maxZ: Math.min(b.maxZ, hi + 60) },
+      // The city, Northgate Heights and the edge of the countryside.
+      fit: { minX: Math.max(b.minX, lo - 70), maxX: east + 36, minZ: Math.max(b.minZ, lo - 300), maxZ: Math.min(b.maxZ, hi + 60) },
     };
   }
+
+  /** Metres per pixel of the pre-rendered map: as sharp as 0.7, but never more than ~8 megapixels. */
+  function baseMppFor(layout) {
+    const E = extentsOf(layout).paint;
+    return Math.max(BASE_MPP, Math.sqrt(((E.maxX - E.minX) * (E.maxZ - E.minZ)) / 8e6));
+  }
+
+  /**
+   * Places built outside the grid (the airport, the fort, Northgate Heights)
+   * paint themselves onto the map: VH.MapPainters is a list of
+   * fn(g, layout, { R, on, circle, px, hair, PAL }), drawn under the roads.
+   */
+  VH.MapPainters = VH.MapPainters || [];
 
   // ------------------------------------------------------------- glyphs
   // Each glyph is drawn around (0, 0) in CSS pixels and baked into a sprite.
@@ -302,6 +320,68 @@
       roundRectPath(g, -2.9, -3.9, 5.8, 3.1, 1.1);
       g.fillStyle = 'rgba(3, 32, 36, 0.85)';
       g.fill();
+    },
+    // A shopping bag: a corner shop (hold it up with a gun, or buy a snack).
+    store(g) {
+      g.beginPath();
+      g.arc(0, -3.4, 3, Math.PI, 0);
+      g.lineWidth = 3.6;
+      g.strokeStyle = INK;
+      g.stroke();
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#ffd447';
+      g.stroke();
+      roundRectPath(g, -6.2, -3.6, 12.4, 10.4, 2);
+      inkThenFill(g, '#ffd447', 3);
+      g.fillStyle = INK;
+      g.font = '700 8.5px ' + FONT;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('$', 0, 1.8);
+    },
+    // Aircraft, drawn nose-up and turned to face their heading.
+    plane(g) {
+      g.beginPath();
+      g.moveTo(0, -7.6);
+      g.lineTo(1.4, -4.4);
+      g.lineTo(1.4, -1.6);
+      g.lineTo(7.4, 1.6);
+      g.lineTo(7.4, 3);
+      g.lineTo(1.4, 1.6);
+      g.lineTo(1, 5);
+      g.lineTo(3.4, 6.6);
+      g.lineTo(3.4, 7.6);
+      g.lineTo(0, 6.8);
+      g.lineTo(-3.4, 7.6);
+      g.lineTo(-3.4, 6.6);
+      g.lineTo(-1, 5);
+      g.lineTo(-1.4, 1.6);
+      g.lineTo(-7.4, 3);
+      g.lineTo(-7.4, 1.6);
+      g.lineTo(-1.4, -1.6);
+      g.lineTo(-1.4, -4.4);
+      g.closePath();
+      inkThenFill(g, '#e9f6ff', 2.6);
+    },
+    heli(g) {
+      roundRectPath(g, -2.4, -4.6, 4.8, 8, 2.2);
+      inkThenFill(g, '#e9f6ff', 2.6);
+      g.fillStyle = '#e9f6ff';
+      g.fillRect(-0.7, 3, 1.4, 4.6);
+      g.beginPath();
+      g.arc(0, -0.6, 6.8, 0, TAU);
+      g.lineWidth = 1.2;
+      g.strokeStyle = 'rgba(233, 246, 255, 0.75)';
+      g.stroke();
+    },
+    tank(g) {
+      roundRectPath(g, -4.6, -6, 9.2, 12.4, 1.6);
+      inkThenFill(g, '#b5c46a', 3);
+      g.beginPath();
+      g.arc(0, 1, 3, 0, TAU);
+      g.fillStyle = '#5d6b2c';
+      g.fill();
+      g.fillRect(-0.8, -8.2, 1.6, 8.6);
     },
     shop(g) {
       roundRectPath(g, -6.6, -6.6, 13.2, 13.2, 3.6);
@@ -635,6 +715,8 @@
       }
     }
 
+    for (const fn of VH.MapPainters) fn(g, layout, { R, on, circle, px, hair, PAL });
+
     // ----------------------------------------------------------- roads
     for (const s of layout.segments) {
       g.fillStyle = s.road.width >= 18 ? PAL.roadMajor : PAL.road;
@@ -766,10 +848,11 @@
     return c;
   }
 
+  let noiseScale = BASE_MPP * 1.25;
   function noisePattern(g) {
     try {
       const pat = g.createPattern(getNoiseTile(), 'repeat');
-      if (pat && pat.setTransform && typeof DOMMatrix !== 'undefined') pat.setTransform(new DOMMatrix().scale(BASE_MPP * 1.25));
+      if (pat && pat.setTransform && typeof DOMMatrix !== 'undefined') pat.setTransform(new DOMMatrix().scale(noiseScale));
       return pat;
     } catch (err) {
       return null;
@@ -1174,7 +1257,9 @@
       this.layout = layout;
       const ext = extentsOf(layout);
       this._ext = ext;
-      const l0 = renderBase(layout, BASE_MPP);
+      const mpp = baseMppFor(layout);
+      noiseScale = mpp * 1.25;
+      const l0 = renderBase(layout, mpp);
       this._base = [l0, downsample(l0)];
       this._planLabels();
       this._staticDirty = true;
@@ -1505,7 +1590,9 @@
       // Off-radar blips ride the rim.
       for (let p = 0; p <= MAX_PRIORITY; p++) {
         for (let i = 0; i < n; i++) {
-          if (!BC[i] || (PRIORITY[blips[i].type] || 0) !== p) continue;
+          // noRim: lots of the same thing (shops, parked aircraft) shows on the
+          // radar only when near, though the full map shows them all.
+          if (!BC[i] || blips[i].noRim || (PRIORITY[blips[i].type] || 0) !== p) continue;
           this._drawBlip(g, d, this._spr, blips[i], BX[i], BY[i], blips[i].type === 'objective' || blips[i].type === 'mission' ? 0.95 : 0.78, i, cam, k, true);
         }
       }
@@ -1615,7 +1702,7 @@
           g.drawImage(cone.canvas, -W / 2, -L, W, L);
           g.setTransform(d, 0, 0, d, 0, 0);
         }
-      } else if (type === 'car' && typeof bl.heading === 'number') {
+      } else if ((type === 'car' || type === 'plane' || type === 'heli' || type === 'tank') && typeof bl.heading === 'number') {
         rotate = true;
       }
       if (!sprite) sprite = spr.mission;

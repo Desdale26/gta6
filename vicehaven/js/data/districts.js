@@ -126,6 +126,44 @@
       palette: { walls: [0xf4f1ea], roofs: [0x7a6a5a], accents: [0x2f7f86] },
       ambient: { crowd: 'none', traffic: 'light' },
     },
+    // Beyond the old city limits: the new skyline north of downtown, the
+    // airport out past it, and the army base west along Meridian Boulevard.
+    {
+      id: 'northgate',
+      name: 'Northgate Heights',
+      tagline: 'Glass, steel and somebody else\'s money',
+      rect: { minX: -100, maxX: 300, minZ: -660, maxZ: -392.01 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0x9aa6b4], roofs: [0x6b6e72], accents: [0x2d3440] },
+      ambient: { crowd: 'business', traffic: 'heavy' },
+    },
+    {
+      id: 'airport',
+      name: 'Vicehaven International',
+      tagline: 'Departures, arrivals, and a fence you can climb',
+      rect: { minX: -1110, maxX: 400, minZ: -1600, maxZ: -1100 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0xdfe3e6], roofs: [0x777777], accents: [0x1fa3a3] },
+      ambient: { crowd: 'none', traffic: 'light' },
+    },
+    {
+      id: 'fort',
+      name: 'Fort Breakwater',
+      tagline: 'Restricted area. They mean it',
+      rect: { minX: -1540, maxX: -1090, minZ: -430, maxZ: 430 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0x6b6f4a], roofs: [0x4a4d3a], accents: [0xd8c070] },
+      ambient: { crowd: 'none', traffic: 'none' },
+    },
     {
       id: 'outskirts',
       name: 'Vicehaven Outskirts',
@@ -188,5 +226,8 @@
     { id: 'founders_park', name: 'Founders Park', block: [1, 5], kind: 'park' },
     { id: 'vicehaven_tower', name: 'Vicehaven Tower', block: [4, 2], kind: 'tower' },
     { id: 'oceanview_pier', name: 'Oceanview Pier', kind: 'pier', x: 420, z: 0 },
+    { id: 'northgate_heights', name: 'Northgate Heights', kind: 'skyline', x: 100, z: -520 },
+    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -300, z: -1300 },
+    { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0 },
   ];
 })();

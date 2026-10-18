@@ -149,7 +149,8 @@
       this.speedGear = el('div', 'speedo-gear', '1');
       const nitro = el('div', 'speedo-bar speedo-nitro');
       this.nitroFill = el('div', 'fill');
-      nitro.append(el('span', 'bar-label', 'NITRO'), this.nitroFill);
+      this.nitroLabel = el('span', 'bar-label', 'NITRO');
+      nitro.append(this.nitroLabel, this.nitroFill);
       const dmg = el('div', 'speedo-bar speedo-damage');
       this.damageFill = el('div', 'fill');
       dmg.append(el('span', 'bar-label', 'BODY'), this.damageFill);
@@ -469,14 +470,21 @@
     }
 
     _updateDriving(v, nitro) {
-      const kmh = Math.round(Math.abs(v.vF) * 3.6);
+      // Aircraft and tanks fill the dial their own way: { kmh, max, gear, bar, barLabel }.
+      const info = v.hudInfo ? v.hudInfo() : null;
+      const kmh = info ? Math.round(info.kmh) : Math.round(Math.abs(v.vF) * 3.6);
+      const maxKmh = info && info.max ? info.max : 260;
       this._set('speed', kmh, (x) => {
         this.speedValue.textContent = String(x);
-        this.speedArc.style.setProperty('--speed', Math.min(1, x / 260).toFixed(3));
+        this.speedArc.style.setProperty('--speed', Math.min(1, x / maxKmh).toFixed(3));
       });
-      this._set('gear', v.reversing && v.vF < -0.5 ? 'R' : String(v.gear), (x) => {
+      this._set('gear', info ? String(info.gear) : v.reversing && v.vF < -0.5 ? 'R' : String(v.gear), (x) => {
         this.speedGear.textContent = x;
       });
+      this._set('nitroLabel', info ? info.barLabel || 'THROTTLE' : 'NITRO', (x) => {
+        this.nitroLabel.textContent = x;
+      });
+      if (info) nitro = info.bar;
       this._set('nitro', Math.round(nitro * 100), (x) => {
         this.nitroFill.style.width = x + '%';
         this.speedo.classList.toggle('nitro-ready', x > 20);
@@ -539,7 +547,7 @@
         this.armorFill.style.width = Math.max(0, (v / p.maxArmor) * 100) + '%';
         this.armorBar.classList.toggle('empty', v <= 0);
       });
-      this._set('crosshair', p.aimAmount > 0.6 && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
+      this._set('crosshair', (p.aimAmount > 0.6 || !!(p.vehicle && p.vehicle.crosshair)) && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
       this._set('lockHint', s.playing && !s.locked && VH.features.pointerLock, (v) => this.lockHint.classList.toggle('visible', v));
       this._set('knockout', p.isDead, (v) => this.knockout.classList.toggle('visible', v));
       this._set('lowHealth', p.health < 30 && !p.isDead, (v) => this.lowHealth.classList.toggle('visible', v));

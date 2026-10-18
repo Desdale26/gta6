@@ -2575,11 +2575,13 @@
         hours: g.environment.hours,
         pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.heading },
         // The car Jay is sitting in comes back with him.
-        vehicle: v && !v.wrecked && !v.removed && !v.burning ? { type: v.type, color: v.model.color, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw } : null,
+        // An aircraft in the air isn't saved (Jay comes back on the ground below).
+        vehicle: v && !v.wrecked && !v.removed && !v.burning && !v.flying ? { type: v.type, color: v.model.color, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw } : null,
         // Closing the tab is not a way to lose the police.
         heat: g.police.level || 0,
         weapons: g.combat.serialize(),
         activities: g.activities ? g.activities.serialize() : null,
+        systems: g.saveSystems ? g.saveSystems() : null,
       };
       return JSON.parse(JSON.stringify(data));
     }
@@ -2664,6 +2666,7 @@
       if (data.hours !== undefined) g.environment.setTime(data.hours);
       g.combat.load(data.weapons);
       if (g.activities && data.activities) g.activities.load(data.activities);
+      if (g.loadSystems) g.loadSystems(data.systems);
       if (data.pos) g.player.teleport(data.pos.x, data.pos.z, data.pos.yaw, data.pos.y);
       this._preRun = null;
       this._chainPending = null;

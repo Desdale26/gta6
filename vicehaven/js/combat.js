@@ -622,8 +622,14 @@
       const firing = inp.down('fire');
       const pressed = inp.consume('fire');
       if (p.inVehicle) {
-        // Drive-by: aim with the right mouse button, pistols and SMGs only.
         const v = p.vehicle;
+        // A tank's cannon, a jet's guns: the vehicle has its own weapons.
+        if (v.fireWeapon) {
+          p.aiming = false;
+          v.fireWeapon(this, inp, firing, pressed, dt);
+          return;
+        }
+        // Drive-by: aim with the right mouse button, pistols and SMGs only.
         p.aiming = inp.down('aim') && w.drivebyAllowed;
         if (p.aiming && (pressed || (firing && w.auto)) && this._cool <= 0) this._fireHitscan(w, true);
         return;

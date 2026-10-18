@@ -839,7 +839,7 @@
     /** People jump out of the way of a car on the pavement. */
     _scareNearCars() {
       for (const v of this.game.vehicles.list) {
-        if (v.speed < 4 || v.driver !== 'player') continue;
+        if (v.speed < 4 || v.driver !== 'player' || v.flying) continue;
         if (this.game.roadnet.onRoad(v.pos.x, v.pos.z)) continue;
         this.threat(v.pos.x + v.vel.x * 0.6, v.pos.z + v.vel.z * 0.6, 9, 'pavement');
       }

@@ -3921,6 +3921,13 @@ body.cutscene .mm-radar {
   }
 }
 </style>
+    <style data-src="css/world.css">
+/*
+ * world.css — HUD pieces of the open-world systems: the hold-up meter in a
+ * corner shop (stores.js), the restricted-area warning at Fort Breakwater
+ * (fort.js), the flight instruments (aircraft.js).
+ */
+</style>
 
   <!--
     Boot guard. This runs before any game file so that a missing file, an
@@ -12162,6 +12169,44 @@ void main() {
       palette: { walls: [0xf4f1ea], roofs: [0x7a6a5a], accents: [0x2f7f86] },
       ambient: { crowd: 'none', traffic: 'light' },
     },
+    // Beyond the old city limits: the new skyline north of downtown, the
+    // airport out past it, and the army base west along Meridian Boulevard.
+    {
+      id: 'northgate',
+      name: 'Northgate Heights',
+      tagline: 'Glass, steel and somebody else\'s money',
+      rect: { minX: -100, maxX: 300, minZ: -660, maxZ: -392.01 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0x9aa6b4], roofs: [0x6b6e72], accents: [0x2d3440] },
+      ambient: { crowd: 'business', traffic: 'heavy' },
+    },
+    {
+      id: 'airport',
+      name: 'Vicehaven International',
+      tagline: 'Departures, arrivals, and a fence you can climb',
+      rect: { minX: -1110, maxX: 400, minZ: -1600, maxZ: -1100 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0xdfe3e6], roofs: [0x777777], accents: [0x1fa3a3] },
+      ambient: { crowd: 'none', traffic: 'light' },
+    },
+    {
+      id: 'fort',
+      name: 'Fort Breakwater',
+      tagline: 'Restricted area. They mean it',
+      rect: { minX: -1540, maxX: -1090, minZ: -430, maxZ: 430 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0x6b6f4a], roofs: [0x4a4d3a], accents: [0xd8c070] },
+      ambient: { crowd: 'none', traffic: 'none' },
+    },
     {
       id: 'outskirts',
       name: 'Vicehaven Outskirts',
@@ -12224,6 +12269,9 @@ void main() {
     { id: 'founders_park', name: 'Founders Park', block: [1, 5], kind: 'park' },
     { id: 'vicehaven_tower', name: 'Vicehaven Tower', block: [4, 2], kind: 'tower' },
     { id: 'oceanview_pier', name: 'Oceanview Pier', kind: 'pier', x: 420, z: 0 },
+    { id: 'northgate_heights', name: 'Northgate Heights', kind: 'skyline', x: 100, z: -520 },
+    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -300, z: -1300 },
+    { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0 },
   ];
 })();
 //# sourceURL=js/data/districts.js
@@ -12553,8 +12601,10 @@ void main() {
   const SIDEWALK = 4;
   const LANE = 3.5;
 
-  /** Roads outside the downtown grid (the docks and the estates). */
+  /** Roads outside the downtown grid (the docks, the estates, the airport, Northgate). */
   const EXTRA_ROADS = [
+    { id: 'airport_rd', kind: 'street', axis: 'x', coord: -1180, width: 18, median: 2, name: 'Airport Road', from: -760, to: 340, isNew: true },
+    { id: 'skyline_dr', kind: 'street', axis: 'x', coord: -512, width: 14, name: 'Skyline Drive', from: -96, to: 288, isNew: true },
     { id: 'crestline', kind: 'avenue', axis: 'z', coord: -510, width: 14, name: 'Crestline Drive', from: -380, to: 380 },
     { id: 'harbor_rd', kind: 'street', axis: 'x', coord: 470, width: 16, name: 'Harbor Road', from: 0, to: 410 },
     { id: 'quay_st', kind: 'street', axis: 'x', coord: 580, width: 14, name: 'Quay Street', from: 0, to: 410 },
@@ -12571,7 +12621,18 @@ void main() {
     streetMedian: (z) => (z === 0 ? 3 : 0),
     seawallX: 424,
     waterLevel: -1.1,
-    bounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
+    // The playable world: the city, the airport to the north, Fort Breakwater to the west.
+    bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
+    // The old city limits (its outskirts trees and road-end barriers were laid out in these).
+    cityBounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
+    // Ground kept clear of trees for the big new places (airfield.js, skyline.js, fort.js).
+    zones: {
+      northgate: { minX: -96, maxX: 300, minZ: -650, maxZ: -391 },
+      airport: { minX: -1080, maxX: 380, minZ: -1560, maxZ: -1090 },
+      fort: { minX: -1520, maxX: -1080, minZ: -420, maxZ: 420 },
+      // The two stunt ramps north of Northgate Heights (activities.js).
+      pasture: { minX: 30, maxX: 185, minZ: -840, maxZ: -765 },
+    },
     pier: { x0: 424, x1: 588, z0: -7, z1: 7 },
   };
 
@@ -12638,10 +12699,17 @@ void main() {
         id: 'ave' + x, kind: 'avenue', axis: 'z', coord: x, width: w, median: CONFIG.avenueMedian(x),
         name: names.avenues[String(x)] || 'Avenue', from: minLine, to: maxLine,
       };
-      // Grand Avenue carries on out of the grid to the north and south.
+      // Grand Avenue carries on out of the grid: south to the docks, north
+      // through Northgate Heights to the airport.
       if (x === 0) {
-        road.from = -620;
+        road.cityFrom = -620;
+        road.from = -1180;
         road.to = 620;
+      }
+      // Coral and Pelican Avenues run north to Skyline Drive.
+      if (x === -96 || x === 288) {
+        road.cityFrom = road.from;
+        road.from = -512;
       }
       layout.roads.push(road);
     }
@@ -12651,7 +12719,12 @@ void main() {
         id: 'st' + z, kind: 'street', axis: 'x', coord: z, width: w, median: CONFIG.streetMedian(z),
         name: names.streets[String(z)] || 'Street', from: minLine, to: maxLine,
       };
-      if (z === 0) road.from = -620; // Meridian Boulevard leads west out of town
+      if (z === 0) {
+        // Meridian Boulevard leads west out of town, to the gate of Fort Breakwater.
+        road.cityFrom = -620;
+        road.from = -1100;
+        road.openStart = true; // the fort's gate, not a row of barriers
+      }
       // Anchor and Heron Streets run west to Crestline Estates.
       if (z === -288 || z === 288) road.from = -620;
       layout.roads.push(road);
@@ -12663,6 +12736,7 @@ void main() {
     for (const extra of EXTRA_ROADS) {
       layout.roads.push(Object.assign({ median: 0 }, extra));
     }
+    layout.zones = CONFIG.zones;
     for (const r of layout.roads) {
       const perDir = Math.max(1, Math.floor((r.width - r.median - 1) / 2 / LANE));
       r.lanesPerDirection = perDir;
@@ -15793,6 +15867,42 @@ void main() {
 })();
 //# sourceURL=js/outskirts.js
 </script>
+    <script data-src="js/skyline.js">
+/*
+ * skyline.js — Northgate Heights: the new skyscraper district north of downtown (world-build geometry, places, map painting).
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/skyline.js
+</script>
+    <script data-src="js/airfield.js">
+/*
+ * airfield.js — Vicehaven International: the airport north of the city (world-build geometry, places, map painting) and its runtime (parked aircraft, air traffic).
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/airfield.js
+</script>
+    <script data-src="js/fort.js">
+/*
+ * fort.js — Fort Breakwater: the army base west along Meridian Boulevard (world-build geometry, places, map painting) and its runtime (soldiers, restricted area, military vehicles).
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/fort.js
+</script>
+    <script data-src="js/stores.js">
+/*
+ * stores.js — Corner shops Jay can hold up: lot planning, world-build geometry, and the robbery runtime.
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/stores.js
+</script>
   <script data-src="js/world.js">
 /*
  * world.js — turns the city layout into things you can see and bump into.
@@ -16026,6 +16136,16 @@ void main() {
       progress(0.85, 'Watering the lawns in Crestline');
       if (VH.Estates) this.estates = VH.Estates.build(this, layout);
       await slicer.tick();
+      // Beyond the old city limits: Northgate Heights, the airport, the fort.
+      progress(0.852, 'Topping out Northgate Heights');
+      if (VH.Skyline) this.skyline = VH.Skyline.build(this, layout);
+      await slicer.tick();
+      progress(0.855, 'Painting the runway');
+      if (VH.Airfield) this.airfield = VH.Airfield.build(this, layout);
+      await slicer.tick();
+      progress(0.858, 'Fencing off Fort Breakwater');
+      if (VH.Fort) this.fort = VH.Fort.build(this, layout);
+      await slicer.tick();
 
       progress(0.86, 'Planting palms and street lights');
       this._buildBoundary(layout);
@@ -16189,13 +16309,13 @@ void main() {
           }
         }
       }
-      // Roads out of town end at barriers (the rest of the map arrives in Phase 3).
-      const limit = this.layout.config.bounds;
-      const endsOutside = (road.axis === 'z' && (b >= limit.maxZ - 30 || a <= limit.minZ + 30)) ||
-        (road.axis === 'x' && a <= limit.minX + 30);
-      if (endsOutside) {
-        const atEnd = road.axis === 'z' ? b >= limit.maxZ - 30 : false;
-        const p = atEnd ? b - 1 : a + 1;
+      // Roads out of town that just stop end at barriers (not where they meet
+      // another road, and not at the fort's gate).
+      const limit = this.layout.config.cityBounds || this.layout.config.bounds;
+      const outEnd = road.axis === 'z' && !ej && b >= limit.maxZ - 30;
+      const outStart = !sj && !road.openStart && a <= (road.axis === 'z' ? limit.minZ : limit.minX) + 30;
+      if (outEnd || outStart) {
+        const p = outEnd ? b - 1 : a + 1;
         for (let c = -half + 2; c <= half - 2; c += 3.8) {
           const px = road.axis === 'z' ? road.coord + c : p;
           const pz = road.axis === 'z' ? p : road.coord + c;
@@ -16246,7 +16366,8 @@ void main() {
         if (block.alley) this._buildAlley(ctx, block);
         for (const lot of block.lots) {
           const lctx = this.ctxAt(lot.cx, lot.cz);
-          const top = VH.Buildings.buildLot(lctx, lot);
+          // A corner shop (stores.js) stands on some of the car parks.
+          const top = lot.store && VH.Stores ? VH.Stores.buildLot(this, lctx, lot) : VH.Buildings.buildLot(lctx, lot);
           lot.top = top || 0;
           if (top > 0) this.stats.buildings++;
           this.stats.tallest = Math.max(this.stats.tallest, top || 0);
@@ -16354,12 +16475,15 @@ void main() {
      * roads running that way: a lamp at the kerb of an x-running road only
      * cares about the cross streets it might stand in.
      */
-    onRoad(x, z, margin, skipAxis) {
+    onRoad(x, z, margin, skipAxis, cityOnly) {
       const m = margin || 0;
       for (const r of this.layout.roads) {
         if (skipAxis && r.axis === skipAxis) continue;
+        // cityOnly: the roads as they were inside the old city limits.
+        if (cityOnly && r.isNew) continue;
+        const from = cityOnly && r.cityFrom !== undefined ? r.cityFrom : r.from;
         const along = r.axis === 'z' ? z : x;
-        if (along < r.from - m || along > r.to + m) continue;
+        if (along < from - m || along > r.to + m) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) < r.width / 2 + m) return true;
       }
@@ -16367,9 +16491,15 @@ void main() {
     }
 
     _buildOutskirtsTrees(layout) {
+      const cfg = layout.config;
+      const zones = Object.values(cfg.zones || {});
+      const inZone = (x, z, pad) => zones.some((r) => x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad);
+      // The trees of the old outskirts, exactly where they always were (the
+      // same random draws, judged against the old roads), minus the ones that
+      // now stand on a new road or in Northgate Heights.
       const rng = new VH.RNG('outskirts-trees');
-      const b = layout.config.bounds;
-      const edge = layout.config.lines[layout.config.lines.length - 1] + 12;
+      const b = cfg.cityBounds || cfg.bounds;
+      const edge = cfg.lines[cfg.lines.length - 1] + 12;
       let placed = 0;
       for (let i = 0; i < 900 && placed < 260; i++) {
         const x = rng.range(b.minX + 4, b.maxX - 4);
@@ -16378,10 +16508,26 @@ void main() {
         if (x > 380) continue;
         // Keep clear of the roads leading out of town, and of every other road.
         if (Math.abs(x) < 20 || Math.abs(z) < 16) continue;
-        if (this.onRoad(x, z, 3)) continue;
+        if (this.onRoad(x, z, 3, null, true)) continue;
         const type = rng.chance(0.7) ? (rng.chance(0.5) ? 'tree' : 'treeB') : 'palm';
-        this.addProp(type, x, 0, z, rng.range(0, 6.28), rng.range(0.8, 1.35));
+        const yaw = rng.range(0, 6.28);
+        const scale = rng.range(0.8, 1.35);
         placed++;
+        if (inZone(x, z, 6) || this.onRoad(x, z, 3)) continue;
+        this.addProp(type, x, 0, z, yaw, scale);
+      }
+      // The new land: north to the airport, west to the fort.
+      const all = cfg.bounds;
+      const rng2 = new VH.RNG('outskirts-trees-2');
+      let more = 0;
+      for (let i = 0; i < 4000 && more < 620; i++) {
+        const x = rng2.range(all.minX + 4, all.maxX - 4);
+        const z = rng2.range(all.minZ + 4, all.maxZ - 4);
+        if (x > b.minX - 6 && x < b.maxX + 6 && z > b.minZ - 6 && z < b.maxZ + 6) continue;
+        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5)) continue;
+        const type = rng2.chance(0.75) ? (rng2.chance(0.5) ? 'tree' : 'treeB') : 'palm';
+        this.addProp(type, x, 0, z, rng2.range(0, 6.28), rng2.range(0.8, 1.4));
+        more++;
       }
     }
 
@@ -18228,7 +18374,7 @@ void main() {
     /** People jump out of the way of a car on the pavement. */
     _scareNearCars() {
       for (const v of this.game.vehicles.list) {
-        if (v.speed < 4 || v.driver !== 'player') continue;
+        if (v.speed < 4 || v.driver !== 'player' || v.flying) continue;
         if (this.game.roadnet.onRoad(v.pos.x, v.pos.z)) continue;
         this.threat(v.pos.x + v.vel.x * 0.6, v.pos.z + v.vel.z * 0.6, 9, 'pavement');
       }
@@ -18530,6 +18676,8 @@ void main() {
       this.spawnPoint = { x: 0, y: 0.2, z: 0, yaw: Math.PI };
       this.vehicle = null; // the car Jay is driving (vehicles.js), or null
       this.enteringVehicle = false;
+      this.parachute = null; // { t, open } after jumping out of an aircraft
+      this._canopy = null;
       this._knockT = 0;
       this.dynamicResolver = null; // set by main.js: pushes Jay out of cars, reports being run over
       this.extraGround = null; // set by main.js: car roofs to stand on
@@ -18748,6 +18896,23 @@ void main() {
 
       // Gravity.
       if (!this.grounded) this.vel.y = Math.max(-55, this.vel.y - P.gravity * dt);
+      // Under a parachute: a slow drift down, steered with the move keys.
+      const chute = this.parachute;
+      if (chute && (this.grounded || this.state !== 'air')) this.parachute = null;
+      else if (chute) {
+        chute.t += dt;
+        if (!chute.open && chute.t > 0.7) chute.open = true;
+        if (chute.open) {
+          this.vel.y = Math.max(this.vel.y, -5);
+          if (this.vel.y < -5) this.vel.y = -5;
+          const want = 7 * (mag > 0.05 ? 1 : 0.4);
+          const fx = wl > 0.2 ? wx : Math.sin(this.heading);
+          const fz = wl > 0.2 ? wz : Math.cos(this.heading);
+          const k = 1 - Math.exp(-1.6 * dt);
+          this.vel.x += (fx * want - this.vel.x) * k;
+          this.vel.z += (fz * want - this.vel.z) * k;
+        }
+      }
 
       // Horizontal move and collision.
       const next = this._next;
@@ -18829,8 +18994,15 @@ void main() {
       if (this.pos.y < -25) this._fellOutOfWorld();
     }
 
+    /** Jumped out of an aircraft: the canopy opens after a moment (see the air step). */
+    openParachute() {
+      this.parachute = { t: 0, open: false };
+    }
+
     _landOn(g) {
-      const impact = -this.vel.y;
+      // A parachute landing is a gentle one.
+      const impact = this.parachute && this.parachute.open ? Math.min(-this.vel.y, 5) : -this.vel.y;
+      this.parachute = null;
       this.pos.y = g;
       this.vel.y = 0;
       this.grounded = true;
@@ -19083,6 +19255,8 @@ void main() {
 
     _die(source) {
       if (this.vehicle) this.vehicle = null;
+      this.parachute = null;
+      if (this._canopy) this._canopy.visible = false;
       this.state = 'dead';
       this._deadTimer = 0;
       this.vel.set(0, 0, 0);
@@ -19211,10 +19385,46 @@ void main() {
         beatN: this.dancing ? this.dancing.beatN : undefined,
         recoil: this._recoil || 0,
         swing: this._meleeSwing || 0,
+        handsUp: this.parachute && this.parachute.open ? 0.85 : 0,
       });
+      this._updateCanopy(dt);
       if (this._recoil > 0) this._recoil = Math.max(0, this._recoil - dt * 9);
       if (this._meleeSwing > 0) this._meleeSwing = Math.max(0, this._meleeSwing - dt * 3.2);
       return rp;
+    }
+
+    /** The parachute canopy over Jay's head (built the first time he needs one). */
+    _updateCanopy(dt) {
+      const open = !!(this.parachute && this.parachute.open);
+      if (!open && !this._canopy) return;
+      if (!this._canopy) {
+        const g = new THREE.Group();
+        const dome = new THREE.SphereGeometry(3.2, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
+        dome.scale(1.25, 0.55, 0.85);
+        const cols = [0xff6a1a, 0xf2f2ee, 0x1fa3a3];
+        const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
+        const c = new Float32Array(dome.attributes.position.count * 3);
+        for (let i = 0; i < dome.attributes.position.count; i++) {
+          const x = dome.attributes.position.getX(i);
+          const col = new THREE.Color(cols[Math.floor((x + 4) / 1.35) % 3]).convertSRGBToLinear();
+          c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b;
+        }
+        dome.setAttribute('color', new THREE.BufferAttribute(c, 3));
+        const canopy = new THREE.Mesh(dome, mat);
+        canopy.position.y = 4.4;
+        canopy.castShadow = true;
+        g.add(canopy);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+        const pts = [];
+        for (const [x, z] of [[-3.6, -1.5], [3.6, -1.5], [-3.6, 1.5], [3.6, 1.5], [0, -2.5], [0, 2.5]]) pts.push(new THREE.Vector3(0, 1.6, 0), new THREE.Vector3(x, 4.5, z));
+        g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+        this.model.root.add(g);
+        this._canopy = g;
+        this._canopyK = 0;
+      }
+      this._canopyK = damp(this._canopyK || 0, open ? 1 : 0, open ? 5 : 9, dt);
+      this._canopy.visible = this._canopyK > 0.02;
+      this._canopy.scale.setScalar(Math.max(0.01, this._canopyK));
     }
 
     /** Where the camera should orbit around (interpolated feet + eye height). */
@@ -19364,7 +19574,9 @@ void main() {
       }
       this.yaw = VH.math.wrapAngle(this.yaw);
       const first = this.isFirstPerson;
-      this.pitch = clamp(this.pitch, first ? -1.45 : -1.2, first ? 1.45 : 0.95);
+      // Flying, the view (and with it the aircraft) can point nearly straight up or down.
+      const wide = first || this._air;
+      this.pitch = clamp(this.pitch, wide ? -1.45 : -1.2, wide ? 1.45 : 0.95);
       this._lookIdle += dt;
 
       const wheel = inp.takeWheel();
@@ -19415,11 +19627,16 @@ void main() {
 
     update(dt, player) {
       if (player.inVehicle) {
+        const v = player.vehicle;
         this._inCar = true;
-        this._aimingInCar = player.aiming;
-        this._updateCar(dt, player.vehicle);
+        // A tank's turret follows the view: never swing it back behind.
+        this._aimingInCar = player.aiming || !!v.aimCamera;
+        this._air = !!v.airCamera;
+        if (this._air) this._updateAir(dt, v);
+        else this._updateCar(dt, v);
         return;
       }
+      this._air = false;
       if (this._inCar) {
         // Just got out: face the way the car was going.
         this._inCar = false;
@@ -19609,6 +19826,77 @@ void main() {
       this._shake = damp(this._shake, 0, 5, dt);
 
       this.fov = damp(this.fov, targetFov, 5, dt);
+      if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
+        cam.fov = this.fov;
+        cam.updateProjectionMatrix();
+        this._lastNear = cam.near;
+      }
+      cam.updateMatrixWorld();
+    }
+
+    /**
+     * Aircraft: the mouse points the view and the aircraft flies where it
+     * looks (aircraft.js reads cameraRig.yaw/pitch), so the camera simply
+     * sits behind the view direction, a long way back for big aircraft.
+     * No recentring: holding still holds the heading.
+     */
+    _updateAir(dt, v) {
+      const cam = this.camera;
+      const settings = this.settings;
+      const mode = CAR_MODES[this.carModeIndex];
+      const pos = v.renderPos;
+      const lift = v.camLift !== undefined ? v.camLift : v.height * 0.7;
+      if (!this._carInit) {
+        this._carPivot.set(pos.x, pos.y + lift, pos.z);
+        this._carInit = true;
+        this._carDist = 8;
+      }
+      const behind = this._behind = damp(this._behind, this.input.down('lookBehind') ? 1 : 0, 12, dt);
+      const yaw = this.yaw + Math.PI * behind;
+      const pitch = this.pitch * (1 - behind);
+      const pv = this._carPivot;
+      // Tight follow: at 100 m/s a soft spring would leave the aircraft behind the camera.
+      pv.x = damp(pv.x, pos.x, 24, dt);
+      pv.z = damp(pv.z, pos.z, 24, dt);
+      pv.y = damp(pv.y, pos.y + lift, 16, dt);
+      const cp = Math.cos(pitch);
+      const fwd = this._fwd.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+      const speed = Math.hypot(v.vel.x, v.vel.y, v.vel.z);
+      const sp = smoothstepLocal(10, 110, speed);
+      let targetFov = settings.get('graphics.fov') + sp * 10 + (v.boostFx || 0) * 8;
+      if (mode.id === 'bonnet') {
+        // From the cockpit, looking where the mouse points.
+        const nose = v.cockpit || { z: v.hz * 0.45, y: v.height * 0.7 };
+        const f = Math.sin(v.renderYaw);
+        const g = Math.cos(v.renderYaw);
+        cam.near = 0.1;
+        cam.position.set(pos.x + f * nose.z, pos.y + nose.y, pos.z + g * nose.z);
+        cam.rotation.set(pitch, yaw + Math.PI, -(v.roll || 0) * 0.6, 'YXZ');
+        targetFov += 4;
+      } else {
+        cam.near = 0.2;
+        const baseDist = (v.camDist || 6 + v.hz * 1.6) * mode.dist + this.zoom * 1.2;
+        const dist = baseDist + sp * 3;
+        const origin = this._shoulder.copy(pv);
+        origin.y += (v.camUp !== undefined ? v.camUp : 1.2) * mode.height;
+        const hit = this.physics.raycast(origin.x, origin.y, origin.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
+          { inflate: 0.25, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
+        const allowed = hit ? Math.max(2, hit.t - 0.3) : dist;
+        if (allowed < this._carDist) this._carDist = allowed;
+        else this._carDist = damp(this._carDist, allowed, 3, dt);
+        cam.position.copy(origin).addScaledVector(fwd, -this._carDist);
+        cam.rotation.set(pitch - 0.05, yaw + Math.PI, 0, 'YXZ');
+      }
+      const shake = this._shake;
+      if (shake > 0.001 && settings.get('gameplay.cameraShake')) {
+        const t = performance.now() / 1000;
+        const s = shake * 0.09;
+        cam.position.x += Math.sin(t * 37.1) * s;
+        cam.position.y += Math.sin(t * 43.7 + 1.3) * s;
+        cam.position.z += Math.sin(t * 29.3 + 2.1) * s;
+      }
+      this._shake = damp(this._shake, 0, 5, dt);
+      this.fov = damp(this.fov, targetFov, 4, dt);
       if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
         cam.fov = this.fov;
         cam.updateProjectionMatrix();
@@ -26087,7 +26375,10 @@ void main() {
       this.spec = typeSpec(typeId);
       if (!this.spec) throw new Error('Unknown vehicle type ' + typeId);
       const s = this.spec;
-      this.model = VH.CarModels.build(typeId, { color: opts.color, seed: opts.seed || this.id * 7919, lod: opts.lod || 0 });
+      // 'car' for everything on wheels; aircraft and tanks (aircraft.js,
+      // tank.js) subclass Vehicle and build their own models.
+      this.kind = s.kind || 'car';
+      this.model = this._buildModel(typeId, opts);
       system.scene.add(this.model.root);
       this.name = s.name;
       this.cls = s.cls;
@@ -26175,6 +26466,11 @@ void main() {
       this._ground = [0, 0, 0, 0];
       this._corner = [{ x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }];
       this.model.setShadows(true);
+    }
+
+    /** The 3D model (a CarModels car; other kinds override this). */
+    _buildModel(typeId, opts) {
+      return VH.CarModels.build(typeId, { color: opts.color, seed: opts.seed || this.id * 7919, lod: opts.lod || 0 });
     }
 
     // ------------------------------------------------------------ setup
@@ -26721,12 +27017,16 @@ void main() {
       this._tmp = { x: 0, z: 0 };
       this._tmp2 = { x: 0, z: 0 };
       this.voices = new Map(); // vehicle id → { engine, skid, siren, horn, fire }
+      this.fixedSpots = []; // vehicles that always wait at a spot (see addFixedSpot)
       this._buildParkingSpots();
     }
 
     // ---------------------------------------------------------- lifecycle
     spawn(type, x, z, heading, opts) {
-      const v = new VH.Vehicle(this, type, opts);
+      // Planes, helicopters and tanks register their own class by kind.
+      const spec = VH.Vehicle.typeSpec(type);
+      const Cls = (spec && spec.kind && VH.VehicleKinds && VH.VehicleKinds[spec.kind]) || VH.Vehicle;
+      const v = new Cls(this, type, opts);
       v.place(x, z, heading, opts && opts.y);
       this.list.push(v);
       return v;
@@ -26789,6 +27089,13 @@ void main() {
     _playerControls(v, dt) {
       const inp = this.game.input;
       const pad = inp.pad;
+      // Aircraft and tanks read the controls their own way.
+      if (v.playerControls) {
+        v.playerControls(inp, dt, this.game);
+        inp.discard('jump');
+        inp.discard('crouch');
+        return;
+      }
       let accel = 0;
       if (inp.down('moveForward')) accel += 1;
       if (inp.down('moveBack')) accel -= 1;
@@ -26816,6 +27123,11 @@ void main() {
     }
 
     _playerExtras(v, dt) {
+      // Nitro, drifts and near misses are for cars.
+      if (v.kind !== 'car') {
+        this._nitroRegen(dt, 0.06);
+        return;
+      }
       // Nitro drains while boosting and fills from style.
       const boosting = v.boostFx > 0.9 && v.input.boost;
       if (boosting) this.nitro = Math.max(0, this.nitro - dt * 0.3);
@@ -27185,7 +27497,7 @@ void main() {
         if (v.wrecked || v.driver === 'player' || v.noEnter) continue;
         if (v.speed > 5) continue;
         for (const side of [1, -1]) {
-          const d0 = v.localToWorld(side * (v.hx + 0.5), v.hz * 0.1, this._tmp);
+          const d0 = this._doorPoint(v, side, 0.5, this._tmp);
           const d = Math.hypot(d0.x - px, d0.z - pz);
           if (d < bestD) {
             bestD = d;
@@ -27199,12 +27511,18 @@ void main() {
           if (d < bestD) {
             bestD = d;
             const side = l.x >= 0 ? 1 : -1;
-            const d0 = v.localToWorld(side * (v.hx + 0.5), v.hz * 0.1, this._tmp);
+            const d0 = this._doorPoint(v, side, 0.5, this._tmp);
             best = { v, side, x: d0.x, z: d0.z };
           }
         }
       }
       return best;
+    }
+
+    /** Where Jay stands to get in: beside the driver's door (a plane's cabin door can be elsewhere). */
+    _doorPoint(v, side, out, into) {
+      const lx = v.doorX !== undefined ? v.doorX + out - 0.5 : v.hx + out;
+      return v.localToWorld(side * lx, v.doorZ !== undefined ? v.doorZ : v.hz * 0.1, into);
     }
 
     /** Start getting into a car (F). */
@@ -27239,7 +27557,7 @@ void main() {
       }
       e.t += dt;
       // Keep the target door where the car is now.
-      const door = v.localToWorld(e.side * (v.hx + 0.45), v.hz * 0.1, this._tmp);
+      const door = this._doorPoint(v, e.side, 0.45, this._tmp);
       if (e.phase === 'walk') {
         const k = smoothstep(0, 0.32, e.t);
         p.pos.x = lerp(e.fromX, door.x, k);
@@ -27292,9 +27610,11 @@ void main() {
       const p = this.player;
       const v = p.vehicle;
       if (!v) return false;
+      const ph = this.physics;
+      // Out of an aircraft in the air: jump, and the parachute opens.
+      if (v.flying && v.pos.y - ph.groundHeight(v.pos.x, v.pos.z, v.pos.y + 0.5) > 4) return this._jumpOut(v);
       const fast = v.speed > 9;
       // Find a free spot: driver door, passenger door, behind, on the roof.
-      const ph = this.physics;
       const tries = [[v.hx + 0.75, 0.2], [-(v.hx + 0.75), 0.2], [v.hx + 0.75, -v.hz * 0.6], [0, -(v.hz + 0.9)], [0, v.hz + 0.9]];
       let spot = null;
       for (const [lx, lz] of tries) {
@@ -27335,6 +27655,32 @@ void main() {
       return true;
     }
 
+    /** Jay leaves a flying aircraft mid-air: it flies on without him. */
+    _jumpOut(v) {
+      const p = this.player;
+      p.vehicle = null;
+      v.driver = null;
+      v.input.accel = 0;
+      v.input.steer = 0;
+      v.input.boost = 0;
+      v.horn = false;
+      v.role = 'abandoned';
+      v.persistent = !!(v.missionOwned || v.keep);
+      const side = v.localToWorld(v.hx + 1.6, 0, {});
+      p.state = 'air';
+      p.grounded = false;
+      p.model.setVisible(true);
+      p.pos.set(side.x, v.pos.y - 1, side.z);
+      p.prevPos.copy(p.pos);
+      p.vel.set(v.vel.x * 0.35, Math.min(2, v.vel.y * 0.35), v.vel.z * 0.35);
+      p.heading = p.prevHeading = v.yaw;
+      p._fallStartY = p.pos.y;
+      if (p.openParachute) p.openParachute();
+      VH.events.emit('vehicle:door', { v, open: true });
+      VH.events.emit('vehicle:exit', { v, bail: true, air: true });
+      return true;
+    }
+
     // ------------------------------------------------------ parked cars
     _buildParkingSpots() {
       const spots = (this.spots = []);
@@ -27370,7 +27716,7 @@ void main() {
 
     _streamParked(focusX, focusZ) {
       let active = 0;
-      for (const v of this.list) if (v.role === 'parked') active++;
+      for (const v of this.list) if (v.role === 'parked' && !v.persistent) active++;
       // Despawn untouched parked cars far away.
       for (let i = this.list.length - 1; i >= 0; i--) {
         const v = this.list[i];
@@ -27400,12 +27746,50 @@ void main() {
       }
     }
 
+    /**
+     * A vehicle that always waits at a spot: the planes at the airport, the
+     * tanks and jets at the fort. spot = { type, x, z, yaw, y?, color?, r?,
+     * onSpawn?(v) }. Taken, wrecked or cleared away (a respawn, a new game),
+     * a fresh one appears there as soon as nobody is looking.
+     */
+    addFixedSpot(spot) {
+      spot.v = null;
+      this.fixedSpots.push(spot);
+      return spot;
+    }
+
+    _streamFixed(fx, fz) {
+      for (const s of this.fixedSpots) {
+        const v = s.v;
+        const r = s.r || 8;
+        if (v && !v.removed && !v.wrecked && Math.hypot(v.pos.x - s.x, v.pos.z - s.z) < r * 3) continue;
+        const d = Math.hypot(s.x - fx, s.z - fz);
+        if (d < 25 || (d < 160 && this.game.isVisible(s.x, (s.y || 0) + 2, s.z, r))) continue;
+        if (v && !v.removed) {
+          // A wreck on the spot is cleared away; one driven off is left where it is,
+          // and from now on comes and goes like any other abandoned vehicle.
+          if (v.wrecked && v !== this.player.vehicle) this.remove(v);
+          else if (v !== this.player.vehicle && v !== this.lastPlayerCar) {
+            v.keep = false;
+            v.persistent = !!v.missionOwned;
+          }
+        }
+        if (this.list.some((o) => !o.removed && o !== v && Math.hypot(o.pos.x - s.x, o.pos.z - s.z) < r)) continue;
+        const nv = this.spawn(s.type, s.x, s.z, s.yaw || 0, { color: s.color, persistent: true, sleeping: true, role: 'parked', y: s.y });
+        nv.keep = true;
+        nv.fixedSpot = s;
+        if (s.onSpawn) s.onSpawn(nv);
+        s.v = nv;
+      }
+    }
+
     // ------------------------------------------------------------- frame
     update(dt, alpha, focus) {
       this._streamTimer -= dt;
       if (this._streamTimer <= 0) {
         this._streamTimer = 0.5;
         this._streamParked(focus.x, focus.z);
+        this._streamFixed(focus.x, focus.z);
       }
       const night = this.game.environment.shared.uWindowGlow.value;
       const cam = this.game.renderer.camera.position;
@@ -27445,6 +27829,24 @@ void main() {
   VH.VehicleSystem = VehicleSystem;
 })();
 //# sourceURL=js/vehicles/vehicles.js
+</script>
+    <script data-src="js/vehicles/aircraft.js">
+/*
+ * vehicles/aircraft.js — Flyable aircraft: planes and helicopters (Vehicle subclasses, models, flight, controls).
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/vehicles/aircraft.js
+</script>
+    <script data-src="js/vehicles/tank.js">
+/*
+ * vehicles/tank.js — The tank (Vehicle subclass: tracks, turret, cannon).
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/vehicles/tank.js
 </script>
   <script data-src="js/vehicles/traffic.js">
 /*
@@ -27870,6 +28272,7 @@ void main() {
         this._ahead(s, pt);
         for (const o of list) {
           if (o === v || (this._bypass && o === this._bypass.car)) continue;
+          if (Math.abs(o.pos.y - v.pos.y) > 4) continue; // an aircraft overhead isn't in the lane
           const dx = o.pos.x - pt.x;
           const dz = o.pos.z - pt.z;
           const r = o.hx + 1.1;
@@ -28155,9 +28558,9 @@ void main() {
       return clamp((dx * r.x + dz * r.z) / d, -1, 1) * 0.85;
     }
 
-    _gain(x, z, ref) {
+    _gain(x, z, ref, y) {
       const cam = this.game.renderer.camera.position;
-      const d = Math.hypot(x - cam.x, z - cam.z);
+      const d = Math.hypot(x - cam.x, z - cam.z, y !== undefined ? y - cam.y : 0);
       return 1 / (1 + Math.pow(d / (ref || 10), 1.5));
     }
 
@@ -28198,7 +28601,7 @@ void main() {
           if (v.burning > 0 && Math.random() < 0.9) fx.flame(hood.x, v.renderPos.y + v.height * 0.62, hood.z, 0.8);
         }
         // Nitro.
-        if (v.boostFx > 0.5) {
+        if (v.boostFx > 0.5 && v.kind === 'car') {
           for (const side of [-0.35, 0.35]) {
             const ex = v.localToWorld(side, -v.hz - 0.1, this._w);
             fx.nitro(ex.x, v.renderPos.y + 0.35, ex.z, s, c);
@@ -28207,7 +28610,7 @@ void main() {
         // Night lights on the road.
         if (night > 0.05 && !v.wrecked && d < 130) {
           const lit = v.lightsOn || (v.driver !== null) || v.role !== 'parked';
-          if (lit && v.role !== 'parked') {
+          if (lit && v.role !== 'parked' && v.kind === 'car') {
             this._q.setFromAxisAngle(this._y, v.renderYaw);
             this._p.set(v.renderPos.x + s * (v.hz + 10.5), v.renderPos.y + 0.012, v.renderPos.z + c * (v.hz + 10.5));
             this._s.set(0.42, 1, 1);
@@ -28239,7 +28642,7 @@ void main() {
       } else this.sirenLight.intensity = 0;
 
       // The player's headlights light the street ahead at night.
-      if (pv && night > 0.2 && !pv.wrecked) {
+      if (pv && night > 0.2 && !pv.wrecked && !pv.airCamera) {
         const f = Math.sin(pv.renderYaw);
         const g = Math.cos(pv.renderYaw);
         this.headlight.position.set(pv.renderPos.x + f * pv.hz, pv.renderPos.y + 0.8, pv.renderPos.z + g * pv.hz);
@@ -28270,7 +28673,7 @@ void main() {
         if (pv) want.add(pv.id);
         for (const [d, v] of byDist) {
           if (want.size >= ENGINE_VOICES) break;
-          if (d < 70) want.add(v.id);
+          if (d < (v.voiceRange || 70)) want.add(v.id);
         }
         const sirens = new Set();
         for (const [d, v] of byDist) {
@@ -28286,12 +28689,13 @@ void main() {
             this.voices.set(v.id, vo);
           }
           if (!vo) continue;
-          if (needEngine && !vo.engine) vo.engine = audio.createEngine({ kind: v.cls, player: v.driver === 'player' });
+          // Aircraft and tanks bring their own engine sound (aircraft.js, tank.js).
+          if (needEngine && !vo.engine) vo.engine = v.createEngineVoice ? v.createEngineVoice(audio) : audio.createEngine({ kind: v.cls, player: v.driver === 'player' });
           if (!needEngine && vo.engine) {
             vo.engine.stop();
             vo.engine = null;
           }
-          if (needEngine && !vo.skid && (v.driver === 'player' || v.skid[2] > 0.2)) vo.skid = audio.createSkid();
+          if (needEngine && !vo.skid && v.kind === 'car' && (v.driver === 'player' || v.skid[2] > 0.2)) vo.skid = audio.createSkid();
           if (needSiren && !vo.siren) vo.siren = audio.createSiren({ style: 'wail' });
           if (!needSiren && vo.siren) {
             vo.siren.stop();
@@ -28319,8 +28723,9 @@ void main() {
         if (!vo) continue;
         const inside = v === pv;
         const pan = inside ? 0 : this._pan(v.renderPos.x, v.renderPos.z);
-        const gain = inside ? 1 : this._gain(v.renderPos.x, v.renderPos.z, 9);
-        if (vo.engine) {
+        const gain = inside ? 1 : this._gain(v.renderPos.x, v.renderPos.z, v.voiceRef || 9, v.voiceRef ? v.renderPos.y : undefined);
+        if (vo.engine && v.updateEngineVoice) v.updateEngineVoice(vo.engine, (inside ? 0.9 : 0.75) * gain * (v.wrecked ? 0 : 1), pan, inside);
+        else if (vo.engine) {
           vo.engine.update({
             rpm: v.rpm, throttle: Math.max(0, v.input.accel), load: clamp(Math.abs(v.ax) / 6, 0, 1),
             gain: (inside ? 0.9 : 0.75) * gain * (v.wrecked ? 0 : 1), pan,
@@ -31560,8 +31965,14 @@ void main() {
       const firing = inp.down('fire');
       const pressed = inp.consume('fire');
       if (p.inVehicle) {
-        // Drive-by: aim with the right mouse button, pistols and SMGs only.
         const v = p.vehicle;
+        // A tank's cannon, a jet's guns: the vehicle has its own weapons.
+        if (v.fireWeapon) {
+          p.aiming = false;
+          v.fireWeapon(this, inp, firing, pressed, dt);
+          return;
+        }
+        // Drive-by: aim with the right mouse button, pistols and SMGs only.
         p.aiming = inp.down('aim') && w.drivebyAllowed;
         if (p.aiming && (pressed || (firing && w.auto)) && this._cool <= 0) this._fireHitscan(w, true);
         return;
@@ -32338,6 +32749,9 @@ void main() {
         killCop: { heat: 3, report: 1, add: 1 },
         shots: { heat: 1, report: 0.8 },
         explosion: { heat: 2, report: 1 },
+        robbery: { heat: 2, report: 1 }, // a corner shop held up (stores.js)
+        killSoldier: { heat: 4, report: 1, add: 1 }, // Fort Breakwater (fort.js)
+        stealMilitary: { heat: 5, report: 1 },
       }[kind] || { heat: 1, report: 0.5 };
     }
 
@@ -32536,7 +32950,7 @@ void main() {
         if (alive < UNITS[this.level]) this._spawnUnit(t);
       }
       // Roadblocks ahead of a fleeing car.
-      if (this.level >= 3 && p.inVehicle) {
+      if (this.level >= 3 && p.inVehicle && !p.vehicle.flying) {
         this._blockT -= dt;
         if (this._blockT <= 0) {
           this._blockT = 28 + Math.random() * 12;
@@ -32622,12 +33036,13 @@ void main() {
       let close = false;
       if (p.inVehicle) {
         const v = p.vehicle;
-        if (v.speed < 1.8) {
+        // Hovering over a patrol car isn't being pulled over.
+        if (v.speed < 1.8 && !v.flying) {
           for (const u of this.units) {
-            if (u.removed || u.wrecked) continue;
+            if (u.removed || u.wrecked || Math.abs(u.pos.y - v.pos.y) > 3) continue;
             if (Math.hypot(u.pos.x - v.pos.x, u.pos.z - v.pos.z) < v.hz + u.hz + 2.5) close = true;
           }
-          for (const a of this.officers) if (!a.dead && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
+          for (const a of this.officers) if (!a.dead && Math.abs(a.pos.y - v.pos.y) < 3 && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
         }
       } else if (p.state !== 'dead') {
         for (const a of this.officers) {
@@ -32773,7 +33188,7 @@ void main() {
     }
 
     static crimeText(kind) {
-      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down' }[kind] || 'a disturbance';
+      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down', robbery: 'an armed robbery', killSoldier: 'a soldier down at Fort Breakwater', stealMilitary: 'a stolen military vehicle' }[kind] || 'a disturbance';
     }
 
     static heading(vel) {
@@ -49685,11 +50100,13 @@ void main() {
         hours: g.environment.hours,
         pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.heading },
         // The car Jay is sitting in comes back with him.
-        vehicle: v && !v.wrecked && !v.removed && !v.burning ? { type: v.type, color: v.model.color, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw } : null,
+        // An aircraft in the air isn't saved (Jay comes back on the ground below).
+        vehicle: v && !v.wrecked && !v.removed && !v.burning && !v.flying ? { type: v.type, color: v.model.color, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw } : null,
         // Closing the tab is not a way to lose the police.
         heat: g.police.level || 0,
         weapons: g.combat.serialize(),
         activities: g.activities ? g.activities.serialize() : null,
+        systems: g.saveSystems ? g.saveSystems() : null,
       };
       return JSON.parse(JSON.stringify(data));
     }
@@ -49774,6 +50191,7 @@ void main() {
       if (data.hours !== undefined) g.environment.setTime(data.hours);
       g.combat.load(data.weapons);
       if (g.activities && data.activities) g.activities.load(data.activities);
+      if (g.loadSystems) g.loadSystems(data.systems);
       if (data.pos) g.player.teleport(data.pos.x, data.pos.z, data.pos.yaw, data.pos.y);
       this._preRun = null;
       this._chainPending = null;
@@ -49868,12 +50286,12 @@ void main() {
     { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
     { x: -250, z: 520, yaw: 0, name: 'Hedge jumper' },
-    { x: 150, z: -470, yaw: Math.PI, name: 'North pasture' },
+    { x: 150, z: -800, yaw: Math.PI, name: 'North pasture' },
     { x: -560, z: -470, yaw: Math.PI / 2, name: 'Outskirts rodeo' },
     { x: -140, z: 36, yaw: -Math.PI / 2, name: 'Meridian Yard flyer' },
     { x: 380, z: 500, yaw: 0, name: 'Quay jump' },
     { x: -560, z: 470, yaw: -Math.PI / 2, name: 'Estate lawn' },
-    { x: 60, z: -470, yaw: -Math.PI / 2, name: 'Grand Avenue north' },
+    { x: 60, z: -800, yaw: -Math.PI / 2, name: 'Grand Avenue north' },
   ];
 
   function rngFrom(seed) {
@@ -50094,7 +50512,7 @@ void main() {
     _checkTakeoff() {
       const v = this.game.player.vehicle;
       if (!v || this._jump) return;
-      if (v.grounded || v.speed < 16) return;
+      if (v.grounded || v.speed < 16 || v.kind !== 'car') return;
       for (const r of this.ramps) {
         if (Math.hypot(v.pos.x - r.top.x, v.pos.z - r.top.z) < 6 && v.pos.y > r.y - 1.2) {
           this._jump = { r, start: { x: v.pos.x, z: v.pos.z }, t: this.game.time };
@@ -50133,7 +50551,7 @@ void main() {
       for (const b of g.layout.blocks) {
         if (b.alley && spots.length < 14) spots.push({ x: (b.alley.minX + b.alley.maxX) / 2 + (rnd() - 0.5) * 20, z: (b.alley.minZ + b.alley.maxZ) / 2 + (rnd() - 0.5) * 4 });
       }
-      const more = [[480, 5.5], [560, -5.5], [412, -250], [412, 200], [150, 525], [360, 440], [60, 615], [-600, -150], [-450, 200], [-560, 350], [-51, 30], [-160, 60], [250, 610], [-300, 520], [100, -500], [-500, -500]];
+      const more = [[480, 5.5], [560, -5.5], [412, -250], [412, 200], [150, 525], [360, 440], [60, 615], [-600, -150], [-450, 200], [-560, 350], [-51, 30], [-160, 60], [250, 610], [-300, 520], [100, -830], [-500, -500]];
       for (const [x, z] of more) spots.push({ x, z });
       this.lanterns = [];
       const geo = new THREE.SphereGeometry(0.28, 12, 10).scale(1, 1.25, 1);
@@ -51089,6 +51507,15 @@ void main() {
 })();
 //# sourceURL=js/club.js
 </script>
+    <script data-src="js/ambient.js">
+/*
+ * ambient.js — The city's background life: things that happen without Jay.
+ */
+(function () {
+  'use strict';
+})();
+//# sourceURL=js/ambient.js
+</script>
   <script data-src="js/minimap.js">
 /*
  * minimap.js — the radar in the bottom-left corner and the full-screen city
@@ -51103,8 +51530,9 @@ void main() {
  * state = {
  *   x, z, heading, camYaw,      player position, player/vehicle yaw, camera yaw
  *   speed,                      m/s; the radar zooms out as it rises (90 m → 190 m radius at 40 m/s)
- *   blips: [{ x, z, type, label?, heading?, flash? }],
+ *   blips: [{ x, z, type, label?, heading?, flash?, noRim? }],
  *          type: police | objective | mission | car | shop | safehouse | race | challenge | enemy
+ *                | store | plane | heli | tank   (noRim: not pinned to the radar's rim when far)
  *   searchArea: { x, z, r } | null,   route: [[x, z], ...] | null,
  *   heat: 0..5,                 visible: bool
  * }
@@ -51177,7 +51605,7 @@ void main() {
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -51194,6 +51622,9 @@ void main() {
     ['race', 'Race'],
     ['challenge', 'Challenge'],
     ['landmark', 'Landmark'],
+    ['store', 'Corner shop'],
+    ['plane', 'Aircraft'],
+    ['tank', 'Military vehicle'],
   ];
   const ALWAYS_ON = { player: true, route: true, landmark: true };
 
@@ -51285,9 +51716,23 @@ void main() {
     return {
       paint: { minX: b.minX - 70, maxX: east + 210, minZ: b.minZ - 70, maxZ: b.maxZ + 70 },
       land: { minX: b.minX - 24, maxX: east + 40, minZ: b.minZ - 24, maxZ: b.maxZ + 24 },
-      fit: { minX: Math.max(b.minX, lo - 70), maxX: east + 36, minZ: Math.max(b.minZ, lo - 60), maxZ: Math.min(b.maxZ, hi + 60) },
+      // The city, Northgate Heights and the edge of the countryside.
+      fit: { minX: Math.max(b.minX, lo - 70), maxX: east + 36, minZ: Math.max(b.minZ, lo - 300), maxZ: Math.min(b.maxZ, hi + 60) },
     };
   }
+
+  /** Metres per pixel of the pre-rendered map: as sharp as 0.7, but never more than ~8 megapixels. */
+  function baseMppFor(layout) {
+    const E = extentsOf(layout).paint;
+    return Math.max(BASE_MPP, Math.sqrt(((E.maxX - E.minX) * (E.maxZ - E.minZ)) / 8e6));
+  }
+
+  /**
+   * Places built outside the grid (the airport, the fort, Northgate Heights)
+   * paint themselves onto the map: VH.MapPainters is a list of
+   * fn(g, layout, { R, on, circle, px, hair, PAL }), drawn under the roads.
+   */
+  VH.MapPainters = VH.MapPainters || [];
 
   // ------------------------------------------------------------- glyphs
   // Each glyph is drawn around (0, 0) in CSS pixels and baked into a sprite.
@@ -51394,6 +51839,68 @@ void main() {
       roundRectPath(g, -2.9, -3.9, 5.8, 3.1, 1.1);
       g.fillStyle = 'rgba(3, 32, 36, 0.85)';
       g.fill();
+    },
+    // A shopping bag: a corner shop (hold it up with a gun, or buy a snack).
+    store(g) {
+      g.beginPath();
+      g.arc(0, -3.4, 3, Math.PI, 0);
+      g.lineWidth = 3.6;
+      g.strokeStyle = INK;
+      g.stroke();
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#ffd447';
+      g.stroke();
+      roundRectPath(g, -6.2, -3.6, 12.4, 10.4, 2);
+      inkThenFill(g, '#ffd447', 3);
+      g.fillStyle = INK;
+      g.font = '700 8.5px ' + FONT;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('$', 0, 1.8);
+    },
+    // Aircraft, drawn nose-up and turned to face their heading.
+    plane(g) {
+      g.beginPath();
+      g.moveTo(0, -7.6);
+      g.lineTo(1.4, -4.4);
+      g.lineTo(1.4, -1.6);
+      g.lineTo(7.4, 1.6);
+      g.lineTo(7.4, 3);
+      g.lineTo(1.4, 1.6);
+      g.lineTo(1, 5);
+      g.lineTo(3.4, 6.6);
+      g.lineTo(3.4, 7.6);
+      g.lineTo(0, 6.8);
+      g.lineTo(-3.4, 7.6);
+      g.lineTo(-3.4, 6.6);
+      g.lineTo(-1, 5);
+      g.lineTo(-1.4, 1.6);
+      g.lineTo(-7.4, 3);
+      g.lineTo(-7.4, 1.6);
+      g.lineTo(-1.4, -1.6);
+      g.lineTo(-1.4, -4.4);
+      g.closePath();
+      inkThenFill(g, '#e9f6ff', 2.6);
+    },
+    heli(g) {
+      roundRectPath(g, -2.4, -4.6, 4.8, 8, 2.2);
+      inkThenFill(g, '#e9f6ff', 2.6);
+      g.fillStyle = '#e9f6ff';
+      g.fillRect(-0.7, 3, 1.4, 4.6);
+      g.beginPath();
+      g.arc(0, -0.6, 6.8, 0, TAU);
+      g.lineWidth = 1.2;
+      g.strokeStyle = 'rgba(233, 246, 255, 0.75)';
+      g.stroke();
+    },
+    tank(g) {
+      roundRectPath(g, -4.6, -6, 9.2, 12.4, 1.6);
+      inkThenFill(g, '#b5c46a', 3);
+      g.beginPath();
+      g.arc(0, 1, 3, 0, TAU);
+      g.fillStyle = '#5d6b2c';
+      g.fill();
+      g.fillRect(-0.8, -8.2, 1.6, 8.6);
     },
     shop(g) {
       roundRectPath(g, -6.6, -6.6, 13.2, 13.2, 3.6);
@@ -51727,6 +52234,8 @@ void main() {
       }
     }
 
+    for (const fn of VH.MapPainters) fn(g, layout, { R, on, circle, px, hair, PAL });
+
     // ----------------------------------------------------------- roads
     for (const s of layout.segments) {
       g.fillStyle = s.road.width >= 18 ? PAL.roadMajor : PAL.road;
@@ -51858,10 +52367,11 @@ void main() {
     return c;
   }
 
+  let noiseScale = BASE_MPP * 1.25;
   function noisePattern(g) {
     try {
       const pat = g.createPattern(getNoiseTile(), 'repeat');
-      if (pat && pat.setTransform && typeof DOMMatrix !== 'undefined') pat.setTransform(new DOMMatrix().scale(BASE_MPP * 1.25));
+      if (pat && pat.setTransform && typeof DOMMatrix !== 'undefined') pat.setTransform(new DOMMatrix().scale(noiseScale));
       return pat;
     } catch (err) {
       return null;
@@ -52266,7 +52776,9 @@ void main() {
       this.layout = layout;
       const ext = extentsOf(layout);
       this._ext = ext;
-      const l0 = renderBase(layout, BASE_MPP);
+      const mpp = baseMppFor(layout);
+      noiseScale = mpp * 1.25;
+      const l0 = renderBase(layout, mpp);
       this._base = [l0, downsample(l0)];
       this._planLabels();
       this._staticDirty = true;
@@ -52597,7 +53109,9 @@ void main() {
       // Off-radar blips ride the rim.
       for (let p = 0; p <= MAX_PRIORITY; p++) {
         for (let i = 0; i < n; i++) {
-          if (!BC[i] || (PRIORITY[blips[i].type] || 0) !== p) continue;
+          // noRim: lots of the same thing (shops, parked aircraft) shows on the
+          // radar only when near, though the full map shows them all.
+          if (!BC[i] || blips[i].noRim || (PRIORITY[blips[i].type] || 0) !== p) continue;
           this._drawBlip(g, d, this._spr, blips[i], BX[i], BY[i], blips[i].type === 'objective' || blips[i].type === 'mission' ? 0.95 : 0.78, i, cam, k, true);
         }
       }
@@ -52707,7 +53221,7 @@ void main() {
           g.drawImage(cone.canvas, -W / 2, -L, W, L);
           g.setTransform(d, 0, 0, d, 0, 0);
         }
-      } else if (type === 'car' && typeof bl.heading === 'number') {
+      } else if ((type === 'car' || type === 'plane' || type === 'heli' || type === 'tank') && typeof bl.heading === 'number') {
         rotate = true;
       }
       if (!sprite) sprite = spr.mission;
@@ -54449,7 +54963,8 @@ void main() {
       this.speedGear = el('div', 'speedo-gear', '1');
       const nitro = el('div', 'speedo-bar speedo-nitro');
       this.nitroFill = el('div', 'fill');
-      nitro.append(el('span', 'bar-label', 'NITRO'), this.nitroFill);
+      this.nitroLabel = el('span', 'bar-label', 'NITRO');
+      nitro.append(this.nitroLabel, this.nitroFill);
       const dmg = el('div', 'speedo-bar speedo-damage');
       this.damageFill = el('div', 'fill');
       dmg.append(el('span', 'bar-label', 'BODY'), this.damageFill);
@@ -54769,14 +55284,21 @@ void main() {
     }
 
     _updateDriving(v, nitro) {
-      const kmh = Math.round(Math.abs(v.vF) * 3.6);
+      // Aircraft and tanks fill the dial their own way: { kmh, max, gear, bar, barLabel }.
+      const info = v.hudInfo ? v.hudInfo() : null;
+      const kmh = info ? Math.round(info.kmh) : Math.round(Math.abs(v.vF) * 3.6);
+      const maxKmh = info && info.max ? info.max : 260;
       this._set('speed', kmh, (x) => {
         this.speedValue.textContent = String(x);
-        this.speedArc.style.setProperty('--speed', Math.min(1, x / 260).toFixed(3));
+        this.speedArc.style.setProperty('--speed', Math.min(1, x / maxKmh).toFixed(3));
       });
-      this._set('gear', v.reversing && v.vF < -0.5 ? 'R' : String(v.gear), (x) => {
+      this._set('gear', info ? String(info.gear) : v.reversing && v.vF < -0.5 ? 'R' : String(v.gear), (x) => {
         this.speedGear.textContent = x;
       });
+      this._set('nitroLabel', info ? info.barLabel || 'THROTTLE' : 'NITRO', (x) => {
+        this.nitroLabel.textContent = x;
+      });
+      if (info) nitro = info.bar;
       this._set('nitro', Math.round(nitro * 100), (x) => {
         this.nitroFill.style.width = x + '%';
         this.speedo.classList.toggle('nitro-ready', x > 20);
@@ -54839,7 +55361,7 @@ void main() {
         this.armorFill.style.width = Math.max(0, (v / p.maxArmor) * 100) + '%';
         this.armorBar.classList.toggle('empty', v <= 0);
       });
-      this._set('crosshair', p.aimAmount > 0.6 && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
+      this._set('crosshair', (p.aimAmount > 0.6 || !!(p.vehicle && p.vehicle.crosshair)) && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
       this._set('lockHint', s.playing && !s.locked && VH.features.pointerLock, (v) => this.lockHint.classList.toggle('visible', v));
       this._set('knockout', p.isDead, (v) => this.knockout.classList.toggle('visible', v));
       this._set('lowHealth', p.health < 30 && !p.isDead, (v) => this.lowHealth.classList.toggle('visible', v));
@@ -56074,6 +56596,9 @@ void main() {
 
   const VH = window.VH;
   const FIXED_DT = 1 / 60;
+  // World systems constructed after the club, in this order (each optional):
+  // stores.js, airfield.js, fort.js, ambient.js.
+  const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
   const TIPS = [
@@ -56218,6 +56743,8 @@ void main() {
       // The city.
       Loading.set(0.15, 'Drawing the street plan');
       this.layout = VH.CityGen.generate('vicehaven');
+      // Corner shops claim their lots before the city is built (stores.js).
+      if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -56300,6 +56827,8 @@ void main() {
       this.places = new VH.Places(this);
       if (VH.Docks && this.world.docks) VH.Docks.registerPlaces(this.world.docks, this.places);
       if (VH.Estates && this.world.estates) VH.Estates.registerPlaces(this.world.estates, this.places);
+      // The places beyond the old city limits, and the corner shops.
+      for (const k of ['Skyline'].concat(WORLD_SYSTEMS)) if (VH[k] && VH[k].registerPlaces) VH[k].registerPlaces(this.world, this.places);
       this.places.finish();
       this.missions = new VH.MissionEngine(this);
       this.interaction.on('mission', (item) => {
@@ -56308,6 +56837,16 @@ void main() {
       });
       if (VH.Activities) this.activities = new VH.Activities(this);
       if (VH.Club) this.club = new VH.Club(this);
+      // Self-contained world systems: hold-ups, the airport, the fort, the
+      // city's background life. Each has update/reset/stop/blips (and
+      // optionally stats/serialize/load).
+      this.systems = [];
+      for (const k of WORLD_SYSTEMS) {
+        if (!VH[k]) continue;
+        const sys = new VH[k](this);
+        this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
+        this.systems.push(sys);
+      }
       if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
       if (this.radio) this.radio.onSongChange = (e) => {
@@ -56468,6 +57007,7 @@ void main() {
     // ------------------------------------------------------------ states
     toTitle() {
       if (this.club) this.club.stop();
+      for (const s of this.systems || []) if (s.stop) s.stop();
       this.state = 'title';
       this.environment.setShadowExtent(260);
       this.input.enabled = false;
@@ -56488,6 +57028,7 @@ void main() {
       this.combat.load(null);
       if (this.activities) this.activities.reset();
       if (this.club) this.club.reset();
+      for (const s of this.systems || []) if (s.reset) s.reset();
       this.player.state = 'ground';
       this.player.vehicle = null;
       this.player.model.setVisible(true);
@@ -56746,7 +57287,7 @@ void main() {
           ['Taxi fares', String(c.fares)],
           ['Best dance score', String(this.player.stats.bestDance || 0)],
         ];
-      })() : []).concat([
+      })() : []).concat(...(this.systems || []).map((sys) => (sys.stats ? sys.stats() : []))).concat([
         ['Money', VH.util.formatMoney(this.player.money)],
       ]);
     },
@@ -56792,6 +57333,7 @@ void main() {
           this.missions.update(FIXED_DT);
           if (this.activities) this.activities.update(FIXED_DT);
           if (this.club) this.club.update(FIXED_DT);
+          for (const s of this.systems) s.update(FIXED_DT);
         }
         this.dialogue.update();
         this.vehicleFeedback.update(FIXED_DT);
@@ -57021,6 +57563,17 @@ void main() {
       this.timeScale = Math.min(this.timeScale, scale);
     },
 
+    /** World systems' saved state (store cooldowns and the like), keyed by each system's saveKey. */
+    saveSystems() {
+      const out = {};
+      for (const s of this.systems || []) if (s.saveKey && s.serialize) out[s.saveKey] = s.serialize();
+      return out;
+    },
+
+    loadSystems(d) {
+      for (const s of this.systems || []) if (s.load) s.load(d && s.saveKey ? d[s.saveKey] : undefined);
+    },
+
     /** Everything the minimap shows. */
     blips() {
       const out = this._blipList || (this._blipList = []);
@@ -57033,6 +57586,7 @@ void main() {
       if (this.missions && this.missions.blips) this.missions.blips(out);
       if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
       if (this.club && !(this.missions && this.missions.run)) this.club.blips(out);
+      for (const s of this.systems || []) if (s.blips) s.blips(out, !!(this.missions && this.missions.run));
       return out;
     },
 
@@ -57203,6 +57757,7 @@ void main() {
         this.missions.update(sdt);
         if (this.activities) this.activities.update(sdt);
         if (this.club) this.club.update(sdt);
+        for (const s of this.systems) s.update(sdt);
       }
       this.dialogue.update();
       const cw = this.combat.weapon;

@@ -230,6 +230,16 @@
       progress(0.85, 'Watering the lawns in Crestline');
       if (VH.Estates) this.estates = VH.Estates.build(this, layout);
       await slicer.tick();
+      // Beyond the old city limits: Northgate Heights, the airport, the fort.
+      progress(0.852, 'Topping out Northgate Heights');
+      if (VH.Skyline) this.skyline = VH.Skyline.build(this, layout);
+      await slicer.tick();
+      progress(0.855, 'Painting the runway');
+      if (VH.Airfield) this.airfield = VH.Airfield.build(this, layout);
+      await slicer.tick();
+      progress(0.858, 'Fencing off Fort Breakwater');
+      if (VH.Fort) this.fort = VH.Fort.build(this, layout);
+      await slicer.tick();
 
       progress(0.86, 'Planting palms and street lights');
       this._buildBoundary(layout);
@@ -393,13 +403,13 @@
           }
         }
       }
-      // Roads out of town end at barriers (the rest of the map arrives in Phase 3).
-      const limit = this.layout.config.bounds;
-      const endsOutside = (road.axis === 'z' && (b >= limit.maxZ - 30 || a <= limit.minZ + 30)) ||
-        (road.axis === 'x' && a <= limit.minX + 30);
-      if (endsOutside) {
-        const atEnd = road.axis === 'z' ? b >= limit.maxZ - 30 : false;
-        const p = atEnd ? b - 1 : a + 1;
+      // Roads out of town that just stop end at barriers (not where they meet
+      // another road, and not at the fort's gate).
+      const limit = this.layout.config.cityBounds || this.layout.config.bounds;
+      const outEnd = road.axis === 'z' && !ej && b >= limit.maxZ - 30;
+      const outStart = !sj && !road.openStart && a <= (road.axis === 'z' ? limit.minZ : limit.minX) + 30;
+      if (outEnd || outStart) {
+        const p = outEnd ? b - 1 : a + 1;
         for (let c = -half + 2; c <= half - 2; c += 3.8) {
           const px = road.axis === 'z' ? road.coord + c : p;
           const pz = road.axis === 'z' ? p : road.coord + c;
@@ -450,7 +460,8 @@
         if (block.alley) this._buildAlley(ctx, block);
         for (const lot of block.lots) {
           const lctx = this.ctxAt(lot.cx, lot.cz);
-          const top = VH.Buildings.buildLot(lctx, lot);
+          // A corner shop (stores.js) stands on some of the car parks.
+          const top = lot.store && VH.Stores ? VH.Stores.buildLot(this, lctx, lot) : VH.Buildings.buildLot(lctx, lot);
           lot.top = top || 0;
           if (top > 0) this.stats.buildings++;
           this.stats.tallest = Math.max(this.stats.tallest, top || 0);
@@ -558,12 +569,15 @@
      * roads running that way: a lamp at the kerb of an x-running road only
      * cares about the cross streets it might stand in.
      */
-    onRoad(x, z, margin, skipAxis) {
+    onRoad(x, z, margin, skipAxis, cityOnly) {
       const m = margin || 0;
       for (const r of this.layout.roads) {
         if (skipAxis && r.axis === skipAxis) continue;
+        // cityOnly: the roads as they were inside the old city limits.
+        if (cityOnly && r.isNew) continue;
+        const from = cityOnly && r.cityFrom !== undefined ? r.cityFrom : r.from;
         const along = r.axis === 'z' ? z : x;
-        if (along < r.from - m || along > r.to + m) continue;
+        if (along < from - m || along > r.to + m) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) < r.width / 2 + m) return true;
       }
@@ -571,9 +585,15 @@
     }
 
     _buildOutskirtsTrees(layout) {
+      const cfg = layout.config;
+      const zones = Object.values(cfg.zones || {});
+      const inZone = (x, z, pad) => zones.some((r) => x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad);
+      // The trees of the old outskirts, exactly where they always were (the
+      // same random draws, judged against the old roads), minus the ones that
+      // now stand on a new road or in Northgate Heights.
       const rng = new VH.RNG('outskirts-trees');
-      const b = layout.config.bounds;
-      const edge = layout.config.lines[layout.config.lines.length - 1] + 12;
+      const b = cfg.cityBounds || cfg.bounds;
+      const edge = cfg.lines[cfg.lines.length - 1] + 12;
       let placed = 0;
       for (let i = 0; i < 900 && placed < 260; i++) {
         const x = rng.range(b.minX + 4, b.maxX - 4);
@@ -582,10 +602,26 @@
         if (x > 380) continue;
         // Keep clear of the roads leading out of town, and of every other road.
         if (Math.abs(x) < 20 || Math.abs(z) < 16) continue;
-        if (this.onRoad(x, z, 3)) continue;
+        if (this.onRoad(x, z, 3, null, true)) continue;
         const type = rng.chance(0.7) ? (rng.chance(0.5) ? 'tree' : 'treeB') : 'palm';
-        this.addProp(type, x, 0, z, rng.range(0, 6.28), rng.range(0.8, 1.35));
+        const yaw = rng.range(0, 6.28);
+        const scale = rng.range(0.8, 1.35);
         placed++;
+        if (inZone(x, z, 6) || this.onRoad(x, z, 3)) continue;
+        this.addProp(type, x, 0, z, yaw, scale);
+      }
+      // The new land: north to the airport, west to the fort.
+      const all = cfg.bounds;
+      const rng2 = new VH.RNG('outskirts-trees-2');
+      let more = 0;
+      for (let i = 0; i < 4000 && more < 620; i++) {
+        const x = rng2.range(all.minX + 4, all.maxX - 4);
+        const z = rng2.range(all.minZ + 4, all.maxZ - 4);
+        if (x > b.minX - 6 && x < b.maxX + 6 && z > b.minZ - 6 && z < b.maxZ + 6) continue;
+        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5)) continue;
+        const type = rng2.chance(0.75) ? (rng2.chance(0.5) ? 'tree' : 'treeB') : 'palm';
+        this.addProp(type, x, 0, z, rng2.range(0, 6.28), rng2.range(0.8, 1.4));
+        more++;
       }
     }
 

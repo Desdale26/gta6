@@ -21,6 +21,9 @@
 
   const VH = window.VH;
   const FIXED_DT = 1 / 60;
+  // World systems constructed after the club, in this order (each optional):
+  // stores.js, airfield.js, fort.js, ambient.js.
+  const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
   const TIPS = [
@@ -165,6 +168,8 @@
       // The city.
       Loading.set(0.15, 'Drawing the street plan');
       this.layout = VH.CityGen.generate('vicehaven');
+      // Corner shops claim their lots before the city is built (stores.js).
+      if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -247,6 +252,8 @@
       this.places = new VH.Places(this);
       if (VH.Docks && this.world.docks) VH.Docks.registerPlaces(this.world.docks, this.places);
       if (VH.Estates && this.world.estates) VH.Estates.registerPlaces(this.world.estates, this.places);
+      // The places beyond the old city limits, and the corner shops.
+      for (const k of ['Skyline'].concat(WORLD_SYSTEMS)) if (VH[k] && VH[k].registerPlaces) VH[k].registerPlaces(this.world, this.places);
       this.places.finish();
       this.missions = new VH.MissionEngine(this);
       this.interaction.on('mission', (item) => {
@@ -255,6 +262,16 @@
       });
       if (VH.Activities) this.activities = new VH.Activities(this);
       if (VH.Club) this.club = new VH.Club(this);
+      // Self-contained world systems: hold-ups, the airport, the fort, the
+      // city's background life. Each has update/reset/stop/blips (and
+      // optionally stats/serialize/load).
+      this.systems = [];
+      for (const k of WORLD_SYSTEMS) {
+        if (!VH[k]) continue;
+        const sys = new VH[k](this);
+        this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
+        this.systems.push(sys);
+      }
       if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
       if (this.radio) this.radio.onSongChange = (e) => {
@@ -415,6 +432,7 @@
     // ------------------------------------------------------------ states
     toTitle() {
       if (this.club) this.club.stop();
+      for (const s of this.systems || []) if (s.stop) s.stop();
       this.state = 'title';
       this.environment.setShadowExtent(260);
       this.input.enabled = false;
@@ -435,6 +453,7 @@
       this.combat.load(null);
       if (this.activities) this.activities.reset();
       if (this.club) this.club.reset();
+      for (const s of this.systems || []) if (s.reset) s.reset();
       this.player.state = 'ground';
       this.player.vehicle = null;
       this.player.model.setVisible(true);
@@ -693,7 +712,7 @@
           ['Taxi fares', String(c.fares)],
           ['Best dance score', String(this.player.stats.bestDance || 0)],
         ];
-      })() : []).concat([
+      })() : []).concat(...(this.systems || []).map((sys) => (sys.stats ? sys.stats() : []))).concat([
         ['Money', VH.util.formatMoney(this.player.money)],
       ]);
     },
@@ -739,6 +758,7 @@
           this.missions.update(FIXED_DT);
           if (this.activities) this.activities.update(FIXED_DT);
           if (this.club) this.club.update(FIXED_DT);
+          for (const s of this.systems) s.update(FIXED_DT);
         }
         this.dialogue.update();
         this.vehicleFeedback.update(FIXED_DT);
@@ -968,6 +988,17 @@
       this.timeScale = Math.min(this.timeScale, scale);
     },
 
+    /** World systems' saved state (store cooldowns and the like), keyed by each system's saveKey. */
+    saveSystems() {
+      const out = {};
+      for (const s of this.systems || []) if (s.saveKey && s.serialize) out[s.saveKey] = s.serialize();
+      return out;
+    },
+
+    loadSystems(d) {
+      for (const s of this.systems || []) if (s.load) s.load(d && s.saveKey ? d[s.saveKey] : undefined);
+    },
+
     /** Everything the minimap shows. */
     blips() {
       const out = this._blipList || (this._blipList = []);
@@ -980,6 +1011,7 @@
       if (this.missions && this.missions.blips) this.missions.blips(out);
       if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
       if (this.club && !(this.missions && this.missions.run)) this.club.blips(out);
+      for (const s of this.systems || []) if (s.blips) s.blips(out, !!(this.missions && this.missions.run));
       return out;
     },
 
@@ -1150,6 +1182,7 @@
         this.missions.update(sdt);
         if (this.activities) this.activities.update(sdt);
         if (this.club) this.club.update(sdt);
+        for (const s of this.systems) s.update(sdt);
       }
       this.dialogue.update();
       const cw = this.combat.weapon;

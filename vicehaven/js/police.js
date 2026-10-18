@@ -312,6 +312,9 @@
         killCop: { heat: 3, report: 1, add: 1 },
         shots: { heat: 1, report: 0.8 },
         explosion: { heat: 2, report: 1 },
+        robbery: { heat: 2, report: 1 }, // a corner shop held up (stores.js)
+        killSoldier: { heat: 4, report: 1, add: 1 }, // Fort Breakwater (fort.js)
+        stealMilitary: { heat: 5, report: 1 },
       }[kind] || { heat: 1, report: 0.5 };
     }
 
@@ -510,7 +513,7 @@
         if (alive < UNITS[this.level]) this._spawnUnit(t);
       }
       // Roadblocks ahead of a fleeing car.
-      if (this.level >= 3 && p.inVehicle) {
+      if (this.level >= 3 && p.inVehicle && !p.vehicle.flying) {
         this._blockT -= dt;
         if (this._blockT <= 0) {
           this._blockT = 28 + Math.random() * 12;
@@ -596,12 +599,13 @@
       let close = false;
       if (p.inVehicle) {
         const v = p.vehicle;
-        if (v.speed < 1.8) {
+        // Hovering over a patrol car isn't being pulled over.
+        if (v.speed < 1.8 && !v.flying) {
           for (const u of this.units) {
-            if (u.removed || u.wrecked) continue;
+            if (u.removed || u.wrecked || Math.abs(u.pos.y - v.pos.y) > 3) continue;
             if (Math.hypot(u.pos.x - v.pos.x, u.pos.z - v.pos.z) < v.hz + u.hz + 2.5) close = true;
           }
-          for (const a of this.officers) if (!a.dead && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
+          for (const a of this.officers) if (!a.dead && Math.abs(a.pos.y - v.pos.y) < 3 && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
         }
       } else if (p.state !== 'dead') {
         for (const a of this.officers) {
@@ -747,7 +751,7 @@
     }
 
     static crimeText(kind) {
-      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down' }[kind] || 'a disturbance';
+      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down', robbery: 'an armed robbery', killSoldier: 'a soldier down at Fort Breakwater', stealMilitary: 'a stolen military vehicle' }[kind] || 'a disturbance';
     }
 
     static heading(vel) {

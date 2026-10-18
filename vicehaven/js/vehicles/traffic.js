@@ -421,6 +421,7 @@
         this._ahead(s, pt);
         for (const o of list) {
           if (o === v || (this._bypass && o === this._bypass.car)) continue;
+          if (Math.abs(o.pos.y - v.pos.y) > 4) continue; // an aircraft overhead isn't in the lane
           const dx = o.pos.x - pt.x;
           const dz = o.pos.z - pt.z;
           const r = o.hx + 1.1;

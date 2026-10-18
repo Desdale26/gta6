@@ -102,6 +102,8 @@
       this.spawnPoint = { x: 0, y: 0.2, z: 0, yaw: Math.PI };
       this.vehicle = null; // the car Jay is driving (vehicles.js), or null
       this.enteringVehicle = false;
+      this.parachute = null; // { t, open } after jumping out of an aircraft
+      this._canopy = null;
       this._knockT = 0;
       this.dynamicResolver = null; // set by main.js: pushes Jay out of cars, reports being run over
       this.extraGround = null; // set by main.js: car roofs to stand on
@@ -320,6 +322,23 @@
 
       // Gravity.
       if (!this.grounded) this.vel.y = Math.max(-55, this.vel.y - P.gravity * dt);
+      // Under a parachute: a slow drift down, steered with the move keys.
+      const chute = this.parachute;
+      if (chute && (this.grounded || this.state !== 'air')) this.parachute = null;
+      else if (chute) {
+        chute.t += dt;
+        if (!chute.open && chute.t > 0.7) chute.open = true;
+        if (chute.open) {
+          this.vel.y = Math.max(this.vel.y, -5);
+          if (this.vel.y < -5) this.vel.y = -5;
+          const want = 7 * (mag > 0.05 ? 1 : 0.4);
+          const fx = wl > 0.2 ? wx : Math.sin(this.heading);
+          const fz = wl > 0.2 ? wz : Math.cos(this.heading);
+          const k = 1 - Math.exp(-1.6 * dt);
+          this.vel.x += (fx * want - this.vel.x) * k;
+          this.vel.z += (fz * want - this.vel.z) * k;
+        }
+      }
 
       // Horizontal move and collision.
       const next = this._next;
@@ -401,8 +420,15 @@
       if (this.pos.y < -25) this._fellOutOfWorld();
     }
 
+    /** Jumped out of an aircraft: the canopy opens after a moment (see the air step). */
+    openParachute() {
+      this.parachute = { t: 0, open: false };
+    }
+
     _landOn(g) {
-      const impact = -this.vel.y;
+      // A parachute landing is a gentle one.
+      const impact = this.parachute && this.parachute.open ? Math.min(-this.vel.y, 5) : -this.vel.y;
+      this.parachute = null;
       this.pos.y = g;
       this.vel.y = 0;
       this.grounded = true;
@@ -655,6 +681,8 @@
 
     _die(source) {
       if (this.vehicle) this.vehicle = null;
+      this.parachute = null;
+      if (this._canopy) this._canopy.visible = false;
       this.state = 'dead';
       this._deadTimer = 0;
       this.vel.set(0, 0, 0);
@@ -783,10 +811,46 @@
         beatN: this.dancing ? this.dancing.beatN : undefined,
         recoil: this._recoil || 0,
         swing: this._meleeSwing || 0,
+        handsUp: this.parachute && this.parachute.open ? 0.85 : 0,
       });
+      this._updateCanopy(dt);
       if (this._recoil > 0) this._recoil = Math.max(0, this._recoil - dt * 9);
       if (this._meleeSwing > 0) this._meleeSwing = Math.max(0, this._meleeSwing - dt * 3.2);
       return rp;
+    }
+
+    /** The parachute canopy over Jay's head (built the first time he needs one). */
+    _updateCanopy(dt) {
+      const open = !!(this.parachute && this.parachute.open);
+      if (!open && !this._canopy) return;
+      if (!this._canopy) {
+        const g = new THREE.Group();
+        const dome = new THREE.SphereGeometry(3.2, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
+        dome.scale(1.25, 0.55, 0.85);
+        const cols = [0xff6a1a, 0xf2f2ee, 0x1fa3a3];
+        const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
+        const c = new Float32Array(dome.attributes.position.count * 3);
+        for (let i = 0; i < dome.attributes.position.count; i++) {
+          const x = dome.attributes.position.getX(i);
+          const col = new THREE.Color(cols[Math.floor((x + 4) / 1.35) % 3]).convertSRGBToLinear();
+          c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b;
+        }
+        dome.setAttribute('color', new THREE.BufferAttribute(c, 3));
+        const canopy = new THREE.Mesh(dome, mat);
+        canopy.position.y = 4.4;
+        canopy.castShadow = true;
+        g.add(canopy);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+        const pts = [];
+        for (const [x, z] of [[-3.6, -1.5], [3.6, -1.5], [-3.6, 1.5], [3.6, 1.5], [0, -2.5], [0, 2.5]]) pts.push(new THREE.Vector3(0, 1.6, 0), new THREE.Vector3(x, 4.5, z));
+        g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+        this.model.root.add(g);
+        this._canopy = g;
+        this._canopyK = 0;
+      }
+      this._canopyK = damp(this._canopyK || 0, open ? 1 : 0, open ? 5 : 9, dt);
+      this._canopy.visible = this._canopyK > 0.02;
+      this._canopy.scale.setScalar(Math.max(0.01, this._canopyK));
     }
 
     /** Where the camera should orbit around (interpolated feet + eye height). */

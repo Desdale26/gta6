@@ -44,12 +44,12 @@
     { x: 230, z: 590, yaw: Math.PI / 2, name: 'Boatyard launch' },
     { x: -470, z: 470, yaw: Math.PI / 2, name: 'The long field' },
     { x: -250, z: 520, yaw: 0, name: 'Hedge jumper' },
-    { x: 150, z: -470, yaw: Math.PI, name: 'North pasture' },
+    { x: 150, z: -800, yaw: Math.PI, name: 'North pasture' },
     { x: -560, z: -470, yaw: Math.PI / 2, name: 'Outskirts rodeo' },
     { x: -140, z: 36, yaw: -Math.PI / 2, name: 'Meridian Yard flyer' },
     { x: 380, z: 500, yaw: 0, name: 'Quay jump' },
     { x: -560, z: 470, yaw: -Math.PI / 2, name: 'Estate lawn' },
-    { x: 60, z: -470, yaw: -Math.PI / 2, name: 'Grand Avenue north' },
+    { x: 60, z: -800, yaw: -Math.PI / 2, name: 'Grand Avenue north' },
   ];
 
   function rngFrom(seed) {
@@ -270,7 +270,7 @@
     _checkTakeoff() {
       const v = this.game.player.vehicle;
       if (!v || this._jump) return;
-      if (v.grounded || v.speed < 16) return;
+      if (v.grounded || v.speed < 16 || v.kind !== 'car') return;
       for (const r of this.ramps) {
         if (Math.hypot(v.pos.x - r.top.x, v.pos.z - r.top.z) < 6 && v.pos.y > r.y - 1.2) {
           this._jump = { r, start: { x: v.pos.x, z: v.pos.z }, t: this.game.time };
@@ -309,7 +309,7 @@
       for (const b of g.layout.blocks) {
         if (b.alley && spots.length < 14) spots.push({ x: (b.alley.minX + b.alley.maxX) / 2 + (rnd() - 0.5) * 20, z: (b.alley.minZ + b.alley.maxZ) / 2 + (rnd() - 0.5) * 4 });
       }
-      const more = [[480, 5.5], [560, -5.5], [412, -250], [412, 200], [150, 525], [360, 440], [60, 615], [-600, -150], [-450, 200], [-560, 350], [-51, 30], [-160, 60], [250, 610], [-300, 520], [100, -500], [-500, -500]];
+      const more = [[480, 5.5], [560, -5.5], [412, -250], [412, 200], [150, 525], [360, 440], [60, 615], [-600, -150], [-450, 200], [-560, 350], [-51, 30], [-160, 60], [250, 610], [-300, 520], [100, -830], [-500, -500]];
       for (const [x, z] of more) spots.push({ x, z });
       this.lanterns = [];
       const geo = new THREE.SphereGeometry(0.28, 12, 10).scale(1, 1.25, 1);

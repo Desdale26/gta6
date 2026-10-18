@@ -125,9 +125,9 @@
       return clamp((dx * r.x + dz * r.z) / d, -1, 1) * 0.85;
     }
 
-    _gain(x, z, ref) {
+    _gain(x, z, ref, y) {
       const cam = this.game.renderer.camera.position;
-      const d = Math.hypot(x - cam.x, z - cam.z);
+      const d = Math.hypot(x - cam.x, z - cam.z, y !== undefined ? y - cam.y : 0);
       return 1 / (1 + Math.pow(d / (ref || 10), 1.5));
     }
 
@@ -168,7 +168,7 @@
           if (v.burning > 0 && Math.random() < 0.9) fx.flame(hood.x, v.renderPos.y + v.height * 0.62, hood.z, 0.8);
         }
         // Nitro.
-        if (v.boostFx > 0.5) {
+        if (v.boostFx > 0.5 && v.kind === 'car') {
           for (const side of [-0.35, 0.35]) {
             const ex = v.localToWorld(side, -v.hz - 0.1, this._w);
             fx.nitro(ex.x, v.renderPos.y + 0.35, ex.z, s, c);
@@ -177,7 +177,7 @@
         // Night lights on the road.
         if (night > 0.05 && !v.wrecked && d < 130) {
           const lit = v.lightsOn || (v.driver !== null) || v.role !== 'parked';
-          if (lit && v.role !== 'parked') {
+          if (lit && v.role !== 'parked' && v.kind === 'car') {
             this._q.setFromAxisAngle(this._y, v.renderYaw);
             this._p.set(v.renderPos.x + s * (v.hz + 10.5), v.renderPos.y + 0.012, v.renderPos.z + c * (v.hz + 10.5));
             this._s.set(0.42, 1, 1);
@@ -209,7 +209,7 @@
       } else this.sirenLight.intensity = 0;
 
       // The player's headlights light the street ahead at night.
-      if (pv && night > 0.2 && !pv.wrecked) {
+      if (pv && night > 0.2 && !pv.wrecked && !pv.airCamera) {
         const f = Math.sin(pv.renderYaw);
         const g = Math.cos(pv.renderYaw);
         this.headlight.position.set(pv.renderPos.x + f * pv.hz, pv.renderPos.y + 0.8, pv.renderPos.z + g * pv.hz);
@@ -240,7 +240,7 @@
         if (pv) want.add(pv.id);
         for (const [d, v] of byDist) {
           if (want.size >= ENGINE_VOICES) break;
-          if (d < 70) want.add(v.id);
+          if (d < (v.voiceRange || 70)) want.add(v.id);
         }
         const sirens = new Set();
         for (const [d, v] of byDist) {
@@ -256,12 +256,13 @@
             this.voices.set(v.id, vo);
           }
           if (!vo) continue;
-          if (needEngine && !vo.engine) vo.engine = audio.createEngine({ kind: v.cls, player: v.driver === 'player' });
+          // Aircraft and tanks bring their own engine sound (aircraft.js, tank.js).
+          if (needEngine && !vo.engine) vo.engine = v.createEngineVoice ? v.createEngineVoice(audio) : audio.createEngine({ kind: v.cls, player: v.driver === 'player' });
           if (!needEngine && vo.engine) {
             vo.engine.stop();
             vo.engine = null;
           }
-          if (needEngine && !vo.skid && (v.driver === 'player' || v.skid[2] > 0.2)) vo.skid = audio.createSkid();
+          if (needEngine && !vo.skid && v.kind === 'car' && (v.driver === 'player' || v.skid[2] > 0.2)) vo.skid = audio.createSkid();
           if (needSiren && !vo.siren) vo.siren = audio.createSiren({ style: 'wail' });
           if (!needSiren && vo.siren) {
             vo.siren.stop();
@@ -289,8 +290,9 @@
         if (!vo) continue;
         const inside = v === pv;
         const pan = inside ? 0 : this._pan(v.renderPos.x, v.renderPos.z);
-        const gain = inside ? 1 : this._gain(v.renderPos.x, v.renderPos.z, 9);
-        if (vo.engine) {
+        const gain = inside ? 1 : this._gain(v.renderPos.x, v.renderPos.z, v.voiceRef || 9, v.voiceRef ? v.renderPos.y : undefined);
+        if (vo.engine && v.updateEngineVoice) v.updateEngineVoice(vo.engine, (inside ? 0.9 : 0.75) * gain * (v.wrecked ? 0 : 1), pan, inside);
+        else if (vo.engine) {
           vo.engine.update({
             rpm: v.rpm, throttle: Math.max(0, v.input.accel), load: clamp(Math.abs(v.ax) / 6, 0, 1),
             gain: (inside ? 0.9 : 0.75) * gain * (v.wrecked ? 0 : 1), pan,

@@ -71,12 +71,16 @@
       this._tmp = { x: 0, z: 0 };
       this._tmp2 = { x: 0, z: 0 };
       this.voices = new Map(); // vehicle id → { engine, skid, siren, horn, fire }
+      this.fixedSpots = []; // vehicles that always wait at a spot (see addFixedSpot)
       this._buildParkingSpots();
     }
 
     // ---------------------------------------------------------- lifecycle
     spawn(type, x, z, heading, opts) {
-      const v = new VH.Vehicle(this, type, opts);
+      // Planes, helicopters and tanks register their own class by kind.
+      const spec = VH.Vehicle.typeSpec(type);
+      const Cls = (spec && spec.kind && VH.VehicleKinds && VH.VehicleKinds[spec.kind]) || VH.Vehicle;
+      const v = new Cls(this, type, opts);
       v.place(x, z, heading, opts && opts.y);
       this.list.push(v);
       return v;
@@ -139,6 +143,13 @@
     _playerControls(v, dt) {
       const inp = this.game.input;
       const pad = inp.pad;
+      // Aircraft and tanks read the controls their own way.
+      if (v.playerControls) {
+        v.playerControls(inp, dt, this.game);
+        inp.discard('jump');
+        inp.discard('crouch');
+        return;
+      }
       let accel = 0;
       if (inp.down('moveForward')) accel += 1;
       if (inp.down('moveBack')) accel -= 1;
@@ -166,6 +177,11 @@
     }
 
     _playerExtras(v, dt) {
+      // Nitro, drifts and near misses are for cars.
+      if (v.kind !== 'car') {
+        this._nitroRegen(dt, 0.06);
+        return;
+      }
       // Nitro drains while boosting and fills from style.
       const boosting = v.boostFx > 0.9 && v.input.boost;
       if (boosting) this.nitro = Math.max(0, this.nitro - dt * 0.3);
@@ -535,7 +551,7 @@
         if (v.wrecked || v.driver === 'player' || v.noEnter) continue;
         if (v.speed > 5) continue;
         for (const side of [1, -1]) {
-          const d0 = v.localToWorld(side * (v.hx + 0.5), v.hz * 0.1, this._tmp);
+          const d0 = this._doorPoint(v, side, 0.5, this._tmp);
           const d = Math.hypot(d0.x - px, d0.z - pz);
           if (d < bestD) {
             bestD = d;
@@ -549,12 +565,18 @@
           if (d < bestD) {
             bestD = d;
             const side = l.x >= 0 ? 1 : -1;
-            const d0 = v.localToWorld(side * (v.hx + 0.5), v.hz * 0.1, this._tmp);
+            const d0 = this._doorPoint(v, side, 0.5, this._tmp);
             best = { v, side, x: d0.x, z: d0.z };
           }
         }
       }
       return best;
+    }
+
+    /** Where Jay stands to get in: beside the driver's door (a plane's cabin door can be elsewhere). */
+    _doorPoint(v, side, out, into) {
+      const lx = v.doorX !== undefined ? v.doorX + out - 0.5 : v.hx + out;
+      return v.localToWorld(side * lx, v.doorZ !== undefined ? v.doorZ : v.hz * 0.1, into);
     }
 
     /** Start getting into a car (F). */
@@ -589,7 +611,7 @@
       }
       e.t += dt;
       // Keep the target door where the car is now.
-      const door = v.localToWorld(e.side * (v.hx + 0.45), v.hz * 0.1, this._tmp);
+      const door = this._doorPoint(v, e.side, 0.45, this._tmp);
       if (e.phase === 'walk') {
         const k = smoothstep(0, 0.32, e.t);
         p.pos.x = lerp(e.fromX, door.x, k);
@@ -642,9 +664,11 @@
       const p = this.player;
       const v = p.vehicle;
       if (!v) return false;
+      const ph = this.physics;
+      // Out of an aircraft in the air: jump, and the parachute opens.
+      if (v.flying && v.pos.y - ph.groundHeight(v.pos.x, v.pos.z, v.pos.y + 0.5) > 4) return this._jumpOut(v);
       const fast = v.speed > 9;
       // Find a free spot: driver door, passenger door, behind, on the roof.
-      const ph = this.physics;
       const tries = [[v.hx + 0.75, 0.2], [-(v.hx + 0.75), 0.2], [v.hx + 0.75, -v.hz * 0.6], [0, -(v.hz + 0.9)], [0, v.hz + 0.9]];
       let spot = null;
       for (const [lx, lz] of tries) {
@@ -685,6 +709,32 @@
       return true;
     }
 
+    /** Jay leaves a flying aircraft mid-air: it flies on without him. */
+    _jumpOut(v) {
+      const p = this.player;
+      p.vehicle = null;
+      v.driver = null;
+      v.input.accel = 0;
+      v.input.steer = 0;
+      v.input.boost = 0;
+      v.horn = false;
+      v.role = 'abandoned';
+      v.persistent = !!(v.missionOwned || v.keep);
+      const side = v.localToWorld(v.hx + 1.6, 0, {});
+      p.state = 'air';
+      p.grounded = false;
+      p.model.setVisible(true);
+      p.pos.set(side.x, v.pos.y - 1, side.z);
+      p.prevPos.copy(p.pos);
+      p.vel.set(v.vel.x * 0.35, Math.min(2, v.vel.y * 0.35), v.vel.z * 0.35);
+      p.heading = p.prevHeading = v.yaw;
+      p._fallStartY = p.pos.y;
+      if (p.openParachute) p.openParachute();
+      VH.events.emit('vehicle:door', { v, open: true });
+      VH.events.emit('vehicle:exit', { v, bail: true, air: true });
+      return true;
+    }
+
     // ------------------------------------------------------ parked cars
     _buildParkingSpots() {
       const spots = (this.spots = []);
@@ -720,7 +770,7 @@
 
     _streamParked(focusX, focusZ) {
       let active = 0;
-      for (const v of this.list) if (v.role === 'parked') active++;
+      for (const v of this.list) if (v.role === 'parked' && !v.persistent) active++;
       // Despawn untouched parked cars far away.
       for (let i = this.list.length - 1; i >= 0; i--) {
         const v = this.list[i];
@@ -750,12 +800,50 @@
       }
     }
 
+    /**
+     * A vehicle that always waits at a spot: the planes at the airport, the
+     * tanks and jets at the fort. spot = { type, x, z, yaw, y?, color?, r?,
+     * onSpawn?(v) }. Taken, wrecked or cleared away (a respawn, a new game),
+     * a fresh one appears there as soon as nobody is looking.
+     */
+    addFixedSpot(spot) {
+      spot.v = null;
+      this.fixedSpots.push(spot);
+      return spot;
+    }
+
+    _streamFixed(fx, fz) {
+      for (const s of this.fixedSpots) {
+        const v = s.v;
+        const r = s.r || 8;
+        if (v && !v.removed && !v.wrecked && Math.hypot(v.pos.x - s.x, v.pos.z - s.z) < r * 3) continue;
+        const d = Math.hypot(s.x - fx, s.z - fz);
+        if (d < 25 || (d < 160 && this.game.isVisible(s.x, (s.y || 0) + 2, s.z, r))) continue;
+        if (v && !v.removed) {
+          // A wreck on the spot is cleared away; one driven off is left where it is,
+          // and from now on comes and goes like any other abandoned vehicle.
+          if (v.wrecked && v !== this.player.vehicle) this.remove(v);
+          else if (v !== this.player.vehicle && v !== this.lastPlayerCar) {
+            v.keep = false;
+            v.persistent = !!v.missionOwned;
+          }
+        }
+        if (this.list.some((o) => !o.removed && o !== v && Math.hypot(o.pos.x - s.x, o.pos.z - s.z) < r)) continue;
+        const nv = this.spawn(s.type, s.x, s.z, s.yaw || 0, { color: s.color, persistent: true, sleeping: true, role: 'parked', y: s.y });
+        nv.keep = true;
+        nv.fixedSpot = s;
+        if (s.onSpawn) s.onSpawn(nv);
+        s.v = nv;
+      }
+    }
+
     // ------------------------------------------------------------- frame
     update(dt, alpha, focus) {
       this._streamTimer -= dt;
       if (this._streamTimer <= 0) {
         this._streamTimer = 0.5;
         this._streamParked(focus.x, focus.z);
+        this._streamFixed(focus.x, focus.z);
       }
       const night = this.game.environment.shared.uWindowGlow.value;
       const cam = this.game.renderer.camera.position;

@@ -117,7 +117,9 @@
       }
       this.yaw = VH.math.wrapAngle(this.yaw);
       const first = this.isFirstPerson;
-      this.pitch = clamp(this.pitch, first ? -1.45 : -1.2, first ? 1.45 : 0.95);
+      // Flying, the view (and with it the aircraft) can point nearly straight up or down.
+      const wide = first || this._air;
+      this.pitch = clamp(this.pitch, wide ? -1.45 : -1.2, wide ? 1.45 : 0.95);
       this._lookIdle += dt;
 
       const wheel = inp.takeWheel();
@@ -168,11 +170,16 @@
 
     update(dt, player) {
       if (player.inVehicle) {
+        const v = player.vehicle;
         this._inCar = true;
-        this._aimingInCar = player.aiming;
-        this._updateCar(dt, player.vehicle);
+        // A tank's turret follows the view: never swing it back behind.
+        this._aimingInCar = player.aiming || !!v.aimCamera;
+        this._air = !!v.airCamera;
+        if (this._air) this._updateAir(dt, v);
+        else this._updateCar(dt, v);
         return;
       }
+      this._air = false;
       if (this._inCar) {
         // Just got out: face the way the car was going.
         this._inCar = false;
@@ -362,6 +369,77 @@
       this._shake = damp(this._shake, 0, 5, dt);
 
       this.fov = damp(this.fov, targetFov, 5, dt);
+      if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
+        cam.fov = this.fov;
+        cam.updateProjectionMatrix();
+        this._lastNear = cam.near;
+      }
+      cam.updateMatrixWorld();
+    }
+
+    /**
+     * Aircraft: the mouse points the view and the aircraft flies where it
+     * looks (aircraft.js reads cameraRig.yaw/pitch), so the camera simply
+     * sits behind the view direction, a long way back for big aircraft.
+     * No recentring: holding still holds the heading.
+     */
+    _updateAir(dt, v) {
+      const cam = this.camera;
+      const settings = this.settings;
+      const mode = CAR_MODES[this.carModeIndex];
+      const pos = v.renderPos;
+      const lift = v.camLift !== undefined ? v.camLift : v.height * 0.7;
+      if (!this._carInit) {
+        this._carPivot.set(pos.x, pos.y + lift, pos.z);
+        this._carInit = true;
+        this._carDist = 8;
+      }
+      const behind = this._behind = damp(this._behind, this.input.down('lookBehind') ? 1 : 0, 12, dt);
+      const yaw = this.yaw + Math.PI * behind;
+      const pitch = this.pitch * (1 - behind);
+      const pv = this._carPivot;
+      // Tight follow: at 100 m/s a soft spring would leave the aircraft behind the camera.
+      pv.x = damp(pv.x, pos.x, 24, dt);
+      pv.z = damp(pv.z, pos.z, 24, dt);
+      pv.y = damp(pv.y, pos.y + lift, 16, dt);
+      const cp = Math.cos(pitch);
+      const fwd = this._fwd.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+      const speed = Math.hypot(v.vel.x, v.vel.y, v.vel.z);
+      const sp = smoothstepLocal(10, 110, speed);
+      let targetFov = settings.get('graphics.fov') + sp * 10 + (v.boostFx || 0) * 8;
+      if (mode.id === 'bonnet') {
+        // From the cockpit, looking where the mouse points.
+        const nose = v.cockpit || { z: v.hz * 0.45, y: v.height * 0.7 };
+        const f = Math.sin(v.renderYaw);
+        const g = Math.cos(v.renderYaw);
+        cam.near = 0.1;
+        cam.position.set(pos.x + f * nose.z, pos.y + nose.y, pos.z + g * nose.z);
+        cam.rotation.set(pitch, yaw + Math.PI, -(v.roll || 0) * 0.6, 'YXZ');
+        targetFov += 4;
+      } else {
+        cam.near = 0.2;
+        const baseDist = (v.camDist || 6 + v.hz * 1.6) * mode.dist + this.zoom * 1.2;
+        const dist = baseDist + sp * 3;
+        const origin = this._shoulder.copy(pv);
+        origin.y += (v.camUp !== undefined ? v.camUp : 1.2) * mode.height;
+        const hit = this.physics.raycast(origin.x, origin.y, origin.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
+          { inflate: 0.25, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
+        const allowed = hit ? Math.max(2, hit.t - 0.3) : dist;
+        if (allowed < this._carDist) this._carDist = allowed;
+        else this._carDist = damp(this._carDist, allowed, 3, dt);
+        cam.position.copy(origin).addScaledVector(fwd, -this._carDist);
+        cam.rotation.set(pitch - 0.05, yaw + Math.PI, 0, 'YXZ');
+      }
+      const shake = this._shake;
+      if (shake > 0.001 && settings.get('gameplay.cameraShake')) {
+        const t = performance.now() / 1000;
+        const s = shake * 0.09;
+        cam.position.x += Math.sin(t * 37.1) * s;
+        cam.position.y += Math.sin(t * 43.7 + 1.3) * s;
+        cam.position.z += Math.sin(t * 29.3 + 2.1) * s;
+      }
+      this._shake = damp(this._shake, 0, 5, dt);
+      this.fov = damp(this.fov, targetFov, 4, dt);
       if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
         cam.fov = this.fov;
         cam.updateProjectionMatrix();

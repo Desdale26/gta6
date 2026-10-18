@@ -75,7 +75,10 @@
       this.spec = typeSpec(typeId);
       if (!this.spec) throw new Error('Unknown vehicle type ' + typeId);
       const s = this.spec;
-      this.model = VH.CarModels.build(typeId, { color: opts.color, seed: opts.seed || this.id * 7919, lod: opts.lod || 0 });
+      // 'car' for everything on wheels; aircraft and tanks (aircraft.js,
+      // tank.js) subclass Vehicle and build their own models.
+      this.kind = s.kind || 'car';
+      this.model = this._buildModel(typeId, opts);
       system.scene.add(this.model.root);
       this.name = s.name;
       this.cls = s.cls;
@@ -163,6 +166,11 @@
       this._ground = [0, 0, 0, 0];
       this._corner = [{ x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }];
       this.model.setShadows(true);
+    }
+
+    /** The 3D model (a CarModels car; other kinds override this). */
+    _buildModel(typeId, opts) {
+      return VH.CarModels.build(typeId, { color: opts.color, seed: opts.seed || this.id * 7919, lod: opts.lod || 0 });
     }
 
     // ------------------------------------------------------------ setup
