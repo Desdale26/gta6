@@ -123,6 +123,31 @@ in Settings.
 | **P** | In a cab: taxi duty on or off |
 | **V** | Chase camera · far chase · bonnet |
 
+**Flying** (planes and helicopters: get in with **F** like a car)
+
+| Key | Plane | Helicopter |
+|-----|-------|------------|
+| **W / S** | Throttle up / down (on the ground, S brakes) | Fly forward / back |
+| **A / D** | Roll left / right (on the ground: steer) | Turn |
+| **Space / Ctrl** | Nose up / down | Climb / descend |
+| **Mouse** | Look; let go of the keys and the plane flies towards where you look | Look; the helicopter turns to face the view |
+| **Shift** | Afterburner (the Talon jet) | Faster |
+| **Left mouse · right mouse** | Guns · rockets (the Talon and the Warden gunship) | Same |
+| **F** | Get out. High up, Jay jumps and his parachute opens | Same |
+
+To take off, line up on a runway, hold **W** and pull up (**Space**, or
+look up) once you're fast enough. Land gently on something flat.
+
+**The tank**
+
+| Key | Action |
+|-----|--------|
+| **W / S** · **A / D** | Drive · turn on the spot |
+| **Mouse** | Aim the turret |
+| **Left mouse · right mouse** | Main gun (it reloads) · machine gun |
+
+**In a shop:** **E** at the counter buys snacks; aim a gun at the clerk to hold the place up.
+
 **Anywhere:** **M** opens the city map (jobs, places, the GPS route),
 **Space** or **Enter** skips a line in a cutscene, **1 / 2 / 3** answer a
 choice, **Esc** pauses (map, job log, save, settings).
@@ -233,8 +258,8 @@ balcony. Tuli on the door won't let you in with the police after you.
 
 ## What's in the city
 
-**Vehicles.** 18 cars, from the Pipit hatchback to the Bulwark armoured van
-and Nana Lu's long teal Duchess. Each has its own handling: a tyre model
+**Vehicles.** 19 cars, from the Pipit hatchback to the Bulwark armoured van
+and Nana Lu's long teal Duchess, plus five aircraft and a tank (below). Each has its own handling: a tyre model
 with grip, slip and drift, weight transfer, gears, and suspension that
 leaves the ground on ramps. Cars dent, smoke, catch fire and explode.
 Street lights, hydrants, bollards, benches, bins and barriers break when
@@ -272,6 +297,46 @@ Enemies take cover, flank and shoot back.
 (house, with Benji Blue) and **Harbor Heat 103.7** (dark beats, with Sable).
 Between songs the hosts talk, and they react to what you've done.
 
+**Northgate Heights.** A new financial district north of downtown, on
+Skyline Drive: eight towers of 130 to 250 m, each its own shape (Coral
+Spire, The Harbinger, The Wedge, The Corkscrew, The Drum with its rooftop
+helipad, The Twins and their sky bridge, The Sail and Meridian Heights),
+with glass lobbies, plazas, palms, office workers on their lunch break,
+and crowns and aircraft beacons that light up at night.
+
+**Vicehaven International.** Up Grand Avenue past Northgate: a 1.3 km
+runway, taxiways, a terminal with jet bridges, a control tower, hangars
+and a helipad. Airliners take off and land every couple of minutes (they
+wait, or go round, if Jay is on the runway). Parked and ready to steal: an
+Albatross airliner, two Skylark light planes and a Sparrow helicopter.
+
+**Fort Breakwater.** The army base at the west end of Meridian Boulevard:
+walls and razor wire, watchtowers, barracks, a motor pool, two helipads
+and an airstrip. Walk in and you get three seconds' warning; stay, shoot
+or steal something and every soldier opens fire and the police come at
+four stars (five if you take a vehicle). Worth it for the Bastion tank,
+the Scout 4x4s, the Talon fighter jet and the Warden gunship.
+
+**Aircraft.** Planes take off from a runway (or any long straight road,
+if you're brave) and bank to turn; helicopters lift straight up. The
+military ones have guns and rockets. Bail out high up and Jay's
+parachute opens. The haze thins as you climb, so the whole city shows
+from the air.
+
+**Corner shops and petrol stations.** Fourteen across Old Market, Harbor
+Point, Palm Crescent and downtown (Sunrise 24/7, Gull Mart, Hi-Lo Market,
+Kwik Pik and three Tidal Fuel stations), each one a real room you can walk
+into with shelves, fridges and a clerk behind the counter. Buy snacks to
+heal, or aim a gun at the clerk: the till pays out while you keep him
+covered, someone hits the silent alarm (two stars), and one clerk in five
+has a shotgun under the counter. A robbed till takes eight minutes to
+fill up again. The map marks them with a yellow shopping bag.
+
+**A city that carries on without you.** Every few quiet minutes a getaway
+car comes tearing past with a police cruiser on its tail, siren going
+(take the car and the police take an interest). Travellers walk the
+terminal forecourt and a sightseeing helicopter flies laps over the bay.
+
 **Time and light.** The clock runs (a full day is about 24 minutes) unless
 you fix the time in Settings. Night is moonlit blue rather than black, with
 street-light pools, headlights, lit windows and neon. If nights are still too
@@ -307,7 +372,7 @@ type a command:
 ```
 vicehaven/
 ├── index.html              page shell, loading and error screens, script order
-├── css/                    style, hud, menus, map, dialogue, weapon wheel
+├── css/                    style, hud, menus, map, dialogue, weapon wheel, world (shop and base overlays)
 ├── js/
 │   ├── lib/three.min.js    three.js r186 as a classic script (MIT)
 │   ├── core.js · settings.js · input.js        namespace, events, maths; options; keyboard/mouse/pad
@@ -316,10 +381,14 @@ vicehaven/
 │   ├── physics.js · roadnet.js                     collision world; lanes, junctions and signals
 │   ├── citygen.js · buildings.js · props.js · signs.js · landmarks.js · construction.js
 │   ├── outskirts.js        Saltmarsh docks (Pier 9, the cranes, the freighter) and Crestline Estates
+│   ├── skyline.js · airfield.js · fort.js   Northgate Heights; the airport and its air traffic;
+│   │                       Fort Breakwater, its soldiers and the alarm
+│   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
 │   ├── world.js            turns the layout into chunked meshes, colliders and props
 │   ├── humanoid.js · player.js · camera.js · crowd.js    people, Jay, the camera, the crowds
-│   ├── vehicles/           carmodels (18 cars), vehicle (physics), vehicles (spawning, collisions),
-│   │                       traffic (lane AI), feedback (smoke, skids, lights, sound)
+│   ├── vehicles/           carmodels (19 cars), vehicle (physics), vehicles (spawning, collisions),
+│   │                       traffic (lane AI), feedback (smoke, skids, lights, sound),
+│   │                       aircraft (planes, helicopters, rockets), tank
 │   ├── weapons-data.js · weapons-models.js · combat.js · ui-wheel.js   guns, fighting, the wheel
 │   ├── police.js · fx.js   heat, pursuit, helicopter; particles, explosions, light pools
 │   ├── audio.js · audio-drive.js · audio-weapons.js    synthesised sound, engines, the radio
@@ -386,6 +455,12 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Night falls: street-light pools, headlights, lit windows, the helicopter's searchlight; Jay, cars and roads stay easy to see
 - [ ] Settings → Graphics → Night brightness changes how bright nights are, live
 - [ ] Settings change live and persist (quality presets, voices, strong language)
+- [ ] Northgate Heights: eight different towers on Skyline Drive, walkers on the plazas, lit crowns at night
+- [ ] Airport: take a Skylark from the general aviation apron, take off down the runway, turn, land again; an airliner takes off or lands within a few minutes
+- [ ] Fly the Sparrow from the helipad: climb, fly, land without damage; jump out high up and the parachute opens
+- [ ] Fort Breakwater: walk in, get the warning, stay and the alarm goes; steal the tank (five stars), drive it, fire the main gun
+- [ ] Walk into a corner shop, buy snacks at the counter (+health), then aim a gun at the clerk: the meter fills and pays out, two stars follow
+- [ ] Wait a few minutes away from jobs and heat: a car chased by a police cruiser comes past
 
 For developers, the automated checks need Node.js and Playwright:
 
@@ -400,8 +475,11 @@ node vicehaven/tools/bundle.mjs && TARGET=dist node vicehaven/tools/smoke.mjs   
 
 ## Known limitations
 
-- **No interiors, swimming, boats, motorbikes or aircraft for Jay.** Indoor
-  moments in the story are told on a black screen with text and voices.
+- **The corner shops are the only interiors; no swimming, boats or
+  motorbikes.** Indoor moments in the story are told on a black screen with
+  text and voices.
+- **Aircraft physics is arcade-simple,** and nothing in the story uses the
+  airport, the base or the shops yet: they're for free roam.
 - **Voices depend on the browser.** Edge on Windows sounds best. Without
   installed voices the game shows subtitles only.
 - **Sound needs one click or key press first.** Browsers don't allow a
