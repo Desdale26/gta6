@@ -643,7 +643,7 @@
           map: tex, emissiveMap: tex, emissive: new THREE.Color(0, 0, 0), roughness: 0.55, metalness: 0,
           polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
         });
-        mat.userData.neon = spec.style === 'neon' || spec.style === 'brand';
+        mat.userData.neon = spec.style === 'neon' || spec.style === 'brand' || spec.style === 'road';
         this.signMaterials.push(mat);
         const fx = Math.sin(spec.yaw);
         const fz = Math.cos(spec.yaw);
@@ -657,7 +657,7 @@
           ctx.chunk.group.add(mesh);
           continue;
         }
-        const faces = spec.twoSided || spec.posts ? [1, -1] : [1];
+        const faces = (spec.twoSided || spec.posts) && !spec.oneSided ? [1, -1] : [1];
         for (const side of faces) {
           const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), mat);
           const off = side > 0 ? depth / 2 + 0.002 : -(depth / 2 + 0.002);
