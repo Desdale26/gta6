@@ -240,6 +240,8 @@
             this.resume();
             setTimeout(() => this.openMap(), 50);
           },
+          toggleDaytime: () => this.toggleDaytime(),
+          isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
           jobLog: () => this.jobLog(),
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
@@ -947,6 +949,18 @@
         }
       }
       if (inp.consume('map') && this.minimap) this.toggleMap();
+      if (inp.consume('daytime')) this.toggleDaytime();
+    },
+
+    /** T, D-pad right or the pause menu: the sun stays up (Always daytime), or the day and night cycle comes back. */
+    toggleDaytime() {
+      const on = !this.settings.get('gameplay.alwaysDay');
+      this.settings.set('gameplay.alwaysDay', on);
+      this._nightTipShown = true; // they know about it now
+      const key = this.input.labelFor('daytime');
+      this.hud.notify(on
+        ? { title: 'Daytime on', text: 'The sun stays up. Press ' + key + ' again for the day and night cycle.', icon: '☀', duration: 4000 }
+        : { title: 'Day and night', text: 'Night falls again in the evening. Press ' + key + ' any time to bring the sun back.', icon: '☾', duration: 4000 });
     },
 
     /** "F  Get in" prompt next to an enterable car. */
@@ -1133,6 +1147,11 @@
     _tickExtras(dt) {
       if (this.minimap && this.minimap.isFullOpen && (document.body.classList.contains('cutscene') || this.player.frozen)) this.closeMap();
       this._updateWaypoint(dt);
+      // The first time it gets properly dark, say how to bring the sun back.
+      if (!this._nightTipShown && this.environment.nightFactor > 0.6 && !this.settings.get('gameplay.alwaysDay') && this.state === 'playing' && !document.body.classList.contains('cutscene')) {
+        this._nightTipShown = true;
+        this.hud.notify({ title: 'Too dark?', text: 'Press ' + this.input.labelFor('daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
+      }
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
         this._tipT = 0;

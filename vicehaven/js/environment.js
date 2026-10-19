@@ -36,6 +36,8 @@
   // exact on-screen colour of the sky's horizon.
   // Moonlight and the orange bounce of street lamps fill the shadows at night.
   const NIGHT_SKY = new THREE.Color(0x5a6ca4);
+  // Night brightness at 100% sits a quarter above where nights started out (players found them too dark).
+  const NIGHT_LIFT = 1.25;
   const NIGHT_GROUND = new THREE.Color(0x4a3a2a);
 
   function acesFilmic(rgb, exposure) {
@@ -256,7 +258,7 @@
     }
 
     applySettings() {
-      this.nightBrightness = VH.math.clamp(+this.settings.get('graphics.nightBrightness') || 1, 0.5, 2);
+      this.nightBrightness = VH.math.clamp(+this.settings.get('graphics.nightBrightness') || 1, 0.5, 2) * NIGHT_LIFT;
       const base = this.settings.shadowTier();
       const tier = this._extentOverride && base.enabled ? Object.assign({}, base, { extent: this._extentOverride }) : base;
       const sun = this.sun;

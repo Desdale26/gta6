@@ -78,7 +78,8 @@ Change it under **Settings → Graphics**:
 
 **Resolution scale** is the biggest lever if the frame rate is low;
 **Post-processing → Off** is the next. The FPS counter can be switched on
-in Settings.
+in Settings. **Film grain** (High and Ultra) is Light by default; set it to
+Off or Strong in the same place.
 
 ---
 
@@ -176,8 +177,9 @@ Jay, **G** shows the GPS waypoint, **Z** shows the whole map.
 **M** or **Esc** closes it.
 
 **Anywhere:** **M** opens the city map (jobs, places, the GPS route),
+**T** switches daytime on or off (D-pad right on a controller),
 **Space** or **Enter** skips a line in a cutscene, **1 / 2 / 3** answer a
-choice, **Esc** pauses (map, job log, save, settings).
+choice, **Esc** pauses (map, daytime, job log, save, settings).
 
 Every key can be rebound under **Settings → Controls**. **Controllers**
 (Xbox, PlayStation and most others) work automatically: sticks move and
@@ -374,8 +376,11 @@ the way out (turning round at the fort's gate and the ends of Airport
 Road). Green signs and gantries point the way to the airport, the base,
 Northgate and back downtown, and taxi fares now go to and from all of it.
 
-**Always daytime.** **Settings → Gameplay → Always daytime** keeps the sun
-up: no night at all, even in story scenes.
+**Daytime on / off.** Press **T** (D-pad right on a controller) at any time:
+the sun comes straight up and stays up, even in story scenes. Press it again
+for the day and night cycle. The pause menu has the same switch, and so does
+**Settings → Gameplay → Always daytime**. The first time it gets dark, a
+notice reminds you.
 
 **Time and light.** The clock runs (a full day is about 24 minutes) unless
 you fix the time in Settings. Night is moonlit blue rather than black, with
@@ -508,6 +513,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Drive up Grand Avenue North and along Meridian West: buildings, people and traffic all the way, green signs pointing the way
 - [ ] In a cab out by the airport, press P: a fare is waiting nearby and may want the terminal, the fort gate or Northgate
 - [ ] Settings → Gameplay → Always daytime: night turns to midday at once and stays that way
+- [ ] At night press T: midday at once, with a notice; T again brings the cycle back; the pause menu button says On / Off to match
+- [ ] Settings → Graphics → Film grain: Off, Light (default) and Strong change the picture live
 - [ ] The title screen says v1.1 and What's new lists the update
 
 For developers, the automated checks need Node.js and Playwright:

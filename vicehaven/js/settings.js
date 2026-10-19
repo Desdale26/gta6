@@ -64,6 +64,7 @@
     aim: ['Mouse2', null],
     weaponWheel: ['Tab', null],
     map: ['KeyM', null],
+    daytime: ['KeyT', null],
     phone: ['KeyP', null],
     camera: ['KeyV', null],
     lookBehind: ['KeyB', null],
@@ -110,6 +111,7 @@
     horn: { label: 'Horn', group: 'Vehicles' },
     lights: { label: 'Headlights / siren', group: 'Vehicles' },
     map: { label: 'City map', group: 'Interface' },
+    daytime: { label: 'Daytime on / off', group: 'Interface' },
     phone: { label: 'Taxi duty on / off (in a cab)', group: 'Vehicles' },
     pause: { label: 'Pause', group: 'Interface', fixed: true },
     debug: { label: 'Developer overlay', group: 'Interface' },
@@ -118,7 +120,7 @@
   function defaults() {
     return {
       version: 1,
-      graphics: Object.assign({ quality: 'high', fov: 65, showFps: true, nightBrightness: 1 }, PRESETS.high),
+      graphics: Object.assign({ quality: 'high', fov: 65, showFps: true, nightBrightness: 1, filmGrain: 'light' }, PRESETS.high),
       gameplay: {
         difficulty: 'normal',
         mouseSensitivity: 1.0,

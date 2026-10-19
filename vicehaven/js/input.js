@@ -41,6 +41,7 @@
     12: 'phone', //      D-pad up (taxi duty)
     13: 'horn', //       D-pad down
     14: 'lights', //     D-pad left
+    15: 'daytime', //    D-pad right
   };
 
   const STICK_DEADZONE = 0.18;
@@ -126,7 +127,7 @@
     /** Label for the first key bound to an action, e.g. "E". */
     labelFor(action) {
       if (this.lastDevice === 'gamepad') {
-        const pad = { jump: 'A', crouch: 'B', reload: 'X', interact: 'Y', aim: 'LT', fire: 'RT', sprint: 'L3', camera: 'RB', pause: 'Menu' };
+        const pad = { jump: 'A', crouch: 'B', reload: 'X', interact: 'Y', aim: 'LT', fire: 'RT', sprint: 'L3', camera: 'RB', pause: 'Menu', daytime: 'D-pad →' };
         if (pad[action]) return pad[action];
       }
       const b = this.bindings[action];

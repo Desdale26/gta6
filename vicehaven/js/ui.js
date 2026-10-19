@@ -33,10 +33,12 @@
         { path: 'graphics.propDensity', label: 'Detail distance', type: 'range', min: 0.5, max: 1.5, step: 0.05, format: pct,
           help: 'How far away benches, lamps and trees are still drawn.' },
         { path: 'graphics.effects', label: 'Post-processing', type: 'select',
-          options: [['low', 'Off (fastest)'], ['medium', 'Medium: bloom and colour grading'], ['high', 'High: plus film grain, full-res bloom']],
+          options: [['low', 'Off (fastest)'], ['medium', 'Medium: bloom and colour grading'], ['high', 'High: plus full-res bloom and film grain']],
           help: 'The glow on lamps, neon, lit windows and the sun, and the Vicehaven colour grade.' },
         { path: 'graphics.antialias', label: 'Anti-aliasing', type: 'toggle',
           help: 'Smooths jagged edges. With post-processing Off it applies after reloading the page.' },
+        { path: 'graphics.filmGrain', label: 'Film grain', type: 'select', options: [['off', 'Off'], ['light', 'Light'], ['strong', 'Strong']],
+          help: 'The fine flicker over the picture, like old film. Only with post-processing on High.' },
         { path: 'graphics.nightBrightness', label: 'Night brightness', type: 'range', min: 0.5, max: 2, step: 0.05, format: pct,
           help: 'How much the moon and street light brighten the city after dark. Turn it up if nights are hard to see on your screen.' },
         { path: 'graphics.fov', label: 'Field of view', type: 'range', min: 50, max: 90, step: 1, format: (v) => v + '°' },
@@ -61,7 +63,7 @@
         { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
         { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
           help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
-        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes.' },
+        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. T (or D-pad right) switches it in the game.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
           help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
@@ -115,6 +117,7 @@
       VH.events.on('settings:changed', (e) => {
         if (e.path.startsWith('accessibility') || e.path === '*') this._applyAccessibility();
         if (this.current === 'settings') this._refreshSettingsValues();
+        if (e.path === 'gameplay.alwaysDay' || e.path === '*') this._refreshDaytime();
       });
       VH.events.on('ui:dialog', (e) => this.openDialog(e.id));
       VH.events.on('input:key', (e) => this._onKey(e));
@@ -137,6 +140,7 @@
       if (focusable) focusable.focus({ preventScroll: true });
       if (id === 'settings') this._refreshSettingsValues();
       if (id === 'stats') this._refreshStats();
+      if (id === 'pause') this._refreshDaytime();
     }
 
     back() {
@@ -237,6 +241,7 @@
       menu.append(
         this._button('Resume', () => this.actions.resume(), { primary: true }),
         this._button('City map', () => this.actions.openMap()),
+        (this.dayBtn = this._button('Daytime: Off', () => this.actions.toggleDaytime && this.actions.toggleDaytime())),
         this._button('Job log', () => this.openDialog('jobLog')),
         this._button('Settings', () => this.show('settings', true)),
         this._button('Statistics', () => this.show('stats', true)),
@@ -258,6 +263,14 @@
 
     setPauseMeta(text) {
       this.pauseMeta.textContent = text;
+    }
+
+    /** The pause menu's daytime button says what pressing it will leave you with. */
+    _refreshDaytime() {
+      if (!this.dayBtn || !this.actions.isDaytime) return;
+      const on = this.actions.isDaytime();
+      this.dayBtn.querySelector('.btn-label').textContent = on ? '☀ Daytime: On' : '☾ Daytime: Off';
+      this.dayBtn.title = (on ? 'The sun stays up' : 'Day and night cycle') + ' (T in the game)';
     }
 
     // --------------------------------------------------------- settings
@@ -502,7 +515,8 @@
       item('$  14 corner shops', 'Walk in, press E at the counter for snacks (they heal you), or aim a gun at the clerk to hold the shop up. Yellow bags on the map.');
       item('🚓  A busier city', 'Police chases tear past now and then, office workers fill the plazas, and a tour helicopter flies over the bay.');
       item('🛣  The roads out of town', 'Grand Avenue North and Meridian West are proper streets now: motels, diners, hotels and workshops, people, traffic and green signs pointing the way. Taxi fares go there too.');
-      item('☀  Always daytime', 'Settings → Gameplay → Always daytime keeps the sun up: no night at all.');
+      item('☀  Daytime at the press of a key', 'Night too dark? Press T (D-pad right on a controller) and the sun comes straight up and stays up. Press it again for day and night. It is in the pause menu too. Nights are a quarter brighter than before as well.');
+      item('🎞  Less film grain', 'The grain over the picture is much lighter now. Settings → Graphics → Film grain turns it off, or back to Strong.');
       item('Flying', 'W/S throttle, A/D roll, Space/Ctrl nose up and down, mouse to look. Jump out high up and the parachute opens.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));

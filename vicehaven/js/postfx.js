@@ -167,8 +167,9 @@
 
       c = toSRGB(clamp(c, 0.0, 1.0));
       // Film grain plus a little dither, which also hides banding in the sky.
+      // The grain fades in the shadows, where it would only read as noise.
       float n = hash(vUv * uResolution + fract(uTime) * 97.0) - 0.5;
-      c += n * (uGrain + 1.0 / 255.0);
+      c += n * (uGrain * (0.3 + 0.7 * dot(c, vec3(0.3333))) + 1.0 / 255.0);
       gl_FragColor = vec4(c, 1.0);
     }
   `;
@@ -230,6 +231,7 @@
       this.configure();
       VH.events.on('settings:changed', (e) => {
         if (e.path === 'graphics' || e.path === 'graphics.effects' || e.path === 'graphics.antialias' || e.path === '*') this.configure();
+        else if (e.path === 'graphics.filmGrain') this._applyGrain();
       });
     }
 
@@ -243,10 +245,16 @@
       this._dispose();
       if (this.enabled) {
         this.mipCount = level === 'high' ? 5 : 4;
-        this.compMat.uniforms.uGrain.value = level === 'high' ? 0.025 : 0.0;
+        this._applyGrain();
         this._allocate(this.width, this.height);
       }
       VH.events.emit('postfx:changed', { enabled: this.enabled });
+    }
+
+    /** Settings → Graphics → Film grain (only with post-processing on High). */
+    _applyGrain() {
+      const amount = { off: 0, light: 0.008, strong: 0.025 }[this.settings.data.graphics.filmGrain];
+      this.compMat.uniforms.uGrain.value = this.level === 'high' ? (amount === undefined ? 0.008 : amount) : 0;
     }
 
     _dispose() {
