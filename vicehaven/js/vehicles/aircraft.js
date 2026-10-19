@@ -699,6 +699,8 @@
       // Bare metal (engine parts, gear legs, spinners) and rubber or matte plastic.
       metal: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.85 }),
       matte: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }),
+      // Cabin windows: dark glass by day, lit from inside after dark (see setNav).
+      cabin: new THREE.MeshStandardMaterial({ color: 0x1a222c, roughness: 0.15, metalness: 0.4, emissive: 0xffd49a, emissiveIntensity: 0 }),
     };
     return MATS;
   }
@@ -712,7 +714,7 @@
   const RUBBER = 0x161616;
 
   // ---------------------------------------------------- model definitions
-  // Each returns { kit (paint), metal, matte, glass (kits), gear (kit that
+  // Each returns { kit (paint), metal, matte, glass, lit (cabin windows that glow at night) (kits), gear (kit that
   // retracts), lights: [[mat, x, y, z, r]], prop / rotor / tailRotor (kits that
   // spin, at a pivot), strobe, beaconLow, burner }. More can be added to
   // VH.AircraftDefs from other files (loaded after this one).
@@ -896,6 +898,7 @@
       body: d.kit.geometry(),
       metal: some(d.metal),
       matte: some(d.matte),
+      lit: some(d.lit),
       glass: d.glass ? d.glass.geometry() : null,
       gear: d.gear ? d.gear.geometry() : null,
       prop: d.prop ? { geo: d.prop.kit.geometry(), at: d.prop.at, disc: d.prop.disc } : null,
@@ -936,6 +939,7 @@
       add(g.body, this.paint);
       if (g.metal) add(g.metal, M.metal);
       if (g.matte) add(g.matte, M.matte);
+      if (g.lit) add(g.lit, M.cabin);
       if (g.glass) add(g.glass, M.glass);
       this.gear = g.gear ? add(g.gear, this.paint) : null;
       const spinner = (part) => {
@@ -981,6 +985,14 @@
     }
 
     setNav(on, t) {
+      // Cabin lights follow the city's lit windows (one shared material for every aircraft).
+      const env = VH.game && VH.game.environment;
+      const glow = env ? env.shared.uWindowGlow.value : 0;
+      const M = mats();
+      if (M._glow !== glow) {
+        M._glow = glow;
+        M.cabin.emissiveIntensity = glow * 2.4;
+      }
       for (const n of this.navs) n.visible = on;
       if (this.strobe) this.strobe.visible = on && (t % 1.2) < 0.08;
       if (this.beacon) this.beacon.visible = on && (t % 1.0) < 0.5;

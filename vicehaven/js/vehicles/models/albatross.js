@@ -36,6 +36,7 @@
     const m = new Kit(); //  bare metal
     const r = new Kit(); //  rubber and matte black
     const gl = new Kit(); // glass
+    const lit = new Kit(); // cabin windows (lit at night)
     const deep = shade(c, 0.72);
 
     // ---------------------------------------------------------- fuselage
@@ -64,7 +65,7 @@
     for (const side of [1, -1]) {
       for (let z = 13.7; z > -11.3; z -= 0.53) {
         if ((z < 1.45 && z > 0.05) || z > 14.1) continue;
-        gl.decal(body, z, 1.3, side, 0.25, 0.36, WINDOW, { round: 1, lift: 0.014 });
+        lit.decal(body, z, 1.3, side, 0.25, 0.36, WINDOW, { round: 1, lift: 0.014 });
       }
       // Doors: an outline, the panel (curved to the skin) and its window.
       for (const [z, wdt, hgt, s] of [[15.0, 0.84, 1.8, 1.42], [-11.9, 0.84, 1.8, 1.42], [0.75, 0.52, 0.95, 1.3]]) {
@@ -72,7 +73,7 @@
         const os = (hgt + 0.08) / 2 / 2.1;
         k.patch(body, z - wdt / 2 - 0.04, z + wdt / 2 + 0.04, [s - os, s + os], [s - os, s + os], side, shade(WHITE, 0.8), { lift: 0.006, ns: 6 });
         k.patch(body, z - wdt / 2, z + wdt / 2, [s - ds, s + ds], [s - ds, s + ds], side, DOOR, { lift: 0.01, ns: 6 });
-        gl.decal(body, z, 1.3, side, 0.24, 0.34, WINDOW, { round: 1, lift: 0.016 });
+        lit.decal(body, z, 1.3, side, 0.24, 0.34, WINDOW, { round: 1, lift: 0.016 });
       }
       // Cockpit glazing: the windscreen and two side panes, with frames between.
       gl.patch(body, 17.78, 18.36, [0.1, 0.84], [0.1, 0.62], side, WINDOW, { lift: 0.016 });
@@ -165,7 +166,7 @@
     k.slab([[16.0, 1.75], [14.6, 1.75], [14.6, 1.2], [16.0, 1.2]], -0.47, -0.42, BELLY, 'zy');
 
     return {
-      kit: k, metal: m, matte: r, glass: gl,
+      kit: k, metal: m, matte: r, glass: gl, lit,
       lights: [['red', 17.15, 3.62, -7.3, 0.16], ['green', -17.15, 3.62, -7.3, 0.16], ['white', 0, 4.96, -19.1, 0.14]],
       strobe: [0, 5.82, 0],
       beaconLow: [0, 1.1, 0.5],
