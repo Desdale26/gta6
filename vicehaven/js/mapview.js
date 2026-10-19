@@ -43,7 +43,7 @@
   const GRID = 250; //        metres per atlas square (A1 is the north-west corner)
   const DRIVE_SPEED = 14; //  m/s: an average for a drive with junctions in it
   const FOOT_SPEED = 4.5; //  m/s: a jog
-  const CLUSTER_PX = 24; //   icons closer than this merge into one with a count
+  const CLUSTER_PX = 24; //   icons closer than this merge into one with a count (more, zoomed out)
   const EASE = 13; //         how quickly the view catches up with where it is going (1/s)
   const FRICTION = 4.5; //    how quickly a flicked map slows down (1/s)
   const PAN_SPEED = 900; //   px/s for the arrow keys and the stick
@@ -2049,6 +2049,7 @@
       const W = this._fw;
       const H = this._fh;
       const groups = [];
+      const CL = s < 0.5 ? CLUSTER_PX * 2 : s < 0.9 ? CLUSTER_PX * 1.3 : CLUSTER_PX;
       const x0 = a.x0 + 26;
       const x1 = a.x1 - 26;
       const y0 = a.y0 + 84;
@@ -2071,7 +2072,7 @@
         if (T.cluster) {
           let hit = null;
           for (const c of groups) {
-            if (c.cat === T.cat && Math.abs(c.X0 - X) < CLUSTER_PX && Math.abs(c.Y0 - Y) < CLUSTER_PX) {
+            if (c.cat === T.cat && Math.abs(c.X0 - X) < CL && Math.abs(c.Y0 - Y) < CL) {
               hit = c;
               break;
             }
