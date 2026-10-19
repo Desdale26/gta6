@@ -45,6 +45,35 @@
         r.speedLimit = r.width >= 18 ? 17.5 : 13.5;
         r.parking = n === 1;
       }
+      this._markRoadEnds(layout);
+    }
+
+    /**
+     * Roads out of town that just stop (Airport Road, Meridian Boulevard at
+     * the fort's gate) get a turnaround so traffic can use them: 'uturn'
+     * where the end is open ground or the gate apron, 'flip' where barriers
+     * close it (cars turn round there only while nobody's looking).
+     * Roads ending at the old city's edge keep their old behaviour.
+     */
+    _markRoadEnds(layout) {
+      const cb = layout.config.cityBounds || layout.config.bounds;
+      const outside = (x, z) => x < cb.minX - 1 || x > cb.maxX + 1 || z < cb.minZ - 1 || z > cb.maxZ + 1;
+      for (const r of this.roads) {
+        r.endFrom = null;
+        r.endTo = null;
+        const js = r.junctions;
+        for (const end of ['from', 'to']) {
+          const a = r[end];
+          const x = r.axis === 'z' ? r.coord : a;
+          const z = r.axis === 'z' ? a : r.coord;
+          if (!outside(x, z)) continue;
+          const j = end === 'from' ? js[0] : js[js.length - 1];
+          if (j && Math.abs(RoadNet.junctionAlong(r, j) - a) < RoadNet.junctionHalf(r, j) + 40) continue; // a junction, not an end
+          // world.js puts barriers across starts out of town (not the fort's open start) and the far south ends.
+          const barrier = end === 'from' ? !r.openStart && a <= (r.axis === 'z' ? cb.minZ : cb.minX) + 30 : r.axis === 'z' && a >= cb.maxZ - 30;
+          r[end === 'from' ? 'endFrom' : 'endTo'] = barrier ? 'flip' : 'uturn';
+        }
+      }
     }
 
     /** Distance of lane `k` (0 = nearest the centre) from the road's centre line. */
@@ -129,11 +158,16 @@
       return dir > 0 ? j.legs.e : j.legs.w;
     }
 
-    /** Is there another junction beyond j along road/dir? (avoids dead ends at the edge of town) */
+    /**
+     * Is there another junction beyond j along road/dir, or a turnaround at
+     * the road's end? (Dead ends at the edge of town are avoided.)
+     */
     static continuesPast(road, dir, j) {
       const list = road.junctions;
       const i = list.indexOf(j);
-      return dir > 0 ? i < list.length - 1 : i > 0;
+      if (dir > 0 ? i < list.length - 1 : i > 0) return true;
+      const end = dir > 0 ? road.endTo : road.endFrom;
+      return !!end && Math.abs((dir > 0 ? road.to : road.from) - RoadNet.junctionAlong(road, j)) > RoadNet.junctionHalf(road, j) + 40;
     }
 
     /**
@@ -312,11 +346,34 @@
 
     /** Random lane position (for spawning), within [minD, maxD] of (x, z). */
     randomLanePoint(rng, x, z, minD, maxD) {
+      // Only the stretches of road within reach, weighted by their length, so
+      // the long roads out of town fill up as readily as downtown does.
+      const cands = this._cands || (this._cands = []);
+      cands.length = 0;
+      let total = 0;
+      for (const r of this.roads) {
+        const across = r.axis === 'z' ? x - r.coord : z - r.coord;
+        if (Math.abs(across) > maxD) continue;
+        const at = r.axis === 'z' ? z : x;
+        const reach = Math.sqrt(maxD * maxD - across * across);
+        const a0 = Math.max(r.from + 20, at - reach);
+        const a1 = Math.min(r.to - 20, at + reach);
+        if (a1 <= a0) continue;
+        cands.push(r, a0, a1);
+        total += a1 - a0;
+      }
+      if (!total) return null;
       for (let tries = 0; tries < 30; tries++) {
-        const r = this.roads[Math.floor(rng() * this.roads.length)];
+        let pickAt = rng() * total;
+        let k = 0;
+        while (k < cands.length - 3 && pickAt > cands[k + 2] - cands[k + 1]) {
+          pickAt -= cands[k + 2] - cands[k + 1];
+          k += 3;
+        }
+        const r = cands[k];
         const dir = rng() < 0.5 ? 1 : -1;
         const lane = Math.floor(rng() * r.lanesPerDirection);
-        const along = r.from + 20 + rng() * (r.to - r.from - 40);
+        const along = cands[k + 1] + Math.min(pickAt, cands[k + 2] - cands[k + 1]);
         const p = this.lanePoint(r, dir, lane, along);
         const d = Math.hypot(p.x - x, p.z - z);
         if (d < minD || d > maxD) continue;

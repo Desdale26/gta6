@@ -112,7 +112,16 @@
         const last = this.pieces[this.pieces.length - 1];
         if (last.type === 'line' && !last.junction) {
           const j = last.endJunction;
-          if (!j) return; // end of the road
+          if (!j) {
+            // The end of a road out of town: turn round, or wait to (see update).
+            const end = last.dir > 0 ? last.road.endTo : last.road.endFrom;
+            if (end === 'uturn') {
+              this._uturn(last);
+              continue;
+            }
+            if (end === 'flip') last.flipEnd = true;
+            return;
+          }
           const exit = this._chooseExit(last.road, last.dir, j);
           if (!exit) return;
           const turn = this.net.turnPiece(last.road, last.dir, last.lane, j, exit);
@@ -131,6 +140,48 @@
           this.pieces.push(piece);
         }
       }
+    }
+
+    /**
+     * A U-turn at an open road end: two quarter curves out past the end and
+     * back into the inner lane the other way, then the run back to the next
+     * junction.
+     */
+    _uturn(last) {
+      const road = last.road;
+      const dir = last.dir;
+      const back = -dir;
+      const aE = dir > 0 ? road.to : road.from;
+      const T = this.net.lanePoint(road, back, 0, aE);
+      const fx = road.axis === 'z' ? 0 : dir;
+      const fz = road.axis === 'z' ? dir : 0;
+      const r = Math.max(3.5, Math.hypot(T.x - last.x1, T.z - last.z1) / 2);
+      const mx = (last.x1 + T.x) / 2 + fx * r;
+      const mz = (last.z1 + T.z) / 2 + fz * r;
+      const curve = (x0, z0, cx, cz, x1, z1) => {
+        const c = { type: 'curve', road, dir: back, lane: 0, fromRoad: road, x0, z0, cx, cz, x1, z1, junction: null, turn: 'uturn', nextLane: 0, limit: 4.2, uturn: true };
+        c.length = RoadNet().curveLength(c);
+        return c;
+      };
+      this.pieces.push(curve(last.x1, last.z1, last.x1 + fx * r, last.z1 + fz * r, mx, mz));
+      this.pieces.push(curve(mx, mz, T.x + fx * r, T.z + fz * r, T.x, T.z));
+      const j = this.net.nextJunction(road, back, aE + back * 0.5);
+      const end = j ? RoadNet().edges(road, back, j).enter : back > 0 ? road.to : road.from;
+      const run = this.net.linePiece(road, back, 0, aE, end);
+      run.endJunction = j;
+      this.pieces.push(run);
+    }
+
+    /** Turn round at a closed road end, out of sight: back into the other carriageway. */
+    _flip(v, p) {
+      const road = p.road;
+      const dir = -p.dir;
+      const along = p.dir > 0 ? road.to - 8 : road.from + 8;
+      const q = this.net.lanePoint(road, dir, 0, along);
+      v.place(q.x, q.z, q.heading);
+      v.setSpeed(2);
+      this.atEnd = false;
+      this.initAt({ road, dir, lane: 0, along });
     }
 
     /** Point `dist` metres ahead of the current progress along the queue. */
@@ -183,6 +234,11 @@
       }
       this._fill();
       if (this.t > 0.985 && this.pieces.length === 1) {
+        // Barriers ahead: turn round once nobody's watching.
+        if (this.pieces[0].flipEnd && this.sys.game && !this.sys.game.isVisible(v.pos.x, 1, v.pos.z, 5)) {
+          this._flip(v, this.pieces[0]);
+          return;
+        }
         // The end of the line (a road out of town): stop.
         v.input.accel = v.speed > 0.5 ? -1 : 0;
         v.input.steer = 0;
@@ -538,8 +594,8 @@
       let spawned = 0;
       while (count < want && spawned < 3) {
         const lp = this.net.randomLanePoint(this._rng, focus.x, focus.z, 70, 200);
-        if (!lp) break;
         spawned++;
+        if (!lp) continue;
         if (this.game.isVisible(lp.x, 1, lp.z, 4) && Math.hypot(lp.x - focus.x, lp.z - focus.z) < 150) continue;
         let clear = true;
         for (const v of list) {
