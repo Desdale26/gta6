@@ -148,12 +148,32 @@ look up) once you're fast enough. Land gently on something flat.
 
 **In a shop:** **E** at the counter buys snacks; aim a gun at the clerk to hold the place up.
 
-**The map (M).** It opens on the whole world: the city, Northgate Heights,
-the airport and Fort Breakwater. The buttons along the top jump to each
-big place (or the nearest shop) and set your GPS there; **click** anywhere
-to set a waypoint, **right-click** (or Clear GPS) to remove it. The route
-shows on the radar, and goes in by the gate at the airport and the base.
-The mouse is free while the map is open; **M** or **Esc** closes it.
+**The map (M).** A full-screen road atlas; the game pauses while it is open.
+It opens on Jay at street level. **Drag** to move (flick it and it glides),
+the **wheel** (or **Q / E**) zooms, **WASD** or the arrows pan, **C** finds
+Jay, **G** shows the GPS waypoint, **Z** shows the whole map.
+
+- **Click** anything (a shop, a plane, a landmark) or anywhere to set the
+  GPS there. An info card says what it is, how far it is by road, how long
+  the drive or the walk takes, and what to do there. Click the waypoint (or
+  **Backspace**) to clear it.
+- **Right-click** (or **P**) drops a coloured pin flag; right-click it again
+  to remove it. Pins stay in this browser and show on the radar too.
+- **The side panel** (**Tab** hides it): where you are, a search box (**/**:
+  places, shops, streets, districts), filters with counts (**1-7**: story,
+  side jobs, shops, vehicles, places, police, pins), overlays (**O**
+  district colours, **N** street names, **R** an atlas grid with squares
+  like C4), every place nearest first with a GPS button, and a map key.
+- Icons that crowd together merge into one with a count: click it to zoom
+  in. Names only show where they fit and when you are close enough.
+- The bar at the top shows the GPS target, the distance by road and the
+  drive time; the overview in the corner shows the whole map (click it to
+  look somewhere else); an off-screen objective gets an arrow at the edge.
+- **On a controller:** the left stick moves the map under a reticle, the
+  triggers or right stick zoom, **A** sets the GPS, **X** clears it, **Y**
+  finds Jay, **LB / RB** step through the places, **B** closes.
+
+**M** or **Esc** closes it.
 
 **Anywhere:** **M** opens the city map (jobs, places, the GPS route),
 **Space** or **Enter** skips a line in a cutscene, **1 / 2 / 3** answer a
@@ -418,7 +438,7 @@ vicehaven/
 │   ├── data/               districts, challenges, weapons, the story (story.js = cast, places,
 │   │                       factions; story-act1…4*.js = the jobs, by act; story-extras.js = fares, races,
 │   │                       bounties, turf wars, texts, radio hosts)
-│   ├── minimap.js · hud.js · ui.js · debug.js · main.js
+│   ├── minimap.js (radar) · mapview.js (full map) · hud.js · ui.js · debug.js · main.js
 ├── docs/STORY_BIBLE.md     the whole story: characters, timeline, every job, choices, endings
 ├── docs/mission-format.md  the data format the story is written in
 ├── dist/vicehaven.html     the single-file build (generated; don't edit it)
@@ -482,7 +502,9 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Fort Breakwater: walk in, get the warning, stay and the alarm goes; steal the tank (five stars), drive it, fire the main gun
 - [ ] Walk into a corner shop, buy snacks at the counter (+health), then aim a gun at the clerk: the meter fills and pays out, two stars follow
 - [ ] Wait a few minutes away from jobs and heat: a car chased by a police cruiser comes past
-- [ ] Press M: the map shows the whole world; click Airport, close the map and follow the GPS route there
+- [ ] Press M: the map fills the screen and opens on Jay; the game pauses
+- [ ] On the map: click a shop (info card, GPS bar, route), search "air" and press Enter, right-click to drop a pin, Tab hides the panel, Z shows the whole map
+- [ ] Zoomed out, crowded icons show a count; click one and the map zooms in on them
 - [ ] Drive up Grand Avenue North and along Meridian West: buildings, people and traffic all the way, green signs pointing the way
 - [ ] In a cab out by the airport, press P: a fare is waiting nearby and may want the terminal, the fort gate or Northgate
 - [ ] Settings → Gameplay → Always daytime: night turns to midday at once and stays that way

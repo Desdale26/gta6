@@ -275,7 +275,22 @@
         this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
         this.systems.push(sys);
       }
-      if (VH.Minimap) this.minimap = new VH.Minimap(this.layout, this.hud.root, { closeKey: this.input.labelFor('map') });
+      if (VH.Minimap) {
+        this.minimap = new VH.Minimap(this.layout, this.hud.root, {
+          closeKey: this.input.labelFor('map'),
+          device: () => this.input.lastDevice,
+          routeTo: (fx, fz, tx, tz) => this._gpsRoute(fx, fz, tx, tz),
+          // Places worth finding that aren't on the map otherwise.
+          places: () => {
+            const out = [];
+            for (const [id, kind] of [['mercy_general', 'Hospital'], ['vpd_central', 'Police station']]) {
+              const p = this.places && this.places.get(id);
+              if (p) out.push({ name: p.name, x: p.x, z: p.z, kind });
+            }
+            return out;
+          },
+        });
+      }
       if (VH.Radio) this.radio = new VH.Radio(this.audio);
       if (this.radio) this.radio.onSongChange = (e) => {
         if (!this.player.inVehicle) return;
@@ -339,9 +354,7 @@
       });
       VH.events.on('ui:click', () => audio.click());
       VH.events.on('map:waypoint', (wp) => this.setWaypoint(wp));
-      window.addEventListener('blur', () => {
-        if (this.state === 'playing' && this.minimap && this.minimap.isFullOpen && !this.debug.inputEl.matches(':focus')) this.pause();
-      });
+      VH.events.on('map:close', () => this.closeMap());
       VH.events.on('input:lockchange', (e) => {
         // The map keeps the mouse free, even if a lock asked for earlier arrives after it opened.
         if (e.locked && this.minimap && this.minimap.isFullOpen) {
@@ -654,6 +667,7 @@
     pause() {
       if (this.state !== 'playing' && this.state !== 'dialog') return;
       if (this.ui.dialogOpen) this.ui.closeDialog();
+      if (this.minimap) this.minimap.closeFull();
       this.state = 'paused';
       this.audio.setPaused(true);
       this._statePausedAt = performance.now();
@@ -880,6 +894,10 @@
         }
         case 'playing':
         case 'dialog': {
+          if (this.minimap && this.minimap.isFullOpen) {
+            this._mapFrame(dt);
+            break;
+          }
           this._tickPlayTime(dt);
           this._tickExtras(dt);
           if (this.state === 'playing') {
@@ -1042,6 +1060,7 @@
       if (this.club && !(this.missions && this.missions.run)) this.club.blips(out);
       for (const s of this.systems || []) if (s.blips) s.blips(out, !!(this.missions && this.missions.run));
       if (this.waypoint) out.push({ x: this.waypoint.x, z: this.waypoint.z, type: 'waypoint', label: this.waypoint.name });
+      if (this.minimap) this.minimap.pinBlips(out);
       return out;
     },
 
@@ -1064,12 +1083,15 @@
       };
     },
 
-    /** The full map frees the mouse so it can be dragged, zoomed and clicked. */
+    /** The full map pauses the game and frees the mouse so the map can be dragged, zoomed and clicked. */
     openMap() {
       if (!this.minimap || this.minimap.isFullOpen) return;
       if (document.body.classList.contains('cutscene') || this.player.frozen) return; // not during a scene
+      this.minimap.updateFull(this._mapState(), 0);
       this.minimap.openFull();
       this.input.exitLock();
+      this.input.releaseAll();
+      this.audio.setPaused(true);
       this._sawMap = true;
       try {
         localStorage.setItem(SEEN_KEY, '1');
@@ -1081,12 +1103,30 @@
     closeMap() {
       if (!this.minimap || !this.minimap.isFullOpen) return;
       this.minimap.closeFull();
+      // Keys pressed on the map (Space, E, Q...) mean nothing to the game.
+      this.input.clearPresses();
+      this.input.releaseAll();
+      this.input.takeMouseDelta();
+      this._acc = 0;
+      if (this.state === 'playing' || this.state === 'dialog') this.audio.setPaused(false);
       if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked && !(this.dialogue && this.dialogue._choice)) this.input.requestLock();
     },
 
     toggleMap() {
       if (this.minimap && this.minimap.isFullOpen) this.closeMap();
       else this.openMap();
+    },
+
+    /** A frame with the full map open: the game holds still; the map gets the keys, the mouse and the pad. */
+    _mapFrame(dt) {
+      const input = this.input;
+      input.takeMouseDelta();
+      input.takeWheel();
+      if (input.consume('map') || document.body.classList.contains('cutscene') || this.player.frozen) {
+        this.closeMap();
+        return;
+      }
+      this.minimap.updateFull(this._mapState(), dt, input.pad);
     },
 
     /** Per-frame odds and ends while playing: the GPS, and the update tip. */
@@ -1125,8 +1165,9 @@
         return;
       }
       this.waypoint = { x: wp.x, z: wp.z, name: wp.name || 'Waypoint' };
-      this._wpRoute = null;
-      this._wpT = 0;
+      // Route it now: the game (and so the per-second refresh) is paused while the map is open.
+      this._wpRoute = this._gpsRoute(this.player.pos.x, this.player.pos.z, wp.x, wp.z);
+      this._wpT = 1;
       this.hud.showToast('GPS set: ' + this.waypoint.name);
       if (this.audio && this.audio.click) this.audio.click();
     },

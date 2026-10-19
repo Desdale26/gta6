@@ -1672,8 +1672,8 @@ body.driving .hud-banner {
   100% { opacity: 0; }
 }
 
-/* Toasts and notices stay readable over the full map (GPS set, arrived...). */
+/* The full map has its own feedback; the game's notices wait behind it. */
 body.map-open .hud-toast,
 body.map-open .hud-notify-stack {
-  z-index: 31;
+  visibility: hidden;
 }

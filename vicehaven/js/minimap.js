@@ -110,8 +110,8 @@
     ['airport', 'Airport'],
     ['fort', 'Army base'],
     ['skyline', 'Skyscrapers'],
+    ['pin', 'Your pin'],
   ];
-  const ALWAYS_ON = { player: true, route: true, landmark: true, airport: true, fort: true, skyline: true };
 
   const NO_DASH = [];
   const DASH_SEARCH = [6, 5];
@@ -472,6 +472,27 @@
       g.arc(0, -3, 2.3, 0, TAU);
       g.fillStyle = '#ffffff';
       g.fill();
+    },
+    // A pin the player drops on the full map: a little flag.
+    pin(g) {
+      glow(g, 11, '63,216,255', 0.35);
+      g.beginPath();
+      g.moveTo(-3, 8.5);
+      g.lineTo(-3, -8);
+      g.lineCap = 'round';
+      g.lineWidth = 3.6;
+      g.strokeStyle = INK;
+      g.stroke();
+      g.lineWidth = 1.5;
+      g.strokeStyle = '#ffffff';
+      g.stroke();
+      g.lineCap = 'butt';
+      g.beginPath();
+      g.moveTo(-3, -8);
+      g.lineTo(7.5, -4.4);
+      g.lineTo(-3, -0.6);
+      g.closePath();
+      inkThenFill(g, '#3fd8ff', 2.6);
     },
     // Badges for the big places outside the grid.
     airport(g) {
@@ -1289,21 +1310,14 @@
       this._by = null;
       this._bc = null;
       this._textW = new Map();
-      this._boxes = [];
-      this._staticBoxes = 0;
-      this._legendMask = -1;
-      this._whereText = null;
-      this._lastFullDraw = 0;
-      this._raf = 0;
 
       this._buildRadarDom();
-      this._buildFullDom();
+      this.view = VH.MapView ? new VH.MapView(this, this.opts) : null; // the full-screen map (js/mapview.js)
       this.setLayout(layout);
 
       this._onResize = () => {
         this._radarDirty = true;
-        this._fullDirty = true;
-        if (this._fullOpen) this._requestFullDraw();
+        if (this.view) this.view.onResize();
       };
       window.addEventListener('resize', this._onResize);
       if (window.ResizeObserver) {
@@ -1338,12 +1352,7 @@
       noiseScale = mpp * 1.25;
       const l0 = renderBase(layout, mpp);
       this._base = [l0, downsample(l0)];
-      this._planLabels();
-      this._staticDirty = true;
-    }
-
-    get isFullOpen() {
-      return this._fullOpen;
+      if (this.view) this.view.setLayout(layout);
     }
 
     setVisible(v) {
@@ -1835,1066 +1844,61 @@
     }
 
     // --------------------------------------------------------- full map
-    _buildFullDom() {
-      const el = (tag, cls, text) => {
-        const node = document.createElement(tag);
-        if (cls) node.className = cls;
-        if (text !== undefined) node.textContent = text;
-        return node;
-      };
-      const o = el('div', 'vh-map');
-      o.setAttribute('aria-hidden', 'true');
-      const canvas = el('canvas', 'vh-map-canvas');
+    // The full-screen map lives in js/mapview.js; these keep the old API.
+    get isFullOpen() {
+      return !!(this.view && this.view.open);
+    }
 
-      const head = el('div', 'vh-map-head');
-      this._whereEl = el('div', 'vh-map-where');
-      head.append(el('div', 'vh-map-kicker', 'Vicehaven'), el('div', 'vh-map-title', 'Map'), this._whereEl);
+    openFull() {
+      if (this.view) this.view.openFull();
+    }
 
-      const compass = el('div', 'vh-map-compass');
-      compass.append(el('span', 'vh-map-compass-needle'), el('span', 'vh-map-compass-n', 'N'));
+    closeFull() {
+      if (this.view) this.view.closeFull();
+      this._acc = 1;
+    }
 
-      const legend = el('div', 'vh-map-legend');
-      legend.append(el('div', 'vh-map-legend-title', 'Legend'));
-      const list = el('ul', 'vh-map-legend-list');
-      this._legendItems = [];
-      for (const [key, label] of LEGEND) {
-        const li = el('li', 'vh-map-legend-item');
-        const icon = el('canvas', 'vh-map-legend-icon');
-        li.append(icon, el('span', 'vh-map-legend-label', label));
-        list.append(li);
-        this._legendItems.push({ key, li, canvas: icon });
-      }
-      legend.append(list);
+    toggleFull() {
+      if (this.isFullOpen) this.closeFull();
+      else this.openFull();
+    }
 
-      const zoom = el('div', 'vh-map-zoom');
-      const btn = (text, title, fn) => {
-        const b = el('button', 'vh-map-btn', text);
-        b.type = 'button';
-        b.tabIndex = -1;
-        b.title = title;
-        b.addEventListener('mousedown', (ev) => ev.preventDefault());
-        b.addEventListener('click', (ev) => {
-          ev.preventDefault();
-          fn();
-        });
-        return b;
-      };
-      zoom.append(
-        btn('+', 'Zoom in', () => this.zoomFull(1)),
-        btn('−', 'Zoom out', () => this.zoomFull(-1)),
-        btn('◎', 'Centre on me', () => this.focusPlayer())
-      );
-
-      // Quick views and the big places: a click shows the place and sets the GPS there.
-      const places = el('div', 'vh-map-places');
-      const chip = (text, title, fn, cls) => {
-        const b = btn(text, title, fn);
-        b.className = 'vh-map-chip' + (cls ? ' ' + cls : '');
-        return b;
-      };
-      this._modeChips = {
-        world: chip('Whole map', 'Show the whole map', () => this.setMode('world'), 'is-view'),
-        city: chip('City', 'Show the city', () => this.setMode('city'), 'is-view'),
-      };
-      places.append(this._modeChips.world, this._modeChips.city);
-      for (const lm of VH.Data.landmarks || []) {
-        if (!lm.major) continue;
-        places.append(chip(lm.short || lm.name, 'Show ' + lm.name + ' and set the GPS there', () => this.goTo(lm), 'is-place is-' + lm.kind));
-      }
-      places.append(chip('Nearest shop', 'Set the GPS to the nearest corner shop', () => this.goToNearestShop(), 'is-place is-store'));
-      this._clearChip = chip('Clear GPS', 'Remove your waypoint', () => this._emitWaypoint(null), 'is-clear');
-      places.append(this._clearChip);
-
-      const scale = el('div', 'vh-map-scale');
-      this._scaleBar = el('div', 'vh-map-scale-bar');
-      this._scaleLabel = el('div', 'vh-map-scale-label');
-      scale.append(this._scaleBar, this._scaleLabel);
-
-      const foot = el('div', 'vh-map-foot');
-      const hint = (key, text) => {
-        const s = el('span', 'vh-map-hint');
-        s.append(el('kbd', '', key), document.createTextNode(' ' + text));
-        return s;
-      };
-      this._closeHint = hint(this.opts.closeKey, 'Close');
-      foot.append(this._closeHint, hint('Wheel', 'Zoom'), hint('Drag', 'Pan'), hint('Click', 'Set GPS'), hint('Right-click', 'Clear GPS'));
-
-      o.append(canvas, head, places, compass, legend, zoom, scale, foot);
-      this._placesEl = places;
-      // Panels a click must not fall through (they ignore the mouse so drags pass under them).
-      this._panelEls = [head, places, compass, legend, zoom, scale];
-      this._hintEls = [...foot.children];
-      this.root.append(o);
-      this.fullEl = o;
-      this._legendEl = legend;
-      this._fc = canvas;
-      this._fg = canvas.getContext('2d');
-      this._fs = makeCanvas(1, 1);
-      this._fsg = this._fs.getContext('2d');
-      this._fullDirty = true;
-
-      // Wheel zooms the map, not the game camera behind it.
-      o.addEventListener('wheel', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        let dy = ev.deltaY;
-        if (ev.deltaMode === 1) dy *= 33;
-        else if (ev.deltaMode === 2) dy *= 400;
-        this._zoomAt(ev.clientX, ev.clientY, Math.exp(-clamp(dy, -300, 300) * 0.0018));
-      }, { passive: false });
-      o.addEventListener('pointerdown', (ev) => {
-        if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button, .vh-map-places, .vh-map-zoom'))) return;
-        ev.preventDefault();
-        this._drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0, t: performance.now() };
-        try {
-          o.setPointerCapture(ev.pointerId);
-        } catch (err) {
-          // Not fatal: dragging still works while the pointer stays over the map.
-        }
-        o.classList.add('is-dragging');
-      });
-      o.addEventListener('pointermove', (ev) => {
-        const dr = this._drag;
-        if (!dr || ev.pointerId !== dr.id) return;
-        const dx = ev.clientX - dr.x;
-        const dy = ev.clientY - dr.y;
-        dr.x = ev.clientX;
-        dr.y = ev.clientY;
-        dr.moved += Math.abs(dx) + Math.abs(dy);
-        this.panFull(dx, dy);
-      });
-      const end = (ev, click) => {
-        const dr = this._drag;
-        if (dr && ev.pointerId === dr.id) {
-          this._drag = null;
-          o.classList.remove('is-dragging');
-          // A press that hardly moved is a click: put the GPS waypoint there.
-          // The second half of a double-click is part of the first, not a new click.
-          if (click && dr.moved < 6 && performance.now() - dr.t < 600) {
-            const now = performance.now();
-            const lc = this._lastClick;
-            if (lc && now - lc.t < 400 && Math.hypot(ev.clientX - lc.x, ev.clientY - lc.y) < 10) this._lastClick = null;
-            else {
-              this._lastClick = { t: now, x: ev.clientX, y: ev.clientY };
-              this._clickAt(ev.clientX, ev.clientY);
-            }
-          }
-        }
-      };
-      o.addEventListener('pointerup', (ev) => end(ev, true));
-      o.addEventListener('pointercancel', (ev) => end(ev, false));
-      // Keep keyboard focus where the game left it (the M key must still reach the game).
-      o.addEventListener('mousedown', (ev) => ev.preventDefault());
-      o.addEventListener('dblclick', (ev) => ev.preventDefault());
-      o.addEventListener('contextmenu', (ev) => {
-        ev.preventDefault();
-        if (this._fullOpen) this._emitWaypoint(null);
-      });
+    /** Per frame while the full map is open (pad: the game's gamepad state, for map controls). */
+    updateFull(state, dt, pad) {
+      if (state) this._state = state;
+      if (this.view) this.view.frame(state, dt, pad);
     }
 
     /** Relabel the close hint if the player rebinds the map key. */
     setCloseKey(label) {
       this.opts.closeKey = label;
-      const kbd = this._closeHint.querySelector('kbd');
-      if (kbd) kbd.textContent = label;
+      if (this.view) this.view.setCloseKey(label);
     }
 
-    openFull() {
-      if (this._fullOpen) return;
-      this._fullOpen = true;
-      clearTimeout(this._freeTimer);
-      this.fullEl.classList.add('is-open');
-      this.fullEl.setAttribute('aria-hidden', 'false');
-      document.body.classList.add('map-open');
-      this._legendW = this._legendEl.offsetWidth || 200;
-      this._legendH = this._legendEl.offsetHeight || 380;
-      if (this._clearChip) {
-        this._clearOn = !!(this._state && this._state.waypoint);
-        this._clearChip.classList.toggle('is-off', !this._clearOn);
-      }
-      this._measurePanels();
-      this._resizeFull();
-      this._fitView();
-      this._drawLegendIcons();
-      this._legendMask = -1;
-      this._lastFullDraw = 0;
-      this._drawFull();
-    }
-
-    closeFull() {
-      if (!this._fullOpen) return;
-      this._fullOpen = false;
-      this._drag = null;
-      this.fullEl.classList.remove('is-open', 'is-dragging');
-      this.fullEl.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('map-open');
-      this._acc = 1;
-      // Give the big canvases' memory back once the fade-out is over.
-      clearTimeout(this._freeTimer);
-      this._freeTimer = setTimeout(() => {
-        if (this._fullOpen) return;
-        this._fc.width = this._fc.height = 1;
-        this._fs.width = this._fs.height = 1;
-        this._fullDirty = true;
-      }, 600);
-    }
-
-    toggleFull() {
-      if (this._fullOpen) this.closeFull();
-      else this.openFull();
-    }
-
-    updateFull(state) {
-      if (state) this._state = state;
-      if (this._fullOpen) this._drawFull();
-    }
-
-    /** Pan by screen pixels (drag, or a stick / locked mouse via the game). */
-    panFull(dx, dy) {
-      const v = this._view;
-      if (!v) return;
-      v.cx -= dx / v.s;
-      v.cz -= dy / v.s;
-      this._clampView();
-      this._staticDirty = true;
-      this._requestFullDraw();
-    }
-
-    /** Zoom by wheel-like steps (+ in, - out) around the screen centre or a point. */
-    zoomFull(steps, sx, sy) {
-      if (!this._view) return;
-      const x = typeof sx === 'number' ? sx : this._view.ox;
-      const y = typeof sy === 'number' ? sy : this._view.oy;
-      this._zoomAt(x, y, Math.pow(1.35, steps));
-    }
-
-    focusPlayer() {
-      const st = this._state;
-      const v = this._view;
-      if (!st || !v) return;
-      v.s = Math.max(v.s, this._fitS * 2.6);
-      v.cx = st.x || 0;
-      v.cz = st.z || 0;
-      this._clampView();
-      this._staticDirty = true;
-      this._requestFullDraw();
-    }
-
-    /** Where the places bar and the legend sit (CSS px), for padding and label claims. */
-    _measurePanels() {
-      const p = this._placesEl;
-      this._placesBox = p && p.offsetWidth ? [p.offsetLeft, p.offsetTop, p.offsetLeft + p.offsetWidth, p.offsetTop + p.offsetHeight] : null;
-      // The legend moves with CSS transforms (centred, sliding in), so take its painted box.
-      const r = this._legendEl.getBoundingClientRect();
-      this._legendBox = r.width ? [r.left - 10, r.top, r.right, r.bottom] : null;
-    }
-
-    /** Centre the full map on a world point at a scale (px per metre). */
-    jumpTo(x, z, s) {
-      const v = this._view;
-      if (!v) return;
-      v.s = clamp(s || v.s, this._minS, this._maxS);
-      v.cx = x;
-      v.cz = z;
-      this._clampView();
-      this._staticDirty = true;
-      this._requestFullDraw();
-    }
-
-    /** 'world' (everything, the default) or 'city'; remembered while the game runs. */
-    setMode(mode) {
-      this._mode = mode;
-      if (this._fullOpen) {
-        this._fitView();
-        this._requestFullDraw();
-      }
-    }
-
-    /** Show one of the big places and put the GPS waypoint at its road entrance. */
-    goTo(lm) {
-      this.jumpTo(lm.x, lm.z, this._fitS * 1.7);
-      this._emitWaypoint({ x: typeof lm.gx === 'number' ? lm.gx : lm.x, z: typeof lm.gz === 'number' ? lm.gz : lm.z, name: lm.name });
-    }
-
-    goToNearestShop() {
-      const st = this._state || {};
-      // Shops that are open show a blip; a shut one (clerk gone) isn't worth the trip.
-      const open = new Set((st.blips || []).filter((bl) => bl.type === 'store').map((bl) => Math.round(bl.x) + ',' + Math.round(bl.z)));
-      const pool = (this.layout.stores || []).filter((s) => !open.size || open.has(Math.round(s.door.x) + ',' + Math.round(s.door.z)));
-      let best = null;
-      let bestD = Infinity;
-      for (const s of pool) {
-        const d = Math.hypot(s.door.x - (st.x || 0), s.door.z - (st.z || 0));
-        if (d < bestD) {
-          bestD = d;
-          best = s;
-        }
-      }
-      if (!best) return;
-      this.jumpTo(best.door.x, best.door.z, Math.max(this._view.s, this._fitS * 1.8));
-      this._emitWaypoint({ x: best.door.x, z: best.door.z, name: best.name });
-    }
-
-    _emitWaypoint(wp) {
-      VH.events.emit('map:waypoint', wp);
-    }
-
-    /** A click on the map: on the waypoint clears it; on a place or blip names it; anywhere else marks the spot. */
-    _clickAt(sx, sy) {
-      const v = this._view;
-      if (!v || !this._fullOpen) return;
-      // Not through the panels that let drags pass (legend, header, hint pills...).
-      const over = (e) => {
-        const r = e.getBoundingClientRect();
-        return r.width > 0 && sx >= r.left && sx <= r.right && sy >= r.top && sy <= r.bottom;
-      };
-      if ((this._panelEls || []).some(over) || (this._hintEls || []).some(over)) return;
-      const st = this._state || {};
-      const toS = (x, z) => [v.ox + (x - v.cx) * v.s, v.oy + (z - v.cz) * v.s];
-      const dist = (x, z) => {
-        const [X, Y] = toS(x, z);
-        return Math.hypot(X - sx, Y - sy);
-      };
-      const wp = st.waypoint;
-      if (wp && dist(wp.x, wp.z) < 16) return this._emitWaypoint(null);
-      // A blip under the cursor (a shop, a plane, a tank) beats the badge of the place it's in.
-      let best = null;
-      let bestD = 16;
-      for (const bl of st.blips || []) {
-        if (!bl.label || bl.type === 'waypoint') continue;
-        const d = dist(bl.x, bl.z);
-        if (d < bestD) {
-          bestD = d;
-          best = bl;
-        }
-      }
-      for (const lm of VH.Data.landmarks || []) {
-        if (lm.major && dist(lm.x, lm.z) < Math.min(24, best ? bestD : 24)) return this.goTo(lm);
-      }
-      if (best) return this._emitWaypoint({ x: best.x, z: best.z, name: best.label });
-      // Anywhere else: only inside the world (the walls stand on its edges), pulled in a little.
-      const b = this.layout.config.bounds;
-      const pier = this.layout.waterfront && this.layout.waterfront.pier;
-      let x = v.cx + (sx - v.ox) / v.s;
-      let z = v.cz + (sy - v.oy) / v.s;
-      const onPier = pier && x >= b.maxX && x <= pier.x1 && z >= pier.z0 && z <= pier.z1;
-      if (!onPier && (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ)) return;
-      if (!onPier) {
-        const seawall = this.layout.config.seawallX || b.maxX;
-        x = clamp(x, b.minX + 4, Math.min(b.maxX, seawall) - 2);
-        z = clamp(z, b.minZ + 4, b.maxZ - 4);
-      }
-      this._emitWaypoint({ x, z, name: 'Waypoint' });
-    }
-
-    _zoomAt(sx, sy, factor) {
-      const v = this._view;
-      if (!v) return;
-      const s2 = clamp(v.s * factor, this._minS, this._maxS);
-      const wx = v.cx + (sx - v.ox) / v.s;
-      const wz = v.cz + (sy - v.oy) / v.s;
-      v.cx = wx - (sx - v.ox) / s2;
-      v.cz = wz - (sy - v.oy) / s2;
-      v.s = s2;
-      this._clampView();
-      this._staticDirty = true;
-      this._requestFullDraw();
-    }
-
-    _clampView() {
-      const L = this._ext.land;
-      const v = this._view;
-      v.cx = clamp(v.cx, L.minX, L.maxX);
-      v.cz = clamp(v.cz, L.minZ, L.maxZ);
-    }
-
-    _requestFullDraw() {
-      if (this._raf || !this._fullOpen) return;
-      this._raf = requestAnimationFrame(() => {
-        this._raf = 0;
-        this._lastFullDraw = 0;
-        if (this._fullOpen) this._drawFull();
-      });
-    }
-
-    _resizeFull() {
-      const W = this.fullEl.clientWidth || window.innerWidth;
-      const H = this.fullEl.clientHeight || window.innerHeight;
-      // Cap the backing store at about 4K worth of pixels.
-      let d = clamp(window.devicePixelRatio || 1, 1, 2);
-      if (W * H * d * d > 8.3e6) d = Math.sqrt(8.3e6 / (W * H));
-      const changed = W !== this._fw || H !== this._fh || d !== this._fd || this._fc.width <= 1;
-      this._fw = W;
-      this._fh = H;
-      this._fd = d;
-      this._fullDirty = false;
-      if (!changed) return false;
-      this._fc.width = this._fs.width = Math.round(W * d);
-      this._fc.height = this._fs.height = Math.round(H * d);
-      this._fspr = buildSprites(d);
-      this._staticDirty = true;
-      return true;
-    }
-
-    _fitView() {
-      const W = this._fw;
-      const H = this._fh;
-      const F = this._ext.fit;
-      const Wd = this._ext.world;
-      const L = this._ext.land;
-      const narrow = W < 900;
-      const top = this._placesBox ? Math.max(100, this._placesBox[3] + 14) : 100; // below the places bar
-      const pad = { l: 32, r: narrow ? 32 : this._legendW + 64, t: top, b: 76 };
-      const aw = Math.max(160, W - pad.l - pad.r);
-      const ah = Math.max(160, H - pad.t - pad.b);
-      // The city scale stays the yardstick (label sizes, zoom limits); the whole map is the default view.
-      const s = Math.min(aw / (F.maxX - F.minX), ah / (F.maxZ - F.minZ));
-      const sW = Math.min(aw / (Wd.maxX - Wd.minX), ah / (Wd.maxZ - Wd.minZ));
-      this._pad = pad;
-      this._fitS = s;
-      // Zoom out far enough to see the whole playable area, in to street level.
-      this._minS = Math.min(sW * 0.9, s * 0.85, Math.min(aw / (L.maxX - L.minX), ah / (L.maxZ - L.minZ)) * 0.95);
-      this._maxS = s * 8;
-      const mode = this._mode || 'world';
-      const B = mode === 'city' ? F : Wd;
-      this._view = { cx: (B.minX + B.maxX) / 2, cz: (B.minZ + B.maxZ) / 2, s: mode === 'city' ? s : sW, ox: pad.l + aw / 2, oy: pad.t + ah / 2 };
-      if (this._modeChips) {
-        this._modeChips.world.classList.toggle('is-active', mode !== 'city');
-        this._modeChips.city.classList.toggle('is-active', mode === 'city');
-      }
-      this._staticDirty = true;
-    }
-
-    _drawFull() {
-      if (!this._fullOpen) return;
-      const now = performance.now();
-      if (now - this._lastFullDraw < 4) return;
-      this._lastFullDraw = now;
-      if (this._fullDirty) {
-        const oldFit = this._fitS;
-        if (this._fullOpen) this._measurePanels();
-        if (this._resizeFull() && this._view) {
-          // Keep the player's zoom relative to the new fit.
-          const rel = this._view.s / oldFit;
-          const cx = this._view.cx;
-          const cz = this._view.cz;
-          this._fitView(); // same mode; then keep the zoom and centre the player had
-          this._view.s = clamp(this._fitS * rel, this._minS, this._maxS);
-          this._view.cx = cx;
-          this._view.cz = cz;
-        }
-      }
-      if (!this._view) this._fitView();
-      if (this._staticDirty) {
-        this._renderStatic();
-        this._updateScaleBar();
-        this._staticDirty = false;
-      }
-      const g = this._fg;
-      const d = this._fd;
-      const st = this._state || {};
-      const t = now / 1000;
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.clearRect(0, 0, this._fc.width, this._fc.height);
-      g.drawImage(this._fs, 0, 0);
-      g.setTransform(d, 0, 0, d, 0, 0);
-      const v = this._view;
-      const s = v.s;
-      const e = v.ox - v.cx * s;
-      const f = v.oy - v.cz * s;
-      const spr = this._fspr;
-
-      const sa = st.searchArea;
-      if (sa && sa.r > 0) this._drawSearch(g, s * sa.x + e, s * sa.z + f, sa.r * s, t);
-      if (st.route && st.route.length > 1) this._drawRoute(g, st.route, s, 0, 0, s, e, f, 1.2, t);
-
-      const blips = st.blips || [];
-      const n = blips.length;
-      this._ensureBlipCapacity(n);
-      const BX = this._bx;
-      const BY = this._by;
-      const BC = this._bc;
-      const W = this._fw;
-      const H = this._fh;
-      const pad = this._pad;
-      const bs = 1.15;
-      const PX = s * (st.x || 0) + e;
-      const PY = s * (st.z || 0) + f;
-      for (let p = 0; p <= MAX_PRIORITY; p++) {
-        for (let i = 0; i < n; i++) {
-          const bl = blips[i];
-          if ((PRIORITY[bl.type] || 0) !== p) continue;
-          let X = s * bl.x + e;
-          let Y = s * bl.z + f;
-          BC[i] = 0;
-          if (X < -20 || X > W + 20 || Y < -20 || Y > H + 20) BC[i] = 2; // off screen
-          const key = bl.type === 'objective' || bl.type === 'mission';
-          if (key && (X < pad.l || X > W - pad.r || Y < pad.t || Y > H - pad.b)) {
-            // Objectives stay in view, pinned to the edge of the map area.
-            X = clamp(X, pad.l + 10, W - pad.r - 10);
-            Y = clamp(Y, pad.t + 10, H - pad.b - 24);
-            BC[i] = 1;
-          }
-          BX[i] = X;
-          BY[i] = Y;
-          if (BC[i] === 2) continue;
-          this._drawBlip(g, d, spr, bl, X, Y, bs, i, Math.PI, s, BC[i] === 1);
-          if (BC[i] === 1) {
-            const ang = Math.atan2(s * bl.z + f - Y, s * bl.x + e - X);
-            this._drawChevron(g, X + Math.cos(ang) * 14, Y + Math.sin(ang) * 14, ang);
-            const dist = formatDistance(Math.hypot(bl.x - (st.x || 0), bl.z - (st.z || 0)));
-            this._drawPill(g, dist, X - Math.cos(ang) * 24, Y - Math.sin(ang) * 19);
-          }
-        }
-      }
-      // Labels, most important first, only where they fit (static labels were claimed already).
-      const boxes = this._boxes;
-      boxes.length = this._staticBoxes;
-      this._claim(PX - 14, PY - 14, PX + 14, PY + 14);
-      g.font = '600 11px ' + FONT;
-      setSpacing(g, 0.6);
-      for (let p = MAX_PRIORITY; p >= 0; p--) {
-        for (let i = 0; i < n; i++) {
-          const bl = blips[i];
-          if (!bl.label || BC[i] || (PRIORITY[bl.type] || 0) !== p) continue;
-          const w = this._measure(g, bl.label);
-          const X = BX[i];
-          const Y = BY[i];
-          const right = !this._collides(X + 10, Y - 8, X + 14 + w, Y + 8);
-          const left = !right && !this._collides(X - 14 - w, Y - 8, X - 10, Y + 8);
-          if (!right && !left && bl.type !== 'objective') continue;
-          const lx = right || !left ? X + 12 : X - 12 - w;
-          this._blipLabel(g, bl.label, lx, Y);
-          this._claim(lx - 2, Y - 8, lx + w + 2, Y + 8);
-        }
-      }
-      setSpacing(g, 0);
-
-      // The player: a sunset ping and the arrow.
-      const ping = (t * 0.7) % 1;
-      g.lineWidth = 2;
-      g.strokeStyle = 'rgba(255, 110, 140, ' + (0.7 * (1 - ping)).toFixed(3) + ')';
-      g.beginPath();
-      g.arc(PX, PY, 7 + ping * 22, 0, TAU);
-      g.stroke();
-      const hd = typeof st.heading === 'number' ? st.heading : st.camYaw || 0;
-      this._drawRot(g, d, spr.player, PX, PY, Math.PI - hd, 1.25);
-
-      this._updateFullDom(st, blips);
-    }
-
-    _drawChevron(g, X, Y, ang) {
-      const d = this._fd;
-      const cs = Math.cos(ang) * d;
-      const sn = Math.sin(ang) * d;
-      g.setTransform(cs, sn, -sn, cs, X * d, Y * d);
-      g.beginPath();
-      g.moveTo(5, 0);
-      g.lineTo(-3, -4.6);
-      g.lineTo(-1.2, 0);
-      g.lineTo(-3, 4.6);
-      g.closePath();
-      g.lineJoin = 'round';
-      g.lineWidth = 2.6;
-      g.strokeStyle = INK;
-      g.stroke();
-      g.fillStyle = '#ff7a59';
-      g.fill();
-      g.setTransform(d, 0, 0, d, 0, 0);
-    }
-
-    _blipLabel(g, text, X, Y) {
-      g.textAlign = 'left';
-      g.textBaseline = 'middle';
-      g.lineJoin = 'round';
-      g.lineWidth = 3.5;
-      g.strokeStyle = 'rgba(6, 9, 20, 0.88)';
-      g.strokeText(text, X, Y);
-      g.fillStyle = '#ffffff';
-      g.fillText(text, X, Y);
-    }
-
-    _updateFullDom(st, blips) {
-      const lay = this.layout;
-      const dist = lay.districtAt ? lay.districtAt(st.x || 0, st.z || 0) : null;
-      const road = VH.CityGen && VH.CityGen.roadNameAt ? VH.CityGen.roadNameAt(lay, st.x || 0, st.z || 0) : null;
-      const where = [dist && dist.name, road].filter(Boolean).join('  ·  ');
-      if (where !== this._whereText) {
-        this._whereText = where;
-        this._whereEl.textContent = where;
-      }
-      let mask = 0;
-      for (const bl of blips) {
-        const i = LEGEND.findIndex((l) => l[0] === (bl.type === 'heli' ? 'plane' : bl.type));
-        if (i >= 0) mask |= 1 << i;
-      }
-      if (st.searchArea) mask |= 1 << 5;
-      const hasWp = !!st.waypoint;
-      if (hasWp !== this._clearOn && this._clearChip) {
-        this._clearOn = hasWp;
-        this._clearChip.classList.toggle('is-off', !hasWp);
-      }
-      if (mask !== this._legendMask) {
-        this._legendMask = mask;
-        this._legendItems.forEach((it, i) => it.li.classList.toggle('is-dim', !ALWAYS_ON[it.key] && !(mask & (1 << i))));
-      }
-    }
-
-    _updateScaleBar() {
-      const s = this._view.s;
-      const nice = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
-      let L = nice[0];
-      for (const n of nice) if (n * s <= 150) L = n;
-      this._scaleBar.style.width = Math.round(L * s) + 'px';
-      this._scaleLabel.textContent = L >= 1000 ? L / 1000 + ' km' : L + ' m';
-    }
-
-    _drawLegendIcons() {
-      const d = clamp(window.devicePixelRatio || 1, 1, 3);
-      const spr = buildSprites(d);
-      for (const it of this._legendItems) {
-        const W = 30;
-        const H = 22;
-        const c = it.canvas;
-        c.width = W * d;
-        c.height = H * d;
-        const g = c.getContext('2d');
-        g.setTransform(d, 0, 0, d, 0, 0);
-        g.clearRect(0, 0, W, H);
-        const put = (name, x, y, sc) => {
-          const S = spr[name].size * sc;
-          g.drawImage(spr[name].canvas, x - S / 2, y - S / 2, S, S);
-        };
-        if (it.key === 'police') {
-          put('police_r', 10, 11, 0.85);
-          put('police_b', 20, 11, 0.85);
-        } else if (it.key === 'route') {
-          g.beginPath();
-          g.moveTo(4, 16);
-          g.lineTo(13, 16);
-          g.lineTo(13, 7);
-          g.lineTo(26, 7);
-          this._strokeLegendRoute(g);
-        } else if (it.key === 'search') {
-          g.beginPath();
-          g.arc(15, 11, 8, 0, TAU);
-          const q = g.createLinearGradient(7, 0, 23, 0);
-          q.addColorStop(0, 'rgba(255, 45, 85, 0.35)');
-          q.addColorStop(1, 'rgba(47, 123, 255, 0.35)');
-          g.fillStyle = q;
-          g.fill();
-          g.setLineDash([3, 2.5]);
-          g.lineWidth = 1.3;
-          const q2 = g.createLinearGradient(7, 0, 23, 0);
-          q2.addColorStop(0, 'rgb(255, 45, 85)');
-          q2.addColorStop(1, 'rgb(47, 123, 255)');
-          g.strokeStyle = q2;
-          g.stroke();
-          g.setLineDash(NO_DASH);
-        } else {
-          put(it.key, 15, 11, it.key === 'player' ? 0.8 : 0.85);
-        }
-      }
-    }
-
-    _strokeLegendRoute(g) {
-      g.lineJoin = 'round';
-      g.lineCap = 'round';
-      g.strokeStyle = 'rgba(255, 79, 139, 0.3)';
-      g.lineWidth = 7;
-      g.stroke();
-      const q = g.createLinearGradient(4, 0, 26, 0);
-      q.addColorStop(0, '#ffb347');
-      q.addColorStop(1, '#ff4f8b');
-      g.strokeStyle = q;
-      g.lineWidth = 3;
-      g.stroke();
-    }
-
-    // ---------------------------------------------- full map: static layer
-    _planLabels() {
-      const lay = this.layout;
-      const districts = VH.Data.districts || [];
-      // Landmarks: blocks with a landmark, plus free-standing ones (the pier).
-      const marks = [];
-      for (const bl of lay.blocks) if (bl.landmark) marks.push({ name: bl.landmark.name, x: bl.cx, z: bl.cz });
-      const wfPier = lay.waterfront && lay.waterfront.pier;
-      for (const lm of VH.Data.landmarks || []) {
-        if (lm.block || typeof lm.x !== 'number') continue;
-        if (lm.kind === 'pier' && wfPier) marks.push({ name: lm.name, x: (wfPier.x0 + wfPier.x1) / 2, z: (wfPier.z0 + wfPier.z1) / 2 });
-        else if (lm.major) {
-          const did = lm.kind === 'skyline' ? 'northgate' : lm.kind;
-          const dist = districts.find((d) => d.id === did);
-          marks.push({ name: lm.name, x: lm.x, z: lm.z, kind: lm.kind, major: true, tagline: dist ? dist.tagline : '' });
-        } else marks.push({ name: lm.name, x: lm.x, z: lm.z });
-      }
-      this._marks = marks;
-
-      // Districts with blocks: candidate spots are their plain blocks, nearest the centroid first.
-      const plans = [];
-      for (const d of districts) {
-        const blocks = lay.blocks.filter((b) => b.district && b.district.id === d.id);
-        if (!blocks.length) continue;
-        let cx = 0;
-        let cz = 0;
-        for (const b of blocks) {
-          cx += b.cx;
-          cz += b.cz;
-        }
-        cx /= blocks.length;
-        cz /= blocks.length;
-        const cands = blocks
-          .filter((b) => !b.landmark)
-          .map((b) => ({ x: b.cx, z: b.cz, d: Math.hypot(b.cx - cx, b.cz - cz) }))
-          .sort((p, q) => p.d - q.d);
-        if (!cands.length) cands.push({ x: cx, z: cz, d: 0 });
-        plans.push({ district: d, cands });
-      }
-      this._districtPlans = plans;
-      // Keep open-land and bay names off the roads out of town and away from the pier.
-      const cfgL = lay.config;
-      const edgeX = cfgL.lines[cfgL.lines.length - 1] + 8;
-      const avoid = lay.segments
-        .filter((sg) => sg.minX < -edgeX || sg.maxX > edgeX || sg.minZ < -edgeX || sg.maxZ > edgeX)
-        .map((sg) => ({ minX: sg.minX, maxX: sg.maxX, minZ: sg.minZ, maxZ: sg.maxZ, pad: 20 }));
-      if (wfPier) avoid.push({ minX: wfPier.x0, maxX: Infinity, minZ: wfPier.z0, maxZ: wfPier.z1, pad: 70 });
-      const bb = cfgL.bounds;
-      const area = { minX: bb.minX, maxX: this._ext.land.maxX, minZ: bb.minZ, maxZ: bb.maxZ };
-      const badged = new Set(['northgate', 'airport', 'fort']); // these have a badge and a big name instead
-      this._openSpots = openDistrictSpots(lay, area, avoid).filter((sp) => !badged.has(sp.district && sp.district.id));
-
-      // Road label candidates: each road's stretches between junctions, in order.
-      this._roadSegs = lay.roads.map((r) => lay.segments.filter((s) => s.road === r).sort((p, q) => p.from - q.from));
-      const cfg = lay.config;
-      const lines = cfg.lines;
-      const east = lines[lines.length - 1] + cfg.avenueWidth(lines[lines.length - 1]) / 2 + (cfg.sidewalk || 4);
-      this._boardwalk = lay.waterfront && lay.waterfront.boardwalk
-        ? { x: (east + cfg.seawallX) / 2, z: -200, width: cfg.seawallX - east }
-        : null;
-    }
-
-    _collides(x0, y0, x1, y1) {
-      const B = this._boxes;
-      for (let i = 0; i < B.length; i += 4) {
-        if (x1 > B[i] && x0 < B[i + 2] && y1 > B[i + 1] && y0 < B[i + 3]) return true;
-      }
-      return false;
-    }
-
-    _claim(x0, y0, x1, y1) {
-      this._boxes.push(x0, y0, x1, y1);
-    }
-
-    _renderStatic() {
-      const g = this._fsg;
-      const d = this._fd;
-      const W = this._fw;
-      const H = this._fh;
-      const v = this._view;
-      const s = v.s;
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.clearRect(0, 0, this._fs.width, this._fs.height);
-      const E = this._ext.paint;
-      const view = {
-        minX: v.cx - v.ox / s, maxX: v.cx + (W - v.ox) / s,
-        minZ: v.cz - v.oy / s, maxZ: v.cz + (H - v.oy) / s,
-      };
-      const devPPM = s * d;
-      g.setTransform(d * s, 0, 0, d * s, d * (v.ox - v.cx * s), d * (v.oy - v.cz * s));
-      if (devPPM <= 1.6) {
-        const lvl = devPPM < 0.85 ? this._base[1] : this._base[0];
-        const x0 = Math.max(E.minX, view.minX);
-        const x1 = Math.min(E.maxX, view.maxX);
-        const z0 = Math.max(E.minZ, view.minZ);
-        const z1 = Math.min(E.maxZ, view.maxZ);
-        if (x1 > x0 && z1 > z0) {
-          g.imageSmoothingEnabled = true;
-          g.imageSmoothingQuality = 'high';
-          const ls = lvl.s;
-          g.drawImage(lvl.canvas, (x0 - E.minX) * ls, (z0 - E.minZ) * ls, (x1 - x0) * ls, (z1 - z0) * ls, x0, z0, x1 - x0, z1 - z0);
-        }
-      } else {
-        // Zoomed past the image: repaint what is on screen as vectors, so it stays sharp.
-        g.save();
-        g.beginPath();
-        g.rect(E.minX, E.minZ, E.maxX - E.minX, E.maxZ - E.minZ);
-        g.clip();
-        if (!this._fsNoise || this._fsNoiseCtx !== g) {
-          this._fsNoise = noisePattern(g);
-          this._fsNoiseCtx = g;
-        }
-        paintCity(g, this.layout, { px: 1 / devPPM, view, noise: this._fsNoise });
-        g.restore();
-      }
-      g.setTransform(d, 0, 0, d, 0, 0);
-      this._fadeEdges(g, E, v);
-      this._boxes.length = 0;
-      this._drawLabels(g);
-      this._staticBoxes = this._boxes.length;
-      g.setTransform(1, 0, 0, 1, 0, 0);
-    }
-
-    /** Fade the painted area's edges into the blurred backdrop. */
-    _fadeEdges(g, E, v) {
-      const s = v.s;
-      const X0 = v.ox + (E.minX - v.cx) * s;
-      const X1 = v.ox + (E.maxX - v.cx) * s;
-      const Y0 = v.oy + (E.minZ - v.cz) * s;
-      const Y1 = v.oy + (E.maxZ - v.cz) * s;
-      const F = clamp(Math.min(X1 - X0, Y1 - Y0) * 0.18, 60, 240);
-      g.globalCompositeOperation = 'destination-out';
-      const band = (x0, y0, x1, y1, gx0, gy0, gx1, gy1) => {
-        const q = g.createLinearGradient(gx0, gy0, gx1, gy1);
-        q.addColorStop(0, 'rgba(0, 0, 0, 1)');
-        q.addColorStop(0.3, 'rgba(0, 0, 0, 0.62)');
-        q.addColorStop(0.62, 'rgba(0, 0, 0, 0.22)');
-        q.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        g.fillStyle = q;
-        g.fillRect(x0, y0, x1 - x0, y1 - y0);
-      };
-      if (X0 > -F) band(X0, Y0, X0 + F, Y1, X0, 0, X0 + F, 0);
-      if (X1 < this._fw + F) band(X1 - F, Y0, X1, Y1, X1, 0, X1 - F, 0);
-      if (Y0 > -F) band(X0, Y0, X1, Y0 + F, 0, Y0, 0, Y0 + F);
-      if (Y1 < this._fh + F) band(X0, Y1 - F, X1, Y1, 0, Y1, 0, Y1 - F);
-      g.globalCompositeOperation = 'source-over';
-    }
-
-    _haloText(g, text, x, y, halo, fill, lw) {
-      g.lineJoin = 'round';
-      g.lineWidth = lw;
-      g.strokeStyle = halo;
-      g.strokeText(text, x, y);
-      g.fillStyle = fill;
-      g.fillText(text, x, y);
-    }
-
-    _drawLabels(g) {
-      const v = this._view;
-      const s = v.s;
-      const W = this._fw;
-      const H = this._fh;
-      const sx = (x) => v.ox + (x - v.cx) * s;
-      const sy = (z) => v.oy + (z - v.cz) * s;
-      const onScreen = (X, Y, m) => X > -m && X < W + m && Y > -m && Y < H + m;
-      const spr = this._fspr;
-      const zoomed = s / this._fitS;
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-
-      // Keep the panels clear of labels: legend, header, compass, zoom buttons, scale bar and hints.
-      const lb = this._legendBox;
-      if (lb) this._claim(lb[0] - 34, lb[1] - 12, W, lb[3] + 12);
-      this._claim(0, 0, 330, 100);
-      if (this._placesBox) this._claim(this._placesBox[0] - 6, this._placesBox[1] - 6, this._placesBox[2] + 6, this._placesBox[3] + 6);
-      this._claim(W - 100, 0, W, 90);
-      this._claim(W - 160, H - 74, W, H);
-      this._claim(0, H - 62, W, H);
-
-      // 0. The big places: a badge, a bold name and the tagline, at every zoom.
-      for (const m of this._marks) {
-        if (!m.major) continue;
-        const X = sx(m.x);
-        const Y = sy(m.z);
-        if (!onScreen(X, Y, 160)) continue;
-        const sp = spr[m.kind] || spr.landmark;
-        const S = sp.size * 1.55;
-        g.drawImage(sp.canvas, X - S / 2, Y - S / 2, S, S);
-        this._claim(X - 14, Y - 14, X + 14, Y + 14);
-        const txt = m.name.toUpperCase();
-        const size = clamp(12 + s * 5, 13, 19);
-        g.font = '800 ' + size.toFixed(1) + 'px ' + FONT;
-        setSpacing(g, 2.2);
-        const w = g.measureText(txt).width;
-        g.font = 'italic 500 11px ' + FONT;
-        setSpacing(g, 0.4);
-        const tw = m.tagline ? g.measureText(m.tagline).width : 0;
-        const bw = Math.max(w, tw) / 2 + 4;
-        for (const dir of [1, -1]) {
-          const ty = Y + dir * (size + 10);
-          const y0 = dir > 0 ? ty - size / 2 - 2 : ty - size / 2 - 16;
-          const y1 = dir > 0 ? ty + size / 2 + 16 : ty + size / 2 + 2;
-          if (this._collides(X - bw, y0, X + bw, y1)) continue;
-          g.font = '800 ' + size.toFixed(1) + 'px ' + FONT;
-          setSpacing(g, 2.2);
-          this._haloText(g, txt, X + 1, ty, 'rgba(6, 9, 20, 0.92)', '#ffffff', 5);
-          if (m.tagline) {
-            g.font = 'italic 500 11px ' + FONT;
-            setSpacing(g, 0.4);
-            this._haloText(g, m.tagline, X, dir > 0 ? ty + size / 2 + 8 : ty - size / 2 - 8, 'rgba(6, 9, 20, 0.85)', '#ffcf8a', 3.5);
-          }
-          this._claim(X - bw, y0, X + bw, y1);
-          break;
-        }
-      }
-
-      // 1. Landmarks.
-      g.font = '700 ' + (zoomed > 2 ? 11.5 : 10.5) + 'px ' + FONT;
-      setSpacing(g, 1.6);
-      const marks = [];
-      for (const m of this._marks) {
-        if (m.major) continue;
-        const X = sx(m.x);
-        const Y = sy(m.z);
-        if (!onScreen(X, Y, 80)) continue;
-        const S = spr.landmark.size;
-        g.drawImage(spr.landmark.canvas, X - S / 2, Y - S / 2, S, S);
-        this._claim(X - 8, Y - 8, X + 8, Y + 8);
-        marks.push(m, X, Y);
-      }
-      for (let i = 0; i < marks.length; i += 3) {
-        const X = marks[i + 1];
-        const Y = marks[i + 2];
-        const txt = marks[i].name.toUpperCase();
-        const w = g.measureText(txt).width;
-        // Below the marker, else above it, else just the marker.
-        for (const ty of [Y + 15, Y - 15]) {
-          if (this._collides(X - w / 2 - 3, ty - 7, X + w / 2 + 3, ty + 7)) continue;
-          this._haloText(g, txt, X + 0.8, ty, 'rgba(6, 9, 20, 0.88)', '#ffcf8a', 3.5);
-          this._claim(X - w / 2 - 3, ty - 7, X + w / 2 + 3, ty + 7);
-          break;
-        }
-      }
-
-      // 2. District names, with a sunset rule and the tagline.
-      const fs = clamp(11 + s * 15, 16, 30);
-      for (const plan of this._districtPlans) {
-        const d = plan.district;
-        const txt = d.name.toUpperCase();
-        g.font = '700 ' + fs + 'px ' + FONT;
-        setSpacing(g, fs * 0.34);
-        const w = g.measureText(txt).width;
-        let placed = null;
-        for (const c of plan.cands) {
-          const X = sx(c.x);
-          const Y = sy(c.z);
-          if (!onScreen(X, Y, -20)) continue;
-          if (!this._collides(X - w / 2 - 6, Y - fs / 2 - 4, X + w / 2 + 6, Y + fs / 2 + 20)) {
-            placed = { X, Y };
-            break;
-          }
-        }
-        if (!placed) continue;
-        const { X, Y } = placed;
-        this._haloText(g, txt, X + fs * 0.17, Y, 'rgba(5, 8, 18, 0.55)', 'rgba(255, 255, 255, 0.9)', 6);
-        g.fillStyle = sunsetGradient(g, X - 16, 0, X + 16, 0);
-        g.fillRect(X - 16, Y + fs / 2 + 3, 32, 2);
-        if (d.tagline) {
-          g.font = 'italic 500 11px ' + FONT;
-          setSpacing(g, 0.8);
-          this._haloText(g, d.tagline, X, Y + fs / 2 + 14, 'rgba(5, 8, 18, 0.7)', 'rgba(210, 216, 236, 0.8)', 3);
-        }
-        this._claim(X - w / 2 - 6, Y - fs / 2 - 4, X + w / 2 + 6, Y + fs / 2 + 20);
-      }
-
-      // 3. Open land and water (districts without blocks), and the boardwalk.
-      for (const sp of this._openSpots) {
-        const txt = sp.district.name.toUpperCase();
-        const size = clamp(10 + s * 8, 12, 20);
-        g.font = (sp.water ? 'italic ' : '') + '600 ' + size + 'px ' + FONT;
-        setSpacing(g, size * (sp.water ? 0.55 : 0.4));
-        const w = g.measureText(txt).width;
-        for (const c of sp.cands) {
-          if (w > c.run * s * 0.95) continue;
-          const X = sx(c.x);
-          const Y = sy(c.z);
-          const bx = c.vertical ? size / 2 + 4 : w / 2 + 4;
-          const by = c.vertical ? w / 2 + 4 : size / 2 + 4;
-          // Wholly on screen, and clear of everything placed so far.
-          if (X - bx < 8 || X + bx > W - 8 || Y - by < 8 || Y + by > H - 8) continue;
-          if (this._collides(X - bx, Y - by, X + bx, Y + by)) continue;
-          g.save();
-          g.translate(X, Y);
-          if (c.vertical) g.rotate(-Math.PI / 2);
-          this._haloText(g, txt, size * (sp.water ? 0.275 : 0.2), 0, 'rgba(4, 8, 18, 0.5)', sp.water ? 'rgba(150, 205, 240, 0.62)' : 'rgba(190, 225, 200, 0.55)', 4);
-          g.restore();
-          this._claim(X - bx, Y - by, X + bx, Y + by);
-          break;
-        }
-      }
-      const bw = this._boardwalk;
-      if (bw && bw.width * s >= 10) {
-        const X = sx(bw.x);
-        const Y = sy(bw.z);
-        g.font = 'italic 600 ' + clamp(bw.width * s * 0.5, 8.5, 11) + 'px ' + FONT;
-        setSpacing(g, 2);
-        const txt = 'THE BOARDWALK';
-        const w = g.measureText(txt).width;
-        if (onScreen(X, Y, 100) && !this._collides(X - 6, Y - w / 2 - 4, X + 6, Y + w / 2 + 4)) {
-          g.save();
-          g.translate(X, Y);
-          g.rotate(-Math.PI / 2);
-          this._haloText(g, txt, 1, 0, 'rgba(20, 12, 6, 0.6)', 'rgba(255, 214, 170, 0.8)', 3);
-          g.restore();
-          this._claim(X - 6, Y - w / 2 - 4, X + 6, Y + w / 2 + 4);
-        }
-      }
-
-      // 4. Road names: along the road (across junctions if need be), staggered, never over other labels.
-      const fr = clamp(8 + s * 2.4, 9, 12.5);
-      g.font = '600 ' + fr + 'px ' + FONT;
-      setStretch(g, 'semi-condensed');
-      setSpacing(g, fr * 0.14);
-      const roads = this.layout.roads;
-      for (let ri = 0; ri < roads.length; ri++) {
-        const r = roads[ri];
-        const segs = this._roadSegs[ri];
-        if (!segs.length || !r.name) continue;
-        const txt = r.name.toUpperCase();
-        const w = g.measureText(txt).width;
-        const wm = (w + 16) / s; // the label's length in metres
-        const major = r.width >= 18;
-        // On a boulevard the name sits on one carriageway rather than on the planted median.
-        const lane = r.median > 0 ? (r.width - r.median) / 2 : r.width;
-        const inside = lane * s >= fr + 3;
-        const across = inside && r.median > 0 ? r.median / 2 + lane / 2 : 0;
-        const typical = Math.max(1, (segs[0].to - segs[0].from) * s);
-        const every = Math.max(1, Math.round(Math.max(w * 2.4, 320) / typical));
-        const start = (ri * 2) % every;
-        for (let j0 = start; j0 < segs.length; j0 += every) {
-         for (let j = Math.max(0, j0); j < Math.min(segs.length, j0 + every); j++) {
-          const seg = segs[j];
-          const mid = (seg.from + seg.to) / 2;
-          if (mid - wm / 2 < r.from || mid + wm / 2 > r.to) continue;
-          const X = sx(r.axis === 'z' ? r.coord + across : mid);
-          const Y = sy(r.axis === 'z' ? mid : r.coord + across);
-          if (!onScreen(X, Y, 40)) continue;
-          const vert = r.axis === 'z';
-          const bx = vert ? fr / 2 + 2 : w / 2 + 5;
-          const by = vert ? w / 2 + 5 : fr / 2 + 2;
-          if (this._collides(X - bx, Y - by, X + bx, Y + by)) continue;
-          g.save();
-          g.translate(X, Y);
-          if (vert) g.rotate(-Math.PI / 2);
-          const ox = fr * 0.07;
-          if (inside) {
-            g.fillStyle = major ? 'rgba(30, 20, 18, 0.95)' : 'rgba(24, 22, 28, 0.88)';
-            g.fillText(txt, ox, 0.5);
-          } else {
-            this._haloText(g, txt, ox, 0, 'rgba(6, 9, 20, 0.85)', major ? '#ffe6cc' : 'rgba(236, 238, 248, 0.85)', 3);
-          }
-          g.restore();
-          this._claim(X - bx, Y - by, X + bx, Y + by);
-          break;
-         }
-        }
-      }
-      setStretch(g, 'normal');
-      setSpacing(g, 0);
+    /** The player's map pins, as blips (the radar shows them too). */
+    pinBlips(out) {
+      if (this.view) this.view.pinBlips(out);
     }
 
     destroy() {
       window.removeEventListener('resize', this._onResize);
       if (this._ro) this._ro.disconnect();
       if (this._panelRo) this._panelRo.disconnect();
-      if (this._raf) cancelAnimationFrame(this._raf);
-      clearTimeout(this._freeTimer);
+      if (this.view) this.view.destroy();
       document.body.classList.remove('map-open');
       this.radarEl.remove();
-      this.fullEl.remove();
     }
   }
 
   Minimap.route = route;
   Minimap.formatDistance = formatDistance;
   VH.Minimap = Minimap;
+
+  // What the full-screen map (js/mapview.js) shares with the radar.
+  VH.MapKit = {
+    PAL, LEGEND, PRIORITY,
+    font: () => FONT,
+    buildSprites, paintCity, noisePattern, extentsOf, openDistrictSpots, route,
+    formatDistance, sunsetGradient, setSpacing, setStretch, roundRectPath, makeCanvas, tintOf, hexRgb,
+  };
 })();
