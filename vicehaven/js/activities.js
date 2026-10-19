@@ -57,6 +57,10 @@
     return () => r.next();
   }
 
+  // Taxi stands at the places outside the old grid, and the kinds of place worth a long fare.
+  const STANDS = /^(airport_terminal|airport_gate|northgate_heights|northgate_plaza|fort_gate|store_\d+)$/;
+  const FEATURED = new Set(['airport', 'fort', 'skyline', 'store']);
+
   class Activities {
     constructor(game) {
       this.game = game;
@@ -449,42 +453,108 @@
       }
     }
 
-    _newFare() {
+    /** A spot on the pavement beside the road nearest a place (where a fare waits for the cab). */
+    _pavementBy(pl) {
+      const g = this.game;
+      const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+      if (!lp) return null;
+      const r = lp.road;
+      const off = r.width / 2 + 1.2;
+      const spot = r.axis === 'z'
+        ? { x: r.coord + (Math.sign(pl.x - r.coord) || 1) * off, z: lp.along }
+        : { x: lp.along, z: r.coord + (Math.sign(pl.z - r.coord) || 1) * off };
+      const gh = g.physics.groundHeight(spot.x, spot.z, 50);
+      return gh > 0.8 || gh < -0.1 ? null : spot;
+    }
+
+    /** Where fares wait: city corners, plus taxi stands at the new places and the roadside strips. */
+    _farePickup(stand) {
       const g = this.game;
       const p = g.player.pos;
+      const corners = () => {
+        for (let i = 0; i < 20; i++) {
+          const b = g.layout.blocks[Math.floor(Math.random() * g.layout.blocks.length)];
+          const c = Math.floor(Math.random() * 4);
+          const x = c === 0 || c === 3 ? b.minX + 2 : b.maxX - 2;
+          const z = c === 0 || c === 1 ? b.minZ + 2 : b.maxZ - 2;
+          const d = Math.hypot(x - p.x, z - p.z);
+          if (d > 80 && d < 260) return { x, z };
+        }
+        return null;
+      };
+      const stands = () => {
+        const cand = [];
+        for (const pl of g.places.map.values()) {
+          if (!STANDS.test(pl.id || '')) continue;
+          const d = Math.hypot(pl.x - p.x, pl.z - p.z);
+          if (d > 80 && d < 400) cand.push(pl);
+        }
+        for (const S of g.layout.strips || []) {
+          const [[x0, z0], [x1, z1]] = S.walk;
+          for (let k = 0; k < 3; k++) {
+            const t = Math.random();
+            const x = x0 + (x1 - x0) * t;
+            const z = z0 + (z1 - z0) * t;
+            const d = Math.hypot(x - p.x, z - p.z);
+            if (d > 80 && d < 400) cand.push({ x, z, onPavement: true });
+          }
+        }
+        while (cand.length) {
+          const c = cand.splice(Math.floor(Math.random() * cand.length), 1)[0];
+          const spot = c.onPavement ? { x: c.x, z: c.z } : this._pavementBy(c);
+          if (spot) return spot;
+        }
+        return null;
+      };
+      return stand ? stands() || corners() : corners() || stands();
+    }
+
+    _newFare() {
+      const g = this.game;
       const vig = this.data.taxi || [];
-      let best = null;
-      for (let i = 0; i < 20 && !best; i++) {
-        const b = g.layout.blocks[Math.floor(Math.random() * g.layout.blocks.length)];
-        const c = Math.floor(Math.random() * 4);
-        const x = c === 0 || c === 3 ? b.minX + 2 : b.maxX - 2;
-        const z = c === 0 || c === 1 ? b.minZ + 2 : b.maxZ - 2;
-        const d = Math.hypot(x - p.x, z - p.z);
-        if (d > 80 && d < 260) best = { x, z };
-      }
+      const best = this._farePickup(Math.random() < 0.35);
       if (!best) return;
       // Somewhere a cab can actually pull up: not a roof, the end of the pier
-      // or a race start, and with a kerb within 40 m to stop at.
-      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && !pl.roof && !(pl.y > 1) && !/\((race|stunt)\)|roof/i.test(pl.name) && pl.kind !== 'pier' &&
-        Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
+      // or a race start, and with a kerb within 40 m to stop at. Trips to or
+      // from out of town (the airport, the fort gate, Northgate, the strips)
+      // may run twice as far.
+      const cb = g.layout.config.cityBounds || g.layout.config.bounds;
+      const outOfTown = best.x < cb.minX || best.x > cb.maxX || best.z < cb.minZ || best.z > cb.maxZ;
+      const cap = (pl) => (outOfTown || FEATURED.has(pl.kind) ? 1800 : 900);
+      const dests = Array.from(g.places.map.values()).filter((pl) => {
+        if (!pl.name || pl.roof || pl.y > 1 || /\((race|stunt)\)|roof/i.test(pl.name) || pl.kind === 'pier') return false;
+        const d = Math.hypot(pl.x - best.x, pl.z - best.z);
+        return d > 250 && d < cap(pl);
+      });
+      // About one fare in three heads somewhere new: mostly the big places, sometimes a shop.
+      const big = dests.filter((pl) => FEATURED.has(pl.kind) && pl.kind !== 'store');
+      const shops = dests.filter((pl) => pl.kind === 'store');
+      const r = Math.random();
+      const pools = [r < 0.22 && big.length ? big : r < 0.32 && shops.length ? shops : null, dests].filter(Boolean);
       let to = null;
-      for (let i = 0; i < 12 && !to && dests.length; i++) {
-        const pl = dests.splice(Math.floor(Math.random() * dests.length), 1)[0];
-        const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
-        if (!lp) continue;
-        const pk = g.missions._kerbPoint(lp);
-        const gh = g.physics.groundHeight(pk.x, pk.z, 50);
-        if (gh > 0.8 || gh < -0.1) continue;
-        to = { x: pk.x, z: pk.z, name: pl.name };
+      for (const pool of pools) {
+        for (let i = 0; i < 12 && !to && pool.length; i++) {
+          const pl = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+          const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+          if (!lp) continue;
+          const pk = g.missions._kerbPoint(lp);
+          const gh = g.physics.groundHeight(pk.x, pk.z, 50);
+          if (gh > 0.8 || gh < -0.1) continue;
+          to = { x: pk.x, z: pk.z, name: pl.name, id: pl.id, kind: pl.kind };
+        }
+        if (to) break;
       }
       if (!to) return;
       const who = 'passenger';
       // Fares unlock with the story; the ones you haven't heard yet come first.
+      // A fare written for this destination ('to') comes first when there is one.
       const done = g.missions.completed;
-      const open = vig.filter((f) => !f.after || done[f.after]);
+      const goes = (f) => f.to === to.kind || f.to === to.id;
+      const open = vig.filter((f) => (!f.after || done[f.after]) && (!f.to || goes(f)));
       this.heardFares = this.heardFares || {};
       const fresh = open.filter((f) => !this.heardFares[f.name]);
-      const pool = fresh.length ? fresh : open;
+      const matched = fresh.filter((f) => f.to);
+      const pool = matched.length ? matched : fresh.length ? fresh : open;
       const v = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
       if (v) this.heardFares[v.name] = true;
       const ids = { fare: who, fare2: 'passenger2' };
@@ -496,7 +566,14 @@
       g.dialogue._voiceMap.delete('passenger2');
       const agent = g.crowd.spawn(best.x, best.z, { persistent: true });
       agent.brain = { update: (a) => { a.moveSpeed = 0; a.anim.handsUp = Math.sin(g.time * 3) > 0.6 ? 0.4 : 0; } };
-      const dist = Math.hypot(to.x - best.x, to.z - best.z);
+      // The meter and the pay go by the road, not as the crow flies.
+      let dist = Math.hypot(to.x - best.x, to.z - best.z);
+      const route = VH.Minimap && VH.Minimap.route ? VH.Minimap.route(g.layout, best.x, best.z, to.x, to.z) : null;
+      if (route && route.length > 1) {
+        let len = 0;
+        for (let i = 1; i < route.length; i++) len += Math.hypot(route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1]);
+        dist = Math.max(dist, len);
+      }
       this.taxi.fare = { stage: 'pickup', from: best, to, toName: to.name, dist, time: 25 + dist / 11, t: 999, who, lines, agent };
     }
 

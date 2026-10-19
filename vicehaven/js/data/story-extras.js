@@ -196,6 +196,36 @@
       ['jay', '(a long beat) A guy who taught me to park.'],
       ['fare', 'Then you park nicely tonight, love. For him.'],
     ] },
+    // Fares for the places out of town ('to': a place kind or id; picked first when that's where they're going).
+    { name: 'First flight', to: 'airport', lines: [
+      ['fare', '(gripping the seatbelt) I\'ve never flown. Not once. Forty-one years old.'],
+      ['jay', 'First time for everything.'],
+      ['fare', 'My daughter had a baby overseas. I\'m a grandad and I\'ve never even held a boarding pass.'],
+      ['fare', '(a shaky laugh) If I faint at security, tell them I was brave in the cab.'],
+    ] },
+    { name: 'Lost luggage', to: 'airport', lines: [
+      ['fare', 'Third time this month they\'ve lost my bag. I\'m going back to stare at the carousel until it confesses.'],
+      ['jay', 'What\'s in it?'],
+      ['fare', '(a beat) Forty jars of my nan\'s chutney. Don\'t ask. It\'s a whole thing.'],
+    ] },
+    { name: 'Back to base', to: 'fort', lines: [
+      ['fare', '(army haircut, a duffel bag) Fort Breakwater, the gate on Meridian. Stop before the sign, they get twitchy.'],
+      ['jay', 'Heard they keep tanks out there.'],
+      ['fare', '(grinning) They do. And a sergeant who counts them twice a day.'],
+      ['fare', 'If one ever goes missing, I was never in your cab.'],
+    ] },
+    { name: 'Corner office', to: 'skyline', lines: [
+      ['fare', 'Northgate Heights. The Corkscrew, forty-third floor.'],
+      ['jay', 'The twisty one?'],
+      ['fare', 'Every morning the lift goes up and the view turns a little more. By lunch I can\'t tell which way the sea is.'],
+      ['fare', '(sighs) Best job I ever hated.'],
+    ] },
+    { name: 'Midnight snack', to: 'store', lines: [
+      ['fare', 'Any shop that\'s open. I need ice cream, and I need it to be somebody else\'s fault.'],
+      ['jay', 'Long day?'],
+      ['fare', 'Twelve-hour shift. I\'m eating the whole tub in the car park. Don\'t judge me.'],
+      ['jay', 'Wouldn\'t dream of it. Get two spoons in case the night gets worse.'],
+    ] },
   ];
 
   // ------------------------------------------------------------ races
