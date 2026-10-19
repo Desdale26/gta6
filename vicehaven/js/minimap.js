@@ -209,7 +209,7 @@
         minX: Math.min(Math.max(b.minX, lo - 70), zones.fort ? zones.fort.minX - 40 : Infinity),
         maxX: east + 36,
         minZ: Math.min(Math.max(b.minZ, lo - 300), zones.airport ? zones.airport.minZ - 40 : Infinity),
-        maxZ: Math.min(b.maxZ, hi + 60),
+        maxZ: b.maxZ,
       },
     };
   }
@@ -1921,6 +1921,9 @@
 
       o.append(canvas, head, places, compass, legend, zoom, scale, foot);
       this._placesEl = places;
+      // Panels a click must not fall through (they ignore the mouse so drags pass under them).
+      this._panelEls = [head, places, compass, legend, zoom, scale];
+      this._hintEls = [...foot.children];
       this.root.append(o);
       this.fullEl = o;
       this._legendEl = legend;
@@ -1940,7 +1943,7 @@
         this._zoomAt(ev.clientX, ev.clientY, Math.exp(-clamp(dy, -300, 300) * 0.0018));
       }, { passive: false });
       o.addEventListener('pointerdown', (ev) => {
-        if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button'))) return;
+        if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button, .vh-map-places, .vh-map-zoom'))) return;
         ev.preventDefault();
         this._drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0, t: performance.now() };
         try {
@@ -1966,7 +1969,16 @@
           this._drag = null;
           o.classList.remove('is-dragging');
           // A press that hardly moved is a click: put the GPS waypoint there.
-          if (click && dr.moved < 6 && performance.now() - dr.t < 600) this._clickAt(ev.clientX, ev.clientY);
+          // The second half of a double-click is part of the first, not a new click.
+          if (click && dr.moved < 6 && performance.now() - dr.t < 600) {
+            const now = performance.now();
+            const lc = this._lastClick;
+            if (lc && now - lc.t < 400 && Math.hypot(ev.clientX - lc.x, ev.clientY - lc.y) < 10) this._lastClick = null;
+            else {
+              this._lastClick = { t: now, x: ev.clientX, y: ev.clientY };
+              this._clickAt(ev.clientX, ev.clientY);
+            }
+          }
         }
       };
       o.addEventListener('pointerup', (ev) => end(ev, true));
@@ -1996,8 +2008,11 @@
       document.body.classList.add('map-open');
       this._legendW = this._legendEl.offsetWidth || 200;
       this._legendH = this._legendEl.offsetHeight || 380;
-      const pr = this._placesEl.getBoundingClientRect();
-      this._placesBox = pr.width ? [pr.left, pr.top, pr.right, pr.bottom] : null;
+      if (this._clearChip) {
+        this._clearOn = !!(this._state && this._state.waypoint);
+        this._clearChip.classList.toggle('is-off', !this._clearOn);
+      }
+      this._measurePanels();
       this._resizeFull();
       this._fitView();
       this._drawLegendIcons();
@@ -2065,6 +2080,15 @@
       this._requestFullDraw();
     }
 
+    /** Where the places bar and the legend sit (CSS px), for padding and label claims. */
+    _measurePanels() {
+      const p = this._placesEl;
+      this._placesBox = p && p.offsetWidth ? [p.offsetLeft, p.offsetTop, p.offsetLeft + p.offsetWidth, p.offsetTop + p.offsetHeight] : null;
+      // The legend moves with CSS transforms (centred, sliding in), so take its painted box.
+      const r = this._legendEl.getBoundingClientRect();
+      this._legendBox = r.width ? [r.left - 10, r.top, r.right, r.bottom] : null;
+    }
+
     /** Centre the full map on a world point at a scale (px per metre). */
     jumpTo(x, z, s) {
       const v = this._view;
@@ -2094,9 +2118,12 @@
 
     goToNearestShop() {
       const st = this._state || {};
+      // Shops that are open show a blip; a shut one (clerk gone) isn't worth the trip.
+      const open = new Set((st.blips || []).filter((bl) => bl.type === 'store').map((bl) => Math.round(bl.x) + ',' + Math.round(bl.z)));
+      const pool = (this.layout.stores || []).filter((s) => !open.size || open.has(Math.round(s.door.x) + ',' + Math.round(s.door.z)));
       let best = null;
       let bestD = Infinity;
-      for (const s of this.layout.stores || []) {
+      for (const s of pool) {
         const d = Math.hypot(s.door.x - (st.x || 0), s.door.z - (st.z || 0));
         if (d < bestD) {
           bestD = d;
@@ -2116,32 +2143,47 @@
     _clickAt(sx, sy) {
       const v = this._view;
       if (!v || !this._fullOpen) return;
+      // Not through the panels that let drags pass (legend, header, hint pills...).
+      const over = (e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && sx >= r.left && sx <= r.right && sy >= r.top && sy <= r.bottom;
+      };
+      if ((this._panelEls || []).some(over) || (this._hintEls || []).some(over)) return;
       const st = this._state || {};
       const toS = (x, z) => [v.ox + (x - v.cx) * v.s, v.oy + (z - v.cz) * v.s];
-      const near = (x, z, r) => {
+      const dist = (x, z) => {
         const [X, Y] = toS(x, z);
-        return Math.hypot(X - sx, Y - sy) < r;
+        return Math.hypot(X - sx, Y - sy);
       };
       const wp = st.waypoint;
-      if (wp && near(wp.x, wp.z, 16)) return this._emitWaypoint(null);
-      for (const lm of VH.Data.landmarks || []) {
-        if (lm.major && near(lm.x, lm.z, 24)) return this.goTo(lm);
-      }
+      if (wp && dist(wp.x, wp.z) < 16) return this._emitWaypoint(null);
+      // A blip under the cursor (a shop, a plane, a tank) beats the badge of the place it's in.
       let best = null;
       let bestD = 16;
       for (const bl of st.blips || []) {
         if (!bl.label || bl.type === 'waypoint') continue;
-        const [X, Y] = toS(bl.x, bl.z);
-        const d = Math.hypot(X - sx, Y - sy);
+        const d = dist(bl.x, bl.z);
         if (d < bestD) {
           bestD = d;
           best = bl;
         }
       }
+      for (const lm of VH.Data.landmarks || []) {
+        if (lm.major && dist(lm.x, lm.z) < Math.min(24, best ? bestD : 24)) return this.goTo(lm);
+      }
       if (best) return this._emitWaypoint({ x: best.x, z: best.z, name: best.label });
-      const L = this._ext.land;
-      const x = clamp(v.cx + (sx - v.ox) / v.s, L.minX, L.maxX);
-      const z = clamp(v.cz + (sy - v.oy) / v.s, L.minZ, L.maxZ);
+      // Anywhere else: only inside the world (the walls stand on its edges), pulled in a little.
+      const b = this.layout.config.bounds;
+      const pier = this.layout.waterfront && this.layout.waterfront.pier;
+      let x = v.cx + (sx - v.ox) / v.s;
+      let z = v.cz + (sy - v.oy) / v.s;
+      const onPier = pier && x >= b.maxX && x <= pier.x1 && z >= pier.z0 && z <= pier.z1;
+      if (!onPier && (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ)) return;
+      if (!onPier) {
+        const seawall = this.layout.config.seawallX || b.maxX;
+        x = clamp(x, b.minX + 4, Math.min(b.maxX, seawall) - 2);
+        z = clamp(z, b.minZ + 4, b.maxZ - 4);
+      }
       this._emitWaypoint({ x, z, name: 'Waypoint' });
     }
 
@@ -2230,12 +2272,13 @@
       this._lastFullDraw = now;
       if (this._fullDirty) {
         const oldFit = this._fitS;
+        if (this._fullOpen) this._measurePanels();
         if (this._resizeFull() && this._view) {
           // Keep the player's zoom relative to the new fit.
           const rel = this._view.s / oldFit;
           const cx = this._view.cx;
           const cz = this._view.cz;
-          this._fitView();
+          this._fitView(); // same mode; then keep the zoom and centre the player had
           this._view.s = clamp(this._fitS * rel, this._minS, this._maxS);
           this._view.cx = cx;
           this._view.cz = cz;
@@ -2389,7 +2432,7 @@
       const hasWp = !!st.waypoint;
       if (hasWp !== this._clearOn && this._clearChip) {
         this._clearOn = hasWp;
-        this._clearChip.classList.toggle('is-hidden', !hasWp);
+        this._clearChip.classList.toggle('is-off', !hasWp);
       }
       if (mask !== this._legendMask) {
         this._legendMask = mask;
@@ -2639,11 +2682,12 @@
       g.textBaseline = 'middle';
 
       // Keep the panels clear of labels: legend, header, compass, zoom buttons, scale bar and hints.
-      if (W >= 900) this._claim(W - this._legendW - 44, H / 2 - this._legendH / 2 - 12, W, H / 2 + this._legendH / 2 + 12);
+      const lb = this._legendBox;
+      if (lb) this._claim(lb[0] - 34, lb[1] - 12, W, lb[3] + 12);
       this._claim(0, 0, 330, 100);
       if (this._placesBox) this._claim(this._placesBox[0] - 6, this._placesBox[1] - 6, this._placesBox[2] + 6, this._placesBox[3] + 6);
       this._claim(W - 100, 0, W, 90);
-      this._claim(W - 90, H - 180, W, H);
+      this._claim(W - 160, H - 74, W, H);
       this._claim(0, H - 62, W, H);
 
       // 0. The big places: a badge, a bold name and the tagline, at every zoom.

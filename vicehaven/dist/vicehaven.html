@@ -2250,6 +2250,12 @@ body.driving .hud-banner {
   60% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; }
 }
+
+/* Toasts and notices stay readable over the full map (GPS set, arrived...). */
+body.map-open .hud-toast,
+body.map-open .hud-notify-stack {
+  z-index: 31;
+}
 </style>
   <style data-src="css/menus.css">
 /*
@@ -2696,7 +2702,7 @@ select {
   color: #fff;
 }
 
-.whatsnew-item h3 {
+.credits-body .whatsnew-item h3 {
   margin: 0.8rem 0 0.15rem;
 }
 
@@ -3153,7 +3159,7 @@ body.map-open .vh-radar {
 .vh-map-legend-icon {
   flex: none;
   width: 30px;
-  height: 20px;
+  height: 22px;
 }
 
 /* ------------------------------------------------ quick views and places */
@@ -3245,8 +3251,38 @@ body.map-open .vh-radar {
   color: #ffc2f2;
 }
 
-.vh-map-chip.is-hidden {
-  display: none;
+.vh-map-chip.is-off {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* Short windows: the legend sits under the compass instead of centred, clear of the zoom buttons. */
+@media (max-height: 860px) {
+  .vh-map-legend {
+    top: 5.2rem;
+    transform: translate(10px, 0);
+  }
+
+  .vh-map.is-open .vh-map-legend {
+    transform: none;
+  }
+
+  .vh-map-legend-item {
+    padding: 0;
+  }
+}
+
+@media (max-height: 640px) {
+  .vh-map-legend {
+    display: none;
+  }
+}
+
+/* Mid widths: the footer drops the GPS hints rather than run into the scale bar. */
+@media (max-width: 1100px) {
+  .vh-map-foot .vh-map-hint:nth-child(n + 4) {
+    display: none;
+  }
 }
 
 /* ------------------------------------------------------ zoom controls */
@@ -3255,7 +3291,7 @@ body.map-open .vh-radar {
   right: 2rem;
   bottom: 1.6rem;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0.35rem;
 }
 
@@ -12521,7 +12557,7 @@ void main() {
     // The big places outside the old grid get a badge on the map and a "go"
     // point the GPS can reach by road (major: true; gx, gz).
     { id: 'northgate_heights', name: 'Northgate Heights', kind: 'skyline', x: 100, z: -520, major: true, short: 'Skyscrapers', gx: 22, gz: -498 },
-    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -300, z: -1300, major: true, short: 'Airport', gx: -255, gz: -1190 },
+    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -255, z: -1222, major: true, short: 'Airport', gx: -255, gz: -1190 },
     { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0, major: true, short: 'Army base', gx: -1092, gz: 0 },
   ];
 })();
@@ -16811,6 +16847,8 @@ void main() {
       const data = {
         runway: RWY, taxiway: TWY, links: LINKS, apron: APRON, ga: GA, service: SERVICE, terminal: TERMINAL,
         tower: TOWER, hangars: HANGARS, helipad: HELIPAD, carpark: CARPARK, fenceZ: FENCE_Z, stands: STANDS,
+        // The airside fence (see _fences): the GPS goes in by the service gate.
+        fence: { minX: -1030, maxX: 345, minZ: -1510, maxZ: FENCE_Z }, gate: { x: 45, z: FENCE_Z + 8 },
       };
       layout.airport = data;
       Airfield._runway(world);
@@ -57036,7 +57074,7 @@ void main() {
         minX: Math.min(Math.max(b.minX, lo - 70), zones.fort ? zones.fort.minX - 40 : Infinity),
         maxX: east + 36,
         minZ: Math.min(Math.max(b.minZ, lo - 300), zones.airport ? zones.airport.minZ - 40 : Infinity),
-        maxZ: Math.min(b.maxZ, hi + 60),
+        maxZ: b.maxZ,
       },
     };
   }
@@ -58748,6 +58786,9 @@ void main() {
 
       o.append(canvas, head, places, compass, legend, zoom, scale, foot);
       this._placesEl = places;
+      // Panels a click must not fall through (they ignore the mouse so drags pass under them).
+      this._panelEls = [head, places, compass, legend, zoom, scale];
+      this._hintEls = [...foot.children];
       this.root.append(o);
       this.fullEl = o;
       this._legendEl = legend;
@@ -58767,7 +58808,7 @@ void main() {
         this._zoomAt(ev.clientX, ev.clientY, Math.exp(-clamp(dy, -300, 300) * 0.0018));
       }, { passive: false });
       o.addEventListener('pointerdown', (ev) => {
-        if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button'))) return;
+        if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button, .vh-map-places, .vh-map-zoom'))) return;
         ev.preventDefault();
         this._drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0, t: performance.now() };
         try {
@@ -58793,7 +58834,16 @@ void main() {
           this._drag = null;
           o.classList.remove('is-dragging');
           // A press that hardly moved is a click: put the GPS waypoint there.
-          if (click && dr.moved < 6 && performance.now() - dr.t < 600) this._clickAt(ev.clientX, ev.clientY);
+          // The second half of a double-click is part of the first, not a new click.
+          if (click && dr.moved < 6 && performance.now() - dr.t < 600) {
+            const now = performance.now();
+            const lc = this._lastClick;
+            if (lc && now - lc.t < 400 && Math.hypot(ev.clientX - lc.x, ev.clientY - lc.y) < 10) this._lastClick = null;
+            else {
+              this._lastClick = { t: now, x: ev.clientX, y: ev.clientY };
+              this._clickAt(ev.clientX, ev.clientY);
+            }
+          }
         }
       };
       o.addEventListener('pointerup', (ev) => end(ev, true));
@@ -58823,8 +58873,11 @@ void main() {
       document.body.classList.add('map-open');
       this._legendW = this._legendEl.offsetWidth || 200;
       this._legendH = this._legendEl.offsetHeight || 380;
-      const pr = this._placesEl.getBoundingClientRect();
-      this._placesBox = pr.width ? [pr.left, pr.top, pr.right, pr.bottom] : null;
+      if (this._clearChip) {
+        this._clearOn = !!(this._state && this._state.waypoint);
+        this._clearChip.classList.toggle('is-off', !this._clearOn);
+      }
+      this._measurePanels();
       this._resizeFull();
       this._fitView();
       this._drawLegendIcons();
@@ -58892,6 +58945,15 @@ void main() {
       this._requestFullDraw();
     }
 
+    /** Where the places bar and the legend sit (CSS px), for padding and label claims. */
+    _measurePanels() {
+      const p = this._placesEl;
+      this._placesBox = p && p.offsetWidth ? [p.offsetLeft, p.offsetTop, p.offsetLeft + p.offsetWidth, p.offsetTop + p.offsetHeight] : null;
+      // The legend moves with CSS transforms (centred, sliding in), so take its painted box.
+      const r = this._legendEl.getBoundingClientRect();
+      this._legendBox = r.width ? [r.left - 10, r.top, r.right, r.bottom] : null;
+    }
+
     /** Centre the full map on a world point at a scale (px per metre). */
     jumpTo(x, z, s) {
       const v = this._view;
@@ -58921,9 +58983,12 @@ void main() {
 
     goToNearestShop() {
       const st = this._state || {};
+      // Shops that are open show a blip; a shut one (clerk gone) isn't worth the trip.
+      const open = new Set((st.blips || []).filter((bl) => bl.type === 'store').map((bl) => Math.round(bl.x) + ',' + Math.round(bl.z)));
+      const pool = (this.layout.stores || []).filter((s) => !open.size || open.has(Math.round(s.door.x) + ',' + Math.round(s.door.z)));
       let best = null;
       let bestD = Infinity;
-      for (const s of this.layout.stores || []) {
+      for (const s of pool) {
         const d = Math.hypot(s.door.x - (st.x || 0), s.door.z - (st.z || 0));
         if (d < bestD) {
           bestD = d;
@@ -58943,32 +59008,47 @@ void main() {
     _clickAt(sx, sy) {
       const v = this._view;
       if (!v || !this._fullOpen) return;
+      // Not through the panels that let drags pass (legend, header, hint pills...).
+      const over = (e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && sx >= r.left && sx <= r.right && sy >= r.top && sy <= r.bottom;
+      };
+      if ((this._panelEls || []).some(over) || (this._hintEls || []).some(over)) return;
       const st = this._state || {};
       const toS = (x, z) => [v.ox + (x - v.cx) * v.s, v.oy + (z - v.cz) * v.s];
-      const near = (x, z, r) => {
+      const dist = (x, z) => {
         const [X, Y] = toS(x, z);
-        return Math.hypot(X - sx, Y - sy) < r;
+        return Math.hypot(X - sx, Y - sy);
       };
       const wp = st.waypoint;
-      if (wp && near(wp.x, wp.z, 16)) return this._emitWaypoint(null);
-      for (const lm of VH.Data.landmarks || []) {
-        if (lm.major && near(lm.x, lm.z, 24)) return this.goTo(lm);
-      }
+      if (wp && dist(wp.x, wp.z) < 16) return this._emitWaypoint(null);
+      // A blip under the cursor (a shop, a plane, a tank) beats the badge of the place it's in.
       let best = null;
       let bestD = 16;
       for (const bl of st.blips || []) {
         if (!bl.label || bl.type === 'waypoint') continue;
-        const [X, Y] = toS(bl.x, bl.z);
-        const d = Math.hypot(X - sx, Y - sy);
+        const d = dist(bl.x, bl.z);
         if (d < bestD) {
           bestD = d;
           best = bl;
         }
       }
+      for (const lm of VH.Data.landmarks || []) {
+        if (lm.major && dist(lm.x, lm.z) < Math.min(24, best ? bestD : 24)) return this.goTo(lm);
+      }
       if (best) return this._emitWaypoint({ x: best.x, z: best.z, name: best.label });
-      const L = this._ext.land;
-      const x = clamp(v.cx + (sx - v.ox) / v.s, L.minX, L.maxX);
-      const z = clamp(v.cz + (sy - v.oy) / v.s, L.minZ, L.maxZ);
+      // Anywhere else: only inside the world (the walls stand on its edges), pulled in a little.
+      const b = this.layout.config.bounds;
+      const pier = this.layout.waterfront && this.layout.waterfront.pier;
+      let x = v.cx + (sx - v.ox) / v.s;
+      let z = v.cz + (sy - v.oy) / v.s;
+      const onPier = pier && x >= b.maxX && x <= pier.x1 && z >= pier.z0 && z <= pier.z1;
+      if (!onPier && (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ)) return;
+      if (!onPier) {
+        const seawall = this.layout.config.seawallX || b.maxX;
+        x = clamp(x, b.minX + 4, Math.min(b.maxX, seawall) - 2);
+        z = clamp(z, b.minZ + 4, b.maxZ - 4);
+      }
       this._emitWaypoint({ x, z, name: 'Waypoint' });
     }
 
@@ -59057,12 +59137,13 @@ void main() {
       this._lastFullDraw = now;
       if (this._fullDirty) {
         const oldFit = this._fitS;
+        if (this._fullOpen) this._measurePanels();
         if (this._resizeFull() && this._view) {
           // Keep the player's zoom relative to the new fit.
           const rel = this._view.s / oldFit;
           const cx = this._view.cx;
           const cz = this._view.cz;
-          this._fitView();
+          this._fitView(); // same mode; then keep the zoom and centre the player had
           this._view.s = clamp(this._fitS * rel, this._minS, this._maxS);
           this._view.cx = cx;
           this._view.cz = cz;
@@ -59216,7 +59297,7 @@ void main() {
       const hasWp = !!st.waypoint;
       if (hasWp !== this._clearOn && this._clearChip) {
         this._clearOn = hasWp;
-        this._clearChip.classList.toggle('is-hidden', !hasWp);
+        this._clearChip.classList.toggle('is-off', !hasWp);
       }
       if (mask !== this._legendMask) {
         this._legendMask = mask;
@@ -59466,11 +59547,12 @@ void main() {
       g.textBaseline = 'middle';
 
       // Keep the panels clear of labels: legend, header, compass, zoom buttons, scale bar and hints.
-      if (W >= 900) this._claim(W - this._legendW - 44, H / 2 - this._legendH / 2 - 12, W, H / 2 + this._legendH / 2 + 12);
+      const lb = this._legendBox;
+      if (lb) this._claim(lb[0] - 34, lb[1] - 12, W, lb[3] + 12);
       this._claim(0, 0, 330, 100);
       if (this._placesBox) this._claim(this._placesBox[0] - 6, this._placesBox[1] - 6, this._placesBox[2] + 6, this._placesBox[3] + 6);
       this._claim(W - 100, 0, W, 90);
-      this._claim(W - 90, H - 180, W, H);
+      this._claim(W - 160, H - 74, W, H);
       this._claim(0, H - 62, W, H);
 
       // 0. The big places: a badge, a bold name and the tagline, at every zoom.
@@ -62492,6 +62574,9 @@ void main() {
       });
       VH.events.on('ui:click', () => audio.click());
       VH.events.on('map:waypoint', (wp) => this.setWaypoint(wp));
+      window.addEventListener('blur', () => {
+        if (this.state === 'playing' && this.minimap && this.minimap.isFullOpen && !this.debug.inputEl.matches(':focus')) this.pause();
+      });
       VH.events.on('input:lockchange', (e) => {
         // The map keeps the mouse free, even if a lock asked for earlier arrives after it opened.
         if (e.locked && this.minimap && this.minimap.isFullOpen) {
@@ -63194,6 +63279,13 @@ void main() {
     },
 
     // ------------------------------------------------------- map and GPS
+    /** A job or a fare is showing the way (its route goes quiet near the marker; the waypoint must not jump in). */
+    _guided() {
+      const m = this.missions;
+      const a = this.activities;
+      return !!((m && m.run && m._routeTo) || (a && a.taxi && a.taxi.fare));
+    },
+
     /** Everything the radar and the full map need this frame. */
     _mapState() {
       const player = this.player;
@@ -63201,13 +63293,14 @@ void main() {
       return {
         x: player.pos.x, z: player.pos.z, heading: pv ? pv.yaw : player.heading, camYaw: this.cameraRig.yaw,
         speed: pv ? pv.speed : player.speed, blips: this.blips ? this.blips() : [], searchArea: this.police ? this.police.searchArea : null,
-        route: this.route || this._wpRoute || null, waypoint: this.waypoint || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
+        route: this.route || (this._guided() ? null : this._wpRoute) || null, waypoint: this.waypoint || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
       };
     },
 
     /** The full map frees the mouse so it can be dragged, zoomed and clicked. */
     openMap() {
       if (!this.minimap || this.minimap.isFullOpen) return;
+      if (document.body.classList.contains('cutscene') || this.player.frozen) return; // not during a scene
       this.minimap.openFull();
       this.input.exitLock();
       this._sawMap = true;
@@ -63221,7 +63314,7 @@ void main() {
     closeMap() {
       if (!this.minimap || !this.minimap.isFullOpen) return;
       this.minimap.closeFull();
-      if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked) this.input.requestLock();
+      if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked && !(this.dialogue && this.dialogue._choice)) this.input.requestLock();
     },
 
     toggleMap() {
@@ -63231,6 +63324,7 @@ void main() {
 
     /** Per-frame odds and ends while playing: the GPS, and the update tip. */
     _tickExtras(dt) {
+      if (this.minimap && this.minimap.isFullOpen && (document.body.classList.contains('cutscene') || this.player.frozen)) this.closeMap();
       this._updateWaypoint(dt);
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
@@ -63275,7 +63369,10 @@ void main() {
       const w = this.waypoint;
       if (!w) return;
       const p = this.player.pos;
-      if (Math.hypot(p.x - w.x, p.z - w.z) < 20) {
+      const b = this.layout.config.bounds;
+      const ax = Math.max(b.minX + 4, w.x); // the hedge wall stands on the west edge
+      const az = Math.max(b.minZ + 4, Math.min(w.z, b.maxZ - 4));
+      if (Math.hypot(p.x - ax, p.z - az) < 20) {
         this.hud.notify({ title: 'You have arrived', text: w.name, icon: '📍', duration: 3500 });
         this.waypoint = null;
         this._wpRoute = null;
@@ -63294,21 +63391,25 @@ void main() {
     _gpsRoute(fx, fz, tx, tz) {
       if (!VH.Minimap || !VH.Minimap.route) return null;
       const lay = this.layout;
-      const zn = lay.config.zones || {};
       const inside = (r, x, z) => r && x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ;
-      let gate = null;
-      let zone = null;
-      if (lay.airport && inside(zn.airport, tx, tz) && tz < lay.airport.fenceZ) {
-        gate = { x: 45, z: lay.airport.fenceZ + 8 }; // the service gate off Airport Road
-        zone = zn.airport;
-      } else if (lay.fort && inside(zn.fort, tx, tz)) {
-        gate = { x: -1100, z: 0 }; // the end of Meridian Boulevard
-        zone = zn.fort;
+      const road = (x0, z0, x1, z1) => (Math.hypot(x0 - x1, z0 - z1) > 30 ? VH.Minimap.route(lay, x0, z0, x1, z1) : null) || [[x0, z0], [x1, z1]];
+      // Airside at the airport: in by the service gate.
+      const af = lay.airport && lay.airport.fence;
+      if (af && inside(af, tx, tz)) {
+        if (inside(af, fx, fz)) return [[fx, fz], [tx, tz]];
+        const g = lay.airport.gate;
+        const r = road(fx, fz, g.x, g.z);
+        r.push([g.x, af.maxZ - 10], [tx, tz]);
+        return r;
       }
-      if (gate && inside(zone, fx, fz)) return [[fx, fz], [tx, tz]]; // already in there
-      if (gate) {
-        const r = Math.hypot(fx - gate.x, fz - gate.z) > 30 ? VH.Minimap.route(lay, fx, fz, gate.x, gate.z) || [[fx, fz], [gate.x, gate.z]] : [[fx, fz]];
-        r.push([tx, tz]);
+      // Inside the army base's walls: in through the gate, then up the apron.
+      const fw = lay.fort && lay.fort.wall;
+      if (fw && tx > fw.x0 && tx < fw.x1 && tz > fw.z0 && tz < fw.z1) {
+        const wall = { minX: fw.x0, maxX: fw.x1, minZ: fw.z0, maxZ: fw.z1 };
+        if (inside(wall, fx, fz)) return [[fx, fz], [tx, tz]];
+        const gz = (lay.fort.gate.z0 + lay.fort.gate.z1) / 2;
+        const r = road(fx, fz, fw.x1 + 20, gz);
+        r.push([fw.x1 - 15, gz], [tx, tz]);
         return r;
       }
       if (Math.hypot(fx - tx, fz - tz) < 30) return null;

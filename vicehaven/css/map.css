@@ -252,7 +252,7 @@ body.map-open .vh-radar {
 .vh-map-legend-icon {
   flex: none;
   width: 30px;
-  height: 20px;
+  height: 22px;
 }
 
 /* ------------------------------------------------ quick views and places */
@@ -344,8 +344,38 @@ body.map-open .vh-radar {
   color: #ffc2f2;
 }
 
-.vh-map-chip.is-hidden {
-  display: none;
+.vh-map-chip.is-off {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* Short windows: the legend sits under the compass instead of centred, clear of the zoom buttons. */
+@media (max-height: 860px) {
+  .vh-map-legend {
+    top: 5.2rem;
+    transform: translate(10px, 0);
+  }
+
+  .vh-map.is-open .vh-map-legend {
+    transform: none;
+  }
+
+  .vh-map-legend-item {
+    padding: 0;
+  }
+}
+
+@media (max-height: 640px) {
+  .vh-map-legend {
+    display: none;
+  }
+}
+
+/* Mid widths: the footer drops the GPS hints rather than run into the scale bar. */
+@media (max-width: 1100px) {
+  .vh-map-foot .vh-map-hint:nth-child(n + 4) {
+    display: none;
+  }
 }
 
 /* ------------------------------------------------------ zoom controls */
@@ -354,7 +384,7 @@ body.map-open .vh-radar {
   right: 2rem;
   bottom: 1.6rem;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0.35rem;
 }
 

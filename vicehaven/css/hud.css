@@ -1671,3 +1671,9 @@ body.driving .hud-banner {
   60% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; }
 }
+
+/* Toasts and notices stay readable over the full map (GPS set, arrived...). */
+body.map-open .hud-toast,
+body.map-open .hud-notify-stack {
+  z-index: 31;
+}

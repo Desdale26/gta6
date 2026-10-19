@@ -337,6 +337,9 @@
       });
       VH.events.on('ui:click', () => audio.click());
       VH.events.on('map:waypoint', (wp) => this.setWaypoint(wp));
+      window.addEventListener('blur', () => {
+        if (this.state === 'playing' && this.minimap && this.minimap.isFullOpen && !this.debug.inputEl.matches(':focus')) this.pause();
+      });
       VH.events.on('input:lockchange', (e) => {
         // The map keeps the mouse free, even if a lock asked for earlier arrives after it opened.
         if (e.locked && this.minimap && this.minimap.isFullOpen) {
@@ -1039,6 +1042,13 @@
     },
 
     // ------------------------------------------------------- map and GPS
+    /** A job or a fare is showing the way (its route goes quiet near the marker; the waypoint must not jump in). */
+    _guided() {
+      const m = this.missions;
+      const a = this.activities;
+      return !!((m && m.run && m._routeTo) || (a && a.taxi && a.taxi.fare));
+    },
+
     /** Everything the radar and the full map need this frame. */
     _mapState() {
       const player = this.player;
@@ -1046,13 +1056,14 @@
       return {
         x: player.pos.x, z: player.pos.z, heading: pv ? pv.yaw : player.heading, camYaw: this.cameraRig.yaw,
         speed: pv ? pv.speed : player.speed, blips: this.blips ? this.blips() : [], searchArea: this.police ? this.police.searchArea : null,
-        route: this.route || this._wpRoute || null, waypoint: this.waypoint || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
+        route: this.route || (this._guided() ? null : this._wpRoute) || null, waypoint: this.waypoint || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
       };
     },
 
     /** The full map frees the mouse so it can be dragged, zoomed and clicked. */
     openMap() {
       if (!this.minimap || this.minimap.isFullOpen) return;
+      if (document.body.classList.contains('cutscene') || this.player.frozen) return; // not during a scene
       this.minimap.openFull();
       this.input.exitLock();
       this._sawMap = true;
@@ -1066,7 +1077,7 @@
     closeMap() {
       if (!this.minimap || !this.minimap.isFullOpen) return;
       this.minimap.closeFull();
-      if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked) this.input.requestLock();
+      if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked && !(this.dialogue && this.dialogue._choice)) this.input.requestLock();
     },
 
     toggleMap() {
@@ -1076,6 +1087,7 @@
 
     /** Per-frame odds and ends while playing: the GPS, and the update tip. */
     _tickExtras(dt) {
+      if (this.minimap && this.minimap.isFullOpen && (document.body.classList.contains('cutscene') || this.player.frozen)) this.closeMap();
       this._updateWaypoint(dt);
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
@@ -1120,7 +1132,10 @@
       const w = this.waypoint;
       if (!w) return;
       const p = this.player.pos;
-      if (Math.hypot(p.x - w.x, p.z - w.z) < 20) {
+      const b = this.layout.config.bounds;
+      const ax = Math.max(b.minX + 4, w.x); // the hedge wall stands on the west edge
+      const az = Math.max(b.minZ + 4, Math.min(w.z, b.maxZ - 4));
+      if (Math.hypot(p.x - ax, p.z - az) < 20) {
         this.hud.notify({ title: 'You have arrived', text: w.name, icon: '📍', duration: 3500 });
         this.waypoint = null;
         this._wpRoute = null;
@@ -1139,21 +1154,25 @@
     _gpsRoute(fx, fz, tx, tz) {
       if (!VH.Minimap || !VH.Minimap.route) return null;
       const lay = this.layout;
-      const zn = lay.config.zones || {};
       const inside = (r, x, z) => r && x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ;
-      let gate = null;
-      let zone = null;
-      if (lay.airport && inside(zn.airport, tx, tz) && tz < lay.airport.fenceZ) {
-        gate = { x: 45, z: lay.airport.fenceZ + 8 }; // the service gate off Airport Road
-        zone = zn.airport;
-      } else if (lay.fort && inside(zn.fort, tx, tz)) {
-        gate = { x: -1100, z: 0 }; // the end of Meridian Boulevard
-        zone = zn.fort;
+      const road = (x0, z0, x1, z1) => (Math.hypot(x0 - x1, z0 - z1) > 30 ? VH.Minimap.route(lay, x0, z0, x1, z1) : null) || [[x0, z0], [x1, z1]];
+      // Airside at the airport: in by the service gate.
+      const af = lay.airport && lay.airport.fence;
+      if (af && inside(af, tx, tz)) {
+        if (inside(af, fx, fz)) return [[fx, fz], [tx, tz]];
+        const g = lay.airport.gate;
+        const r = road(fx, fz, g.x, g.z);
+        r.push([g.x, af.maxZ - 10], [tx, tz]);
+        return r;
       }
-      if (gate && inside(zone, fx, fz)) return [[fx, fz], [tx, tz]]; // already in there
-      if (gate) {
-        const r = Math.hypot(fx - gate.x, fz - gate.z) > 30 ? VH.Minimap.route(lay, fx, fz, gate.x, gate.z) || [[fx, fz], [gate.x, gate.z]] : [[fx, fz]];
-        r.push([tx, tz]);
+      // Inside the army base's walls: in through the gate, then up the apron.
+      const fw = lay.fort && lay.fort.wall;
+      if (fw && tx > fw.x0 && tx < fw.x1 && tz > fw.z0 && tz < fw.z1) {
+        const wall = { minX: fw.x0, maxX: fw.x1, minZ: fw.z0, maxZ: fw.z1 };
+        if (inside(wall, fx, fz)) return [[fx, fz], [tx, tz]];
+        const gz = (lay.fort.gate.z0 + lay.fort.gate.z1) / 2;
+        const r = road(fx, fz, fw.x1 + 20, gz);
+        r.push([fw.x1 - 15, gz], [tx, tz]);
         return r;
       }
       if (Math.hypot(fx - tx, fz - tz) < 30) return null;

@@ -155,6 +155,8 @@
       const data = {
         runway: RWY, taxiway: TWY, links: LINKS, apron: APRON, ga: GA, service: SERVICE, terminal: TERMINAL,
         tower: TOWER, hangars: HANGARS, helipad: HELIPAD, carpark: CARPARK, fenceZ: FENCE_Z, stands: STANDS,
+        // The airside fence (see _fences): the GPS goes in by the service gate.
+        fence: { minX: -1030, maxX: 345, minZ: -1510, maxZ: FENCE_Z }, gate: { x: 45, z: FENCE_Z + 8 },
       };
       layout.airport = data;
       Airfield._runway(world);
