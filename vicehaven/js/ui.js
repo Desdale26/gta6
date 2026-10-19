@@ -509,6 +509,7 @@
         body.append(row);
       };
       body.append(el('p', 'whatsnew-lead', 'Press M in the game for the new map: full screen, with a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.'));
+      item('✈  New aircraft and tank', 'The airliner, the Skylark, the Talon jet, both helicopters and the Bastion tank have all been rebuilt: real wings and engines, windows and doors, cockpits, liveries, tread links and camouflage. Airliner windows light up at night.');
       item('🗺  A brand new map', 'Search for places, shops and streets; filter what shows; click a place for how far it is and how long the drive takes; right-click to drop coloured pins (they show on the radar too). The game pauses while it is open, and it works with a controller.');
       item('✈  Vicehaven International', 'Drive north up Grand Avenue to the airport. Steal a Skylark plane or the Sparrow helicopter, or the big Albatross jet, and fly. Airliners take off and land every few minutes.');
       item('★  Fort Breakwater', 'The army base at the far west end of Meridian Boulevard. Tanks, army jeeps, a fighter jet and a gunship, if you can get past the soldiers. Five stars if you take one.');

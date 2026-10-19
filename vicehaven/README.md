@@ -444,6 +444,7 @@ vicehaven/
 │   │                       factions; story-act1…4*.js = the jobs, by act; story-extras.js = fares, races,
 │   │                       bounties, turf wars, texts, radio hosts)
 │   ├── minimap.js (radar) · mapview.js (full map) · hud.js · ui.js · debug.js · main.js
+│   ├── vehicles/models/    one file per aircraft model (albatross, skylark, talon, sparrow, warden), built with the kit in aircraft.js
 ├── docs/STORY_BIBLE.md     the whole story: characters, timeline, every job, choices, endings
 ├── docs/mission-format.md  the data format the story is written in
 ├── dist/vicehaven.html     the single-file build (generated; don't edit it)

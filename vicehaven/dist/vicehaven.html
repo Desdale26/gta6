@@ -9962,11 +9962,19 @@ void main() {
         }
         const saved = JSON.parse(raw);
         const merged = mergeKnown(defaults(), saved);
-        // Bindings may gain new actions in later phases; keep defaults for those.
+        // Bindings may gain new actions in later phases; keep defaults for those,
+        // unless the player already uses that key for something else.
         if (saved && saved.controls && saved.controls.bindings) {
+          const sb = saved.controls.bindings;
           for (const action of Object.keys(DEFAULT_BINDINGS)) {
-            const b = saved.controls.bindings[action];
+            const b = sb[action];
             if (Array.isArray(b)) merged.controls.bindings[action] = [b[0] || null, b[1] || null];
+          }
+          const used = new Set();
+          for (const action of Object.keys(sb)) if (Array.isArray(sb[action])) for (const c of sb[action]) if (c) used.add(c);
+          for (const action of Object.keys(DEFAULT_BINDINGS)) {
+            if (Array.isArray(sb[action])) continue;
+            merged.controls.bindings[action] = merged.controls.bindings[action].map((c) => (c && used.has(c) ? null : c));
           }
         }
         this.data = merged;
@@ -32847,6 +32855,54 @@ void main() {
   };
 
   // ============================================================ model kit
+  /** A smooth curve through (x, y) keys that never overshoots them (monotone cubic). */
+  function monotone(xs, ys) {
+    const n = xs.length;
+    if (n === 1) return () => ys[0];
+    const d = [];
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i] || 1e-6));
+    const m = [d[0]];
+    for (let i = 1; i < n - 1; i++) m.push(d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2);
+    m.push(d[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) {
+        m[i] = m[i + 1] = 0;
+        continue;
+      }
+      const a = m[i] / d[i];
+      const b = m[i + 1] / d[i];
+      const h = a * a + b * b;
+      if (h > 9) {
+        const t = 3 / Math.sqrt(h);
+        m[i] = t * a * d[i];
+        m[i + 1] = t * b * d[i];
+      }
+    }
+    return (x) => {
+      if (x <= xs[0]) return ys[0];
+      if (x >= xs[n - 1]) return ys[n - 1];
+      let i = 0;
+      while (i < n - 2 && x > xs[i + 1]) i++;
+      const h = xs[i + 1] - xs[i];
+      const t = (x - xs[i]) / h;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
+    };
+  }
+
+  /** Half-thickness of a symmetric NACA four-digit airfoil at chord fraction x, thickness t. */
+  function naca(x, t) {
+    return 5 * t * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+  }
+  // Chord stations of an airfoil, trailing edge → leading edge (denser at the nose).
+  const FOIL = [1, 0.86, 0.68, 0.5, 0.34, 0.21, 0.11, 0.05, 0.016, 0];
+
+  const _p0 = new THREE.Vector3();
+  const _p1 = new THREE.Vector3();
+  const _t0 = new THREE.Vector3();
+  const _t1 = new THREE.Vector3();
+
   /** Collects coloured primitives and merges them into one geometry. */
   class Kit {
     constructor() {
@@ -32940,6 +32996,449 @@ void main() {
       return this.add(g, color);
     }
 
+    /** One triangle with per-vertex normals and colours, turned to face along its normals. */
+    tri(a, b, c, na, nb, nc, ca, cb, cc) {
+      // Orientation from the geometry: flip if it faces against the supplied normals.
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
+      if (gx * gx + gy * gy + gz * gz < 1e-14) return this;
+      const sx = na[0] + nb[0] + nc[0], sy = na[1] + nb[1] + nc[1], sz = na[2] + nb[2] + nc[2];
+      if (gx * sx + gy * sy + gz * sz < 0) {
+        let t = b;
+        b = c;
+        c = t;
+        t = nb;
+        nb = nc;
+        nc = t;
+        t = cb;
+        cb = cc;
+        cc = t;
+      }
+      this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+      this.nor.push(na[0], na[1], na[2], nb[0], nb[1], nb[2], nc[0], nc[1], nc[2]);
+      this.col.push(ca[0], ca[1], ca[2], cb[0], cb[1], cb[2], cc[0], cc[1], cc[2]);
+      return this;
+    }
+
+    /**
+     * A smooth body lofted through cross-sections along Z (fuselages, booms,
+     * nacelles, pods). stations: [{ z, w, h, y, n }] = half width, half
+     * height, centre height and squareness (a superellipse power: 2 is an
+     * ellipse, 3-5 boxier), curved smoothly between. Colour `color`, with
+     * hard-edged paint:
+     *   opts.bands  [[s0, s1, color]] round the body, s = angle from the top
+     *               (0 top, PI/2 the sides, PI the belly), both sides alike
+     *   opts.zBands [[z0, z1, color]] along it (a nose cone, a tail band);
+     *               these win over bands
+     *   opts.seg    points round (default 28), opts.steps between stations (5)
+     *   opts.caps   { front: color, back: color } closes open ends in a colour
+     *   opts.x      moves it sideways (an engine pod under a wing)
+     * Returns the surface, for decals: surf.at(z, s, side) → { p, n, tz, ts }.
+     */
+    loft(stations, color, opts) {
+      opts = opts || {};
+      const ox = opts.x || 0;
+      const S = stations.slice().sort((a, b) => a.z - b.z);
+      const zs = S.map((q) => q.z);
+      const fw = monotone(zs, S.map((q) => q.w));
+      const fh = monotone(zs, S.map((q) => (q.h === undefined ? q.w : q.h)));
+      const fy = monotone(zs, S.map((q) => q.y || 0));
+      const fn = monotone(zs, S.map((q) => q.n || 2));
+      const zMin = zs[0];
+      const zMax = zs[zs.length - 1];
+      const P = (z, s, side, out) => {
+        if (s < 0) {
+          s = -s;
+          side = -side;
+        } else if (s > Math.PI) {
+          s = 2 * Math.PI - s;
+          side = -side;
+        }
+        const w = Math.max(fw(z), 0);
+        const h = Math.max(fh(z), 0);
+        const e = 2 / Math.max(fn(z), 1.2);
+        const sn = Math.sin(s);
+        const cs = Math.cos(s);
+        out.set(ox + side * w * Math.pow(Math.abs(sn), e), fy(z) + h * Math.sign(cs) * Math.pow(Math.abs(cs), e), z);
+        return out;
+      };
+      const frame = (z, s, side) => {
+        const p = P(z, s, side, new THREE.Vector3());
+        const dz = 0.01;
+        const za = Math.max(zMin, z - dz);
+        const zb = Math.min(zMax, z + dz);
+        const tz = P(zb, s, side, _t0).sub(P(za, s, side, _t1)).clone();
+        const ts = P(z, s + 0.01, side, _t0).sub(P(z, s - 0.01, side, _t1)).clone(); // "down" round the side
+        const n = new THREE.Vector3().crossVectors(tz, ts).multiplyScalar(side < 0 ? -1 : 1);
+        if (n.lengthSq() < 1e-12 || ts.lengthSq() < 1e-10) {
+          n.set(0, 0, z >= (zMin + zMax) / 2 ? 1 : -1);
+        } else {
+          n.normalize();
+          // Outward, whatever the maths above made of it.
+          const out = _p0.set(p.x - ox, p.y - fy(z), 0);
+          if (out.lengthSq() > 1e-8 && n.dot(out) < 0) n.negate();
+        }
+        return { p, n, tz: tz.normalize(), ts: ts.lengthSq() > 1e-10 ? ts.normalize() : new THREE.Vector3(0, -1, 0) };
+      };
+      const base = VH.col(color);
+      const bandList = (opts.bands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const zBandList = (opts.zBands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const colS = (s) => {
+        for (const [a, b, c] of bandList) if (s >= a && s < b) return c;
+        return base;
+      };
+      const colZ = (z) => {
+        for (const [a, b, c] of zBandList) if (z >= a && z < b) return c;
+        return null;
+      };
+      // Columns round the body: down the +X side, then back up the -X side; band edges doubled.
+      const seg = opts.seg || 28;
+      const half = Math.max(4, Math.round(seg / 2));
+      const cuts = new Set();
+      for (const [a, b] of bandList) {
+        if (a > 1e-4 && a < Math.PI - 1e-4) cuts.add(+a.toFixed(5));
+        if (b > 1e-4 && b < Math.PI - 1e-4) cuts.add(+b.toFixed(5));
+      }
+      const sv = new Set();
+      for (let k = 0; k <= half; k++) sv.add(+((Math.PI * k) / half).toFixed(5));
+      for (const c of cuts) sv.add(c);
+      const sList = [...sv].sort((a, b) => a - b);
+      const cols = [];
+      for (const s of sList) {
+        if (cuts.has(s)) cols.push({ s, side: 1, c: colS(s - 1e-4) }, { s, side: 1, c: colS(s + 1e-4) });
+        else cols.push({ s, side: 1, c: colS(s) });
+      }
+      for (let i = sList.length - 2; i >= 1; i--) {
+        const s = sList[i];
+        if (cuts.has(s)) cols.push({ s, side: -1, c: colS(s + 1e-4) }, { s, side: -1, c: colS(s - 1e-4) });
+        else cols.push({ s, side: -1, c: colS(s) });
+      }
+      // Rings along Z: the stations, the steps between, and zBand edges doubled.
+      const steps = opts.steps || 5;
+      const zv = new Set();
+      for (let i = 0; i < S.length - 1; i++) for (let k = 0; k < steps; k++) zv.add(+(S[i].z + ((S[i + 1].z - S[i].z) * k) / steps).toFixed(5));
+      zv.add(+zMax.toFixed(5));
+      const zc = new Set();
+      for (const [a, b] of zBandList) {
+        for (const v of [a, b]) if (v > zMin + 1e-4 && v < zMax - 1e-4) zc.add(+v.toFixed(5));
+      }
+      for (const v of zc) zv.add(v);
+      const zList = [...zv].sort((a, b) => a - b);
+      const rings = [];
+      for (const z of zList) {
+        const fr = cols.map((cl) => frame(z, cl.s, cl.side));
+        if (zc.has(z)) {
+          rings.push({ z, fr, cz: colZ(z - 1e-4) }, { z, fr, cz: colZ(z + 1e-4) });
+        } else rings.push({ z, fr, cz: colZ(z) });
+      }
+      const nc = cols.length;
+      const arr = (v) => [v.x, v.y, v.z];
+      for (let r = 0; r < rings.length - 1; r++) {
+        const A = rings[r];
+        const B = rings[r + 1];
+        if (B.z - A.z < 1e-6) continue;
+        for (let j = 0; j < nc; j++) {
+          const j2 = (j + 1) % nc;
+          if (cols[j].s === cols[j2].s && cols[j].side === cols[j2].side) continue;
+          const c1 = A.cz || cols[j].c;
+          const c2 = A.cz || cols[j2].c;
+          const c3 = B.cz || cols[j].c;
+          const c4 = B.cz || cols[j2].c;
+          const a = A.fr[j], b = A.fr[j2], c = B.fr[j], d = B.fr[j2];
+          this.tri(arr(a.p), arr(b.p), arr(c.p), arr(a.n), arr(b.n), arr(c.n), c1, c2, c3);
+          this.tri(arr(b.p), arr(d.p), arr(c.p), arr(b.n), arr(d.n), arr(c.n), c2, c4, c3);
+        }
+      }
+      // Close open ends.
+      const caps = opts.caps || {};
+      for (const [ring, dir, key] of [[rings[0], -1, 'back'], [rings[rings.length - 1], 1, 'front']]) {
+        if (Math.max(fw(ring.z), fh(ring.z)) < 0.01) continue;
+        const cc = caps[key] !== undefined ? VH.col(caps[key]) : ring.cz || base;
+        const ctr = [ox, fy(ring.z), ring.z];
+        const nn = [0, 0, dir];
+        for (let j = 0; j < nc; j++) {
+          const j2 = (j + 1) % nc;
+          this.tri(ctr, arr(ring.fr[j].p), arr(ring.fr[j2].p), nn, nn, nn, cc, cc, cc);
+        }
+      }
+      return {
+        at: (z, s, side) => frame(z, s, side || 1),
+        width: (z) => fw(z),
+        height: (z) => fh(z),
+        centre: (z) => fy(z),
+      };
+    }
+
+    /**
+     * Paint on a loft (windows, doors, panels): a flat patch on the surface at
+     * (z, s, side), w long (along Z) and h tall (round the body). opts.round
+     * rounds the corners (0-1); opts.lift lifts it off the skin (default 1.2 cm).
+     */
+    decal(surf, z, s, side, w, h, color, opts) {
+      opts = opts || {};
+      const f = surf.at(z, s, side);
+      const lift = opts.lift === undefined ? 0.012 : opts.lift;
+      const o = f.p.clone().addScaledVector(f.n, lift);
+      const c = VH.col(color);
+      const n = [f.n.x, f.n.y, f.n.z];
+      const pt = (u, v) => {
+        const q = o.clone().addScaledVector(f.tz, u).addScaledVector(f.ts, v);
+        return [q.x, q.y, q.z];
+      };
+      const r = Math.min(1, Math.max(0, opts.round || 0));
+      const hw = w / 2;
+      const hh = h / 2;
+      let outline;
+      if (r > 0) {
+        const cr = Math.min(hw, hh) * r;
+        outline = [];
+        for (const [cx, cy, a0] of [[hw - cr, hh - cr, 0], [-hw + cr, hh - cr, Math.PI / 2], [-hw + cr, -hh + cr, Math.PI], [hw - cr, -hh + cr, Math.PI * 1.5]]) {
+          for (let k = 0; k <= 3; k++) {
+            const a = a0 + (k / 3) * (Math.PI / 2);
+            outline.push([cx + Math.cos(a) * cr, cy + Math.sin(a) * cr]);
+          }
+        }
+      } else outline = [[hw, hh], [-hw, hh], [-hw, -hh], [hw, -hh]];
+      const ctr = pt(0, 0);
+      for (let i = 0; i < outline.length; i++) {
+        const a = outline[i];
+        const b = outline[(i + 1) % outline.length];
+        this.tri(ctr, pt(a[0], a[1]), pt(b[0], b[1]), n, n, n, c, c, c);
+      }
+      return this;
+    }
+
+    /**
+     * A curved panel that follows a loft (windscreens, canopies' frames, big
+     * painted areas): from z0 to z1, between s angles that may change along
+     * it, sA = [top, bottom] at z0 and sB at z1 (a trapezoid). opts.lift as
+     * for decals; opts.nz / opts.ns: how finely it bends (6 × 4).
+     */
+    patch(surf, z0, z1, sA, sB, side, color, opts) {
+      opts = opts || {};
+      const lift = opts.lift === undefined ? 0.012 : opts.lift;
+      const nz = opts.nz || 6;
+      const ns = opts.ns || 4;
+      const c = VH.col(color);
+      const G = [];
+      for (let i = 0; i <= nz; i++) {
+        const t = i / nz;
+        const z = z0 + (z1 - z0) * t;
+        const sT = sA[0] + (sB[0] - sA[0]) * t;
+        const sBt = sA[1] + (sB[1] - sA[1]) * t;
+        const row = [];
+        for (let j = 0; j <= ns; j++) {
+          const f = surf.at(z, sT + (sBt - sT) * (j / ns), side);
+          const q = f.p.clone().addScaledVector(f.n, lift);
+          row.push({ p: [q.x, q.y, q.z], n: [f.n.x, f.n.y, f.n.z] });
+        }
+        G.push(row);
+      }
+      for (let i = 0; i < nz; i++) {
+        for (let j = 0; j < ns; j++) {
+          const a = G[i][j], b = G[i][j + 1], d = G[i + 1][j], e = G[i + 1][j + 1];
+          this.tri(a.p, b.p, d.p, a.n, b.n, d.n, c, c, c);
+          this.tri(b.p, e.p, d.p, b.n, e.n, d.n, c, c, c);
+        }
+      }
+      return this;
+    }
+
+    /**
+     * A wing, tailplane or fin lofted through airfoil sections from the root
+     * out: sections [{ x, y, z, c, t }] place the leading edge, the chord
+     * (running back along -Z) and the thickness (a fraction of the chord).
+     * opts.axis 'y' makes a fin (thickness across X); opts.mirror adds the
+     * other side; opts.bands [[f0, f1, color]] paint spanwise (0 root, 1 tip);
+     * opts.camber bows it a little (wings, not fins).
+     */
+    wing(sections, color, opts) {
+      opts = opts || {};
+      const fin = opts.axis === 'y';
+      const base = VH.col(color);
+      const bands = (opts.bands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const span = (q) => (fin ? q.y : Math.abs(q.x));
+      const s0 = span(sections[0]);
+      const s1 = span(sections[sections.length - 1]);
+      const frac = (q) => (s1 === s0 ? 0 : (span(q) - s0) / (s1 - s0));
+      const colAt = (f) => {
+        for (const [a, b, c] of bands) if (f >= a && f < b) return c;
+        return base;
+      };
+      const lerpSec = (a, b, t) => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t), c: lerp(a.c, b.c, t), t: lerp(a.t, b.t, t) });
+      // Sections, with band edges doubled.
+      const secs = [];
+      for (let i = 0; i < sections.length; i++) {
+        const q = sections[i];
+        const f = frac(q);
+        if (i > 0) {
+          const p = sections[i - 1];
+          const fp = frac(p);
+          const edges = [];
+          for (const [a, b] of bands) for (const e of [a, b]) if (e > fp + 1e-4 && e < f - 1e-4) edges.push(e);
+          edges.sort((u, v) => u - v);
+          for (const e of edges) {
+            const t = (e - fp) / (f - fp);
+            const m = lerpSec(p, q, t);
+            secs.push({ q: m, c: colAt(e - 1e-4) }, { q: m, c: colAt(e + 1e-4) });
+          }
+        }
+        secs.push({ q, c: colAt(Math.min(f, 1 - 1e-4)) });
+      }
+      const camber = fin ? 0 : opts.camber || 0;
+      // The outline: upper surface trailing edge → nose, then the lower surface back.
+      const loop = [];
+      for (const x of FOIL) loop.push([x, 1]);
+      for (let i = FOIL.length - 2; i >= 0; i--) loop.push([FOIL[i], -1]);
+      const point = (q, x, side) => {
+        const th = naca(Math.max(x, 0), q.t) * q.c * side + camber * q.c * 4 * x * (1 - x);
+        return fin ? [q.x + th, q.y, q.z - x * q.c] : [q.x, q.y + th, q.z - x * q.c];
+      };
+      const sideSign = sections[sections.length - 1].x < sections[0].x ? -1 : 1;
+      // Positions for every section × outline point, then smooth normals.
+      const G = secs.map((sc) => loop.map(([x, side]) => point(sc.q, x, side)));
+      const L = loop.length;
+      const norms = G.map(() => loop.map(() => [0, 0, 0]));
+      const quad = (i, j) => {
+        const a = G[i][j], b = G[i][j + 1], c = G[i + 1][j], d = G[i + 1][j + 1];
+        return [a, b, c, d];
+      };
+      const addN = (i, j, n) => {
+        const v = norms[i][j];
+        v[0] += n[0];
+        v[1] += n[1];
+        v[2] += n[2];
+      };
+      const faceN = (a, b, c) => {
+        const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+        const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+        return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      };
+      // Which way a face looks: up (or +X on a fin) on the upper surface, down on the lower, forward at the nose.
+      const outward = (i, j) => {
+        const side = loop[j][0] > 0 ? loop[j][1] : loop[j + 1][1];
+        const nose = loop[j][0] < 0.06 && loop[j + 1][0] < 0.06 ? 0.6 : 0;
+        return fin ? [side, 0, nose] : [0, side, nose];
+      };
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q === secs[i].q) continue;
+        for (let j = 0; j < L - 1; j++) {
+          const [a, b, c, d] = quad(i, j);
+          let n1 = faceN(a, b, c);
+          let n2 = faceN(b, d, c);
+          const ref = outward(i, j);
+          if (n1[0] * ref[0] + n1[1] * ref[1] + n1[2] * ref[2] < 0) n1 = n1.map((v) => -v);
+          if (n2[0] * ref[0] + n2[1] * ref[1] + n2[2] * ref[2] < 0) n2 = n2.map((v) => -v);
+          for (const [ii, jj, n] of [[i, j, n1], [i, j + 1, n1], [i + 1, j, n1], [i, j + 1, n2], [i + 1, j + 1, n2], [i + 1, j, n2]]) addN(ii, jj, n);
+        }
+      }
+      // Band seams share normals with their twin, so the paint edge doesn't show in the shading.
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q !== secs[i].q) continue;
+        for (let j = 0; j < L; j++) {
+          const a = norms[i][j], b = norms[i + 1][j];
+          const m = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+          norms[i][j] = m;
+          norms[i + 1][j] = m.slice();
+        }
+      }
+      const unit = (v) => {
+        const l = Math.hypot(v[0], v[1], v[2]) || 1;
+        return [v[0] / l, v[1] / l, v[2] / l];
+      };
+      const N = norms.map((row) => row.map(unit));
+      const out = new Kit();
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q === secs[i].q) continue;
+        const ca = secs[i].c, cb = secs[i + 1].c;
+        for (let j = 0; j < L - 1; j++) {
+          out.tri(G[i][j], G[i][j + 1], G[i + 1][j], N[i][j], N[i][j + 1], N[i + 1][j], ca, ca, cb);
+          out.tri(G[i][j + 1], G[i + 1][j + 1], G[i + 1][j], N[i][j + 1], N[i + 1][j + 1], N[i + 1][j], ca, cb, cb);
+        }
+      }
+      // Root and tip caps.
+      for (const [i, dir] of [[0, -1], [G.length - 1, 1]]) {
+        const ring = G[i];
+        const q = secs[i].q;
+        const nn = fin ? [0, dir, 0] : [dir * sideSign, 0, 0];
+        const c = secs[i].c;
+        const mid = [q.x, q.y, q.z - 0.35 * q.c];
+        for (let j = 0; j < L - 1; j++) out.tri(mid, ring[j], ring[j + 1], nn, nn, nn, c, c, c);
+      }
+      this._absorb(out);
+      if (opts.mirror) this._absorb(out, true);
+      return this;
+    }
+
+    /** Copy another kit's triangles in (optionally mirrored across X = 0, winding fixed). */
+    _absorb(k, mirror) {
+      const P = k.pos, Nn = k.nor, C = k.col;
+      for (let i = 0; i < P.length; i += 9) {
+        const v = (o) => [mirror ? -P[i + o] : P[i + o], P[i + o + 1], P[i + o + 2]];
+        const n = (o) => [mirror ? -Nn[i + o] : Nn[i + o], Nn[i + o + 1], Nn[i + o + 2]];
+        const c = (o) => [C[i + o], C[i + o + 1], C[i + o + 2]];
+        if (mirror) this.tri(v(0), v(6), v(3), n(0), n(6), n(3), c(0), c(6), c(3));
+        else this.tri(v(0), v(3), v(6), n(0), n(3), n(6), c(0), c(3), c(6));
+      }
+      return this;
+    }
+
+    /** Copy another kit's triangles in, moved by a matrix (a rotor blade built once, placed four times). */
+    place(src, m) {
+      const nm = new THREE.Matrix3().getNormalMatrix(m);
+      const P = src.pos, Nn = src.nor, C = src.col;
+      const v = new THREE.Vector3();
+      const n = new THREE.Vector3();
+      for (let i = 0; i < P.length; i += 9) {
+        const pts = [];
+        const ns = [];
+        const cs = [];
+        for (let o = 0; o < 9; o += 3) {
+          v.set(P[i + o], P[i + o + 1], P[i + o + 2]).applyMatrix4(m);
+          n.set(Nn[i + o], Nn[i + o + 1], Nn[i + o + 2]).applyMatrix3(nm).normalize();
+          pts.push([v.x, v.y, v.z]);
+          ns.push([n.x, n.y, n.z]);
+          cs.push([C[i + o], C[i + o + 1], C[i + o + 2]]);
+        }
+        this.tri(pts[0], pts[1], pts[2], ns[0], ns[1], ns[2], cs[0], cs[1], cs[2]);
+      }
+      return this;
+    }
+
+    /** Mirror everything added after `from` (a vertex count) across X = 0. */
+    mirrorFrom(from) {
+      const tmp = new Kit();
+      tmp.pos = this.pos.slice(from * 3);
+      tmp.nor = this.nor.slice(from * 3);
+      tmp.col = this.col.slice(from * 3);
+      return this._absorb(tmp, true);
+    }
+
+    get count() {
+      return this.pos.length / 3;
+    }
+
+    /** A tyre (a rounded ring) with its axle along X, centred at (x, y, z). */
+    tyre(r, w, x, y, z, color, seg) {
+      const prof = [];
+      const ri = r * 0.62;
+      const rr = Math.min(w * 0.42, (r - ri) * 0.5);
+      prof.push(new THREE.Vector2(ri, -w / 2));
+      for (let k = 0; k <= 4; k++) {
+        const a = -Math.PI / 2 + (k / 4) * (Math.PI / 2);
+        prof.push(new THREE.Vector2(r - rr + Math.cos(a) * rr, -w / 2 + rr + Math.sin(a) * rr));
+      }
+      for (let k = 0; k <= 4; k++) {
+        const a = (k / 4) * (Math.PI / 2);
+        prof.push(new THREE.Vector2(r - rr + Math.cos(a) * rr, w / 2 - rr + Math.sin(a) * rr));
+      }
+      prof.push(new THREE.Vector2(ri, w / 2));
+      const g = new THREE.LatheGeometry(prof, seg || 16);
+      g.rotateZ(Math.PI / 2);
+      return this.add(g, color, mat(x, y, z));
+    }
+
     geometry() {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -32967,11 +33466,16 @@ void main() {
       white: hdr(5, 5, 4.6),
       burner: new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 2.2, 0.8), transparent: true, opacity: 0.85, depthWrite: false }),
       blur: new THREE.MeshBasicMaterial({ color: 0x1c1f24, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }),
+      // Bare metal (engine parts, gear legs, spinners) and rubber or matte plastic.
+      metal: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.85 }),
+      matte: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }),
+      // Cabin windows: dark glass by day, lit from inside after dark (see setNav).
+      cabin: new THREE.MeshStandardMaterial({ color: 0x1a222c, roughness: 0.15, metalness: 0.4, emissive: 0xffd49a, emissiveIntensity: 0 }),
     };
     return MATS;
   }
   function paintMaterial() {
-    return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.25 });
+    return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.2 });
   }
 
   const WHITE = 0xf1f2ef;
@@ -32980,7 +33484,10 @@ void main() {
   const RUBBER = 0x161616;
 
   // ---------------------------------------------------- model definitions
-  // Each returns { kit (paint), glass (kit), lights: [[mat, x, y, z, r]], spin: {...} }.
+  // Each returns { kit (paint), metal, matte, glass, lit (cabin windows that glow at night) (kits), gear (kit that
+  // retracts), lights: [[mat, x, y, z, r]], prop / rotor / tailRotor (kits that
+  // spin, at a pivot), strobe, beaconLow, burner }. More can be added to
+  // VH.AircraftDefs from other files (loaded after this one).
   const DEFS = {
     skylark(c) {
       const k = new Kit();
@@ -33146,15 +33653,22 @@ void main() {
     },
   };
 
+  // Other files may add or replace models: VH.AircraftDefs[type] = (color, Kit) => def.
+  VH.AircraftDefs = VH.AircraftDefs || {};
+
   // Geometry is cached per type and colour; materials per aircraft (damage tint).
   const GEO = new Map();
   function geometryFor(type, color) {
     const key = type + '|' + color;
     let g = GEO.get(key);
     if (g) return g;
-    const d = DEFS[type](color);
+    const d = (VH.AircraftDefs[type] || DEFS[type])(color, Kit);
+    const some = (k) => (k && k.pos.length ? k.geometry() : null);
     g = {
       body: d.kit.geometry(),
+      metal: some(d.metal),
+      matte: some(d.matte),
+      lit: some(d.lit),
       glass: d.glass ? d.glass.geometry() : null,
       gear: d.gear ? d.gear.geometry() : null,
       prop: d.prop ? { geo: d.prop.kit.geometry(), at: d.prop.at, disc: d.prop.disc } : null,
@@ -33193,6 +33707,9 @@ void main() {
         return mesh;
       };
       add(g.body, this.paint);
+      if (g.metal) add(g.metal, M.metal);
+      if (g.matte) add(g.matte, M.matte);
+      if (g.lit) add(g.lit, M.cabin);
       if (g.glass) add(g.glass, M.glass);
       this.gear = g.gear ? add(g.gear, this.paint) : null;
       const spinner = (part) => {
@@ -33238,6 +33755,14 @@ void main() {
     }
 
     setNav(on, t) {
+      // Cabin lights follow the city's lit windows (one shared material for every aircraft).
+      const env = VH.game && VH.game.environment;
+      const glow = env ? env.shared.uWindowGlow.value : 0;
+      const M = mats();
+      if (M._glow !== glow) {
+        M._glow = glow;
+        M.cabin.emissiveIntensity = glow * 2.4;
+      }
       for (const n of this.navs) n.visible = on;
       if (this.strobe) this.strobe.visible = on && (t % 1.2) < 0.08;
       if (this.beacon) this.beacon.visible = on && (t % 1.0) < 0.5;
@@ -34031,6 +34556,1330 @@ void main() {
 })();
 //# sourceURL=js/vehicles/aircraft.js
 </script>
+    <script data-src="js/vehicles/models/albatross.js">
+/*
+ * models/albatross.js — the Albatross 300, a twin-jet airliner (the one you
+ * can steal at Vicehaven International, and the ones flying over the city).
+ *
+ * Built with the aircraft model kit (aircraft.js): a lofted fuselage with a
+ * painted cheatline, belly and tail cone, rows of cabin windows and doors as
+ * decals, swept airfoil wings with winglets, two turbofans on pylons, and
+ * proper gear. The colour is the airline's: the cheatline, the engines and
+ * the fin. Sizes and pivots match SPECS.albatross (38 m long, 34 m span).
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+
+  const WHITE = 0xf3f4f2;
+  const SKIN = 0xd9dde1; //    wings and tailplane (painted grey)
+  const BELLY = 0xb7bcc2;
+  const DARK = 0x23262b;
+  const WINDOW = 0x18202a;
+  const DOOR = 0xe2e5e8;
+  const METAL = 0xb4b9bf;
+  const RUBBER = 0x17181a;
+  const SUN = [0xffb347, 0xff7a59, 0xff4f8b]; // the Vicehaven sunset on the tail
+
+  function shade(hex, k) {
+    const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+    const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+    const b = Math.min(255, Math.round((hex & 255) * k));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  VH.AircraftDefs = VH.AircraftDefs || {};
+  VH.AircraftDefs.albatross = function (c, Kit) {
+    const k = new Kit(); //  paint
+    const m = new Kit(); //  bare metal
+    const r = new Kit(); //  rubber and matte black
+    const gl = new Kit(); // glass
+    const lit = new Kit(); // cabin windows (lit at night)
+    const deep = shade(c, 0.72);
+
+    // ---------------------------------------------------------- fuselage
+    const body = k.loft([
+      { z: 19.05, w: 0.04, h: 0.04, y: 3.22 },
+      { z: 18.7, w: 0.6, h: 0.68, y: 3.28 },
+      { z: 18.0, w: 1.14, h: 1.28, y: 3.4 },
+      { z: 17.0, w: 1.58, h: 1.74, y: 3.5 },
+      { z: 15.5, w: 1.94, h: 2.04, y: 3.57 },
+      { z: 13.5, w: 2.08, h: 2.15, y: 3.6 },
+      { z: -9.0, w: 2.08, h: 2.15, y: 3.6 },
+      { z: -12.0, w: 1.98, h: 1.94, y: 3.76 },
+      { z: -14.5, w: 1.6, h: 1.48, y: 4.16 },
+      { z: -16.6, w: 1.06, h: 0.94, y: 4.56 },
+      { z: -18.3, w: 0.5, h: 0.44, y: 4.86 },
+      { z: -19.0, w: 0.24, h: 0.22, y: 4.96 },
+    ], WHITE, {
+      seg: 36,
+      steps: 4,
+      bands: [[1.6, 1.79, c], [1.79, 1.86, deep], [2.12, Math.PI + 0.01, BELLY]],
+      zBands: [[-19.1, -16.9, c]],
+      caps: { back: DARK },
+    });
+
+    // Cabin windows, both sides, with gaps at the doors and the overwing exits.
+    for (const side of [1, -1]) {
+      for (let z = 13.7; z > -11.3; z -= 0.53) {
+        if ((z < 1.45 && z > 0.05) || z > 14.1) continue;
+        lit.decal(body, z, 1.3, side, 0.25, 0.36, WINDOW, { round: 1, lift: 0.014 });
+      }
+      // Doors: an outline, the panel (curved to the skin) and its window.
+      for (const [z, wdt, hgt, s] of [[15.0, 0.84, 1.8, 1.42], [-11.9, 0.84, 1.8, 1.42], [0.75, 0.52, 0.95, 1.3]]) {
+        const ds = hgt / 2 / 2.1;
+        const os = (hgt + 0.08) / 2 / 2.1;
+        k.patch(body, z - wdt / 2 - 0.04, z + wdt / 2 + 0.04, [s - os, s + os], [s - os, s + os], side, shade(WHITE, 0.8), { lift: 0.006, ns: 6 });
+        k.patch(body, z - wdt / 2, z + wdt / 2, [s - ds, s + ds], [s - ds, s + ds], side, DOOR, { lift: 0.01, ns: 6 });
+        lit.decal(body, z, 1.3, side, 0.24, 0.34, WINDOW, { round: 1, lift: 0.016 });
+      }
+      // Cockpit glazing: the windscreen and two side panes, with frames between.
+      gl.patch(body, 17.78, 18.36, [0.1, 0.84], [0.1, 0.62], side, WINDOW, { lift: 0.016 });
+      gl.patch(body, 17.18, 17.66, [0.58, 1.0], [0.52, 0.95], side, WINDOW, { lift: 0.016 });
+      gl.patch(body, 16.62, 17.06, [0.7, 1.06], [0.64, 1.04], side, WINDOW, { lift: 0.016 });
+    }
+    // Antennas on the crown and under the belly.
+    k.slab([[8.6, 5.7], [8.0, 5.7], [7.85, 6.15], [8.05, 6.15]], -0.025, 0.025, DARK, 'zy');
+    k.slab([[-4.0, 5.7], [-4.6, 5.7], [-4.75, 6.05], [-4.55, 6.05]], -0.025, 0.025, DARK, 'zy');
+    // The belly fairing where the wings meet the body.
+    k.loft([
+      { z: 7.6, w: 0.5, h: 0.3, y: 2.05 },
+      { z: 5.6, w: 1.85, h: 0.66, y: 1.88 },
+      { z: -2.6, w: 1.98, h: 0.72, y: 1.86 },
+      { z: -5.6, w: 1.2, h: 0.42, y: 2.06 },
+      { z: -6.6, w: 0.3, h: 0.2, y: 2.25 },
+    ], BELLY, { seg: 22, steps: 3 });
+
+    // ------------------------------------------------------------- wings
+    k.wing([
+      { x: 1.5, y: 2.25, z: 5.2, c: 8.4, t: 0.14 },
+      { x: 6.6, y: 2.6, z: 2.4, c: 5.6, t: 0.12 },
+      { x: 17.0, y: 3.55, z: -6.2, c: 2.0, t: 0.1 },
+    ], SKIN, { mirror: true, camber: 0.012 });
+    // Winglets in the airline's colour.
+    k.wing([
+      { x: 16.95, y: 3.5, z: -6.1, c: 2.05, t: 0.08 },
+      { x: 17.25, y: 5.35, z: -7.75, c: 0.85, t: 0.08 },
+    ], c, { axis: 'y' });
+    k.wing([
+      { x: -16.95, y: 3.5, z: -6.1, c: 2.05, t: 0.08 },
+      { x: -17.25, y: 5.35, z: -7.75, c: 0.85, t: 0.08 },
+    ], c, { axis: 'y' });
+    // Flap-track fairings under the trailing edge.
+    for (const s of [1, -1]) {
+      for (const [x, z, y] of [[4.0, -3.6, 2.3], [9.2, -4.5, 2.7], [12.7, -5.8, 3.0]]) k.sphere(1, 0.17, 0.2, 1.15, s * x, y, z, SKIN, 8, 6);
+    }
+
+    // ----------------------------------------------------------- engines
+    for (const s of [1, -1]) {
+      const x = s * 6.6;
+      k.loft([
+        { z: 6.05, w: 1.06, y: 1.45 },
+        { z: 5.75, w: 1.22, y: 1.45 },
+        { z: 4.7, w: 1.28, y: 1.45 },
+        { z: 2.9, w: 1.12, y: 1.45 },
+        { z: 1.6, w: 0.84, y: 1.45 },
+        { z: 1.0, w: 0.62, y: 1.45 },
+      ], c, { x, seg: 24, steps: 3, zBands: [[5.7, 6.1, METAL], [1.0, 1.75, shade(METAL, 0.8)]], caps: { front: DARK, back: DARK } });
+      // Fan face: a spinner and a ring of blades suggested by a darker disc.
+      m.sphere(0.34, 1, 1, 1.35, x, 1.45, 6.02, 0x9aa1a8, 12, 8);
+      r.cyl(0.98, 0.98, 0.02, 24, x, 1.45, 5.98, 0x2c3036);
+      m.cyl(0.46, 0.14, 0.95, 14, x, 1.45, 0.55, 0x707680); // exhaust cone
+      // Pylon up to the wing.
+      k.slab([[5.1, 2.55], [1.0, 2.68], [0.7, 2.25], [4.7, 2.25]], x - 0.17, x + 0.17, SKIN, 'zy');
+    }
+
+    // -------------------------------------------------------------- tail
+    k.wing([
+      { x: 0.8, y: 4.75, z: -14.3, c: 4.0, t: 0.1 },
+      { x: 6.6, y: 5.25, z: -18.35, c: 1.5, t: 0.09 },
+    ], SKIN, { mirror: true });
+    k.wing([
+      { x: 0, y: 4.9, z: -12.4, c: 6.8, t: 0.11 },
+      { x: 0, y: 8.0, z: -15.8, c: 4.0, t: 0.1 },
+      { x: 0, y: 11.4, z: -18.2, c: 2.0, t: 0.09 },
+    ], c, { axis: 'y', bands: [[0, 0.1, WHITE], [0.56, 0.62, SUN[0]], [0.62, 0.68, SUN[1]], [0.68, 0.74, SUN[2]]] });
+
+    // -------------------------------------------------------------- gear
+    m.strut([0, 1.75, 15.2], [0, 0.55, 15.2], 0.11, METAL);
+    m.box(0.7, 0.1, 0.12, 0, 0.55, 15.2, METAL);
+    for (const s of [1, -1]) {
+      r.tyre(0.55, 0.3, s * 0.32, 0.55, 15.2, RUBBER, 16);
+      m.cyl(0.22, 0.22, 0.05, 12, s * 0.48, 0.55, 15.2, 0xd5d8db, 0, Math.PI / 2);
+      // Main legs, each with a four-wheel bogie.
+      m.strut([s * 3.0, 2.05, -0.2], [s * 3.0, 0.65, -0.2], 0.17, METAL);
+      m.box(0.24, 0.2, 1.75, s * 3.0, 0.62, -0.2, METAL);
+      m.box(0.9, 0.12, 0.12, s * 3.0, 0.62, -0.85, METAL);
+      m.box(0.9, 0.12, 0.12, s * 3.0, 0.62, 0.45, METAL);
+      for (const z of [-0.85, 0.45]) {
+        for (const dx of [-0.34, 0.34]) {
+          r.tyre(0.62, 0.34, s * 3.0 + dx, 0.62, z, RUBBER, 16);
+          m.cyl(0.25, 0.25, 0.05, 12, s * 3.0 + dx * 1.5, 0.62, z, 0xd5d8db, 0, Math.PI / 2);
+        }
+      }
+      // Gear doors.
+      k.slab([[0.8, 2.0], [-1.2, 2.0], [-1.2, 1.2], [0.8, 1.2]], s * 2.62 - 0.03, s * 2.62 + 0.03, BELLY, 'zy');
+    }
+    k.slab([[16.0, 1.75], [14.6, 1.75], [14.6, 1.2], [16.0, 1.2]], 0.42, 0.47, BELLY, 'zy');
+    k.slab([[16.0, 1.75], [14.6, 1.75], [14.6, 1.2], [16.0, 1.2]], -0.47, -0.42, BELLY, 'zy');
+
+    return {
+      kit: k, metal: m, matte: r, glass: gl, lit,
+      lights: [['red', 17.15, 3.62, -7.3, 0.16], ['green', -17.15, 3.62, -7.3, 0.16], ['white', 0, 4.96, -19.1, 0.14]],
+      strobe: [0, 5.82, 0],
+      beaconLow: [0, 1.1, 0.5],
+    };
+  };
+})();
+//# sourceURL=js/vehicles/models/albatross.js
+</script>
+    <script data-src="js/vehicles/models/skylark.js">
+/*
+ * models/skylark.js — the Skylark S2 (Ardea), a light high-wing four-seater:
+ * the trainer and runabout parked on the general aviation apron.
+ *
+ * Built with the aircraft model kit (aircraft.js): a lofted fuselage with a
+ * cowling, spinner and intakes, a framed wraparound windscreen, doors with
+ * windows, a rear roof window, a high airfoil wing with flaps, ailerons and
+ * streamlined struts, a swept fin with a dorsal fillet and rudder, a
+ * tailplane with elevators, fixed tricycle gear in wheel spats, and a
+ * two-blade propeller. The colour is the livery: the swoosh along the
+ * sides, the spinner, wing tips, fin band and spats. Sizes and pivots match
+ * SPECS.skylark (8.5 m long, 11 m span, prop at z 4.32, wheels on y = 0).
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+
+  const WHITE = 0xf3f4f2;
+  const SEAM = 0xc4c8cc; //   panel lines
+  const LINE = 0x9a9ea3; //   door and hatch outlines
+  const FRAME = 0x2a2f35; //  window seals
+  const WINDOW = 0x18202a;
+  const DARK = 0x24272b;
+  const METAL = 0xb9bec4;
+  const RUBBER = 0x161718;
+  const TIP = 0xf2c500; //    propeller tip warning paint
+  const REG = 'S2-HAL'; //    the registration on the tail cone
+
+  // Seven-segment strokes for the registration letters.
+  const FONT = { S: 'afgcd', 2: 'abged', '-': 'g', H: 'bcefg', A: 'abcefg', L: 'def' };
+
+  function shade(hex, k) {
+    const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+    const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+    const b = Math.min(255, Math.round((hex & 255) * k));
+    return (r << 16) | (g << 8) | b;
+  }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ss = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+
+  /** Copy a kit's triangles into another, moved by a matrix (the propeller blades). */
+  function place(dst, src, mtx) {
+    const nm = new THREE.Matrix3().getNormalMatrix(mtx);
+    const v = new THREE.Vector3();
+    const P = src.pos, N = src.nor, C = src.col;
+    const pt = (i) => (v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(mtx), [v.x, v.y, v.z]);
+    const nr = (i) => (v.set(N[i], N[i + 1], N[i + 2]).applyMatrix3(nm).normalize(), [v.x, v.y, v.z]);
+    const cl = (i) => [C[i], C[i + 1], C[i + 2]];
+    for (let i = 0; i < P.length; i += 9) dst.tri(pt(i), pt(i + 3), pt(i + 6), nr(i), nr(i + 3), nr(i + 6), cl(i), cl(i + 3), cl(i + 6));
+  }
+
+  VH.AircraftDefs = VH.AircraftDefs || {};
+  VH.AircraftDefs.skylark = function (c, Kit) {
+    const k = new Kit(); //  paint
+    const m = new Kit(); //  bare metal
+    const r = new Kit(); //  rubber and matte black
+    const gl = new Kit(); // glass
+    const deep = shade(c, 0.62);
+
+    // ---------------------------------------------------------- fuselage
+    // Stations by the top and bottom lines: cowling, windscreen, the cabin
+    // under the wing, then the tail cone sweeping up to the fin.
+    const st = (z, top, bot, w, n) => ({ z, y: (top + bot) / 2, h: (top - bot) / 2, w, n });
+    const body = k.loft([
+      st(4.256, 1.475, 0.935, 0.27, 2.2), // the nose bowl round the spinner
+      st(4.25, 1.6, 0.8, 0.42, 2.4),
+      st(4.2, 1.665, 0.74, 0.5, 2.6),
+      st(4.05, 1.715, 0.71, 0.56, 2.8),
+      st(3.5, 1.77, 0.7, 0.605, 2.9),
+      st(2.7, 1.83, 0.7, 0.625, 3),
+      st(2.3, 1.88, 0.705, 0.635, 3),
+      st(1.85, 2.1, 0.71, 0.64, 3),
+      st(1.4, 2.27, 0.715, 0.64, 3),
+      st(0.9, 2.3, 0.72, 0.64, 3),
+      st(-0.1, 2.29, 0.75, 0.635, 3),
+      st(-0.6, 2.18, 0.8, 0.6, 2.9),
+      st(-1.3, 1.97, 0.9, 0.52, 2.8),
+      st(-2.2, 1.82, 1.06, 0.4, 2.6),
+      st(-3.2, 1.71, 1.24, 0.25, 2.4),
+      st(-3.9, 1.64, 1.36, 0.13, 2.2),
+      st(-4.15, 1.585, 1.455, 0.05, 2),
+    ], WHITE, {
+      seg: 32,
+      steps: 4,
+      zBands: [[2.42, 2.435, SEAM], [-1.435, -1.42, SEAM], [-2.865, -2.85, SEAM]],
+      caps: { front: DARK },
+    });
+    const roof = (z) => body.centre(z) + body.height(z);
+
+    // s (the angle round the body from the top) where the skin is at height y.
+    const sAt = (z, y) => {
+      let a = 0, b = Math.PI;
+      for (let i = 0; i < 22; i++) {
+        const mid = (a + b) / 2;
+        if (body.at(z, mid, 1).p.y > y) a = mid;
+        else b = mid;
+      }
+      return (a + b) / 2;
+    };
+    const val = (f, z) => (typeof f === 'function' ? f(z) : f);
+    // Paint or glass on the side between heights bot(z) and top(z) (numbers or functions), in n strips.
+    const area = (kit, z0, z1, top, bot, side, color, lift, n, ns) => {
+      n = n || 1;
+      for (let i = 0; i < n; i++) {
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n);
+        kit.patch(body, za, zb, [sAt(za, val(top, za)), sAt(za, val(bot, za))], [sAt(zb, val(top, zb)), sAt(zb, val(bot, zb))], side, color, { lift, nz: 2, ns: ns || 3 });
+      }
+    };
+    // A window: a dark seal round the glass.
+    const pane = (z0, z1, top, bot, side, n) => {
+      const e = 0.03;
+      area(k, z0 + e, z1 - e, (z) => val(top, z) + e, (z) => val(bot, z) - e, side, FRAME, 0.007, n, 4);
+      area(gl, z0, z1, top, bot, side, WINDOW, 0.013, n, 4);
+    };
+
+    // The windscreen wraps down to the A-pillar; the door window's front follows it.
+    const pillar = (z) => 1.64 + (2.36 - z) * 0.62;
+    const doorTop = (z) => Math.min(2.18, pillar(z + 0.2));
+    const rearTop = (z) => Math.min(2.14, roof(z) - 0.17);
+    for (const side of [1, -1]) {
+      // Windscreen (from the centre line down to the pillar), its seal.
+      area(k, 2.39, 1.38, Infinity, (z) => pillar(z) - 0.03, side, FRAME, 0.007, 4, 6);
+      area(gl, 2.36, 1.4, Infinity, pillar, side, WINDOW, 0.013, 4, 6);
+      // Door window, rear side window, the roof window behind the wing.
+      pane(2.14, 0.5, doorTop, 1.6, side, 4);
+      pane(0.36, -0.62, rearTop, 1.6, side, 3);
+      area(k, -0.13, -0.95, Infinity, (z) => roof(z) - 0.11, side, FRAME, 0.007, 3, 4);
+      area(gl, -0.16, -0.92, Infinity, (z) => roof(z) - 0.08, side, WINDOW, 0.013, 3, 4);
+      // Door outline: front (straight, then along the pillar), back, bottom.
+      area(k, 2.266, 2.254, 1.642, 0.9, side, LINE, 0.009);
+      area(k, 2.26, 1.31, (z) => pillar(z) - 0.054, (z) => pillar(z) - 0.066, side, LINE, 0.009, 3, 1);
+      area(k, 0.432, 0.42, 2.2, 0.9, side, LINE, 0.009);
+      area(k, 2.26, 0.42, 0.906, 0.894, side, LINE, 0.009, 2, 1);
+      m.decal(body, 0.56, sAt(0.56, 1.42), side, 0.14, 0.03, METAL, { lift: 0.02 }); // handle
+    }
+    // Baggage door on the left, behind the cabin.
+    area(k, -0.95, -0.962, 1.36, 0.95, 1, LINE, 0.009);
+    area(k, -1.35, -1.362, 1.36, 0.95, 1, LINE, 0.009);
+    area(k, -0.95, -1.362, 1.366, 1.354, 1, LINE, 0.009, 1, 1);
+    area(k, -0.95, -1.362, 0.956, 0.944, 1, LINE, 0.009, 1, 1);
+
+    // The livery: a swoosh along each side that sweeps up the tail cone, with a pinstripe.
+    const mid = (z) => 1.12 + 0.36 * ss(0, -3.4, z);
+    const half = (z) => 0.075 - 0.035 * ss(-0.5, -3.8, z);
+    for (const side of [1, -1]) {
+      area(k, 4.06, -3.95, (z) => mid(z) + half(z), (z) => mid(z) - half(z), side, c, 0.006, 32, 2);
+      area(k, 4.0, -3.92, (z) => mid(z) + half(z) + 0.06, (z) => mid(z) + half(z) + 0.035, side, deep, 0.006, 32, 1);
+    }
+
+    // Registration, seven-segment letters on both sides of the tail cone.
+    const SEG = (cw, ch, sw) => ({
+      a: [0, ch / 2 - sw / 2, cw, sw], g: [0, 0, cw, sw], d: [0, -ch / 2 + sw / 2, cw, sw],
+      b: [cw / 2 - sw / 2, ch / 4, sw, ch / 2], c: [cw / 2 - sw / 2, -ch / 4, sw, ch / 2],
+      f: [-cw / 2 + sw / 2, ch / 4, sw, ch / 2], e: [-cw / 2 + sw / 2, -ch / 4, sw, ch / 2],
+    });
+    const seg = SEG(0.1, 0.17, 0.024);
+    for (const side of [1, -1]) {
+      const dir = side > 0 ? -1 : 1; // reads left to right from either side
+      const zA = side > 0 ? -1.18 : -1.18 - 0.145 * (REG.length - 1);
+      for (let i = 0; i < REG.length; i++) {
+        const zc = zA + dir * 0.145 * i;
+        for (const sg of FONT[REG[i]] || '') {
+          const [u, v, w, h] = seg[sg];
+          const z = zc + dir * u;
+          k.decal(body, z, sAt(z, 1.64 + v), side, w, h, DARK, { lift: 0.008 });
+        }
+      }
+    }
+
+    // ------------------------------------------------------------- nose
+    // Spinner (it doesn't change as it turns, so it stays on the body).
+    k.lathe([[0.255, 0], [0.255, 0.08], [0.245, 0.15], [0.215, 0.22], [0.165, 0.28], [0.095, 0.325], [0.035, 0.34], [0.001, 0.348]], 20, 0, 1.2, 4.21, c);
+    // Round cooling intakes in the nose bowl either side of the spinner, the air exit under the cowl.
+    const faceZ = (w) => {
+      let a = 4.25, b = 4.256;
+      for (let i = 0; i < 20; i++) {
+        const zm = (a + b) / 2;
+        if (body.width(zm) > w) a = zm;
+        else b = zm;
+      }
+      return (a + b) / 2;
+    };
+    for (const side of [1, -1]) r.decal(body, faceZ(0.35), Math.PI / 2 + 0.12, side, 0.11, 0.12, DARK, { round: 1, lift: 0.004 });
+    for (const side of [1, -1]) k.patch(body, 2.46, 2.66, [Math.PI - 0.55, Math.PI], [Math.PI - 0.55, Math.PI], side, DARK, { lift: 0.006 });
+    // Cowling split line and the oil door.
+    for (const side of [1, -1]) area(k, 4.05, 2.44, 1.392, 1.38, side, SEAM, 0.005, 6, 1);
+    k.patch(body, 3.18, 3.56, [0.14, 0.58], [0.14, 0.58], -1, LINE, { lift: 0.005, ns: 4 });
+    k.patch(body, 3.2, 3.54, [0.16, 0.56], [0.16, 0.56], -1, WHITE, { lift: 0.008, ns: 4 });
+    // Exhaust stub under the cowl on the right, the air filter scoop.
+    m.cyl(0.035, 0.042, 0.24, 8, -0.27, 0.66, 2.56, 0x6e655c, -0.5);
+    r.sphere(0.07, 1.3, 0.5, 1.2, 0, 0.74, 3.95, DARK, 10, 6);
+
+    // ------------------------------------------------------------- wings
+    // A constant-chord inner panel and a tapered outer one with a touch of
+    // dihedral; flaps and ailerons are separate surfaces behind a gap.
+    const Y = (x) => 2.3 + 0.06 * (Math.abs(x) / 5.5);
+    const LE = (x) => (x < 2.7 ? 1.36 : 1.36 - (0.06 * (x - 2.7)) / 2.6);
+    const TE = (x) => (x < 2.7 ? -0.06 : -0.06 + (0.24 * (x - 2.7)) / 2.6);
+    const CS = 0.34; // control surface chord
+    const fixed = (x, t) => ({ x, y: Y(x), z: LE(x), c: LE(x) - TE(x) - CS - 0.02, t });
+    const surf = (x) => ({ x, y: Y(x), z: TE(x) + CS, c: CS, t: 0.16 });
+    const fr = (x, x0, x1) => (x - x0) / (x1 - x0);
+    // Centre section over the cabin.
+    k.wing([{ x: 0, y: Y(0), z: 1.36, c: 1.42, t: 0.13 }, { x: 0.66, y: Y(0.66), z: 1.36, c: 1.42, t: 0.13 }], WHITE, { mirror: true, camber: 0.02 });
+    k.wing([fixed(0.62, 0.175), fixed(2.7, 0.175), fixed(5.29, 0.16)], WHITE, { mirror: true, camber: 0.02, bands: [[fr(5.1, 0.62, 5.29), 1.01, c]] });
+    k.wing([surf(0.68), surf(2.74)], WHITE, { mirror: true }); // flaps
+    k.wing([surf(2.8), surf(5.24)], WHITE, { mirror: true, bands: [[fr(5.1, 2.8, 5.24), 1.01, c]] }); // ailerons
+    // Rounded tips in the livery colour, carrying the nav lights.
+    k.wing([
+      { x: 5.26, y: Y(5.26), z: LE(5.26), c: LE(5.26) - TE(5.26), t: 0.115 },
+      { x: 5.42, y: Y(5.42) - 0.005, z: LE(5.42) - 0.02, c: LE(5.42) - TE(5.42) - 0.08, t: 0.09 },
+      { x: 5.5, y: Y(5.5) - 0.01, z: 1.16, c: 0.72, t: 0.06 },
+    ], c, { mirror: true, camber: 0.01 });
+    for (const s of [1, -1]) gl.sphere(0.055, 0.8, 0.8, 1.5, s * 5.5, 2.36, 0.6, WINDOW, 10, 6);
+    // Streamlined struts from the lower fuselage to the wing.
+    k.wing([{ x: 0.5, y: 0.97, z: 0.82, c: 0.2, t: 0.28 }, { x: 2.62, y: 2.27, z: 0.84, c: 0.2, t: 0.28 }], WHITE, { mirror: true });
+    // Fuel caps, the landing light in the left wing, the pitot tube under it.
+    for (const s of [1, -1]) m.cyl(0.04, 0.04, 0.014, 10, s * 1.1, 2.424, 0.95, 0x8d939a, Math.PI / 2);
+    gl.sphere(0.065, 1.4, 0.7, 0.55, 2.25, Y(2.25) - 0.005, 1.36, WINDOW, 10, 6);
+    m.strut([3.3, 2.28, 1.12], [3.3, 2.17, 1.17], 0.012, METAL);
+    m.strut([3.3, 2.17, 1.0], [3.3, 2.17, 1.48], 0.014, METAL);
+
+    // -------------------------------------------------------------- tail
+    // Dorsal fillet, fin, rudder and a fin cap; the livery band runs across fin and rudder.
+    const finBands = (y0, y1) => [[fr(1.98, y0, y1), fr(2.34, y0, y1), c], [fr(2.4, y0, y1), fr(2.45, y0, y1), deep]];
+    k.wing([{ x: 0, y: 1.75, z: -1.6, c: 1.25, t: 0.06 }, { x: 0, y: 1.95, z: -2.875, c: 0.35, t: 0.1 }], WHITE, { axis: 'y' });
+    k.wing([{ x: 0, y: 1.55, z: -2.55, c: 1.29, t: 0.1 }, { x: 0, y: 2.68, z: -3.48, c: 0.38, t: 0.15 }], WHITE, { axis: 'y', bands: finBands(1.55, 2.68) });
+    k.wing([{ x: 0, y: 1.45, z: -3.87, c: 0.36, t: 0.13 }, { x: 0, y: 2.66, z: -3.88, c: 0.31, t: 0.15 }], WHITE, { axis: 'y', bands: finBands(1.45, 2.66) });
+    k.wing([
+      { x: 0, y: 2.66, z: -3.47, c: 0.73, t: 0.085 },
+      { x: 0, y: 2.73, z: -3.5, c: 0.7, t: 0.075 },
+      { x: 0, y: 2.77, z: -3.58, c: 0.58, t: 0.05 },
+    ], WHITE, { axis: 'y' });
+    // Beacon on top (the strobe flashes on it).
+    m.cyl(0.03, 0.04, 0.07, 10, 0, 2.8, -3.9, DARK, Math.PI / 2);
+    gl.sphere(0.035, 1, 0.9, 1, 0, 2.84, -3.9, WINDOW, 8, 6);
+    // Tailplane and elevators.
+    k.wing([{ x: 0, y: 1.42, z: -3.0, c: 0.8, t: 0.1 }, { x: 1.72, y: 1.44, z: -3.2, c: 0.6, t: 0.1 }], WHITE, { mirror: true, bands: [[fr(1.52, 0, 1.72), 1.01, c]] });
+    k.wing([{ x: 0.07, y: 1.42, z: -3.82, c: 0.4, t: 0.08 }, { x: 1.6, y: 1.44, z: -3.82, c: 0.38, t: 0.08 }, { x: 1.72, y: 1.44, z: -3.82, c: 0.3, t: 0.08 }], WHITE, { mirror: true, bands: [[fr(1.52, 0.07, 1.72), 1.01, c]] });
+    // Antennas: a blade and a whip on the tail cone, one under the belly.
+    r.slab([[-1.45, 1.9], [-1.62, 1.9], [-1.74, 2.13], [-1.66, 2.13]], -0.012, 0.012, DARK, 'zy');
+    r.strut([0, 1.78, -2.45], [0, 2.08, -2.78], 0.01, DARK);
+    r.slab([[-0.75, 0.84], [-0.88, 0.84], [-0.93, 0.64], [-0.87, 0.64]], -0.012, 0.012, DARK, 'zy');
+
+    // -------------------------------------------------------------- gear
+    // Spring-steel main legs into wheel spats; the nose leg is an oleo strut.
+    k.wing([{ x: 0.28, y: 0.8, z: 0.6, c: 0.14, t: 0.22 }, { x: 1.0, y: 0.36, z: 0.57, c: 0.12, t: 0.22 }], WHITE, { mirror: true });
+    // Teardrop wheel spats: round nose, pointed tail, the tyre showing underneath.
+    const spat = (x, z, len, w, hgt, y) => k.loft([
+      { z: z + len * 0.5, w: 0.02, h: 0.02, y },
+      { z: z + len * 0.42, w: w * 0.7, h: hgt * 0.68, y },
+      { z: z + len * 0.28, w: w * 0.94, h: hgt * 0.95, y },
+      { z: z + len * 0.06, w, h: hgt, y },
+      { z: z - len * 0.2, w: w * 0.86, h: hgt * 0.82, y: y + 0.015 },
+      { z: z - len * 0.42, w: w * 0.45, h: hgt * 0.45, y: y + 0.05 },
+      { z: z - len * 0.58, w: 0.015, h: 0.02, y: y + 0.08 },
+    ], WHITE, { x, seg: 18, steps: 3, bands: [[1.32, 1.6, c]] });
+    for (const s of [1, -1]) {
+      const x = s * 1.12;
+      r.tyre(0.3, 0.17, x, 0.3, 0.5, RUBBER, 18);
+      m.cyl(0.13, 0.13, 0.18, 14, x, 0.3, 0.5, METAL, 0, Math.PI / 2);
+      spat(x, 0.5, 1.0, 0.145, 0.215, 0.43);
+    }
+    r.tyre(0.25, 0.14, 0, 0.25, 2.95, RUBBER, 16);
+    m.cyl(0.1, 0.1, 0.15, 12, 0, 0.25, 2.95, METAL, 0, Math.PI / 2);
+    spat(0, 2.95, 0.82, 0.12, 0.185, 0.37);
+    m.cyl(0.032, 0.032, 0.3, 8, 0, 0.6, 2.97, METAL, Math.PI / 2);
+    m.cyl(0.05, 0.05, 0.16, 10, 0, 0.74, 2.99, 0x7d838a, Math.PI / 2);
+    m.box(0.02, 0.12, 0.05, 0.05, 0.62, 2.92, 0x7d838a);
+
+    // --------------------------------------------------------- propeller
+    // Two blades round the pivot, at a fixed pitch, with warning-yellow tips.
+    const blade = new Kit();
+    blade.wing([
+      { x: 0, y: 0.12, z: 0.035, c: 0.1, t: 0.3 },
+      { x: 0, y: 0.3, z: 0.05, c: 0.15, t: 0.18 },
+      { x: 0, y: 0.55, z: 0.055, c: 0.16, t: 0.13 },
+      { x: 0, y: 0.82, z: 0.045, c: 0.13, t: 0.11 },
+      { x: 0, y: 0.95, z: 0.035, c: 0.1, t: 0.1 },
+      { x: 0, y: 1.0, z: 0.02, c: 0.05, t: 0.1 },
+    ], DARK, { axis: 'y', bands: [[0.9, 1.01, TIP]] });
+    const prop = new Kit();
+    const pitch = new THREE.Matrix4().makeRotationY(-(Math.PI / 2 - 0.38));
+    for (const a of [0, Math.PI]) place(prop, blade, new THREE.Matrix4().makeRotationZ(a).multiply(pitch));
+
+    return {
+      kit: k, metal: m, matte: r, glass: gl,
+      lights: [['red', 5.5, 2.36, 0.6, 0.07], ['green', -5.5, 2.36, 0.6, 0.07], ['white', 0, 2.78, -4.0, 0.06]],
+      strobe: [0, 2.9, -3.9],
+      prop: { kit: prop, at: [0, 1.2, 4.32], disc: 1.0 },
+    };
+  };
+})();
+//# sourceURL=js/vehicles/models/skylark.js
+</script>
+    <script data-src="js/vehicles/models/talon.js">
+/*
+ * models/talon.js — the Talon F-9, Breakwater Arsenal's single-seat
+ * twin-tail fighter (the jets on the flight line at the fort).
+ *
+ * Built with the aircraft model kit (aircraft.js): a lofted fuselage with a
+ * pointed radome and gun blisters, a bubble canopy running into a dorsal
+ * spine, side intakes under leading-edge root extensions, a trapezoid wing
+ * with a little anhedral, twin canted fins on tail booms, all-moving
+ * tailplanes and one engine nozzle (the afterburner's cone sits in it).
+ * The paint is a two-tone splinter camouflage in the colour given over a
+ * light belly, with panel and control-surface lines, low-visibility
+ * markings and formation light strips. Missiles hang on the wing pylons
+ * where the rockets leave; the gear kit (legs, doors, wheels) retracts in
+ * flight. Sizes, mounts and lights match SPECS.talon (16 m long, 10 m span,
+ * 4.6 m tall).
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const PI = Math.PI;
+
+  const DARK = 0x24282d; //     intake mouths, gun ports, antennas
+  const GEAR = 0xc3c7ca; //     gear legs and doors' insides (painted light grey)
+  const RUBBER = 0x17181a;
+  const HUB = 0x9ea4a9;
+  const TITANIUM = 0x8d9297; // the nozzle
+  const BURNT = 0x6a5c52; //    heat-stained petals at the exit
+  const SOOT = 0x16171a; //     inside the nozzle
+  const MISSILE = 0xe1e3e0;
+  const SEEKER = 0x4a5056;
+  const AMBER = 0xc99a2e; //    live warhead band
+  const MOTOR = 0x8a5f33; //    rocket motor band
+  const FORMATION = 0xc6d97e; // formation light strips (unlit)
+  const RED = 0xb3322c; //      warning triangles
+  const YELLOW = 0xd8b02a;
+
+  function shade(hex, k) {
+    const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+    const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+    const b = Math.min(255, Math.round((hex & 255) * k));
+    return (r << 16) | (g << 8) | b;
+  }
+  function mix(a, b, t) {
+    const ch = (sh) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * t);
+    return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+  }
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+  /** Half-thickness of a NACA four-digit airfoil (as the kit's wings use). */
+  function naca(x, t) {
+    return 5 * t * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+  }
+  const FOIL = [0, 0.016, 0.05, 0.11, 0.21, 0.34, 0.5, 0.68, 0.86, 1];
+
+  /**
+   * The skin of a kit wing (same sections and options), for paint that lies
+   * on it. Positions are (u, z) with u the span (|x| on a wing, y on a fin);
+   * side 1 is the top (+X face of a fin), -1 underneath.
+   *   paint(kit, outline, color, side, lift)  a convex outline of [u, z]
+   *   fill(kit, u0, u1, x0, x1, color, side)  a span × chord-fraction area
+   */
+  function skin(sections, opts) {
+    opts = opts || {};
+    const fin = opts.axis === 'y';
+    const camber = fin ? 0 : opts.camber || 0;
+    const span = (q) => (fin ? q.y : Math.abs(q.x));
+    const sec = (u) => {
+      let i = 0;
+      while (i < sections.length - 2 && u > span(sections[i + 1])) i++;
+      const a = sections[i];
+      const b = sections[i + 1];
+      const f = clamp01((u - span(a)) / (span(b) - span(a)));
+      const L = (key) => a[key] + (b[key] - a[key]) * f;
+      return { x: L('x'), y: L('y'), z: L('z'), c: L('c'), tc: a.t * a.c + (b.t * b.c - a.t * a.c) * f };
+    };
+    const onChord = (u, x, side) => {
+      const q = sec(u);
+      const th = naca(x, 1) * q.tc * side + camber * q.c * 4 * x * (1 - x);
+      return fin ? [q.x + th, q.y, q.z - x * q.c] : [q.x, q.y + th, q.z - x * q.c];
+    };
+    const chordAt = (u, z) => {
+      const q = sec(u);
+      return clamp01((q.z - z) / q.c);
+    };
+    const vert = (u, x, side, lift) => {
+      const e = 0.004;
+      const xa = Math.max(0.002, x - e);
+      const xb = Math.min(1, Math.max(xa + 0.001, x + e));
+      const p = onChord(u, x, side);
+      const du = onChord(u + 0.01, x, side).map((v, i) => v - onChord(u - 0.01, x, side)[i]);
+      const dx = onChord(u, xb, side).map((v, i) => v - onChord(u, xa, side)[i]);
+      let n = [du[1] * dx[2] - du[2] * dx[1], du[2] * dx[0] - du[0] * dx[2], du[0] * dx[1] - du[1] * dx[0]];
+      const ref = fin ? [side, 0, x < 0.05 ? 0.5 : 0] : [0, side, x < 0.05 ? 0.5 : 0];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1;
+      const sg = n[0] * ref[0] + n[1] * ref[1] + n[2] * ref[2] < 0 ? -1 / l : 1 / l;
+      n = n.map((v) => v * sg);
+      return { p: [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift], n };
+    };
+    const tri = (kit, a, b, c, col) => kit.tri(a.p, b.p, c.p, a.n, b.n, c.n, col, col, col);
+    return {
+      paint(kit, outline, color, side, lift, sub) {
+        lift = lift === undefined ? 0.008 : lift;
+        sub = sub || 3;
+        const col = VH.col(color);
+        let cu = 0;
+        let cz = 0;
+        for (const [u, z] of outline) {
+          cu += u / outline.length;
+          cz += z / outline.length;
+        }
+        const V = (u, z) => vert(u, chordAt(u, z), side, lift);
+        for (let e = 0; e < outline.length; e++) {
+          const A = outline[e];
+          const B = outline[(e + 1) % outline.length];
+          // The fan triangle (centre, A, B), cut into sub² pieces so it bends with the skin.
+          const P = (i, j) => V(cu + (A[0] - cu) * (i / sub) + (B[0] - A[0]) * (j / sub), cz + (A[1] - cz) * (i / sub) + (B[1] - A[1]) * (j / sub));
+          const rows = [];
+          for (let i = 0; i <= sub; i++) {
+            const row = [];
+            for (let j = 0; j <= i; j++) row.push(P(i, j));
+            rows.push(row);
+          }
+          for (let i = 0; i < sub; i++) {
+            for (let j = 0; j <= i; j++) {
+              tri(kit, rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], col);
+              if (j < i) tri(kit, rows[i][j], rows[i + 1][j + 1], rows[i][j + 1], col);
+            }
+          }
+        }
+        return kit;
+      },
+      fill(kit, u0, u1, x0, x1, color, side, lift, nu) {
+        lift = lift === undefined ? 0.006 : lift;
+        nu = nu || 4;
+        const col = VH.col(color);
+        const xs = [x0, ...FOIL.filter((x) => x > x0 + 1e-4 && x < x1 - 1e-4), x1];
+        const G = [];
+        for (let i = 0; i <= nu; i++) G.push(xs.map((x) => vert(u0 + ((u1 - u0) * i) / nu, x, side, lift)));
+        for (let i = 0; i < nu; i++) {
+          for (let j = 0; j < xs.length - 1; j++) {
+            tri(kit, G[i][j], G[i + 1][j], G[i][j + 1], col);
+            tri(kit, G[i][j + 1], G[i + 1][j], G[i + 1][j + 1], col);
+          }
+        }
+        return kit;
+      },
+    };
+  }
+
+  // Seven-segment strokes in a 0.6 × 1 cell, [u0, v0, u1, v1], for codes and numbers.
+  const SEG = {
+    a: [0, 0.88, 0.6, 1], b: [0.48, 0.5, 0.6, 1], c: [0.48, 0, 0.6, 0.5], d: [0, 0, 0.6, 0.12],
+    e: [0, 0, 0.12, 0.5], f: [0, 0.5, 0.12, 1], g: [0, 0.44, 0.6, 0.56],
+  };
+  const GLYPH = { 0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg', '-': 'g' };
+  /** Lays a code out as strokes, h tall: rect(u0, v0, u1, v1) in metres from its left foot. Returns its width. */
+  function lettering(str, h, rect) {
+    let u = 0;
+    for (const ch of str) {
+      for (const sg of GLYPH[ch] || '') {
+        const q = SEG[sg];
+        rect(u + q[0] * h, q[1] * h, u + q[2] * h, q[3] * h);
+      }
+      u += 0.85 * h;
+    }
+    return u - 0.25 * h;
+  }
+
+  VH.AircraftDefs = VH.AircraftDefs || {};
+  VH.AircraftDefs.talon = function (c, Kit) {
+    const k = new Kit(); //    paint
+    const m = new Kit(); //    bare metal
+    const r = new Kit(); //    matte black
+    const gl = new Kit(); //   glass
+    const gear = new Kit(); // retracts in flight (painted)
+    const CAMO = shade(c, 0.74); //               the second tone
+    const BELLY = mix(c, 0xc6cbce, 0.55); //      light underside
+    const LINE = shade(c, 0.8); //                panel lines
+    const BLINE = shade(BELLY, 0.82);
+    const RADOME = mix(c, 0x454b51, 0.6);
+    const MARK = mix(c, 0x2c3035, 0.62); //       low-visibility markings
+    const FRAME = shade(c, 0.82);
+
+    // ---------------------------------------------------------- fuselage
+    const body = k.loft([
+      { z: 8.05, w: 0.015, h: 0.015, y: 1.88 },
+      { z: 7.75, w: 0.13, h: 0.12, y: 1.88 },
+      { z: 7.2, w: 0.27, h: 0.25, y: 1.89 },
+      { z: 6.3, w: 0.43, h: 0.4, y: 1.92 },
+      { z: 5.3, w: 0.55, h: 0.5, y: 1.95, n: 2.3 },
+      { z: 4.3, w: 0.64, h: 0.56, y: 1.97, n: 2.7 },
+      { z: 3.0, w: 0.73, h: 0.6, y: 1.96, n: 3 },
+      { z: 1.6, w: 0.82, h: 0.62, y: 1.9, n: 3.2 },
+      { z: -0.2, w: 1.0, h: 0.62, y: 1.85, n: 3.4 },
+      { z: -2.4, w: 1.12, h: 0.6, y: 1.83, n: 3.6 },
+      { z: -4.6, w: 1.1, h: 0.56, y: 1.82, n: 3.4 },
+      { z: -6.2, w: 0.9, h: 0.56, y: 1.81, n: 2.8 },
+      { z: -7.2, w: 0.74, h: 0.66, y: 1.8, n: 2.2 },
+      { z: -7.5, w: 0.71, h: 0.69, y: 1.8, n: 2 },
+    ], c, {
+      seg: 32,
+      steps: 4,
+      bands: [[2.0, PI + 0.01, BELLY]],
+      zBands: [[6.3, 8.1, RADOME], [6.27, 6.3, LINE], [4.76, 4.78, LINE], [-2.62, -2.6, LINE], [-5.32, -5.3, LINE]],
+      caps: { back: DARK },
+    });
+    // The canopy: one bubble, its bottom half buried in the nose.
+    const canopy = gl.loft([
+      { z: 4.78, w: 0.06, h: 0.05, y: 2.47 },
+      { z: 4.35, w: 0.33, h: 0.29, y: 2.46 },
+      { z: 3.65, w: 0.47, h: 0.47, y: 2.45 },
+      { z: 2.75, w: 0.49, h: 0.52, y: 2.44 },
+      { z: 1.85, w: 0.44, h: 0.45, y: 2.42 },
+      { z: 1.15, w: 0.25, h: 0.26, y: 2.42 },
+      { z: 0.75, w: 0.05, h: 0.05, y: 2.42 },
+    ], 0x000000, { seg: 28, steps: 4 });
+    // The dorsal spine behind it, running back between the fins.
+    const spine = k.loft([
+      { z: 1.75, w: 0.08, h: 0.06, y: 2.5 },
+      { z: 1.2, w: 0.38, h: 0.24, y: 2.45 },
+      { z: -0.5, w: 0.52, h: 0.3, y: 2.4 },
+      { z: -3.5, w: 0.56, h: 0.3, y: 2.33 },
+      { z: -5.8, w: 0.42, h: 0.22, y: 2.28 },
+      { z: -7.0, w: 0.16, h: 0.08, y: 2.3 },
+    ], c, { seg: 22, steps: 3, zBands: [[-1.42, -1.4, LINE]] });
+    // Side intakes, under the root extensions, fading into the body aft.
+    const intake = {};
+    for (const s of [1, -1]) {
+      intake[s] = k.loft([
+        { z: 2.55, w: 0.34, h: 0.4, y: 1.52, n: 4.5 },
+        { z: 2.2, w: 0.37, h: 0.42, y: 1.52, n: 4.5 },
+        { z: 0.5, w: 0.38, h: 0.42, y: 1.53, n: 4 },
+        { z: -1.6, w: 0.35, h: 0.4, y: 1.57, n: 3.5 },
+        { z: -3.0, w: 0.2, h: 0.32, y: 1.63, n: 3 },
+        { z: -3.9, w: 0.05, h: 0.18, y: 1.66 },
+      ], c, { x: s * 1.0, seg: 24, steps: 3, bands: [[1.75, PI + 0.01, BELLY]], zBands: [[2.42, 2.6, LINE]], caps: { front: DARK } });
+      // Splitter plate between the mouth and the fuselage.
+      k.slab([[2.8, 1.9], [2.25, 1.92], [2.25, 1.13], [2.8, 1.22]], s * 0.665, s * 0.665 + s * 0.025, c, 'zy');
+    }
+    // Gun blisters on the chines, a port at the front of each.
+    for (const s of [1, -1]) {
+      k.loft([
+        { z: 5.66, w: 0.09, h: 0.08, y: 1.9 },
+        { z: 5.5, w: 0.12, h: 0.1, y: 1.9 },
+        { z: 5.0, w: 0.11, h: 0.09, y: 1.91 },
+        { z: 4.25, w: 0.02, h: 0.03, y: 1.93 },
+      ], c, { x: s * 0.62, seg: 14, steps: 3, caps: { front: DARK } });
+      m.cyl(0.03, 0.03, 0.22, 8, s * 0.64, 1.9, 5.66, 0x55595e);
+    }
+    // Tail booms beside the engine, carrying the fins and tailplanes.
+    const boom = {};
+    for (const s of [1, -1]) {
+      boom[s] = k.loft([
+        { z: -3.6, w: 0.05, h: 0.1, y: 1.86 },
+        { z: -4.6, w: 0.2, h: 0.24, y: 1.86 },
+        { z: -7.4, w: 0.25, h: 0.26, y: 1.86, n: 2.4 },
+        { z: -8.05, w: 0.14, h: 0.15, y: 1.86 },
+        { z: -8.25, w: 0.03, h: 0.04, y: 1.86 },
+      ], c, { x: s * 0.96, seg: 16, steps: 3, bands: [[2.0, PI + 0.01, BELLY]] });
+    }
+
+    // ------------------------------------------------------------ nozzle
+    m.lathe([[0.52, -8.45], [0.585, -8.47], [0.615, -8.2]], 24, 0, 1.8, 0, BURNT);
+    m.lathe([[0.615, -8.2], [0.66, -7.8], [0.69, -7.35]], 24, 0, 1.8, 0, TITANIUM);
+    r.lathe([[0.01, -7.92], [0.47, -7.94], [0.5, -8.2], [0.52, -8.45]], 24, 0, 1.8, 0, SOOT);
+    m.cyl(0.17, 0.05, 0.24, 12, 0, 1.8, -8.06, 0x4c4743); // the flame holder's cone
+
+    // ------------------------------------------------------------- wings
+    const WING = [
+      { x: 0.9, y: 1.9, z: 2.0, c: 6.8, t: 0.045 },
+      { x: 5.0, y: 1.65, z: -3.1, c: 1.6, t: 0.04 },
+    ];
+    const WOPT = { mirror: true, camber: 0.006 };
+    k.wing(WING, c, WOPT);
+    const LERX = [
+      { x: 0.5, y: 1.96, z: 4.5, c: 4.8, t: 0.02 },
+      { x: 1.62, y: 1.9, z: 1.05, c: 2.2, t: 0.028 },
+    ];
+    k.wing(LERX, c, { mirror: true });
+    const TAILPLANE = [
+      { x: 0.85, y: 1.8, z: -5.6, c: 2.55, t: 0.04 },
+      { x: 3.1, y: 1.74, z: -7.05, c: 0.95, t: 0.04 },
+    ];
+    k.wing(TAILPLANE, c, { mirror: true });
+    const wingSkin = skin(WING, WOPT);
+    const lerxSkin = skin(LERX);
+    const tailSkin = skin(TAILPLANE);
+
+    // Paint on one side (the +X), mirrored after.
+    const k0 = k.count;
+    // Light undersides.
+    wingSkin.fill(k, 0, 5.0, 0, 1, BELLY, -1, 0.006, 5);
+    lerxSkin.fill(k, 0.5, 1.62, 0, 1, BELLY, -1, 0.006, 3);
+    tailSkin.fill(k, 0.85, 3.1, 0, 1, BELLY, -1, 0.006, 3);
+    // Splinter camouflage on top.
+    for (const o of [
+      [[1.4, 1.15], [2.3, 0.1], [2.9, -1.5], [1.4, -0.7]],
+      [[2.6, -1.9], [4.1, -2.25], [4.5, -3.7], [2.4, -3.3]],
+      [[4.35, -2.45], [4.92, -3.18], [4.92, -4.6], [4.6, -4.62]],
+      [[1.4, -2.6], [2.0, -2.4], [2.25, -4.72], [1.4, -4.74]],
+    ]) wingSkin.paint(k, o, CAMO, 1, 0.008, 4);
+    lerxSkin.paint(k, [[0.75, 3.55], [1.35, 1.75], [1.35, 1.1], [0.75, 2.2]], CAMO, 1, 0.008, 3);
+    tailSkin.paint(k, [[1.2, -5.95], [2.3, -6.6], [2.6, -7.9], [1.2, -8.1]], CAMO, 1, 0.008, 3);
+    // Control surfaces: flaperons, leading-edge flaps and the tailplane's pivot.
+    const strip = (skn, a, b, wdt, color, side) => {
+      // A thin band from a to b (in u, z), wdt wide.
+      const du = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const l = Math.hypot(du, dz) || 1;
+      const nu = (-dz / l) * (wdt / 2);
+      const nz = (du / l) * (wdt / 2);
+      skn.paint(k, [[a[0] + nu, a[1] + nz], [b[0] + nu, b[1] + nz], [b[0] - nu, b[1] - nz], [a[0] - nu, a[1] - nz]], color, side, 0.011, 2);
+    };
+    for (const side of [1, -1]) {
+      const col = side > 0 ? LINE : BLINE;
+      strip(wingSkin, [1.45, -4.17], [4.55, -4.07], 0.025, col, side);
+      for (const x of [1.45, 3.05, 4.55]) strip(wingSkin, [x, -4.17 + (x - 1.45) * 0.032], [x, -4.76 + (x - 0.9) * 0.024], 0.025, col, side);
+      strip(wingSkin, [1.6, 1.13 - 0.42], [4.8, -2.85 - 0.3], 0.025, col, side);
+      strip(wingSkin, [4.8, -2.85 - 0.3], [4.8, -2.85 + 0.04], 0.025, col, side);
+      strip(tailSkin, [1.3, -6.05], [1.3, -8.12], 0.022, side > 0 ? LINE : BLINE, side);
+    }
+    // Formation light strip near the tip, and the low-vis roundel on top.
+    strip(wingSkin, [4.6, -3.0], [4.6, -3.45], 0.07, FORMATION, 1);
+    const ring = (cu, cz, rad, n) => {
+      const o = [];
+      for (let i = 0; i < n; i++) o.push([cu + Math.cos((i / n) * PI * 2) * rad, cz + Math.sin((i / n) * PI * 2) * rad]);
+      return o;
+    };
+    wingSkin.paint(k, ring(3.55, -2.75, 0.42, 16), MARK, 1, 0.012, 2);
+    wingSkin.paint(k, ring(3.55, -2.75, 0.32, 16), c, 1, 0.014, 2);
+    wingSkin.paint(k, [[3.55, -2.5], [3.75, -2.95], [3.55, -2.85], [3.35, -2.95]], MARK, 1, 0.016, 2);
+    // Pylon and its missile under the wing (the rockets leave from here).
+    k.slab([[-2.6, 1.75], [-0.95, 1.75], [-0.35, 1.47], [-2.35, 1.47]], 2.95, 3.05, BELLY, 'zy');
+    k.box(0.07, 0.08, 1.7, 3.0, 1.43, -1.15, shade(BELLY, 0.85));
+    k.loft([
+      { z: 0.88, w: 0.012 },
+      { z: 0.74, w: 0.056 },
+      { z: 0.52, w: 0.088 },
+      { z: 0.36, w: 0.09 },
+      { z: -2.0, w: 0.09 },
+      { z: -2.08, w: 0.08 },
+    ].map((q) => Object.assign({ y: 1.3 }, q)), MISSILE, {
+      x: 3.0,
+      seg: 14,
+      steps: 2,
+      zBands: [[0.5, 1.0, SEEKER], [0.18, 0.25, AMBER], [-0.42, -0.37, MOTOR]],
+      caps: { back: DARK },
+    });
+    for (const a of [PI / 4, -PI / 4]) {
+      k.box(0.42, 0.012, 0.26, 3.0, 1.3, -0.25, MISSILE, 0, 0, a);
+      k.box(0.46, 0.012, 0.2, 3.0, 1.3, -1.9, MISSILE, 0, 0, a);
+    }
+    // Wingtip fairing with the navigation light.
+    k.loft([
+      { z: -2.9, w: 0.01, h: 0.01, y: 1.65 },
+      { z: -3.1, w: 0.05, h: 0.05, y: 1.65 },
+      { z: -4.6, w: 0.055, h: 0.055, y: 1.65 },
+      { z: -4.85, w: 0.02, h: 0.02, y: 1.65 },
+    ], c, { x: 5.0, seg: 10, steps: 2 });
+    // Ventral strakes under the booms.
+    k.slab([[-4.7, 1.36], [-6.7, 1.36], [-6.6, 1.02], [-5.6, 1.02]], 0.73, 0.76, BELLY, 'zy');
+    k.mirrorFrom(k0);
+
+    // -------------------------------------------------------------- fins
+    for (const s of [1, -1]) {
+      const FIN = [
+        { x: s * 0.98, y: 2.05, z: -4.5, c: 3.1, t: 0.05 },
+        { x: s * 1.5, y: 4.55, z: -6.55, c: 1.25, t: 0.045 },
+      ];
+      k.wing(FIN, c, { axis: 'y', bands: [[0.86, 0.89, YELLOW], [0.89, 1.01, MARK]] });
+      const fs = skin(FIN, { axis: 'y' });
+      for (const side of [1, -1]) {
+        fs.paint(k, [[2.25, -4.85], [3.15, -5.55], [2.85, -7.6], [2.25, -7.58]], CAMO, side, 0.008, 3);
+        fs.paint(k, [[3.75, -6.45], [4.3, -6.9], [4.3, -7.75], [3.55, -7.7]], CAMO, side, 0.008, 3);
+        // Rudder hinge line.
+        fs.paint(k, [[2.2, -6.85], [4.15, -7.2], [4.15, -7.225], [2.2, -6.875]], LINE, side, 0.011, 2);
+      }
+      // The serial on the outer face, reading nose to tail.
+      const fw = lettering('2609', 0.2, () => {});
+      lettering('2609', 0.2, (u0, v0, u1, v1) => {
+        const z0 = -6.15 + s * (fw / 2 - u0);
+        const z1 = -6.15 + s * (fw / 2 - u1);
+        fs.paint(k, [[2.9 + v0, z0], [2.9 + v0, z1], [2.9 + v1, z1], [2.9 + v1, z0]], MARK, s, 0.012, 1);
+      });
+      fs.paint(k, [[4.1, -6.62], [3.85, -6.32], [3.6, -6.62], [3.85, -6.92]], MARK, s, 0.012, 2);
+      // Formation strip.
+      fs.paint(k, [[2.5, -6.0], [2.55, -6.0], [2.55, -6.6], [2.5, -6.6]], FORMATION, s, 0.012, 1);
+    }
+
+    // ------------------------------------------------- paint on the body
+    const b0 = k.count;
+    // Splinter camouflage over the top and sides.
+    k.patch(body, 6.1, 5.45, [1.0, 1.75], [0.55, 1.5], 1, CAMO, { lift: 0.006 });
+    k.patch(body, 1.5, 0.2, [1.0, 1.55], [0.7, 1.5], 1, CAMO, { lift: 0.006 });
+    k.patch(body, -0.8, -2.2, [0.5, 1.2], [0.9, 1.5], 1, CAMO, { lift: 0.006 });
+    k.patch(body, -2.8, -4.6, [0.9, 1.5], [0.4, 1.1], 1, CAMO, { lift: 0.006 });
+    k.patch(body, -5.4, -7.2, [0.5, 1.4], [0.9, 1.5], 1, CAMO, { lift: 0.006 });
+    k.patch(spine, 0.9, -1.6, [0.15, 1.1], [0.0, 1.3], 1, CAMO, { lift: 0.006 });
+    k.patch(spine, -3.0, -5.4, [0.0, 0.9], [0.25, 1.3], 1, CAMO, { lift: 0.006 });
+    k.patch(intake[1], 1.9, -0.2, [0.2, 0.9], [0.4, 1.4], 1, CAMO, { lift: 0.006 });
+    k.patch(boom[1], -5.2, -7.6, [0.2, 1.4], [0.3, 1.5], 1, CAMO, { lift: 0.006 });
+    // Panel lines along the body.
+    k.patch(body, 6.2, 3.2, [1.38, 1.4], [1.43, 1.45], 1, LINE, { lift: 0.01, ns: 1, nz: 8 });
+    k.patch(body, -2.6, -7.2, [1.02, 1.04], [1.12, 1.14], 1, LINE, { lift: 0.01, ns: 1, nz: 8 });
+    k.patch(spine, 1.3, -6.2, [0.72, 0.74], [0.72, 0.74], 1, LINE, { lift: 0.01, ns: 1, nz: 10 });
+    // Formation strip on the nose and the boom.
+    k.decal(body, 5.95, 1.35, 1, 0.4, 0.05, FORMATION, { lift: 0.012 });
+    k.decal(boom[1], -6.3, 1.2, 1, 0.5, 0.06, FORMATION, { lift: 0.012 });
+    // Warning triangle by the intake, and the canopy's rescue arrow.
+    k.patch(intake[1], 2.25, 1.95, [0.95, 1.35], [1.15, 1.15], 1, RED, { lift: 0.012, nz: 2, ns: 2 });
+    k.patch(body, 3.6, 3.35, [1.25, 1.4], [1.32, 1.33], 1, YELLOW, { lift: 0.012, nz: 2, ns: 2 });
+    k.mirrorFrom(b0);
+    // Roundels on the intakes (round, so mirrored is fine) and the nose numbers per side.
+    for (const s of [1, -1]) {
+      k.decal(intake[s], -0.6, PI / 2, s, 0.62, 0.62, MARK, { round: 1, lift: 0.01 });
+      k.decal(intake[s], -0.6, PI / 2, s, 0.48, 0.48, c, { round: 1, lift: 0.014 });
+      k.patch(intake[s], -0.42, -0.78, [1.25, 1.9], [1.5, 1.5], s, MARK, { lift: 0.018, nz: 2, ns: 2 });
+      const R = 0.6;
+      const W = lettering('09', 0.26, () => {});
+      lettering('09', 0.26, (u0, v0, u1, v1) => {
+        const z0 = 5.15 + s * (W / 2 - u0);
+        const z1 = 5.15 + s * (W / 2 - u1);
+        k.patch(body, z0, z1, [1.05 - (v1 - 0.13) / R, 1.05 - (v0 - 0.13) / R], [1.05 - (v1 - 0.13) / R, 1.05 - (v0 - 0.13) / R], s, MARK, { lift: 0.012, nz: 1, ns: 2 });
+      });
+    }
+
+    // ------------------------------------------------------------ canopy
+    for (const s of [1, -1]) {
+      k.patch(canopy, 3.9, 4.0, [0, 1.62], [0, 1.62], s, FRAME, { lift: 0.008, nz: 1, ns: 8 });
+      k.patch(canopy, 4.0, 1.2, [1.42, 1.62], [1.42, 1.62], s, FRAME, { lift: 0.008, nz: 10, ns: 1 });
+    }
+    gl.sphere(0.085, 1, 1, 1, -0.2, 2.5, 4.98, 0x000000, 10, 8); // infrared sensor ball
+    m.cyl(0.09, 0.1, 0.06, 10, -0.2, 2.46, 4.98, 0x50555a, PI / 2);
+
+    // ---------------------------------------------------------- details
+    m.strut([0, 1.88, 7.95], [0, 1.88, 8.28], 0.014, 0x9aa0a6); // pitot
+    for (const s of [1, -1]) {
+      k.slab([[6.62, 1.86], [6.5, 1.86], [6.46, 1.8], [6.56, 1.8]], s * 0.37, s * 0.37 + s * 0.01, DARK, 'zy'); // angle-of-attack vane
+    }
+    // Blade antennas on the spine and under the belly.
+    r.slab([[-2.0, 2.6], [-2.45, 2.6], [-2.55, 2.85], [-2.35, 2.85]], -0.012, 0.012, DARK, 'zy');
+    r.slab([[0.6, 1.26], [0.2, 1.26], [0.1, 1.05], [0.3, 1.05]], -0.012, 0.012, DARK, 'zy');
+    // Air-refuelling door on the spine, and engine bay vents.
+    k.decal(spine, -0.6, 0, 1, 0.42, 0.3, LINE, { lift: 0.008 });
+    for (const s of [1, -1]) {
+      for (const z of [-5.6, -5.9, -6.2]) k.decal(body, z, 0.62, s, 0.18, 0.05, DARK, { lift: 0.008 });
+    }
+    // Arrestor hook.
+    m.strut([0, 1.16, -5.7], [0, 1.1, -7.25], 0.03, 0x3a3d41);
+
+    // -------------------------------------------------------------- gear
+    // Nose leg (wheel at z 5.0) with its doors.
+    gear.strut([0, 1.47, 5.1], [0, 0.8, 5.06], 0.06, GEAR);
+    gear.strut([0, 0.82, 5.06], [0, 0.42, 5.0], 0.042, 0xdde0e2);
+    gear.strut([0, 1.45, 5.85], [0, 1.0, 5.08], 0.03, GEAR);
+    gear.box(0.3, 0.05, 0.12, 0, 0.66, 5.02, GEAR);
+    for (const s of [1, -1]) gear.box(0.025, 0.36, 0.1, s * 0.135, 0.5, 5.0, GEAR);
+    gear.tyre(0.35, 0.2, 0, 0.35, 5.0, RUBBER, 16);
+    gear.cyl(0.22, 0.22, 0.18, 12, 0, 0.35, 5.0, HUB, 0, PI / 2);
+    gear.cyl(0.07, 0.07, 0.24, 8, 0, 0.35, 5.0, 0x5d6267, 0, PI / 2);
+    gear.cyl(0.055, 0.065, 0.08, 10, 0, 0.98, 5.17, 0xf2f2ea); // taxi light
+    for (const s of [1, -1]) gear.slab([[5.55, 1.48], [4.55, 1.45], [4.62, 1.14], [5.48, 1.16]], s * 0.19, s * 0.19 + s * 0.012, BELLY, 'zy');
+    gear.patch(body, 5.55, 4.55, [PI - 0.4, PI], [PI - 0.4, PI], 1, DARK, { lift: 0.004, ns: 2, nz: 2 });
+    gear.patch(body, 5.55, 4.55, [PI - 0.4, PI], [PI - 0.4, PI], -1, DARK, { lift: 0.004, ns: 2, nz: 2 });
+    // Main legs under the intakes (wheels at x ±1.42, z -1.5).
+    for (const s of [1, -1]) {
+      gear.strut([s * 1.16, 1.12, -1.42], [s * 1.18, 0.74, -1.48], 0.07, GEAR);
+      gear.strut([s * 1.18, 0.76, -1.48], [s * 1.2, 0.42, -1.5], 0.05, 0xdde0e2);
+      gear.strut([s * 1.12, 1.12, -0.55], [s * 1.17, 0.82, -1.42], 0.035, GEAR);
+      gear.strut([s * 1.17, 0.42, -1.5], [s * 1.32, 0.42, -1.5], 0.045, GEAR);
+      gear.tyre(0.42, 0.24, s * 1.42, 0.42, -1.5, RUBBER, 18);
+      gear.cyl(0.26, 0.26, 0.2, 14, s * 1.42, 0.42, -1.5, HUB, 0, PI / 2);
+      gear.cyl(0.1, 0.1, 0.24, 10, s * 1.42, 0.42, -1.5, 0x5d6267, 0, PI / 2);
+      // Doors: the big one inboard, a small one on the leg.
+      gear.slab([[-0.75, 1.14], [-2.3, 1.14], [-2.1, 0.64], [-0.95, 0.64]], s * 0.86, s * 0.86 + s * 0.025, BELLY, 'zy');
+      gear.slab([[-1.12, 1.1], [-1.72, 1.1], [-1.72, 0.72], [-1.12, 0.72]], s * 1.07, s * 1.07 - s * 0.02, BELLY, 'zy');
+      gear.patch(intake[s], -0.75, -2.3, [2.35, PI], [2.35, PI], 1, DARK, { lift: 0.004, ns: 3, nz: 3 });
+      gear.patch(intake[s], -0.75, -2.3, [2.35, PI], [2.35, PI], -1, DARK, { lift: 0.004, ns: 3, nz: 3 });
+    }
+
+    return {
+      kit: k, metal: m, matte: r, glass: gl, gear,
+      lights: [['red', 5.0, 1.65, -4.0, 0.08], ['green', -5.0, 1.65, -4.0, 0.08]],
+      burner: [0, 1.8, -8.45],
+    };
+  };
+})();
+//# sourceURL=js/vehicles/models/talon.js
+</script>
+    <script data-src="js/vehicles/models/sparrow.js">
+/*
+ * models/sparrow.js — the Sparrow, Ardea's light civil helicopter (the one
+ * on the airport helipad, and the pink coast-tour helicopter over the bay).
+ *
+ * Built with the aircraft model kit (aircraft.js): a lofted cabin with a
+ * big glass nose and door windows, an engine fairing on the roof, a lofted
+ * tail boom with a fin, ventral fin and tailplane, a two-blade main rotor
+ * with a proper hub and airfoil blades, a two-blade tail rotor, and skids
+ * on bent cross tubes. The colour paints the cabin, boom and fin; the belly
+ * and a stripe contrast with it. Sizes and pivots match SPECS.sparrow
+ * (rotor at 0, 3.1, 0.4 with a 5.25 m radius; tail rotor at 0.22, 2.0, -6.0).
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const PI = Math.PI;
+
+  const WHITE = 0xf3f4f2;
+  const DARK = 0x24272c;
+  const FRAME = 0x2f3338;
+  const WINDOW = 0x16202a;
+  const METAL = 0xb3b8be;
+  const SKID = 0x9aa0a7;
+  const BLADE = 0x2a2d31;
+  const TIP = 0xf2c500;
+
+  function shade(hex, k) {
+    const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+    const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+    const b = Math.min(255, Math.round((hex & 255) * k));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  function pale(hex) {
+    return ((hex >> 16) & 255) + ((hex >> 8) & 255) + (hex & 255) > 600;
+  }
+
+  VH.AircraftDefs = VH.AircraftDefs || {};
+  VH.AircraftDefs.sparrow = function (c, Kit) {
+    const k = new Kit();
+    const m = new Kit();
+    const r = new Kit();
+    const gl = new Kit();
+    const belly = pale(c) ? 0x2b4f8f : WHITE; // a white helicopter gets a blue belly
+    const stripe = pale(c) ? 0xd8262e : shade(c, 0.6);
+
+    // ------------------------------------------------------------- cabin
+    const cabin = k.loft([
+      { z: 2.47, w: 0.05, h: 0.06, y: 1.42, n: 2 },
+      { z: 2.32, w: 0.5, h: 0.6, y: 1.45, n: 2.1 },
+      { z: 1.95, w: 0.82, h: 0.88, y: 1.5, n: 2.3 },
+      { z: 1.2, w: 0.95, h: 0.98, y: 1.54, n: 2.5 },
+      { z: 0.2, w: 0.96, h: 0.99, y: 1.56, n: 2.5 },
+      { z: -0.7, w: 0.9, h: 0.92, y: 1.62, n: 2.4 },
+      { z: -1.45, w: 0.6, h: 0.64, y: 1.83, n: 2.2 },
+      { z: -1.95, w: 0.32, h: 0.36, y: 1.96, n: 2 },
+    ], c, { seg: 32, steps: 5, bands: [[1.62, 1.74, stripe], [1.98, PI + 0.01, belly]] });
+
+    // The glass nose (one big bubble, a frame down the middle) and the windows.
+    for (const side of [1, -1]) {
+      gl.patch(cabin, 1.15, 2.42, [0.12, 1.7], [0.07, 2.0], side, WINDOW, { lift: 0.012, nz: 8, ns: 8 });
+      gl.patch(cabin, -0.15, 0.95, [0.55, 1.42], [0.5, 1.42], side, WINDOW, { lift: 0.012, nz: 4, ns: 4 });
+      gl.patch(cabin, -1.05, -0.35, [0.62, 1.32], [0.55, 1.36], side, WINDOW, { lift: 0.012, nz: 3, ns: 3 });
+      // Door shut lines and handles.
+      for (const z of [1.02, -0.22, -1.12]) k.patch(cabin, z - 0.018, z + 0.018, [0.42, 1.95], [0.42, 1.95], side, shade(c, 0.55), { lift: 0.008, nz: 1, ns: 6 });
+      k.decal(cabin, 0.3, 1.5, side, 0.16, 0.035, METAL, { lift: 0.014 });
+      k.decal(cabin, -0.95, 1.48, side, 0.16, 0.035, METAL, { lift: 0.014 });
+    }
+    k.patch(cabin, 1.15, 2.44, [0, 0.07], [0, 0.07], 1, FRAME, { lift: 0.016, nz: 6, ns: 1 });
+    k.patch(cabin, 1.15, 2.44, [0, 0.07], [0, 0.07], -1, FRAME, { lift: 0.016, nz: 6, ns: 1 });
+
+    // Engine fairing on the roof, its intake, exhaust and the rotor mast.
+    k.loft([
+      { z: 1.0, w: 0.08, h: 0.06, y: 2.42 },
+      { z: 0.6, w: 0.44, h: 0.3, y: 2.5 },
+      { z: -0.6, w: 0.46, h: 0.33, y: 2.52 },
+      { z: -1.5, w: 0.3, h: 0.22, y: 2.42 },
+      { z: -1.95, w: 0.12, h: 0.1, y: 2.32 },
+    ], c, { seg: 20, steps: 3 });
+    for (const s of [1, -1]) r.box(0.03, 0.16, 0.42, s * 0.44, 2.55, 0.05, DARK);
+    m.cyl(0.11, 0.13, 0.42, 12, 0, 2.55, -1.85, 0x5c6168, -0.35);
+    m.cyl(0.09, 0.11, 0.42, 10, 0, 2.95, 0.4, METAL, PI / 2);
+
+    // --------------------------------------------------------------- tail
+    k.loft([
+      { z: -1.75, w: 0.3, h: 0.34, y: 1.96 },
+      { z: -3.5, w: 0.2, h: 0.22, y: 2.0 },
+      { z: -6.15, w: 0.1, h: 0.12, y: 2.05 },
+    ], c, { seg: 16, steps: 4, bands: [[1.5, 1.68, stripe]] });
+    k.wing([
+      { x: 0, y: 2.0, z: -5.45, c: 1.0, t: 0.13 },
+      { x: 0, y: 3.02, z: -6.0, c: 0.55, t: 0.12 },
+    ], c, { axis: 'y', bands: [[0.72, 1.01, stripe]] });
+    k.wing([
+      { x: 0, y: 2.0, z: -5.6, c: 0.75, t: 0.12 },
+      { x: 0, y: 1.5, z: -5.95, c: 0.45, t: 0.12 },
+    ], c, { axis: 'y' });
+    k.wing([
+      { x: 0.08, y: 2.0, z: -4.6, c: 0.58, t: 0.12 },
+      { x: 1.0, y: 2.02, z: -4.72, c: 0.45, t: 0.12 },
+    ], c, { mirror: true });
+    for (const s of [1, -1]) k.wing([{ x: s * 1.0, y: 1.86, z: -4.66, c: 0.48, t: 0.1 }, { x: s * 1.0, y: 2.2, z: -4.72, c: 0.36, t: 0.1 }], stripe, { axis: 'y' });
+    m.sphere(0.13, 1, 1, 1.3, 0.1, 2.0, -6.0, METAL, 10, 8); // tail rotor gearbox
+
+    // -------------------------------------------------------------- skids
+    for (const s of [1, -1]) {
+      const x = s * 0.9;
+      m.cyl(0.05, 0.05, 3.1, 10, x, 0.07, 0.42, SKID);
+      m.strut([x, 0.07, 1.96], [x, 0.16, 2.2], 0.05, SKID);
+      m.strut([x, 0.16, 2.2], [x, 0.34, 2.36], 0.05, SKID);
+      for (const z of [1.35, -0.45]) {
+        m.strut([s * 0.5, 0.82, z], [s * 0.78, 0.5, z], 0.045, SKID);
+        m.strut([s * 0.78, 0.5, z], [x, 0.09, z], 0.045, SKID);
+      }
+      r.box(0.06, 0.05, 0.2, x, 0.12, 1.35, DARK);
+      r.box(0.06, 0.05, 0.2, x, 0.12, -0.45, DARK);
+    }
+
+    // ---------------------------------------------------------- the rotors
+    // Main rotor (spins about its mast): a hub, grips and two airfoil blades.
+    const blade = new Kit();
+    blade.wing([
+      { x: 0.42, y: 0, z: 0.16, c: 0.3, t: 0.14 },
+      { x: 5.22, y: 0, z: 0.14, c: 0.27, t: 0.11 },
+    ], BLADE, { bands: [[0.93, 1.01, TIP]] });
+    const rotor = new Kit();
+    rotor.place(blade, new THREE.Matrix4());
+    rotor.place(blade, new THREE.Matrix4().makeRotationY(PI));
+    rotor.cyl(0.18, 0.2, 0.2, 12, 0, 0, 0, METAL, PI / 2);
+    rotor.box(0.95, 0.09, 0.2, 0, 0.0, 0, 0x6f757c);
+    rotor.cyl(0.07, 0.07, 0.24, 8, 0, 0.18, 0, DARK, PI / 2);
+    // Tail rotor (spins about X): two blades in the Y-Z plane.
+    const tail = new Kit();
+    tail.slab([[0.07, 0.08], [-0.07, 0.08], [-0.05, 0.8], [0.05, 0.8]], -0.015, 0.015, BLADE, 'zy');
+    tail.slab([[0.07, -0.08], [-0.07, -0.08], [-0.05, -0.8], [0.05, -0.8]], -0.015, 0.015, BLADE, 'zy');
+    tail.slab([[0.05, 0.7], [-0.05, 0.7], [-0.05, 0.8], [0.05, 0.8]], 0.016, 0.02, TIP, 'zy');
+    tail.slab([[0.05, -0.7], [-0.05, -0.7], [-0.05, -0.8], [0.05, -0.8]], 0.016, 0.02, TIP, 'zy');
+    tail.cyl(0.06, 0.06, 0.12, 10, 0, 0, 0, METAL, 0, PI / 2);
+
+    return {
+      kit: k, metal: m, matte: r, glass: gl,
+      lights: [['red', 0.98, 1.36, 0.8, 0.06], ['green', -0.98, 1.36, 0.8, 0.06], ['white', 0, 2.06, -6.18, 0.06]],
+      strobe: [0, 3.06, -6.05],
+      rotor: { kit: rotor, at: [0, 3.1, 0.4], r: 5.25 },
+      tailRotor: { kit: tail, at: [0.22, 2.0, -6.0] },
+    };
+  };
+})();
+//# sourceURL=js/vehicles/models/sparrow.js
+</script>
+    <script data-src="js/vehicles/models/warden.js">
+/*
+ * models/warden.js — the Warden AH, Breakwater Arsenal's attack helicopter
+ * (on the pad at Fort Breakwater).
+ *
+ * Built with the aircraft model kit (aircraft.js): a narrow, slab-sided
+ * lofted fuselage with a stepped tandem cockpit (two glass canopies with
+ * frames), a nose sensor turret and the chin cannon, two engine pods with
+ * exhausts, stub wings carrying the rocket pods and wingtip missiles, a
+ * lofted tail boom with fin, tailplane and tail wheel, a four-blade main
+ * rotor and a four-blade tail rotor. Military paint in the colour given,
+ * with a darker belly, panel lines and markings. Sizes, guns, rocket pods
+ * and pivots match SPECS.warden (rotor at 0, 3.65, 0.5, 7 m radius; tail
+ * rotor at 0.25, 2.6, -7.25).
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const PI = Math.PI;
+
+  const DARK = 0x1f2226;
+  const FRAME = 0x2a2e33;
+  const WINDOW = 0x152029;
+  const METAL = 0x8f959b;
+  const GUN = 0x3a3e43;
+  const RUBBER = 0x17181a;
+  const BLADE = 0x2b2e2a;
+  const MARK = 0xd9dccf; // low-visibility markings
+  const MISSILE = 0xc9ccc4;
+
+  function shade(hex, k) {
+    const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+    const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+    const b = Math.min(255, Math.round((hex & 255) * k));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  VH.AircraftDefs = VH.AircraftDefs || {};
+  VH.AircraftDefs.warden = function (c, Kit) {
+    const k = new Kit();
+    const m = new Kit();
+    const r = new Kit();
+    const gl = new Kit();
+    const dark = shade(c, 0.72);
+    const line = shade(c, 0.55);
+
+    // ---------------------------------------------------------- fuselage
+    const body = k.loft([
+      { z: 4.95, w: 0.06, h: 0.07, y: 1.36, n: 2.2 },
+      { z: 4.62, w: 0.36, h: 0.4, y: 1.38, n: 2.6 },
+      { z: 3.8, w: 0.55, h: 0.6, y: 1.48, n: 3 },
+      { z: 2.6, w: 0.62, h: 0.76, y: 1.62, n: 3.2 },
+      { z: 1.2, w: 0.74, h: 0.92, y: 1.76, n: 3.2 },
+      { z: -0.4, w: 0.76, h: 0.95, y: 1.86, n: 3.2 },
+      { z: -1.6, w: 0.62, h: 0.8, y: 1.96, n: 3 },
+      { z: -2.7, w: 0.38, h: 0.48, y: 2.04, n: 2.6 },
+      { z: -3.6, w: 0.3, h: 0.36, y: 2.0, n: 2.4 },
+      { z: -6.8, w: 0.17, h: 0.21, y: 1.72, n: 2.2 },
+      { z: -7.5, w: 0.12, h: 0.15, y: 1.7, n: 2 },
+    ], c, { seg: 30, steps: 4, bands: [[2.25, PI + 0.01, dark]], caps: { back: dark } });
+    // Panel lines and access doors.
+    for (const side of [1, -1]) {
+      for (const z of [3.0, 0.05, -1.25, -3.5]) k.patch(body, z - 0.015, z + 0.015, [0.5, 2.3], [0.5, 2.3], side, line, { lift: 0.007, nz: 1, ns: 6 });
+      k.patch(body, -0.9, 0.0, [1.25, 1.75], [1.25, 1.75], side, shade(c, 0.86), { lift: 0.008, nz: 2, ns: 2 });
+      // Markings: a roundel on the boom, a number block on the nose.
+      k.decal(body, -4.6, 1.45, side, 0.42, 0.42, MARK, { round: 1, lift: 0.012 });
+      k.decal(body, -4.6, 1.45, side, 0.22, 0.22, line, { round: 1, lift: 0.016 });
+      k.decal(body, 3.55, 1.5, side, 0.5, 0.14, MARK, { lift: 0.012 });
+      k.decal(body, -6.2, 1.5, side, 0.32, 0.1, 0xd4b13a, { lift: 0.012 }); // "no step" band by the tail rotor
+    }
+
+    // The stepped tandem canopies: the gunner in front and low, the pilot behind and high.
+    const front = gl.loft([
+      { z: 4.25, w: 0.04, h: 0.04, y: 1.98 },
+      { z: 3.85, w: 0.4, h: 0.34, y: 2.0 },
+      { z: 3.05, w: 0.5, h: 0.46, y: 2.08 },
+      { z: 2.62, w: 0.25, h: 0.24, y: 2.16 },
+    ], WINDOW, { seg: 20, steps: 3 });
+    const rear = gl.loft([
+      { z: 2.75, w: 0.04, h: 0.04, y: 2.42 },
+      { z: 2.3, w: 0.5, h: 0.44, y: 2.46 },
+      { z: 1.2, w: 0.56, h: 0.56, y: 2.55 },
+      { z: 0.5, w: 0.46, h: 0.44, y: 2.56 },
+      { z: 0.15, w: 0.12, h: 0.1, y: 2.52 },
+    ], WINDOW, { seg: 20, steps: 3 });
+    // Frames over the glass.
+    for (const side of [1, -1]) {
+      for (const z of [3.85, 3.05]) k.patch(front, z - 0.025, z + 0.025, [0, 1.6], [0, 1.6], side, FRAME, { lift: 0.008, nz: 1, ns: 5 });
+      for (const z of [2.3, 1.55, 0.75]) k.patch(rear, z - 0.025, z + 0.025, [0, 1.6], [0, 1.6], side, FRAME, { lift: 0.008, nz: 1, ns: 5 });
+      k.patch(front, 2.62, 4.2, [0, 0.05], [0, 0.05], side, FRAME, { lift: 0.008, nz: 5, ns: 1 });
+      k.patch(rear, 0.15, 2.72, [0, 0.05], [0, 0.05], side, FRAME, { lift: 0.008, nz: 5, ns: 1 });
+    }
+
+    // Nose sensor turret and the chin cannon.
+    m.sphere(0.24, 1, 1, 1, 0, 1.24, 4.82, GUN, 14, 10);
+    gl.sphere(0.11, 1, 1, 0.6, 0, 1.24, 5.03, 0x3a5a7a, 10, 8);
+    m.sphere(0.26, 1, 0.9, 1, 0, 0.92, 3.75, GUN, 12, 8);
+    for (const a of [0, 2.1, 4.2]) m.cyl(0.035, 0.035, 1.1, 8, Math.cos(a) * 0.06, 0.82 + Math.sin(a) * 0.06, 4.35, DARK);
+    m.cyl(0.08, 0.08, 0.3, 10, 0, 0.82, 3.95, GUN);
+
+    // Engine pods with intakes and exhausts, and the rotor mast fairing.
+    for (const s of [1, -1]) {
+      const x = s * 0.56;
+      k.loft([
+        { z: 0.7, w: 0.12, y: 2.75 },
+        { z: 0.45, w: 0.32, h: 0.3, y: 2.75 },
+        { z: -1.55, w: 0.34, h: 0.32, y: 2.76 },
+        { z: -2.25, w: 0.22, h: 0.2, y: 2.72 },
+      ], c, { x, seg: 18, steps: 3, caps: { front: DARK } });
+      r.cyl(0.24, 0.24, 0.02, 14, x, 2.75, 0.62, DARK);
+      m.cyl(0.13, 0.17, 0.55, 12, x + s * 0.1, 2.78, -2.35, 0x4a4e52, 0, s * 0.45);
+      k.patch(body, -1.9, 0.6, [0.15, 0.55], [0.15, 0.55], s, dark, { lift: 0.006, nz: 3, ns: 2 });
+    }
+    m.cyl(0.16, 0.22, 0.5, 12, 0, 3.32, 0.5, METAL, PI / 2);
+    k.loft([
+      { z: 1.4, w: 0.06, h: 0.05, y: 2.95 },
+      { z: 1.0, w: 0.34, h: 0.22, y: 3.0 },
+      { z: 0.0, w: 0.36, h: 0.24, y: 3.0 },
+      { z: -0.6, w: 0.14, h: 0.1, y: 2.95 },
+    ], c, { seg: 16, steps: 3 });
+
+    // ------------------------------------------------- stub wings and stores
+    k.wing([
+      { x: 0.6, y: 1.74, z: 1.25, c: 1.45, t: 0.15 },
+      { x: 2.65, y: 1.64, z: 0.98, c: 1.0, t: 0.12 },
+    ], c, { mirror: true });
+    for (const s of [1, -1]) {
+      const x = s * 2.25;
+      // Rocket pod on a pylon: the tubes show as dark rings in the front face.
+      k.slab([[1.15, 1.66], [0.35, 1.66], [0.45, 1.5], [1.0, 1.5]], x - 0.05, x + 0.05, dark, 'zy');
+      k.loft([
+        { z: 1.85, w: 0.2, y: 1.35 },
+        { z: 1.68, w: 0.27, y: 1.35 },
+        { z: -0.05, w: 0.27, y: 1.35 },
+        { z: -0.3, w: 0.16, y: 1.35 },
+      ], dark, { x, seg: 18, steps: 2, caps: { front: DARK } });
+      for (const [dx, dy] of [[0, 0], [0.13, 0.08], [-0.13, 0.08], [0.13, -0.08], [-0.13, -0.08], [0, 0.16], [0, -0.16]]) r.cyl(0.045, 0.045, 0.02, 8, x + dx, 1.35 + dy, 1.86, 0x0c0d0e);
+      // Wingtip missiles.
+      m.box(0.06, 0.08, 1.0, s * 2.62, 1.55, 0.6, GUN);
+      k.loft([
+        { z: 1.45, w: 0.02, y: 1.46 },
+        { z: 1.25, w: 0.08, y: 1.46 },
+        { z: -0.25, w: 0.08, y: 1.46 },
+      ], MISSILE, { x: s * 2.62, seg: 10, steps: 2, caps: { back: DARK } });
+      for (const a of [0, PI / 2, PI, PI * 1.5]) {
+        k.box(0.12, 0.012, 0.2, s * 2.62 + Math.cos(a) * 0.12, 1.46 + Math.sin(a) * 0.12, -0.12, MISSILE, 0, 0, a);
+      }
+    }
+
+    // --------------------------------------------------------------- tail
+    k.wing([
+      { x: 0, y: 1.72, z: -6.25, c: 1.4, t: 0.14 },
+      { x: 0, y: 3.78, z: -7.3, c: 0.75, t: 0.12 },
+    ], c, { axis: 'y', bands: [[0.82, 1.01, dark]] });
+    k.wing([
+      { x: 0.1, y: 1.84, z: -5.75, c: 0.75, t: 0.12 },
+      { x: 1.45, y: 1.86, z: -5.95, c: 0.56, t: 0.11 },
+    ], c, { mirror: true });
+    for (const s of [1, -1]) k.wing([{ x: s * 1.45, y: 1.62, z: -5.9, c: 0.58, t: 0.1 }, { x: s * 1.45, y: 2.12, z: -6.0, c: 0.42, t: 0.1 }], dark, { axis: 'y' });
+    m.sphere(0.16, 1, 1, 1.3, 0.14, 2.6, -7.25, METAL, 10, 8); // tail rotor gearbox
+
+    // -------------------------------------------------------------- wheels
+    for (const s of [1, -1]) {
+      m.strut([s * 0.6, 1.15, 1.75], [s * 1.12, 0.36, 1.5], 0.07, GUN);
+      m.strut([s * 0.62, 1.05, 0.95], [s * 1.12, 0.38, 1.5], 0.05, GUN);
+      r.tyre(0.35, 0.22, s * 1.17, 0.35, 1.5, RUBBER, 16);
+      m.cyl(0.17, 0.17, 0.1, 12, s * 1.24, 0.35, 1.5, METAL, 0, PI / 2);
+    }
+    m.strut([0, 1.55, -6.5], [0, 0.5, -6.6], 0.06, GUN);
+    m.box(0.16, 0.12, 0.3, 0, 0.5, -6.6, GUN);
+    r.tyre(0.28, 0.14, 0, 0.28, -6.6, RUBBER, 14);
+
+    // ---------------------------------------------------------- the rotors
+    const blade = new Kit();
+    blade.wing([
+      { x: 0.55, y: 0, z: 0.26, c: 0.52, t: 0.13 },
+      { x: 6.95, y: 0, z: 0.22, c: 0.46, t: 0.1 },
+    ], BLADE, { bands: [[0.95, 1.01, 0xc9b23a]] });
+    const rotor = new Kit();
+    for (let i = 0; i < 4; i++) rotor.place(blade, new THREE.Matrix4().makeRotationY((i * PI) / 2));
+    rotor.cyl(0.32, 0.34, 0.26, 14, 0, 0, 0, METAL, PI / 2);
+    for (let i = 0; i < 4; i++) rotor.box(0.7, 0.1, 0.2, Math.cos((i * PI) / 2) * 0.45, 0, -Math.sin((i * PI) / 2) * 0.45, 0x5f656b, 0, (i * PI) / 2);
+    rotor.cyl(0.1, 0.12, 0.3, 10, 0, 0.26, 0, DARK, PI / 2);
+    const tail = new Kit();
+    for (let i = 0; i < 4; i++) {
+      const b = new Kit();
+      b.slab([[0.09, 0.1], [-0.09, 0.1], [-0.07, 1.08], [0.07, 1.08]], -0.018, 0.018, BLADE, 'zy');
+      tail.place(b, new THREE.Matrix4().makeRotationX((i * PI) / 2 + 0.3));
+    }
+    tail.cyl(0.09, 0.09, 0.16, 10, 0, 0, 0, METAL, 0, PI / 2);
+
+    return {
+      kit: k, metal: m, matte: r, glass: gl,
+      lights: [['red', 2.66, 1.64, 0.5, 0.06], ['green', -2.66, 1.64, 0.5, 0.06]],
+      strobe: [0, 3.82, -7.3],
+      rotor: { kit: rotor, at: [0, 3.65, 0.5], r: 7 },
+      tailRotor: { kit: tail, at: [0.25, 2.6, -7.25] },
+    };
+  };
+})();
+//# sourceURL=js/vehicles/models/warden.js
+</script>
     <script data-src="js/vehicles/tank.js">
 /*
  * tank.js — the Bastion main battle tank (Fort Breakwater's motor pool).
@@ -34068,6 +35917,8 @@ void main() {
     MATS = {
       lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.24, 0.2) }),
       lampOn: new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.8, 4.2) }),
+      metal: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }),
+      matte: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.05 }),
     };
     return MATS;
   }
@@ -34080,44 +35931,227 @@ void main() {
     return (r << 16) | (g << 8) | b;
   }
 
-  /** Hull, turret and gun, built with the aircraft model kit (aircraft.js). */
+  /** A solid between two convex outlines ([x, z] points, the same count) at two heights: turret faces, a bustle. */
+  function frustum(kit, lower, y0, upper, y1, color) {
+    const c = VH.col(color);
+    const B = lower.map(([x, z]) => [x, y0, z]);
+    const T = upper.map(([x, z]) => [x, y1, z]);
+    const all = B.concat(T);
+    const ctr = [0, 0, 0];
+    for (const p of all) for (let i = 0; i < 3; i++) ctr[i] += p[i] / all.length;
+    const face = (pts) => {
+      const [a, b, d] = pts;
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1;
+      n = n.map((q) => q / l);
+      const mid = pts.reduce((m, p) => [m[0] + p[0] / pts.length, m[1] + p[1] / pts.length, m[2] + p[2] / pts.length], [0, 0, 0]);
+      if (n[0] * (mid[0] - ctr[0]) + n[1] * (mid[1] - ctr[1]) + n[2] * (mid[2] - ctr[2]) < 0) n = n.map((q) => -q);
+      for (let i = 1; i + 1 < pts.length; i++) kit.tri(pts[0], pts[i], pts[i + 1], n, n, n, c, c, c);
+    };
+    face(T);
+    face(B);
+    for (let i = 0; i < B.length; i++) {
+      const j = (i + 1) % B.length;
+      face([B[i], B[j], T[j], T[i]]);
+    }
+  }
+
+  /** A small seeded random generator, so the camouflage is the same on every tank of a colour. */
+  function seeded(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /**
+   * Hull, turret and gun, built with the aircraft model kit (aircraft.js):
+   * paint, bare metal and matte (tracks, rubber) for each part.
+   */
   function buildGeometry(color) {
     const K = () => new VH.AircraftKit();
     const hull = K();
-    const dark = 0x23251f;
-    const steel = 0x3a3d36;
-    const shade = shadeHex(color, 0.82);
-    // Hull: a sloped glacis in front, flat deck, angled rear.
-    hull.slab([[-3.9, 0.55], [3.35, 0.55], [4.05, 1.0], [3.45, 1.6], [-3.75, 1.6], [-3.95, 1.25]], -1.42, 1.42, color, 'zy');
-    // Tracks, road wheels and skirts.
+    const hullM = K();
+    const hullR = K();
+    const PI = Math.PI;
+    const dark = 0x1f211c;
+    const steel = 0x5b5f58;
+    const track = 0x2a2b28;
+    const rubber = 0x18191a;
+    const shade = shadeHex(color, 0.8);
+    const camoA = shadeHex(color, 0.62);
+    const camoB = 0x6e6247;
+    const rnd = seeded(color);
+
+    // ----------------------------------------------------------- hull
+    // Lower hull between the tracks, and the upper hull over them (sloped glacis, flat deck, raked back).
+    hull.slab([[-3.9, 0.55], [3.35, 0.55], [4.05, 1.0], [3.6, 1.15], [-3.95, 1.15], [-3.98, 0.9]], -1.3, 1.3, shade, 'zy');
+    hull.slab([[-3.98, 1.0], [3.75, 1.0], [4.18, 1.12], [3.45, 1.62], [-3.78, 1.62], [-4.02, 1.3]], -1.98, 1.98, color, 'zy');
+    // Side skirts with panel joints, a little proud of the hull.
     for (const s of [1, -1]) {
-      hull.box(0.62, 0.95, 7.95, s * 1.62, 0.55, -0.1, dark);
-      for (let i = 0; i < 7; i++) hull.cyl(0.36, 0.36, 0.5, 12, s * 1.62, 0.42, -3.3 + i * 1.08, steel, 0, Math.PI / 2);
-      hull.cyl(0.32, 0.32, 0.5, 12, s * 1.62, 0.78, 3.75, steel, 0, Math.PI / 2);
-      hull.box(0.1, 0.55, 7.2, s * 1.95, 1.25, 0.1, shade);
-      hull.box(0.3, 0.12, 0.5, s * 1.1, 1.66, -3.4, steel); // stowage
-      hull.box(0.22, 0.18, 0.22, s * 1.2, 1.42, 3.55, 0x111111); // headlight housings
+      hull.slab([[-3.95, 0.62], [3.55, 0.62], [3.9, 0.9], [3.9, 1.2], [-3.95, 1.2]], s > 0 ? 1.98 : -2.04, s > 0 ? 2.04 : -1.98, color, 'zy');
+      for (let z = -2.85; z < 3.4; z += 1.1) hull.box(0.012, 0.56, 0.035, s * 2.046, 0.91, z, shade);
+      hull.box(0.012, 0.03, 7.6, s * 2.046, 0.66, -0.2, shade);
     }
-    hull.box(2.2, 0.35, 0.9, 0, 1.78, -3.2, shade); // engine deck
-    hull.box(1.9, 0.08, 1.5, 0, 1.97, -3.2, dark);
-    // Turret: a faceted plan on a ring, with a commander's hatch and smoke launchers.
+
+    // Tracks: a dark loop round the drive sprocket (back) and idler (front), with the tread links on it.
+    const loop = [];
+    loop.push([-3.25, 0.02], [3.15, 0.02]);
+    for (let a = -1.2; a <= 1.41; a += 0.32) loop.push([3.52 + Math.cos(a) * 0.42, 0.55 + Math.sin(a) * 0.42]);
+    for (let a = PI - 1.45; a <= PI + 1.01; a += 0.3) loop.push([-3.72 + Math.cos(a) * 0.44, 0.58 + Math.sin(a) * 0.44]);
+    const per = [];
+    for (let i = 0; i < loop.length; i++) per.push([loop[i], loop[(i + 1) % loop.length]]);
+    const lc = loop.reduce((m, p) => [m[0] + p[0] / loop.length, m[1] + p[1] / loop.length], [0, 0]);
+    for (const s of [1, -1]) {
+      const x0 = s * 1.32;
+      const x1 = s * 1.93;
+      hullR.slab(loop, Math.min(x0, x1), Math.max(x0, x1), track, 'zy');
+      // Tread links every 20 cm round the loop.
+      let carry = 0;
+      for (const [a, b] of per) {
+        const dz = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len = Math.hypot(dz, dy);
+        const th = Math.atan2(dy, dz);
+        let nz = -dy / len;
+        let ny = dz / len;
+        const mz = (a[0] + b[0]) / 2 - lc[0];
+        const my = (a[1] + b[1]) / 2 - lc[1];
+        if (nz * mz + ny * my < 0) {
+          nz = -nz;
+          ny = -ny;
+        }
+        for (let t = carry; t < len; t += 0.2) {
+          const z = a[0] + (dz * t) / len + nz * 0.018;
+          const y = a[1] + (dy * t) / len + ny * 0.018;
+          hullR.box(0.64, 0.05, 0.1, s * 1.625, y, z, 0x34352f, -th);
+        }
+        carry = (carry + 0.2 - (len % 0.2)) % 0.2;
+      }
+      // Road wheels (their lower halves show under the skirts), idler and drive sprocket.
+      for (let i = 0; i < 7; i++) {
+        const z = -3.08 + i * 1.03;
+        hullR.tyre(0.37, 0.09, s * 1.97, 0.4, z, rubber, 16);
+        hull.cyl(0.25, 0.25, 0.1, 14, s * 1.99, 0.4, z, shade, 0, PI / 2);
+        hullM.cyl(0.07, 0.07, 0.12, 8, s * 2.02, 0.4, z, steel, 0, PI / 2);
+      }
+      hull.cyl(0.36, 0.36, 0.12, 16, s * 1.96, 0.55, 3.52, shade, 0, PI / 2);
+      hullM.cyl(0.1, 0.1, 0.16, 8, s * 2.0, 0.55, 3.52, steel, 0, PI / 2);
+      hullM.cyl(0.42, 0.42, 0.14, 18, s * 1.95, 0.58, -3.72, steel, 0, PI / 2);
+      for (let k = 0; k < 11; k++) {
+        const a = (k / 11) * PI * 2;
+        hullM.box(0.14, 0.09, 0.12, s * 1.95, 0.58 + Math.sin(a) * 0.45, -3.72 + Math.cos(a) * 0.45, steel, -a);
+      }
+      hullM.cyl(0.16, 0.16, 0.18, 10, s * 2.0, 0.58, -3.72, dark, 0, PI / 2);
+      // Headlight housings, tow hooks, mudguards, tools and exhausts.
+      hull.box(0.28, 0.22, 0.2, s * 1.25, 1.38, 3.77, shade);
+      hullM.box(0.12, 0.2, 0.16, s * 0.8, 0.86, 4.08, steel);
+      hull.box(0.62, 0.04, 0.5, s * 1.62, 1.12, 3.95, shade, 0.25);
+      hullM.box(0.06, 0.05, 1.6, s * 1.75, 1.66, -1.2, 0x6e5a3e); // shovel handle
+      hullM.box(0.24, 0.03, 0.34, s * 1.75, 1.655, -0.25, steel); // shovel blade
+      hullM.box(0.05, 0.05, 1.8, s * 1.55, 1.655, 0.6, steel); // crowbar
+      hullM.box(0.36, 0.22, 0.42, s * 1.35, 1.38, -4.0, 0x2c2d2a);
+      hullR.box(0.28, 0.14, 0.04, s * 1.35, 1.38, -4.22, 0x0c0c0c);
+    }
+    // Driver's hatch and periscopes, engine deck grilles, stowage at the back.
+    hull.cyl(0.36, 0.36, 0.06, 14, 0, 1.65, 2.75, shade, PI / 2);
+    for (const x of [-0.24, 0, 0.24]) {
+      hullM.box(0.16, 0.1, 0.12, x, 1.67, 3.15, steel);
+      hullR.box(0.13, 0.06, 0.01, x, 1.68, 3.215, 0x1a2a33);
+    }
+    hullR.box(2.3, 0.025, 1.7, 0, 1.63, -2.75, dark);
+    for (let i = 0; i < 9; i++) hull.box(2.2, 0.05, 0.06, 0, 1.655, -3.5 + i * 0.19, shade);
+    hull.box(1.5, 0.36, 0.42, 0, 1.36, -4.15, color);
+    for (const s of [1, -1]) hull.box(0.08, 0.08, 0.35, s * 0.55, 1.75, -1.6, steel); // lifting eyes
+    // Camouflage on the top and the skirts.
+    const blot = (cx, cz, rad, col, plane, x) => {
+      const pts = [];
+      const n = 6;
+      const ph = rnd() * PI;
+      for (let i = 0; i < n; i++) {
+        const a = ph + (i / n) * PI * 2;
+        const rr = rad * (0.7 + rnd() * 0.45);
+        pts.push(plane === 'zy' ? [cz + Math.cos(a) * rr * 1.6, cx + Math.sin(a) * rr * 0.55] : [cx + Math.cos(a) * rr, cz + Math.sin(a) * rr * 1.4]);
+      }
+      if (plane === 'zy') hull.slab(pts, Math.min(x, x + Math.sign(x) * 0.004), Math.max(x, x + Math.sign(x) * 0.004), col, 'zy');
+      else hull.slab(pts, 1.622, 1.627, col);
+    };
+    for (let i = 0; i < 9; i++) blot(-1.5 + rnd() * 3, -3.2 + rnd() * 6.2, 0.25 + rnd() * 0.3, i % 2 ? camoA : camoB, 'xz');
+    for (const s of [1, -1]) for (let i = 0; i < 5; i++) blot(0.8 + rnd() * 0.25, -3.4 + i * 1.6 + rnd() * 0.5, 0.2 + rnd() * 0.12, i % 2 ? camoA : camoB, 'zy', s * 2.0425);
+
+    // ---------------------------------------------------------- turret
     const turret = K();
-    turret.cyl(1.25, 1.25, 0.2, 18, 0, 0.0, 0, steel, Math.PI / 2);
-    turret.slab([[-1.55, -2.0], [1.55, -2.0], [1.8, 0.3], [1.05, 1.95], [-1.05, 1.95], [-1.8, 0.3]], 0.05, 0.85, color, 'xz');
-    turret.slab([[-1.3, -1.8], [1.3, -1.8], [1.5, 0.2], [0.9, 1.6], [-0.9, 1.6], [-1.5, 0.2]], 0.85, 1.0, shade, 'xz');
-    turret.box(1.6, 0.3, 0.9, 0, 0.55, -2.3, shade); // bustle rack
-    turret.cyl(0.38, 0.38, 0.22, 12, 0.6, 1.1, -0.5, steel, Math.PI / 2);
-    turret.cyl(0.3, 0.3, 0.2, 12, -0.65, 1.05, -0.2, steel, Math.PI / 2);
-    for (const s of [1, -1]) for (let i = 0; i < 3; i++) turret.cyl(0.07, 0.07, 0.35, 6, s * (1.55 - i * 0.12), 0.75, 0.9 + i * 0.12, dark, -0.4, s * 0.5);
-    turret.strut([-0.9, 1.0, -1.6], [-0.95, 3.3, -1.75], 0.02, dark);
-    // Gun: mantlet, barrel, fume extractor, muzzle brake (points down +Z from the trunnion).
+    const turretM = K();
+    const turretR = K();
+    turretM.cyl(1.25, 1.25, 0.2, 18, 0, 0.0, 0, steel, PI / 2);
+    frustum(turret, [[-1.6, -2.0], [1.6, -2.0], [1.95, 0.1], [1.25, 2.0], [-1.25, 2.0], [-1.95, 0.1]], 0.08,
+      [[-1.38, -1.86], [1.38, -1.86], [1.66, 0.05], [0.96, 1.7], [-0.96, 1.7], [-1.66, 0.05]], 0.92, color);
+    frustum(turret, [[-1.45, -2.85], [1.45, -2.85], [1.6, -1.95], [-1.6, -1.95]], 0.24,
+      [[-1.3, -2.75], [1.3, -2.75], [1.4, -1.9], [-1.4, -1.9]], 0.88, color);
+    // Bustle rack with kit in it.
+    turretM.box(3.0, 0.04, 0.06, 0, 0.84, -3.15, steel);
+    turretM.box(3.0, 0.04, 0.06, 0, 0.4, -3.15, steel);
+    for (const x of [-1.45, -0.5, 0.5, 1.45]) turretM.box(0.04, 0.48, 0.06, x, 0.62, -3.15, steel);
+    turret.box(0.9, 0.34, 0.36, -0.75, 0.6, -3.0, camoB);
+    turret.box(0.7, 0.3, 0.34, 0.55, 0.58, -3.0, shade);
+    turretR.cyl(0.16, 0.16, 0.9, 10, 0.45, 0.82, -3.0, 0x3a3f2c, 0, PI / 2);
+    // Commander's cupola with periscopes and a machine gun; the loader's hatch.
+    turret.cyl(0.4, 0.42, 0.24, 16, 0.65, 1.04, -0.55, shade, PI / 2);
+    turret.cyl(0.33, 0.33, 0.06, 14, 0.65, 1.19, -0.55, color, PI / 2);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * PI * 2;
+      turretM.box(0.12, 0.09, 0.08, 0.65 + Math.cos(a) * 0.36, 1.1, -0.55 + Math.sin(a) * 0.36, steel, 0, -a);
+    }
+    turretM.box(0.1, 0.18, 0.1, 0.25, 1.26, -0.4, steel);
+    turretM.box(0.12, 0.12, 0.55, 0.25, 1.38, -0.25, dark);
+    turretM.cyl(0.025, 0.025, 0.85, 8, 0.25, 1.4, 0.4, dark);
+    turret.box(0.18, 0.16, 0.28, 0.42, 1.32, -0.3, shade); // ammo box
+    turret.cyl(0.32, 0.32, 0.06, 14, -0.62, 0.96, -0.3, shade, PI / 2);
+    // Gunner's sight, smoke launchers, aerials.
+    turret.box(0.42, 0.34, 0.52, 1.0, 1.1, 0.85, shade);
+    turretR.box(0.34, 0.24, 0.02, 1.0, 1.12, 1.115, 0x1a2a33);
+    for (const s of [1, -1]) {
+      for (let i = 0; i < 4; i++) turretM.cyl(0.065, 0.065, 0.34, 8, s * (1.5 - i * 0.04), 0.78 + i * 0.09, 0.9 + i * 0.04, dark, -0.5, s * 0.55);
+      turretM.strut([s * 1.25, 0.9, -1.75], [s * 1.3, 3.2, -1.85], 0.015, dark);
+    }
+    // Camouflage on the roof.
+    for (let i = 0; i < 5; i++) {
+      const cx = -1.0 + rnd() * 2.0;
+      const cz = -1.6 + rnd() * 3.0;
+      const pts = [];
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * PI * 2;
+        const rr = 0.22 + rnd() * 0.18;
+        pts.push([cx + Math.cos(a) * rr, cz + Math.sin(a) * rr * 1.3]);
+      }
+      turret.slab(pts, 0.922, 0.927, i % 2 ? camoA : camoB);
+    }
+
+    // ------------------------------------------------------------- gun
+    // Mantlet, barrel with thermal sleeve bands, fume extractor and muzzle (from the trunnion along +Z).
     const gun = K();
-    gun.box(1.1, 0.7, 0.6, 0, 0, 0.2, color);
-    gun.cyl(0.13, 0.15, 5.4, 12, 0, 0, 2.95, steel);
-    gun.cyl(0.19, 0.19, 0.9, 12, 0, 0, 3.6, steel);
-    gun.cyl(0.2, 0.2, 0.45, 12, 0, 0, 5.7, dark);
-    gun.box(0.18, 0.12, 0.6, 0.45, 0.2, 0.5, dark); // coaxial MG
-    return { hull: hull.geometry(), turret: turret.geometry(), gun: gun.geometry() };
+    const gunM = K();
+    frustum(gun, [[-0.6, -0.15], [0.6, -0.15], [0.55, 0.55], [-0.55, 0.55]], -0.38,
+      [[-0.55, -0.12], [0.55, -0.12], [0.48, 0.5], [-0.48, 0.5]], 0.38, color);
+    gun.cyl(0.15, 0.17, 5.3, 14, 0, 0, 3.15, color);
+    for (const z of [1.4, 2.4, 4.4, 5.2]) gun.cyl(0.165, 0.165, 0.08, 14, 0, 0, z, shade);
+    gun.cyl(0.21, 0.21, 0.85, 14, 0, 0, 3.4, shade);
+    gunM.cyl(0.17, 0.17, 0.3, 14, 0, 0, 5.88, dark);
+    gunM.cyl(0.11, 0.11, 0.04, 12, 0, 0, 6.04, 0x0a0a0a);
+    gunM.box(0.12, 0.1, 0.12, 0, 0.18, 5.6, steel); // muzzle reference sensor
+    gunM.box(0.16, 0.12, 0.5, 0.44, 0.15, 0.6, dark); // coaxial MG
+    gunM.cyl(0.025, 0.025, 0.4, 8, 0.44, 0.15, 1.0, dark);
+    return {
+      hull: hull.geometry(), hullM: hullM.geometry(), hullR: hullR.geometry(),
+      turret: turret.geometry(), turretM: turretM.geometry(), turretR: turretR.geometry(),
+      gun: gun.geometry(), gunM: gunM.geometry(),
+    };
   }
 
   class TankModel {
@@ -34135,8 +36169,9 @@ void main() {
       this.root.add(this.body);
       this.paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.1 });
       this.meshes = [];
-      const add = (geo, parent) => {
-        const m = new THREE.Mesh(geo, this.paint);
+      const M0 = mats();
+      const add = (geo, parent, material) => {
+        const m = new THREE.Mesh(geo, material || this.paint);
         m.castShadow = true;
         m.receiveShadow = true;
         parent.add(m);
@@ -34144,18 +36179,23 @@ void main() {
         return m;
       };
       add(g.hull, this.body);
+      add(g.hullM, this.body, M0.metal);
+      add(g.hullR, this.body, M0.matte);
       this.turret = new THREE.Group();
       this.turret.position.set(0, 1.6, -0.3);
       this.body.add(this.turret);
       add(g.turret, this.turret);
+      add(g.turretM, this.turret, M0.metal);
+      add(g.turretR, this.turret, M0.matte);
       this.gun = new THREE.Group();
       this.gun.position.set(0, 0.45, 1.75);
       this.turret.add(this.gun);
       add(g.gun, this.gun);
+      add(g.gunM, this.gun, M0.metal);
       const M = mats();
       this.lamps = [1, -1].map((s) => {
         const l = new THREE.Mesh(LAMP_GEO, M.lamp);
-        l.position.set(s * 1.2, 1.42, 3.67);
+        l.position.set(s * 1.25, 1.38, 3.875);
         this.body.add(l);
         return l;
       });
@@ -64582,7 +66622,7 @@ void main() {
         { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
         { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
           help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
-        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. T (or D-pad right) switches it in the game.' },
+        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. The Daytime key (T, or D-pad right) switches it in the game.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
           help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
@@ -64789,7 +66829,8 @@ void main() {
       if (!this.dayBtn || !this.actions.isDaytime) return;
       const on = this.actions.isDaytime();
       this.dayBtn.querySelector('.btn-label').textContent = on ? '☀ Daytime: On' : '☾ Daytime: Off';
-      this.dayBtn.title = (on ? 'The sun stays up' : 'Day and night cycle') + ' (T in the game)';
+      const key = this.actions.daytimeKey && this.actions.daytimeKey();
+      this.dayBtn.title = (on ? 'The sun stays up' : 'Day and night cycle') + (key ? ' (' + key + ' in the game)' : '');
     }
 
     // --------------------------------------------------------- settings
@@ -65027,6 +67068,7 @@ void main() {
         body.append(row);
       };
       body.append(el('p', 'whatsnew-lead', 'Press M in the game for the new map: full screen, with a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.'));
+      item('✈  New aircraft and tank', 'The airliner, the Skylark, the Talon jet, both helicopters and the Bastion tank have all been rebuilt: real wings and engines, windows and doors, cockpits, liveries, tread links and camouflage. Airliner windows light up at night.');
       item('🗺  A brand new map', 'Search for places, shops and streets; filter what shows; click a place for how far it is and how long the drive takes; right-click to drop coloured pins (they show on the radar too). The game pauses while it is open, and it works with a controller.');
       item('✈  Vicehaven International', 'Drive north up Grand Avenue to the airport. Steal a Skylark plane or the Sparrow helicopter, or the big Albatross jet, and fly. Airliners take off and land every few minutes.');
       item('★  Fort Breakwater', 'The army base at the far west end of Meridian Boulevard. Tanks, army jeeps, a fighter jet and a gunship, if you can get past the soldiers. Five stars if you take one.');
@@ -65659,6 +67701,7 @@ void main() {
   // stores.js, airfield.js, fort.js, ambient.js.
   const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
+  const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
   const TIPS = [
@@ -65876,6 +67919,7 @@ void main() {
           },
           toggleDaytime: () => this.toggleDaytime(),
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
+          daytimeKey: () => this._dayKey(),
           jobLog: () => this.jobLog(),
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
@@ -66588,13 +68632,38 @@ void main() {
 
     /** T, D-pad right or the pause menu: the sun stays up (Always daytime), or the day and night cycle comes back. */
     toggleDaytime() {
+      const env = this.environment;
       const on = !this.settings.get('gameplay.alwaysDay');
+      if (on) this._hourBeforeDay = env.hours;
       this.settings.set('gameplay.alwaysDay', on);
-      this._nightTipShown = true; // they know about it now
-      const key = this.input.labelFor('daytime');
+      // Off again: back to the hour it was (so the switch undoes itself, even with the clock stopped).
+      if (!on && typeof this._hourBeforeDay === 'number') {
+        env.setTime(this._hourBeforeDay);
+        if (this.world && this.world.setNightFactor) this.world.setNightFactor(env.shared.uWindowGlow.value);
+        this._hourBeforeDay = null;
+      }
+      this._markNightTip();
+      const key = this._dayKey();
+      const press = key ? 'Press ' + key : 'Use the pause menu';
       this.hud.notify(on
-        ? { title: 'Daytime on', text: 'The sun stays up. Press ' + key + ' again for the day and night cycle.', icon: '☀', duration: 4000 }
-        : { title: 'Day and night', text: 'Night falls again in the evening. Press ' + key + ' any time to bring the sun back.', icon: '☾', duration: 4000 });
+        ? { title: 'Daytime on', text: 'The sun stays up. ' + press + ' again for day and night.', icon: '☀', duration: 4000 }
+        : { title: 'Day and night', text: 'The clock carries on from where it was. ' + press + ' any time to bring the sun back.', icon: '☾', duration: 4000 });
+    },
+
+    /** The key (or button) that switches daytime, or null when it is unbound. */
+    _dayKey() {
+      const k = this.input.labelFor('daytime');
+      return k && k !== '—' ? k : null;
+    },
+
+    /** The "Too dark?" tip is shown once, ever (and never after the player has used the switch). */
+    _markNightTip() {
+      this._nightTipShown = true;
+      try {
+        localStorage.setItem(NIGHT_TIP_KEY, '1');
+      } catch (e) {
+        // Private mode: it may show once more next time.
+      }
     },
 
     /** "F  Get in" prompt next to an enterable car. */
@@ -66783,8 +68852,15 @@ void main() {
       this._updateWaypoint(dt);
       // The first time it gets properly dark, say how to bring the sun back.
       if (!this._nightTipShown && this.environment.nightFactor > 0.6 && !this.settings.get('gameplay.alwaysDay') && this.state === 'playing' && !document.body.classList.contains('cutscene')) {
-        this._nightTipShown = true;
-        this.hud.notify({ title: 'Too dark?', text: 'Press ' + this.input.labelFor('daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
+        let seen = false;
+        try {
+          seen = localStorage.getItem(NIGHT_TIP_KEY) === '1';
+        } catch (e) {
+          seen = false;
+        }
+        this._markNightTip();
+        const key = this._dayKey();
+        if (!seen) this.hud.notify({ title: 'Too dark?', text: (key ? 'Press ' + key : 'Pause and choose Daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
       }
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
