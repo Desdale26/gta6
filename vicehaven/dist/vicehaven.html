@@ -9120,6 +9120,7 @@ void main() {
         showHints: true,
         slowMotion: true,
         timeOfDay: 'cycle',
+        alwaysDay: false,
         voicedDialogue: true,
         policeVoice: true,
         blood: 'lots',
@@ -11337,6 +11338,9 @@ void main() {
           this._applyKeys(this.sunDir.y);
         }
       });
+      VH.events.on('settings:changed', (e) => {
+        if (e.path === 'gameplay.alwaysDay' || e.path === '*') this.setTime(this.hours);
+      });
       VH.events.on('postfx:changed', () => this._applyKeys(this.sunDir.y));
       this.setTime(this.hours);
     }
@@ -11383,6 +11387,8 @@ void main() {
     /** Set the time of day (hours, 0–24) and recompute all lighting. */
     setTime(hours) {
       this.hours = ((hours % 24) + 24) % 24;
+      // Always daytime (Settings → Gameplay): daytime hours stand, anything else becomes midday.
+      if (this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
       // Sunrise ~06:00, sunset ~18:00; the sun crosses the southern sky (+Z).
       const t = ((this.hours - 6) / 12) * Math.PI;
       const maxAlt = 66 * VH.math.DEG;
@@ -11476,7 +11482,7 @@ void main() {
     /** Per-frame: advance time (if running), follow the focus with the shadow map. */
     update(dt, focus) {
       this.shared.uTime.value += dt;
-      if (this.clockRunning) this.setTime(this.hours + dt / 60);
+      if (this.clockRunning && !this.settings.get('gameplay.alwaysDay')) this.setTime(this.hours + dt / 60);
 
       // Reflections follow the sky at most every 2 s of *real* time: fast-forwarding
       // the simulation must not queue up hundreds of PMREM renders on the GPU.
@@ -12017,6 +12023,35 @@ void main() {
         r.speedLimit = r.width >= 18 ? 17.5 : 13.5;
         r.parking = n === 1;
       }
+      this._markRoadEnds(layout);
+    }
+
+    /**
+     * Roads out of town that just stop (Airport Road, Meridian Boulevard at
+     * the fort's gate) get a turnaround so traffic can use them: 'uturn'
+     * where the end is open ground or the gate apron, 'flip' where barriers
+     * close it (cars turn round there only while nobody's looking).
+     * Roads ending at the old city's edge keep their old behaviour.
+     */
+    _markRoadEnds(layout) {
+      const cb = layout.config.cityBounds || layout.config.bounds;
+      const outside = (x, z) => x < cb.minX - 1 || x > cb.maxX + 1 || z < cb.minZ - 1 || z > cb.maxZ + 1;
+      for (const r of this.roads) {
+        r.endFrom = null;
+        r.endTo = null;
+        const js = r.junctions;
+        for (const end of ['from', 'to']) {
+          const a = r[end];
+          const x = r.axis === 'z' ? r.coord : a;
+          const z = r.axis === 'z' ? a : r.coord;
+          if (!outside(x, z)) continue;
+          const j = end === 'from' ? js[0] : js[js.length - 1];
+          if (j && Math.abs(RoadNet.junctionAlong(r, j) - a) < RoadNet.junctionHalf(r, j) + 40) continue; // a junction, not an end
+          // world.js puts barriers across starts out of town (not the fort's open start) and the far south ends.
+          const barrier = end === 'from' ? !r.openStart && a <= (r.axis === 'z' ? cb.minZ : cb.minX) + 30 : r.axis === 'z' && a >= cb.maxZ - 30;
+          r[end === 'from' ? 'endFrom' : 'endTo'] = barrier ? 'flip' : 'uturn';
+        }
+      }
     }
 
     /** Distance of lane `k` (0 = nearest the centre) from the road's centre line. */
@@ -12101,11 +12136,16 @@ void main() {
       return dir > 0 ? j.legs.e : j.legs.w;
     }
 
-    /** Is there another junction beyond j along road/dir? (avoids dead ends at the edge of town) */
+    /**
+     * Is there another junction beyond j along road/dir, or a turnaround at
+     * the road's end? (Dead ends at the edge of town are avoided.)
+     */
     static continuesPast(road, dir, j) {
       const list = road.junctions;
       const i = list.indexOf(j);
-      return dir > 0 ? i < list.length - 1 : i > 0;
+      if (dir > 0 ? i < list.length - 1 : i > 0) return true;
+      const end = dir > 0 ? road.endTo : road.endFrom;
+      return !!end && Math.abs((dir > 0 ? road.to : road.from) - RoadNet.junctionAlong(road, j)) > RoadNet.junctionHalf(road, j) + 40;
     }
 
     /**
@@ -12284,11 +12324,34 @@ void main() {
 
     /** Random lane position (for spawning), within [minD, maxD] of (x, z). */
     randomLanePoint(rng, x, z, minD, maxD) {
+      // Only the stretches of road within reach, weighted by their length, so
+      // the long roads out of town fill up as readily as downtown does.
+      const cands = this._cands || (this._cands = []);
+      cands.length = 0;
+      let total = 0;
+      for (const r of this.roads) {
+        const across = r.axis === 'z' ? x - r.coord : z - r.coord;
+        if (Math.abs(across) > maxD) continue;
+        const at = r.axis === 'z' ? z : x;
+        const reach = Math.sqrt(maxD * maxD - across * across);
+        const a0 = Math.max(r.from + 20, at - reach);
+        const a1 = Math.min(r.to - 20, at + reach);
+        if (a1 <= a0) continue;
+        cands.push(r, a0, a1);
+        total += a1 - a0;
+      }
+      if (!total) return null;
       for (let tries = 0; tries < 30; tries++) {
-        const r = this.roads[Math.floor(rng() * this.roads.length)];
+        let pickAt = rng() * total;
+        let k = 0;
+        while (k < cands.length - 3 && pickAt > cands[k + 2] - cands[k + 1]) {
+          pickAt -= cands[k + 2] - cands[k + 1];
+          k += 3;
+        }
+        const r = cands[k];
         const dir = rng() < 0.5 ? 1 : -1;
         const lane = Math.floor(rng() * r.lanesPerDirection);
-        const along = r.from + 20 + rng() * (r.to - r.from - 40);
+        const along = cands[k + 1] + Math.min(pickAt, cands[k + 2] - cands[k + 1]);
         const p = this.lanePoint(r, dir, lane, along);
         const d = Math.hypot(p.x - x, p.z - z);
         if (d < minD || d > maxD) continue;
@@ -12491,6 +12554,31 @@ void main() {
       archetypes: [],
       palette: { walls: [0x6b6f4a], roofs: [0x4a4d3a], accents: [0xd8c070] },
       ambient: { crowd: 'none', traffic: 'none' },
+    },
+    // The roadside strips on the roads out of town (suburbs.js).
+    {
+      id: 'northroad',
+      name: 'Grand Avenue North',
+      tagline: 'Motels, diners and the last exit before departures',
+      rect: { minX: -60, maxX: 60, minZ: -1095, maxZ: -655.01 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0xf7c6c7], roofs: [0x8a8f94], accents: [0x1f8a8a] },
+      ambient: { crowd: 'light', traffic: 'heavy' },
+    },
+    {
+      id: 'meridianwest',
+      name: 'Meridian West',
+      tagline: 'Yards, workshops and the long road to the fort',
+      rect: { minX: -1078, maxX: -640.01, minZ: -55, maxZ: 55 },
+      lot: { min: 0, max: 0 },
+      alleyChance: 0,
+      emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0x8a8f96], roofs: [0x5a5f66], accents: [0xe06a1a] },
+      ambient: { crowd: 'light', traffic: 'medium' },
     },
     {
       id: 'outskirts',
@@ -14427,7 +14515,9 @@ void main() {
  *
  * A sign spec is { w, h (metres), lines: [...], style }. The first line is
  * the headline; later lines are smaller. Styles give each kind of sign its
- * own look: bronze plaques, wayfinding boards, neon, the city welcome sign.
+ * own look: bronze plaques, wayfinding boards, neon, the city welcome sign,
+ * and green road direction signs ('road': one destination per row, arrows
+ * from leading or trailing arrow characters, a distance after '|').
  */
 (function () {
   'use strict';
@@ -14444,6 +14534,8 @@ void main() {
     park: { bg: ['#2c4a31', '#36583b'], fg: '#f1e8cf', font: SERIF, border: '#e9dcb8', weight: '700' },
     monolith: { bg: ['#1d2126', '#2b3037'], fg: '#dfe5ea', font: FONT, weight: '600', spacing: 0.22 },
     neon: { bg: ['#0b0d18', '#141729'], fg: '#ff5c95', font: FONT, weight: '700', glow: '#ff2d78', outline: '#48f0e0' },
+    // Brown tourist signs are this with colors: { bg: [...] }.
+    road: { bg: ['#0f7c45', '#0b6a3a'], fg: '#ffffff', font: FONT, border: '#ffffff', weight: '700' },
   };
 
   function fitFont(ctx, text, family, weight, italic, maxWidth, maxSize) {
@@ -14454,6 +14546,152 @@ void main() {
       size *= 0.92;
     }
     return size;
+  }
+
+  // ------------------------------------------------------------- road signs
+  // Arrow characters and the way each one points (degrees clockwise from up).
+  const ARROWS = { '↑': 0, '↗': 45, '→': 90, '↘': 135, '↓': 180, '↙': 225, '←': 270, '↖': 315 };
+  // An arrow pointing up in a unit box: head, then shaft.
+  const ARROW_PTS = [[0, -0.5], [0.42, -0.04], [0.14, -0.04], [0.14, 0.5], [-0.14, 0.5], [-0.14, -0.04], [-0.42, -0.04]];
+  // An aircraft seen from above, nose up (right half; mirrored for the left).
+  const PLANE_HALF = [[0, -0.5], [0.06, -0.43], [0.065, -0.13], [0.48, 0.1], [0.48, 0.19], [0.065, 0.07], [0.05, 0.3], [0.2, 0.41], [0.2, 0.48], [0, 0.44]];
+  const PLANE_PTS = PLANE_HALF.concat(PLANE_HALF.slice(1, -1).reverse().map(([x, y]) => [-x, y]));
+  const PLANE = '✈';
+
+  /** Fill a unit-box shape centred at (cx, cy), `size` across, turned `deg` clockwise. */
+  function shape(g, pts, cx, cy, size, deg) {
+    const a = (deg * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    g.beginPath();
+    pts.forEach(([x, y], i) => {
+      const px = cx + (x * c - y * s) * size;
+      const py = cy + (x * s + y * c) * size;
+      if (i) g.lineTo(px, py);
+      else g.moveTo(px, py);
+    });
+    g.closePath();
+    g.fill();
+  }
+
+  /** Split one sign row into its parts: '← Old Market', '↑ AIRPORT ✈ | 1.1 km', 'Cargo →'. */
+  function parseRow(line) {
+    let text = String(line).trim();
+    let dist = '';
+    const bar = text.indexOf('|');
+    if (bar >= 0) {
+      dist = text.slice(bar + 1).trim();
+      text = text.slice(0, bar).trim();
+    }
+    let lead = null;
+    let trail = null;
+    if (text[0] in ARROWS) {
+      lead = ARROWS[text[0]];
+      text = text.slice(1).trim();
+    }
+    if (text.length && text[text.length - 1] in ARROWS) {
+      trail = ARROWS[text[text.length - 1]];
+      text = text.slice(0, -1).trim();
+    }
+    return { text, dist, lead, trail };
+  }
+
+  /** Width of text in the current font, with each ✈ drawn as a pictogram `size` wide. */
+  function richWidth(g, text, size) {
+    let w = 0;
+    text.split(PLANE).forEach((part, i) => {
+      if (i) w += size * 1.05;
+      w += g.measureText(part).width;
+    });
+    return w;
+  }
+
+  function richText(g, text, x, y, size) {
+    text.split(PLANE).forEach((part, i) => {
+      if (i) {
+        shape(g, PLANE_PTS, x + size * 0.5, y, size * 0.95, 45);
+        x += size * 1.05;
+      }
+      g.fillText(part, x, y);
+      x += g.measureText(part).width;
+    });
+  }
+
+  /**
+   * A green (or brown) direction sign: a thin white border, one destination
+   * per row, arrows drawn as shapes, distances right-aligned. A rule
+   * separates rows that point different ways.
+   */
+  function roadFace(g, W, H, lines, style) {
+    const border = Math.max(2, Math.round(H * 0.012));
+    const inset = Math.max(3, Math.round(H * 0.035));
+    g.strokeStyle = style.border || style.fg;
+    g.lineWidth = border;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(inset, inset, W - inset * 2, H - inset * 2, H * 0.05);
+    else g.rect(inset, inset, W - inset * 2, H - inset * 2);
+    g.stroke();
+
+    const rows = lines.map(parseRow);
+    const m = inset + border + H * 0.035; // inner margin
+    const rowH = (H - m * 2) / rows.length;
+    const cell = Math.min(rowH * 0.78, H * 0.3); // arrow box
+    const gap = cell * 0.28;
+    const anyLead = rows.some((r) => r.lead !== null);
+    const left = m + (anyLead ? cell + gap : gap * 0.5);
+    const base = Math.min(rowH * 0.6, H * 0.24); // letter size
+    g.fillStyle = style.fg;
+    g.textBaseline = 'middle';
+    const fontOf = (size, weight) => weight + ' ' + Math.round(size) + 'px ' + style.font;
+
+    rows.forEach((r, i) => {
+      const cy = m + rowH * (i + 0.5);
+      if (i > 0 && dirKey(rows[i - 1]) !== dirKey(r)) {
+        g.fillRect(m, m + rowH * i - border * 0.35, W - m * 2, Math.max(1, border * 0.7));
+      }
+      if (r.lead !== null) shape(g, ARROW_PTS, m + cell / 2, cy, cell * (r.lead % 90 ? 0.88 : 1), r.lead);
+      let right = W - m;
+      if (r.trail !== null) {
+        shape(g, ARROW_PTS, right - cell / 2, cy, cell * (r.trail % 90 ? 0.88 : 1), r.trail);
+        right -= cell + gap;
+      } else {
+        right -= gap * 0.5;
+      }
+      if (r.dist) {
+        const ds = base * 0.78;
+        g.font = fontOf(ds, '600');
+        g.textAlign = 'right';
+        g.fillText(r.dist, right, cy + ds * 0.04);
+        right -= g.measureText(r.dist).width + gap * 1.2;
+      }
+      if (!r.text) return;
+      // Shrink to fit, then left-align (right-align beside a lone right arrow).
+      let size = base;
+      g.font = fontOf(size, style.weight);
+      const room = right - left;
+      const w0 = richWidth(g, r.text, size);
+      if (w0 > room) {
+        size = Math.max(base * 0.45, (size * room) / w0);
+        g.font = fontOf(size, style.weight);
+      }
+      g.textAlign = 'left';
+      const w = richWidth(g, r.text, size);
+      const x = r.trail !== null && r.lead === null && !r.dist ? right - w : left;
+      richText(g, r.text, x, cy + size * 0.04, size);
+    });
+  }
+
+  /** Rows pointing the same way share a group (no rule between them). */
+  function dirKey(r) {
+    return r.lead !== null ? 'l' + r.lead : r.trail !== null ? 't' + r.trail : 'none';
+  }
+
+  function texture(canvas, anisotropy) {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = anisotropy || 4;
+    tex.needsUpdate = true;
+    return tex;
   }
 
   function paint(spec, anisotropy) {
@@ -14475,6 +14713,10 @@ void main() {
     style.bg.forEach((c, i) => grad.addColorStop(style.bg.length === 1 ? 0 : i / (style.bg.length - 1), c));
     g.fillStyle = grad;
     g.fillRect(0, 0, W, H);
+    if (spec.style === 'road') {
+      roadFace(g, W, H, spec.lines, style);
+      return texture(canvas, anisotropy);
+    }
 
     const pad = Math.round(Math.min(W, H) * 0.08);
     if (style.border) {
@@ -14548,11 +14790,7 @@ void main() {
       }
     }
 
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = anisotropy || 4;
-    tex.needsUpdate = true;
-    return tex;
+    return texture(canvas, anisotropy);
   }
 
   VH.Signs = { paint, STYLES };
@@ -16647,10 +16885,11 @@ void main() {
   VH.MapPainters.push((g, layout, o) => {
     const s = layout.skyline;
     if (!s) return;
+    // Pavement like the city's blocks, the plaza paving a shade lighter.
     for (const P of s.parcels) {
-      g.fillStyle = '#c9c4ba';
+      g.fillStyle = (o.PAL && o.PAL.pave) || '#283042';
       o.R(P.x0, P.z0, P.x1, P.z1);
-      g.fillStyle = '#bdb8ae';
+      g.fillStyle = '#323a4e';
       o.R(P.x0 + SIDEWALK, P.z0 + SIDEWALK, P.x1 - SIDEWALK, P.z1 - SIDEWALK);
     }
     // Each tower's real footprint, with a drop shadow and a lit roof.
@@ -16677,9 +16916,9 @@ void main() {
         cz /= pts.length;
         g.fillStyle = 'rgba(0, 0, 0, 0.4)';
         poly(pts, 4, 4, 1, cx, cz);
-        g.fillStyle = '#5d6878';
+        g.fillStyle = (o.PAL && o.PAL.building) || '#1a2031';
         poly(pts, 0, 0, 1, cx, cz);
-        g.fillStyle = '#8796a8';
+        g.fillStyle = '#2c3650';
         poly(pts, 0, 0, 0.72, cx, cz);
       }
     }
@@ -16856,7 +17095,7 @@ void main() {
       Airfield._terminal(world);
       Airfield._tower(world);
       Airfield._hangars(world);
-      Airfield._landside(world);
+      Airfield._landside(world, layout);
       Airfield._fences(world);
       return data;
     }
@@ -17069,7 +17308,7 @@ void main() {
       }
     }
 
-    static _landside(world) {
+    static _landside(world, layout) {
       // Car park: bays and lamp posts.
       const C = CARPARK;
       pave(world, C.x0, C.z0, C.x1, C.z1, 0x8f8f8f, 0.014);
@@ -17078,16 +17317,22 @@ void main() {
         mark(world, x, C.z1 - 9, x + 0.12, C.z1 - 4, 0xf4f4ef, 0.022);
       }
       for (let x = C.x0 + 20; x < C.x1; x += 40) world.addProp('streetlight', x, 0, (C.z0 + C.z1) / 2, 0, 1);
-      // Street lights along Grand Avenue to the airport and along Airport Road.
+      // Street lights along Grand Avenue to the airport and along Airport Road,
+      // where the roadside strips (suburbs.js) don't already light the pavement.
+      const strips = layout.strips || [];
+      const onStrip = (x, z) => strips.some((s) => x >= s.x0 - 1 && x <= s.x1 + 1 && z >= s.z0 - 1 && z <= s.z1 + 1);
+      const lamp = (x, z, yaw) => {
+        if (!onStrip(x, z)) world.addProp('streetlight', x, 0, z, yaw, 1);
+      };
       for (let z = -1160; z < -660; z += 38) {
-        world.addProp('streetlight', 15.5, 0, z, -Math.PI / 2, 1);
-        world.addProp('streetlight', -15.5, 0, z + 19, Math.PI / 2, 1);
+        lamp(15.5, z, -Math.PI / 2);
+        if (z + 19 < -655) lamp(-15.5, z + 19, Math.PI / 2); // not inside the Northgate plaza
       }
       for (let x = -740; x < 330; x += 40) {
         if (x > -440 && x < -70) continue; // the terminal's canopy
         if (Math.abs(x) < 20 || (x > 20 && x < 70)) continue; // the junction, the gate
-        world.addProp('streetlight', x, 0, -1191.5, 0, 1);
-        world.addProp('streetlight', x + 20, 0, -1168.5, Math.PI, 1);
+        lamp(x, -1191.5, 0);
+        if (Math.abs(x + 20) > 20) lamp(x + 20, -1168.5, Math.PI); // not on Grand Avenue itself
       }
       (world.signs || (world.signs = [])).push({ x: 26, y: 3.2, z: -1150, yaw: -Math.PI / 2, w: 9, h: 3, lines: ['VICEHAVEN', 'INTERNATIONAL ✈'], style: 'welcome' });
       const ctx = world.ctxAt(26, -1150);
@@ -19084,6 +19329,602 @@ void main() {
 })();
 //# sourceURL=js/stores.js
 </script>
+    <script data-src="js/suburbs.js">
+/*
+ * suburbs.js — the roadside strips along the roads out of town, so driving
+ * to the airport or the army base feels like crossing one city, not a
+ * field: offices and apartments, then motels, diners and hotels up Grand
+ * Avenue to the airport; yards, workshops, a diner and a petrol station
+ * along Meridian Boulevard to Fort Breakwater; airport hotels and car
+ * rental on Airport Road.
+ *
+ *   VH.Suburbs.plan(layout)        lays out the strips and their lots
+ *                                  (layout.strips) right after CityGen,
+ *                                  keeps trees off them (layout.config.zones)
+ *                                  and adds a petrol station and a corner
+ *                                  shop to layout.stores
+ *   VH.Suburbs.build(world, layout) kerbed pavements, the buildings (the
+ *                                  city's own generator), street lights,
+ *                                  trees and benches
+ *
+ * The strips are kept out of layout.blocks on purpose: story places, the
+ * corner-shop plan and the crowd all index the old 8x8 grid.
+ *
+ * A strip: { id, road, side, axis ('x' runs east-west, 'z' north-south),
+ *   x0, x1, z0, z1 (pavement and lots), pave: {x0, x1, z0, z1},
+ *   edge (the road-side coordinate), out (+1/-1: away from the road),
+ *   a0, a1 (its run along the road), lots: [...], walk: [[x, z], [x, z]] }
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const KERB = 0.15;
+  const PAVE = 4; // pavement depth, like the city blocks
+  const DEPTH = 30; // lot depth behind the pavement
+  const CHUNK = 192;
+  const ORIGIN = -768;
+
+  // Palettes for the kinds of street (walls, roofs, accents).
+  const LOOKS = {
+    offices: { id: 'strip-offices', palette: { walls: [0xb9bcc1, 0x98a1ab, 0xcdc4b3, 0xaab2bb, 0xc2b49c], roofs: [0x6b6e72, 0x5c5f63], accents: [0x2d3440, 0xe8e2d6, 0x445566] } },
+    homes: { id: 'strip-homes', palette: { walls: [0xf2e6d0, 0xf4d9c6, 0xe6efe9, 0xf1e3b3, 0xd9e8f0, 0xcfe3d4], roofs: [0xa4553c, 0x9a4e37, 0x7a6a5a], accents: [0xffffff, 0x2f7f86, 0xd8795e, 0x3d6b8f] } },
+    motels: { id: 'strip-motels', palette: { walls: [0xf7c6c7, 0xa8e0d8, 0xf9e2a6, 0xf5f0e6, 0xffd3b0, 0xc9d8f5], roofs: [0x8a8f94, 0x9a9da0], accents: [0xffffff, 0x1f8a8a, 0xff6f91, 0xf0a030] } },
+    yards: { id: 'strip-yards', palette: { walls: [0x8a8f96, 0x9a968e, 0xa8a39a, 0x7d838a, 0xb8b6b0, 0x6b6f4a], roofs: [0x5a5f66, 0x5d6168, 0x4a4d3a], accents: [0xe06a1a, 0xd8c070, 0x2b4a6b] } },
+    hotels: { id: 'strip-hotels', palette: { walls: [0xe9e4da, 0xc9d8f5, 0xdfe3e6, 0xb9c4cc, 0xf5f0e6], roofs: [0x777777, 0x8a8f94], accents: [0x1fa3a3, 0x2d3440, 0xffffff] } },
+  };
+
+  // What gets built where: [archetype or 'parking', weight, floors].
+  const MIXES = {
+    north: { look: 'offices', alt: 'homes', lots: [['office', 3, [3, 6]], ['apartment', 3, [3, 6]], ['hotel', 1, [4, 7]], ['parking', 1]] },
+    airport: { look: 'motels', lots: [['apartment', 3, [2, 3]], ['shophouse', 3, [1, 1]], ['hotel', 2, [4, 7]], ['parking', 2]] },
+    yards: { look: 'yards', lots: [['office', 3, [2, 3]], ['shophouse', 3, [1, 2]], ['parking', 3]] },
+    fortside: { look: 'motels', lots: [['shophouse', 4, [1, 2]], ['apartment', 2, [2, 2]], ['parking', 2]] },
+    hotels: { look: 'hotels', lots: [['hotel', 4, [5, 9]], ['office', 2, [3, 5]], ['shophouse', 2, [1, 2]], ['parking', 2]] },
+  };
+
+  /*
+   * The strips. Grand Avenue's road edges are x = +-13, Meridian's z = +-9,
+   * Airport Road's south edge z = -1171. Gaps: the stunt ramp's landing run
+   * east of Grand Avenue (z -860..-740), Skyline parcels to z -650, the
+   * airport car park (x -400..-120) and welcome sign (x 26), the fort gate
+   * apron (x < -1078) and the Crestline estates (x > -628).
+   */
+  const PLAN = [
+    { id: 'gn_w', road: 'Grand Avenue', axis: 'z', edge: -13, out: -1, a0: -1086, a1: -662, mix: (a) => (a > -900 ? 'north' : 'airport') },
+    { id: 'gn_e1', road: 'Grand Avenue', axis: 'z', edge: 13, out: 1, a0: -1086, a1: -860, mix: (a) => (a > -940 ? 'north' : 'airport') },
+    { id: 'gn_e2', road: 'Grand Avenue', axis: 'z', edge: 13, out: 1, a0: -740, a1: -662, mix: () => 'north' },
+    { id: 'mw_n', road: 'Meridian Boulevard', axis: 'x', edge: -9, out: -1, a0: -1072, a1: -652, mix: (a) => (a < -960 ? 'fortside' : 'yards') },
+    { id: 'mw_s', road: 'Meridian Boulevard', axis: 'x', edge: 9, out: 1, a0: -1072, a1: -652, mix: (a) => (a < -960 ? 'fortside' : 'yards') },
+    { id: 'ar_w', road: 'Airport Road', axis: 'x', edge: -1171, out: 1, a0: -755, a1: -410, mix: () => 'hotels' },
+    { id: 'ar_e', road: 'Airport Road', axis: 'x', edge: -1171, out: 1, a0: 38, a1: 335, mix: () => 'hotels' },
+  ];
+
+  // Extra shops on the strips (appended to layout.stores, so city shop ids keep their numbers).
+  const SHOPS = [
+    { strip: 'mw_s', near: -860, brand: 'tidal' },
+    { strip: 'gn_w', near: -1010, brand: 'kwikpik' },
+  ];
+
+  function hashString(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  /** World rectangle of a run along a strip's road (a0..a1) between two depths from the edge. */
+  function rectOf(S, a0, a1, d0, d1) {
+    const e0 = S.edge + S.out * d0;
+    const e1 = S.edge + S.out * d1;
+    const lo = Math.min(e0, e1);
+    const hi = Math.max(e0, e1);
+    return S.axis === 'z' ? { minX: lo, maxX: hi, minZ: a0, maxZ: a1 } : { minX: a0, maxX: a1, minZ: lo, maxZ: hi };
+  }
+
+  /** The lot side that faces the road. */
+  function frontSide(S) {
+    if (S.axis === 'z') return S.out > 0 ? 'w' : 'e';
+    return S.out > 0 ? 'n' : 's';
+  }
+
+  /** The lot sides along the road: [the side toward a0, the side toward a1]. */
+  function flankSides(S) {
+    return S.axis === 'z' ? ['n', 's'] : ['w', 'e'];
+  }
+
+  function pick(rng, list) {
+    let total = 0;
+    for (const e of list) total += e[1];
+    let r = rng.next() * total;
+    for (const e of list) {
+      r -= e[1];
+      if (r <= 0) return e;
+    }
+    return list[list.length - 1];
+  }
+
+  // ================================================================ plan
+  const Suburbs = {
+    plan(layout) {
+      const strips = [];
+      const zones = layout.config.zones || (layout.config.zones = {});
+      let n = 0;
+      for (const P of PLAN) {
+        const S = Object.assign({}, P);
+        const r = rectOf(S, S.a0, S.a1, 0, PAVE + DEPTH);
+        Object.assign(S, { x0: r.minX, x1: r.maxX, z0: r.minZ, z1: r.maxZ });
+        const pv = rectOf(S, S.a0, S.a1, 0, PAVE);
+        S.pave = { x0: pv.minX, x1: pv.maxX, z0: pv.minZ, z1: pv.maxZ };
+        // Pedestrians walk the middle of the pavement.
+        const wd = S.edge + S.out * 2.2;
+        S.walk = S.axis === 'z' ? [[wd, S.a0 + 2], [wd, S.a1 - 2]] : [[S.a0 + 2, wd], [S.a1 - 2, wd]];
+        S.lots = [];
+        const rng = new VH.RNG('strip-' + S.id);
+        const front = frontSide(S);
+        const [lo, hi] = flankSides(S);
+        let a = S.a0;
+        let prevGap = true;
+        while (a < S.a1 - 14) {
+          // Now and then a driveway or a patch of grass between buildings.
+          if (!prevGap && rng.next() < 0.18) {
+            S.lots[S.lots.length - 1].back[hi] = true; // its far side looks onto the gap
+            a += rng.range(6, 12);
+            prevGap = true;
+            continue;
+          }
+          let w = Math.round(rng.range(20, 34));
+          if (S.a1 - (a + w) < 16) w = S.a1 - a; // no slivers at the end
+          const mixId = S.mix(a + w / 2);
+          const mix = MIXES[mixId];
+          const e = pick(rng, mix.lots);
+          const lookKey = mix.alt && e[0] === 'apartment' ? mix.alt : mix.look;
+          const look = LOOKS[lookKey];
+          const lr = rectOf(S, a, a + w, PAVE, PAVE + DEPTH);
+          const lot = {
+            id: 'strip_' + n++,
+            minX: lr.minX, maxX: lr.maxX, minZ: lr.minZ, maxZ: lr.maxZ,
+            cx: (lr.minX + lr.maxX) / 2, cz: (lr.minZ + lr.maxZ) / 2,
+            kind: e[0] === 'parking' ? 'parking' : 'building',
+            interior: false,
+            front: { n: false, s: false, e: false, w: false },
+            back: {},
+            archetype: e[0] === 'parking' ? null : e[0],
+            floorRange: e[2] || [2, 3],
+            seed: hashString(S.id + ':' + a),
+            district: look,
+            strip: S.id,
+            a0: a,
+            a1: a + w,
+          };
+          lot.front[front] = true;
+          // Windows on the ends that face a gap or the end of the strip.
+          if (prevGap) lot.back[lo] = true;
+          S.lots.push(lot);
+          prevGap = false;
+          a += w;
+        }
+        // The last lot's far end faces open ground too.
+        if (S.lots.length) S.lots[S.lots.length - 1].back[hi] = true;
+        zones['strip_' + S.id] = { minX: S.x0, maxX: S.x1, minZ: S.z0, maxZ: S.z1 };
+        strips.push(S);
+      }
+      layout.strips = strips;
+      Suburbs._addShops(layout);
+      return strips;
+    },
+
+    /** A petrol station and a corner shop on the strips, run like the city's (stores.js). */
+    _addShops(layout) {
+      if (!VH.Stores || !VH.Stores._describe || !layout.stores) return;
+      for (const sh of SHOPS) {
+        const S = layout.strips.find((s) => s.id === sh.strip);
+        if (!S) continue;
+        const gas = sh.brand === 'tidal';
+        let best = null;
+        let bestD = Infinity;
+        for (const lot of S.lots) {
+          const w = lot.a1 - lot.a0;
+          if (w < (gas ? 30 : 16)) continue;
+          const d = Math.abs((lot.a0 + lot.a1) / 2 - sh.near);
+          if (d < bestD) {
+            bestD = d;
+            best = lot;
+          }
+        }
+        if (!best) continue;
+        best.kind = 'parking';
+        best.district = Object.assign({}, best.district, { id: best.district.id });
+        const s = VH.Stores._describe(layout, { lot: best, side: frontSide(S), brand: sh.brand }, layout.stores.length);
+        layout.stores.push(s);
+        best.store = s;
+      }
+    },
+
+    // ============================================================== build
+    build(world, layout) {
+      const strips = layout.strips || [];
+      for (const S of strips) buildStrip(world, layout, S);
+      return { strips };
+    },
+  };
+
+  /** Split a rectangle on chunk lines so each piece culls with its own chunk. */
+  function chunked(x0, z0, x1, z1, fn) {
+    const xs = [x0];
+    for (let x = Math.ceil((x0 - ORIGIN) / CHUNK) * CHUNK + ORIGIN; x < x1; x += CHUNK) if (x > x0) xs.push(x);
+    xs.push(x1);
+    const zs = [z0];
+    for (let z = Math.ceil((z0 - ORIGIN) / CHUNK) * CHUNK + ORIGIN; z < z1; z += CHUNK) if (z > z0) zs.push(z);
+    zs.push(z1);
+    for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) fn(xs[i], zs[j], xs[i + 1], zs[j + 1]);
+  }
+
+  /** A point at distance `along` the road and `d` metres in from the road edge. */
+  function at(S, along, d) {
+    const c = S.edge + S.out * d;
+    return S.axis === 'z' ? [c, along] : [along, c];
+  }
+
+  /** Street lights face the road: their arm points away from the strip. */
+  function lampYaw(S) {
+    if (S.axis === 'z') return S.out < 0 ? Math.PI / 2 : -Math.PI / 2;
+    return S.out < 0 ? 0 : Math.PI;
+  }
+
+  function buildStrip(world, layout, S) {
+    // One kerbed slab under the pavement and the lots, like a city block.
+    chunked(S.x0, S.z0, S.x1, S.z1, (a0, b0, a1, b1) => {
+      const ctx = world.ctxAt((a0 + a1) / 2, (b0 + b1) / 2);
+      ctx.concrete.box(a0, 0, b0, a1, KERB, b1, VH.col(0xcfcac0), { skip: { top: true } });
+      ctx.sidewalk.topRect(a0, b0, a1, b1, KERB, VH.col(0xffffff), 3);
+    });
+    world.physics.addBox(S.x0, -0.5, S.z0, S.x1, KERB, S.z1, 'kerb');
+
+    // The buildings: the city's own generator (or a corner shop / petrol station).
+    for (const lot of S.lots) {
+      const ctx = world.ctxAt(lot.cx, lot.cz);
+      const top = lot.store && VH.Stores ? VH.Stores.buildLot(world, ctx, lot) : VH.Buildings.buildLot(ctx, lot);
+      lot.top = top || 0;
+      if (top > 0) world.stats.buildings++;
+      world.stats.tallest = Math.max(world.stats.tallest || 0, top || 0);
+    }
+
+    // Street lights, palms, benches, bins and hydrants along the pavement.
+    const rng = new VH.RNG('strip-furniture-' + S.id);
+    const yaw = lampYaw(S);
+    const storeAt = (along) => S.lots.some((l) => l.store && along > l.a0 - 2 && along < l.a1 + 2);
+    for (let a = S.a0 + 8; a < S.a1 - 4; a += 26) {
+      const [x, z] = at(S, a, 0.7);
+      world.addProp('streetlight', x, KERB, z, yaw, 1);
+    }
+    const tree = S.id.startsWith('mw') ? 'tree' : 'palmTall';
+    for (let a = S.a0 + 21; a < S.a1 - 6; a += 26) {
+      if (storeAt(a) || rng.next() < 0.15) continue; // keep shop forecourts open
+      const [x, z] = at(S, a, 1.6);
+      world.addProp(tree === 'tree' && rng.next() < 0.5 ? 'treeB' : tree, x, KERB, z, rng.range(0, 6.28), rng.range(0.85, 1.1));
+    }
+    for (let a = S.a0 + 14; a < S.a1 - 8; a += 52) {
+      if (storeAt(a)) continue;
+      const [x, z] = at(S, a + rng.range(-3, 3), 3.2);
+      const roll = rng.next();
+      if (roll < 0.45) world.addProp('bench', x, KERB, z, yaw + Math.PI, 1);
+      else if (roll < 0.75) world.addProp('bin', x, KERB, z, 0, 1);
+      else world.addProp('hydrant', x, KERB, z, yaw, 1);
+    }
+  }
+
+  // ------------------------------------------------------------------ map
+  VH.MapPainters = VH.MapPainters || [];
+  VH.MapPainters.push((g, layout, o) => {
+    const R = o.R;
+    for (const S of layout.strips || []) {
+      g.fillStyle = o.PAL.pave || '#283042';
+      R(S.x0, S.z0, S.x1, S.z1);
+      for (const lot of S.lots) {
+        const x0 = lot.minX + 0.8;
+        const z0 = lot.minZ + 0.8;
+        const x1 = lot.maxX - 0.8;
+        const z1 = lot.maxZ - 0.8;
+        if (lot.kind === 'parking' && !lot.store) {
+          g.fillStyle = o.PAL.parking || '#20273a';
+          R(x0, z0, x1, z1);
+          continue;
+        }
+        if (lot.store) continue; // stores.js paints its own shops
+        const sh = Math.max(0.9, Math.min(3.2, 0.7 + (lot.top || 8) * 0.07));
+        g.fillStyle = 'rgba(2, 4, 10, 0.42)';
+        R(x0 + 0.7 * sh, z0 + sh, x1 + 0.7 * sh, z1 + sh);
+        g.fillStyle = o.PAL.building || '#1a2031';
+        R(x0, z0, x1, z1);
+      }
+    }
+  });
+
+  VH.Suburbs = Suburbs;
+})();
+//# sourceURL=js/suburbs.js
+</script>
+    <script data-src="js/roadsigns.js">
+/*
+ * roadsigns.js — green direction signs and gantries pointing the way to the
+ * airport, the army base, Northgate Heights and back downtown.
+ *
+ *   VH.RoadSigns.build(world, layout)   steel gantries over Grand Avenue and
+ *                                       Meridian Boulevard, roadside signs on
+ *                                       posts, and a brown sign for the stunt
+ *                                       ramps (world build time, after the
+ *                                       roadside strips, before signs are
+ *                                       painted)
+ *
+ * The faces are ordinary world.signs in the 'road' style (signs.js paints
+ * them); this file adds the steelwork and the colliders. Each sign is
+ * checked against what is already standing (lamps, palms, buildings) and
+ * slides a few metres along the road, or is left out, if anything is in
+ * the way: the strips along these roads are built just before.
+ *
+ * A face looks along (sin yaw, cos yaw): yaw 0 faces south, so it is read
+ * by northbound traffic.
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const KM = (m) => (m / 1000).toFixed(1) + ' km';
+
+  // Gantry heights (metres): the panel hangs in front of a two-chord beam.
+  const PANEL_H = 3;
+  const PANEL_Y = 6.85; // centre: 5.35 m clear underneath
+  const CHORD_LO = [5.75, 6.05];
+  const CHORD_HI = [7.75, 8.15];
+  const LEG_TOP = 8.45;
+  const FACE_OFF = 0.29; // beam centre line to the panel's centre
+  const STEEL = 0x8e959c;
+  const FRAME = 0x8a9097; // galvanised backs and posts
+  const BROWN = { bg: ['#7a4524', '#5f3519'] };
+
+  /*
+   * Gantries. axis: the road's direction ('z' north-south, 'x' east-west);
+   * at: where along it; legs: the two leg positions across it (one on the
+   * median, one on the far pavement 1.1 m from the kerb); panels: centre
+   * across the road and width. Every gantry sits midway between two median
+   * palms and clear of the kerbside street lights.
+   */
+  const GANTRIES = [
+    // Northbound Grand Avenue, approaching Northgate Street.
+    {
+      id: 'G1', axis: 'z', at: -342.9, legs: [1.3, 14.1], yaw: 0,
+      panels: [{ c: 6.6, w: 8, lines: ['↑ AIRPORT ✈ | ' + KM(1090), '↑ Northgate Heights', '← Old Market'] }],
+    },
+    // Southbound Grand Avenue through Northgate Heights, back into town.
+    {
+      id: 'G2', axis: 'z', at: -420.4, legs: [-1.3, -14.1], yaw: Math.PI,
+      panels: [{ c: -6.6, w: 8.4, lines: ['↑ DOWNTOWN', '↑ Oceanview Pier', '→ Old Market', 'Fort Breakwater: Meridian Blvd west'] }],
+    },
+    // Northbound Grand Avenue at the Airport Road T-junction.
+    {
+      id: 'G4', axis: 'z', at: -1102.4, legs: [1.3, 14.1], yaw: 0,
+      panels: [{ c: 7.4, w: 10, lines: ['← TERMINAL · DEPARTURES ✈', '← Arrivals · Parking', 'Cargo · Hangars · Airside →'] }],
+    },
+    // Westbound Meridian Boulevard, approaching Cypress Parkway.
+    {
+      id: 'M1', axis: 'x', at: -340.4, legs: [-0.5, -10.1], yaw: Math.PI / 2,
+      panels: [{ c: -5.25, w: 6.6, lines: ['↑ FORT BREAKWATER | ' + KM(760), '↑ Crestline Estates', '→ Old Market'] }],
+    },
+  ];
+
+  // Roadside signs on two posts, faces only towards the traffic.
+  const POSTS = [
+    // Southbound Grand Avenue, leaving the airport.
+    { id: 'P1', x: -19.5, z: -1122, yaw: Math.PI, w: 4.8, h: 2.4, lines: ['↑ DOWNTOWN | ' + KM(1120), '↑ Northgate Heights | ' + KM(610), 'Fort Breakwater: via Meridian Blvd'] },
+    // Eastbound Meridian Boulevard, out of the fort's gate (before the strip's first lot).
+    { id: 'P2', x: -1082, z: 12.6, yaw: -Math.PI / 2, w: 4.6, h: 2.4, lines: ['↑ DOWNTOWN | ' + KM(1080), '↑ Crestline Estates | ' + KM(440), 'Airport ✈: via Grand Ave'] },
+    // Eastbound Airport Road, before the Grand Avenue junction.
+    { id: 'P3', x: -90, z: -1166.6, yaw: -Math.PI / 2, w: 4.4, h: 2.2, lines: ['→ DOWNTOWN · Grand Ave | ' + KM(1170), '→ Northgate Heights | ' + KM(760), '↑ Cargo · Hangars'] },
+    // Northbound Grand Avenue, leaving Northgate Heights (on the plaza's edge).
+    { id: 'P5', x: 18.2, z: -609.5, yaw: 0, w: 4.4, h: 2.2, lines: ['↑ AIRPORT ✈ | ' + KM(830), '↑ Stunt Park | ' + KM(160)] },
+    // Brown tourist sign: the stunt ramps in the north pasture, in the gap between the strips.
+    { id: 'P4', x: 16.5, z: -768, yaw: 0, w: 4.4, h: 2, lines: ['→ STUNT PARK', 'North pasture ramps'], colors: BROWN },
+  ];
+
+  // What stands in the way. Crowns: how far a tree's leaves reach (gantries clear them).
+  const CROWN = { palm: 5.0, palmTall: 5.3, tree: 3.4, treeB: 3.4 };
+  const LOW_CROWN = { palm: 0.8, palmTall: 0.8, tree: 2.6, treeB: 2.6 }; // under a post sign's top
+  const SLIDE_GANTRY = [0, 1, -1, 2, -2, 3, -3];
+  const SLIDE_POST = [0, 2, -2, 4, -4, 6, -6];
+
+  /** An oriented rectangle in the collider's own shape (physics.js). */
+  function obb(cx, cz, hx, hz, yaw) {
+    return { cx, cz, hx, hz, cos: Math.cos(yaw), sin: Math.sin(yaw) };
+  }
+
+  /** Distance from (x, z) to an oriented rectangle (0 inside). */
+  function rectDist(o, x, z) {
+    const dx = x - o.cx;
+    const dz = z - o.cz;
+    const lx = dx * o.cos - dz * o.sin;
+    const lz = dx * o.sin + dz * o.cos;
+    return Math.hypot(Math.max(0, Math.abs(lx) - o.hx), Math.max(0, Math.abs(lz) - o.hz));
+  }
+
+  /** Solid colliders (not the road or a kerb) within r of (x, z) between heights y0 and y1. */
+  function solidNear(world, x, z, r, y0, y1) {
+    const out = [];
+    world.physics.query(x - r, z - r, x + r, z + r, (col) => {
+      if (!(col.flags & VH.COLLIDE.SOLID) || col.minY >= y1 || col.maxY <= y0) return;
+      if (rectDist(col, x, z) < r) out.push(col);
+    });
+    return out;
+  }
+
+  /**
+   * Is a sign's footprint clear? `feet`: [x, z, r, top] ground-level
+   * footprints (legs, posts); `span`: the panel or beam rectangle with its
+   * heights; `crowns`: how far each kind of tree must be kept from it;
+   * `lampGap`: how far street lights must be kept from it. Returns what is
+   * in the way, or null.
+   */
+  function blocked(world, feet, span, crowns, lampGap) {
+    for (const [x, z, r, top] of feet) {
+      const hit = solidNear(world, x, z, r, 0.35, top);
+      if (hit.length) return hit[0].propType || hit[0].tag;
+    }
+    // Sample along the span for anything at its height.
+    const n = Math.max(1, Math.ceil(span.hx / 0.5));
+    for (let i = -n; i <= n; i++) {
+      const u = (i / n) * span.hx;
+      const x = span.cx + u * span.cos;
+      const z = span.cz - u * span.sin;
+      const hit = solidNear(world, x, z, span.hz + 0.15, span.y0, span.y1);
+      if (hit.length) return hit[0].propType || hit[0].tag;
+    }
+    let why = null;
+    const reach = Math.max(span.hx, span.hz) + 6;
+    world.physics.query(span.cx - reach, span.cz - reach, span.cx + reach, span.cz + reach, (col) => {
+      const crown = crowns[col.propType];
+      if (!crown || rectDist(span, col.cx, col.cz) >= crown) return true;
+      why = col.propType;
+      return false;
+    });
+    if (why) return why;
+    for (const l of world.lamps) {
+      if (Math.abs(l.x - span.cx) < reach && Math.abs(l.z - span.cz) < reach && rectDist(span, l.x, l.z) < lampGap) return 'streetlight';
+    }
+    return null;
+  }
+
+  /** A box drawn with its underside too (the beam is seen from below). */
+  function slab(b, cx, cz, hx, hz, yaw, y0, y1, color) {
+    b.orientedBox(cx, cz, hx, hz, yaw, y0, y1, color);
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const P = (lx, lz) => [cx + lx * c + lz * s, y0, cz - lx * s + lz * c];
+    b.quad(P(-hx, -hz), P(hx, -hz), P(hx, hz), P(-hx, hz), [0, -1, 0], color);
+  }
+
+  // ------------------------------------------------------------ gantries
+  function gantryPlan(G, slide) {
+    const at = G.at + slide;
+    const pt = (across) => (G.axis === 'z' ? [across, at] : [at, across]);
+    const A = pt(G.legs[0]);
+    const B = pt(G.legs[1]);
+    const mx = (A[0] + B[0]) / 2;
+    const mz = (A[1] + B[1]) / 2;
+    const half = Math.hypot(B[0] - A[0], B[1] - A[1]) / 2;
+    const fx = Math.sin(G.yaw);
+    const fz = Math.cos(G.yaw);
+    // The beam with the panels on its face, as one rectangle.
+    const span = obb(mx + fx * 0.1, mz + fz * 0.1, half + 0.3, 0.42, G.yaw);
+    span.y0 = PANEL_Y - PANEL_H / 2 - 0.1;
+    span.y1 = LEG_TOP + 0.1;
+    return { at, pt, A, B, mx, mz, half, fx, fz, span };
+  }
+
+  function buildGantry(world, G, plan) {
+    const { A, B, mx, mz, half, fx, fz, pt } = plan;
+    const yaw = G.yaw;
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const steel = VH.col(STEEL);
+    const flags = VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS;
+    // Legs: a concrete footing, a square steel column and a cap.
+    for (const [lx, lz] of [A, B]) {
+      const lctx = world.ctxAt(lx, lz);
+      lctx.concrete.orientedBox(lx, lz, 0.45, 0.45, yaw, 0, 0.4, VH.col(0xb9b4aa));
+      lctx.prop.orientedBox(lx, lz, 0.21, 0.21, yaw, 0.4, LEG_TOP, steel);
+      lctx.prop.orientedBox(lx, lz, 0.27, 0.27, yaw, LEG_TOP, LEG_TOP + 0.08, steel);
+      world.physics.addOrientedBox(lx, lz, 0.45, 0.45, yaw, -0.2, 0.4, 'sign', flags);
+      world.physics.addOrientedBox(lx, lz, 0.22, 0.22, yaw, 0.4, LEG_TOP + 0.08, 'sign', flags);
+    }
+    // The beam: two chords joined by struts, like a ladder truss.
+    const b = world.ctxAt(mx, mz).prop;
+    for (const [y0, y1] of [CHORD_LO, CHORD_HI]) slab(b, mx, mz, half, 0.2, yaw, y0, y1, steel);
+    const struts = Math.max(2, Math.round((half * 2) / 1.5));
+    for (let i = 0; i <= struts; i++) {
+      const u = -half + 0.3 + ((half * 2 - 0.6) * i) / struts;
+      for (const d of [-0.14, 0.14]) {
+        b.orientedBox(mx + u * c + d * s, mz - u * s + d * c, 0.035, 0.035, yaw, CHORD_LO[1], CHORD_HI[0], steel);
+      }
+    }
+    world.physics.addOrientedBox(plan.span.cx, plan.span.cz, plan.span.hx, plan.span.hz, yaw, plan.span.y0, plan.span.y1, 'sign', flags);
+    // The panels hang on the face of the beam.
+    const signs = world.signs || (world.signs = []);
+    for (const p of G.panels) {
+      const [px, pz] = pt(p.c);
+      signs.push({
+        x: px + fx * FACE_OFF, y: PANEL_Y, z: pz + fz * FACE_OFF, yaw, w: p.w, h: PANEL_H,
+        lines: p.lines, style: 'road', frame: FRAME,
+      });
+    }
+  }
+
+  // --------------------------------------------------------- post signs
+  function postPlan(P, slide) {
+    const fx = Math.sin(P.yaw);
+    const fz = Math.cos(P.yaw);
+    const x = P.x + fx * slide;
+    const z = P.z + fz * slide;
+    const y = 2.1 + P.h / 2; // 2.1 m clear underneath
+    const rx = Math.cos(P.yaw) * P.w * 0.38;
+    const rz = -Math.sin(P.yaw) * P.w * 0.38;
+    const span = obb(x, z, P.w / 2 + 0.06, 0.1, P.yaw);
+    span.y0 = y - P.h / 2 - 0.1;
+    span.y1 = y + P.h / 2 + 0.1;
+    const feet = [[x - rx, z - rz, 0.3, span.y0], [x + rx, z + rz, 0.3, span.y0]];
+    return { x, z, y, span, feet };
+  }
+
+  function buildPost(world, P, plan) {
+    const signs = world.signs || (world.signs = []);
+    const spec = {
+      x: plan.x, y: plan.y, z: plan.z, yaw: P.yaw, w: P.w, h: P.h,
+      lines: P.lines, style: 'road', posts: true, oneSided: true, frame: FRAME,
+    };
+    if (P.colors) spec.colors = P.colors;
+    signs.push(spec);
+    // The posts' colliders are added with the face (world._buildSigns); this covers the panel.
+    world.physics.addOrientedBox(plan.x, plan.z, P.w / 2 + 0.06, 0.08, P.yaw, plan.span.y0, plan.span.y1, 'sign', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
+  }
+
+  // ================================================================ build
+  const RoadSigns = {
+    GANTRIES,
+    POSTS,
+
+    build(world, layout) {
+      const placed = [];
+      const skipped = [];
+      const place = (def, slides, planFn, check, buildFn) => {
+        let why = null;
+        for (const slide of slides) {
+          const plan = planFn(def, slide);
+          why = check(plan);
+          if (why) continue;
+          buildFn(world, def, plan);
+          placed.push({ id: def.id, slide, x: plan.span.cx, z: plan.span.cz, lines: def.lines || def.panels.map((p) => p.lines).flat() });
+          return;
+        }
+        skipped.push({ id: def.id, why });
+      };
+      for (const G of GANTRIES) {
+        place(G, SLIDE_GANTRY, gantryPlan, (pl) => {
+          const feet = [[pl.A[0], pl.A[1], 0.6, LEG_TOP], [pl.B[0], pl.B[1], 0.6, LEG_TOP]];
+          return blocked(world, feet, pl.span, CROWN, 1.6);
+        }, buildGantry);
+      }
+      for (const P of POSTS) {
+        place(P, SLIDE_POST, postPlan, (pl) => blocked(world, pl.feet, pl.span, LOW_CROWN, 0.8), buildPost);
+      }
+      return { placed, skipped };
+    },
+  };
+
+  VH.RoadSigns = RoadSigns;
+})();
+//# sourceURL=js/roadsigns.js
+</script>
   <script data-src="js/world.js">
 /*
  * world.js — turns the city layout into things you can see and bump into.
@@ -19329,6 +20170,11 @@ void main() {
       await slicer.tick();
       progress(0.858, 'Fencing off Fort Breakwater');
       if (VH.Fort) this.fort = VH.Fort.build(this, layout);
+      await slicer.tick();
+      // The roads out of town: roadside strips (suburbs.js) and direction signs (roadsigns.js).
+      progress(0.859, 'Opening the motels on the airport road');
+      if (VH.Suburbs) this.suburbs = VH.Suburbs.build(this, layout);
+      if (VH.RoadSigns) this.roadsigns = VH.RoadSigns.build(this, layout);
       await slicer.tick();
 
       progress(0.86, 'Planting palms and street lights');
@@ -19725,7 +20571,7 @@ void main() {
           map: tex, emissiveMap: tex, emissive: new THREE.Color(0, 0, 0), roughness: 0.55, metalness: 0,
           polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
         });
-        mat.userData.neon = spec.style === 'neon' || spec.style === 'brand';
+        mat.userData.neon = spec.style === 'neon' || spec.style === 'brand' || spec.style === 'road';
         this.signMaterials.push(mat);
         const fx = Math.sin(spec.yaw);
         const fz = Math.cos(spec.yaw);
@@ -19739,7 +20585,7 @@ void main() {
           ctx.chunk.group.add(mesh);
           continue;
         }
-        const faces = spec.twoSided || spec.posts ? [1, -1] : [1];
+        const faces = (spec.twoSided || spec.posts) && !spec.oneSided ? [1, -1] : [1];
         for (const side of faces) {
           const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), mat);
           const off = side > 0 ? depth / 2 + 0.002 : -(depth / 2 + 0.002);
@@ -32852,7 +33698,16 @@ void main() {
         const last = this.pieces[this.pieces.length - 1];
         if (last.type === 'line' && !last.junction) {
           const j = last.endJunction;
-          if (!j) return; // end of the road
+          if (!j) {
+            // The end of a road out of town: turn round, or wait to (see update).
+            const end = last.dir > 0 ? last.road.endTo : last.road.endFrom;
+            if (end === 'uturn') {
+              this._uturn(last);
+              continue;
+            }
+            if (end === 'flip') last.flipEnd = true;
+            return;
+          }
           const exit = this._chooseExit(last.road, last.dir, j);
           if (!exit) return;
           const turn = this.net.turnPiece(last.road, last.dir, last.lane, j, exit);
@@ -32871,6 +33726,48 @@ void main() {
           this.pieces.push(piece);
         }
       }
+    }
+
+    /**
+     * A U-turn at an open road end: two quarter curves out past the end and
+     * back into the inner lane the other way, then the run back to the next
+     * junction.
+     */
+    _uturn(last) {
+      const road = last.road;
+      const dir = last.dir;
+      const back = -dir;
+      const aE = dir > 0 ? road.to : road.from;
+      const T = this.net.lanePoint(road, back, 0, aE);
+      const fx = road.axis === 'z' ? 0 : dir;
+      const fz = road.axis === 'z' ? dir : 0;
+      const r = Math.max(3.5, Math.hypot(T.x - last.x1, T.z - last.z1) / 2);
+      const mx = (last.x1 + T.x) / 2 + fx * r;
+      const mz = (last.z1 + T.z) / 2 + fz * r;
+      const curve = (x0, z0, cx, cz, x1, z1) => {
+        const c = { type: 'curve', road, dir: back, lane: 0, fromRoad: road, x0, z0, cx, cz, x1, z1, junction: null, turn: 'uturn', nextLane: 0, limit: 4.2, uturn: true };
+        c.length = RoadNet().curveLength(c);
+        return c;
+      };
+      this.pieces.push(curve(last.x1, last.z1, last.x1 + fx * r, last.z1 + fz * r, mx, mz));
+      this.pieces.push(curve(mx, mz, T.x + fx * r, T.z + fz * r, T.x, T.z));
+      const j = this.net.nextJunction(road, back, aE + back * 0.5);
+      const end = j ? RoadNet().edges(road, back, j).enter : back > 0 ? road.to : road.from;
+      const run = this.net.linePiece(road, back, 0, aE, end);
+      run.endJunction = j;
+      this.pieces.push(run);
+    }
+
+    /** Turn round at a closed road end, out of sight: back into the other carriageway. */
+    _flip(v, p) {
+      const road = p.road;
+      const dir = -p.dir;
+      const along = p.dir > 0 ? road.to - 8 : road.from + 8;
+      const q = this.net.lanePoint(road, dir, 0, along);
+      v.place(q.x, q.z, q.heading);
+      v.setSpeed(2);
+      this.atEnd = false;
+      this.initAt({ road, dir, lane: 0, along });
     }
 
     /** Point `dist` metres ahead of the current progress along the queue. */
@@ -32923,6 +33820,11 @@ void main() {
       }
       this._fill();
       if (this.t > 0.985 && this.pieces.length === 1) {
+        // Barriers ahead: turn round once nobody's watching.
+        if (this.pieces[0].flipEnd && this.sys.game && !this.sys.game.isVisible(v.pos.x, 1, v.pos.z, 5)) {
+          this._flip(v, this.pieces[0]);
+          return;
+        }
         // The end of the line (a road out of town): stop.
         v.input.accel = v.speed > 0.5 ? -1 : 0;
         v.input.steer = 0;
@@ -33278,8 +34180,8 @@ void main() {
       let spawned = 0;
       while (count < want && spawned < 3) {
         const lp = this.net.randomLanePoint(this._rng, focus.x, focus.z, 70, 200);
-        if (!lp) break;
         spawned++;
+        if (!lp) continue;
         if (this.game.isVisible(lp.x, 1, lp.z, 4) && Math.hypot(lp.x - focus.x, lp.z - focus.z) < 150) continue;
         let clear = true;
         for (const v of list) {
@@ -51588,6 +52490,36 @@ void main() {
       ['jay', '(a long beat) A guy who taught me to park.'],
       ['fare', 'Then you park nicely tonight, love. For him.'],
     ] },
+    // Fares for the places out of town ('to': a place kind or id; picked first when that's where they're going).
+    { name: 'First flight', to: 'airport', lines: [
+      ['fare', '(gripping the seatbelt) I\'ve never flown. Not once. Forty-one years old.'],
+      ['jay', 'First time for everything.'],
+      ['fare', 'My daughter had a baby overseas. I\'m a grandad and I\'ve never even held a boarding pass.'],
+      ['fare', '(a shaky laugh) If I faint at security, tell them I was brave in the cab.'],
+    ] },
+    { name: 'Lost luggage', to: 'airport', lines: [
+      ['fare', 'Third time this month they\'ve lost my bag. I\'m going back to stare at the carousel until it confesses.'],
+      ['jay', 'What\'s in it?'],
+      ['fare', '(a beat) Forty jars of my nan\'s chutney. Don\'t ask. It\'s a whole thing.'],
+    ] },
+    { name: 'Back to base', to: 'fort', lines: [
+      ['fare', '(army haircut, a duffel bag) Fort Breakwater, the gate on Meridian. Stop before the sign, they get twitchy.'],
+      ['jay', 'Heard they keep tanks out there.'],
+      ['fare', '(grinning) They do. And a sergeant who counts them twice a day.'],
+      ['fare', 'If one ever goes missing, I was never in your cab.'],
+    ] },
+    { name: 'Corner office', to: 'skyline', lines: [
+      ['fare', 'Northgate Heights. The Corkscrew, forty-third floor.'],
+      ['jay', 'The twisty one?'],
+      ['fare', 'Every morning the lift goes up and the view turns a little more. By lunch I can\'t tell which way the sea is.'],
+      ['fare', '(sighs) Best job I ever hated.'],
+    ] },
+    { name: 'Midnight snack', to: 'store', lines: [
+      ['fare', 'Any shop that\'s open. I need ice cream, and I need it to be somebody else\'s fault.'],
+      ['jay', 'Long day?'],
+      ['fare', 'Twelve-hour shift. I\'m eating the whole tub in the car park. Don\'t judge me.'],
+      ['jay', 'Wouldn\'t dream of it. Get two spoons in case the night gets worse.'],
+    ] },
   ];
 
   // ------------------------------------------------------------ races
@@ -55193,6 +56125,10 @@ void main() {
     return () => r.next();
   }
 
+  // Taxi stands at the places outside the old grid, and the kinds of place worth a long fare.
+  const STANDS = /^(airport_terminal|airport_gate|northgate_heights|northgate_plaza|fort_gate|store_\d+)$/;
+  const FEATURED = new Set(['airport', 'fort', 'skyline', 'store']);
+
   class Activities {
     constructor(game) {
       this.game = game;
@@ -55585,42 +56521,108 @@ void main() {
       }
     }
 
-    _newFare() {
+    /** A spot on the pavement beside the road nearest a place (where a fare waits for the cab). */
+    _pavementBy(pl) {
+      const g = this.game;
+      const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+      if (!lp) return null;
+      const r = lp.road;
+      const off = r.width / 2 + 1.2;
+      const spot = r.axis === 'z'
+        ? { x: r.coord + (Math.sign(pl.x - r.coord) || 1) * off, z: lp.along }
+        : { x: lp.along, z: r.coord + (Math.sign(pl.z - r.coord) || 1) * off };
+      const gh = g.physics.groundHeight(spot.x, spot.z, 50);
+      return gh > 0.8 || gh < -0.1 ? null : spot;
+    }
+
+    /** Where fares wait: city corners, plus taxi stands at the new places and the roadside strips. */
+    _farePickup(stand) {
       const g = this.game;
       const p = g.player.pos;
+      const corners = () => {
+        for (let i = 0; i < 20; i++) {
+          const b = g.layout.blocks[Math.floor(Math.random() * g.layout.blocks.length)];
+          const c = Math.floor(Math.random() * 4);
+          const x = c === 0 || c === 3 ? b.minX + 2 : b.maxX - 2;
+          const z = c === 0 || c === 1 ? b.minZ + 2 : b.maxZ - 2;
+          const d = Math.hypot(x - p.x, z - p.z);
+          if (d > 80 && d < 260) return { x, z };
+        }
+        return null;
+      };
+      const stands = () => {
+        const cand = [];
+        for (const pl of g.places.map.values()) {
+          if (!STANDS.test(pl.id || '')) continue;
+          const d = Math.hypot(pl.x - p.x, pl.z - p.z);
+          if (d > 80 && d < 400) cand.push(pl);
+        }
+        for (const S of g.layout.strips || []) {
+          const [[x0, z0], [x1, z1]] = S.walk;
+          for (let k = 0; k < 3; k++) {
+            const t = Math.random();
+            const x = x0 + (x1 - x0) * t;
+            const z = z0 + (z1 - z0) * t;
+            const d = Math.hypot(x - p.x, z - p.z);
+            if (d > 80 && d < 400) cand.push({ x, z, onPavement: true });
+          }
+        }
+        while (cand.length) {
+          const c = cand.splice(Math.floor(Math.random() * cand.length), 1)[0];
+          const spot = c.onPavement ? { x: c.x, z: c.z } : this._pavementBy(c);
+          if (spot) return spot;
+        }
+        return null;
+      };
+      return stand ? stands() || corners() : corners() || stands();
+    }
+
+    _newFare() {
+      const g = this.game;
       const vig = this.data.taxi || [];
-      let best = null;
-      for (let i = 0; i < 20 && !best; i++) {
-        const b = g.layout.blocks[Math.floor(Math.random() * g.layout.blocks.length)];
-        const c = Math.floor(Math.random() * 4);
-        const x = c === 0 || c === 3 ? b.minX + 2 : b.maxX - 2;
-        const z = c === 0 || c === 1 ? b.minZ + 2 : b.maxZ - 2;
-        const d = Math.hypot(x - p.x, z - p.z);
-        if (d > 80 && d < 260) best = { x, z };
-      }
+      const best = this._farePickup(Math.random() < 0.35);
       if (!best) return;
       // Somewhere a cab can actually pull up: not a roof, the end of the pier
-      // or a race start, and with a kerb within 40 m to stop at.
-      const dests = Array.from(g.places.map.values()).filter((pl) => pl.name && !pl.roof && !(pl.y > 1) && !/\((race|stunt)\)|roof/i.test(pl.name) && pl.kind !== 'pier' &&
-        Math.hypot(pl.x - best.x, pl.z - best.z) > 250 && Math.hypot(pl.x - best.x, pl.z - best.z) < 900);
+      // or a race start, and with a kerb within 40 m to stop at. Trips to or
+      // from out of town (the airport, the fort gate, Northgate, the strips)
+      // may run twice as far.
+      const cb = g.layout.config.cityBounds || g.layout.config.bounds;
+      const outOfTown = best.x < cb.minX || best.x > cb.maxX || best.z < cb.minZ || best.z > cb.maxZ;
+      const cap = (pl) => (outOfTown || FEATURED.has(pl.kind) ? 1800 : 900);
+      const dests = Array.from(g.places.map.values()).filter((pl) => {
+        if (!pl.name || pl.roof || pl.y > 1 || /\((race|stunt)\)|roof/i.test(pl.name) || pl.kind === 'pier') return false;
+        const d = Math.hypot(pl.x - best.x, pl.z - best.z);
+        return d > 250 && d < cap(pl);
+      });
+      // About one fare in three heads somewhere new: mostly the big places, sometimes a shop.
+      const big = dests.filter((pl) => FEATURED.has(pl.kind) && pl.kind !== 'store');
+      const shops = dests.filter((pl) => pl.kind === 'store');
+      const r = Math.random();
+      const pools = [r < 0.22 && big.length ? big : r < 0.32 && shops.length ? shops : null, dests].filter(Boolean);
       let to = null;
-      for (let i = 0; i < 12 && !to && dests.length; i++) {
-        const pl = dests.splice(Math.floor(Math.random() * dests.length), 1)[0];
-        const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
-        if (!lp) continue;
-        const pk = g.missions._kerbPoint(lp);
-        const gh = g.physics.groundHeight(pk.x, pk.z, 50);
-        if (gh > 0.8 || gh < -0.1) continue;
-        to = { x: pk.x, z: pk.z, name: pl.name };
+      for (const pool of pools) {
+        for (let i = 0; i < 12 && !to && pool.length; i++) {
+          const pl = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+          const lp = g.roadnet.nearestLane(pl.x, pl.z, undefined, 40);
+          if (!lp) continue;
+          const pk = g.missions._kerbPoint(lp);
+          const gh = g.physics.groundHeight(pk.x, pk.z, 50);
+          if (gh > 0.8 || gh < -0.1) continue;
+          to = { x: pk.x, z: pk.z, name: pl.name, id: pl.id, kind: pl.kind };
+        }
+        if (to) break;
       }
       if (!to) return;
       const who = 'passenger';
       // Fares unlock with the story; the ones you haven't heard yet come first.
+      // A fare written for this destination ('to') comes first when there is one.
       const done = g.missions.completed;
-      const open = vig.filter((f) => !f.after || done[f.after]);
+      const goes = (f) => f.to === to.kind || f.to === to.id;
+      const open = vig.filter((f) => (!f.after || done[f.after]) && (!f.to || goes(f)));
       this.heardFares = this.heardFares || {};
       const fresh = open.filter((f) => !this.heardFares[f.name]);
-      const pool = fresh.length ? fresh : open;
+      const matched = fresh.filter((f) => f.to);
+      const pool = matched.length ? matched : fresh.length ? fresh : open;
       const v = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
       if (v) this.heardFares[v.name] = true;
       const ids = { fare: who, fare2: 'passenger2' };
@@ -55632,7 +56634,14 @@ void main() {
       g.dialogue._voiceMap.delete('passenger2');
       const agent = g.crowd.spawn(best.x, best.z, { persistent: true });
       agent.brain = { update: (a) => { a.moveSpeed = 0; a.anim.handsUp = Math.sin(g.time * 3) > 0.6 ? 0.4 : 0; } };
-      const dist = Math.hypot(to.x - best.x, to.z - best.z);
+      // The meter and the pay go by the road, not as the crow flies.
+      let dist = Math.hypot(to.x - best.x, to.z - best.z);
+      const route = VH.Minimap && VH.Minimap.route ? VH.Minimap.route(g.layout, best.x, best.z, to.x, to.z) : null;
+      if (route && route.length > 1) {
+        let len = 0;
+        for (let i = 1; i < route.length; i++) len += Math.hypot(route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1]);
+        dist = Math.max(dist, len);
+      }
       this.taxi.fare = { stage: 'pickup', from: best, to, toName: to.name, dist, time: 25 + dist / 11, t: 999, who, lines, agent };
     }
 
@@ -56549,6 +57558,24 @@ void main() {
       for (let x = T.x1 - 12; x >= T.x0 + 12; x -= 22) pts.push([x, z + 1.2]);
       zones.push({ id: 'terminal', x: (T.x0 + T.x1) / 2, z, near: 220, far: 290, loops: [{ pts, count: 12 }], look: 'travel' });
     }
+    // The pavements of the roadside strips (suburbs.js), in pieces of about 150 m.
+    for (const S of layout.strips || []) {
+      const len = S.a1 - S.a0;
+      const pieces = Math.max(1, Math.round(len / 150));
+      const pt = (along, d) => {
+        const c = S.edge + S.out * d;
+        return S.axis === 'z' ? [c, along] : [along, c];
+      };
+      for (let k = 0; k < pieces; k++) {
+        const a0 = S.a0 + (len * k) / pieces + 3;
+        const a1 = S.a0 + (len * (k + 1)) / pieces - 3;
+        const pts = [];
+        for (let a = a0; a <= a1; a += 12) pts.push(pt(a, 2.4));
+        for (let a = a1; a >= a0; a -= 12) pts.push(pt(a, 3.0));
+        const [cx, cz] = pt((a0 + a1) / 2, 2);
+        zones.push({ id: 'strip_' + S.id + '_' + k, x: cx, z: cz, near: 170, far: 220, loops: [{ pts, count: 3 }], look: S.id.startsWith('ar') ? 'travel' : 'street' });
+      }
+    }
     return zones;
   }
 
@@ -56581,8 +57608,37 @@ void main() {
       this._tourT = Math.random() * 100;
       this._fogK = 1;
       this.chases = 0;
+      this._parkStrips();
       VH.events.on('gunshot', (e) => this._panic(e.x, e.z, 70));
       VH.events.on('vehicle:enter', (e) => this._entered(e.v));
+    }
+
+    /** Parked cars in the roadside car parks: extra spots for the vehicle system's own streaming. */
+    _parkStrips() {
+      const V = this.game.vehicles;
+      if (!V || !V.spots || !V.spots.length) return;
+      const types = V.spots.map((s) => s.type);
+      for (const S of this.game.layout.strips || []) {
+        for (const lot of S.lots) {
+          if (lot.kind !== 'parking' || lot.store) continue;
+          const alongX = lot.maxX - lot.minX >= lot.maxZ - lot.minZ;
+          // The bays buildings.js paints: two rows, 2.7 m apart, 5.2 m deep, 1 m in from the edges.
+          const rows = alongX ? [[lot.minZ + 3.6, 0], [lot.maxZ - 3.6, Math.PI]] : [[lot.minX + 3.6, Math.PI / 2], [lot.maxX - 3.6, -Math.PI / 2]];
+          const a0 = (alongX ? lot.minX : lot.minZ) + 2;
+          const a1 = (alongX ? lot.maxX : lot.maxZ) - 2;
+          for (const [c, heading] of rows) {
+            for (let a = a0; a + 2.7 <= a1; a += 2.7) {
+              const h = VH.math.hash2(Math.round(a * 10), Math.round(c * 10) + 31);
+              if (h > 0.4) continue;
+              const m = a + 1.35;
+              V.spots.push({
+                x: alongX ? m : c, z: alongX ? c : m, heading: heading + (h < 0.2 ? Math.PI : 0), road: null,
+                type: types[Math.floor(h * 1e4) % types.length], seed: Math.floor(h * 1e6), vehicle: null, used: false,
+              });
+            }
+          }
+        }
+      }
     }
 
     update(dt) {
@@ -61201,6 +62257,7 @@ void main() {
         { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
         { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
           help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
+        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
           help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
@@ -61639,6 +62696,8 @@ void main() {
       item('▮  Northgate Heights', 'Eight new skyscrapers just north of downtown on Skyline Drive, one with a helipad on the roof.');
       item('$  14 corner shops', 'Walk in, press E at the counter for snacks (they heal you), or aim a gun at the clerk to hold the shop up. Yellow bags on the map.');
       item('🚓  A busier city', 'Police chases tear past now and then, office workers fill the plazas, and a tour helicopter flies over the bay.');
+      item('🛣  The roads out of town', 'Grand Avenue North and Meridian West are proper streets now: motels, diners, hotels and workshops, people, traffic and green signs pointing the way. Taxi fares go there too.');
+      item('☀  Always daytime', 'Settings → Gameplay → Always daytime keeps the sun up: no night at all.');
       item('Flying', 'W/S throttle, A/D roll, Space/Ctrl nose up and down, mouse to look. Jump out high up and the parachute opens.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));
@@ -62408,6 +63467,8 @@ void main() {
       this.layout = VH.CityGen.generate('vicehaven');
       // Corner shops claim their lots before the city is built (stores.js).
       if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
+      // Then the roadside strips along the roads out of town (suburbs.js).
+      if (VH.Suburbs && VH.Suburbs.plan) VH.Suburbs.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -62638,6 +63699,8 @@ void main() {
         this._needsRender = true;
         // The clock follows the Time of day setting straight away, not on the next load.
         if (this.environment && this.state !== 'title' && this.state !== 'loading') this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
+        // Lit windows and street lights follow the sky straight away (Always daytime).
+        if (this.environment && this.world && this.world.setNightFactor) this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
       });
       VH.events.on('renderer:resize', () => {
         this._needsRender = true;

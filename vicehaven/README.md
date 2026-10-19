@@ -148,6 +148,13 @@ look up) once you're fast enough. Land gently on something flat.
 
 **In a shop:** **E** at the counter buys snacks; aim a gun at the clerk to hold the place up.
 
+**The map (M).** It opens on the whole world: the city, Northgate Heights,
+the airport and Fort Breakwater. The buttons along the top jump to each
+big place (or the nearest shop) and set your GPS there; **click** anywhere
+to set a waypoint, **right-click** (or Clear GPS) to remove it. The route
+shows on the radar, and goes in by the gate at the airport and the base.
+The mouse is free while the map is open; **M** or **Esc** closes it.
+
 **Anywhere:** **M** opens the city map (jobs, places, the GPS route),
 **Space** or **Enter** skips a line in a cutscene, **1 / 2 / 3** answer a
 choice, **Esc** pauses (map, job log, save, settings).
@@ -337,6 +344,19 @@ car comes tearing past with a police cruiser on its tail, siren going
 (take the car and the police take an interest). Travellers walk the
 terminal forecourt and a sightseeing helicopter flies laps over the bay.
 
+**The roads out of town are streets, not fields.** Grand Avenue North (to
+the airport), Meridian West (to the army base) and Airport Road are lined
+with pavements, street lights, palms and 79 buildings: offices and flats
+near Northgate, motels, diners and hotels toward the airport, yards and
+workshops toward the base, plus another Tidal Fuel and a Kwik Pik. People
+walk the pavements, cars park in the car parks, and traffic drives all
+the way out (turning round at the fort's gate and the ends of Airport
+Road). Green signs and gantries point the way to the airport, the base,
+Northgate and back downtown, and taxi fares now go to and from all of it.
+
+**Always daytime.** **Settings → Gameplay → Always daytime** keeps the sun
+up: no night at all, even in story scenes.
+
 **Time and light.** The clock runs (a full day is about 24 minutes) unless
 you fix the time in Settings. Night is moonlit blue rather than black, with
 street-light pools, headlights, lit windows and neon. If nights are still too
@@ -384,6 +404,7 @@ vicehaven/
 │   ├── skyline.js · airfield.js · fort.js   Northgate Heights; the airport and its air traffic;
 │   │                       Fort Breakwater, its soldiers and the alarm
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
+│   ├── suburbs.js · roadsigns.js   the roadside strips on the roads out of town; direction signs
 │   ├── world.js            turns the layout into chunked meshes, colliders and props
 │   ├── humanoid.js · player.js · camera.js · crowd.js    people, Jay, the camera, the crowds
 │   ├── vehicles/           carmodels (19 cars), vehicle (physics), vehicles (spawning, collisions),
@@ -461,6 +482,11 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Fort Breakwater: walk in, get the warning, stay and the alarm goes; steal the tank (five stars), drive it, fire the main gun
 - [ ] Walk into a corner shop, buy snacks at the counter (+health), then aim a gun at the clerk: the meter fills and pays out, two stars follow
 - [ ] Wait a few minutes away from jobs and heat: a car chased by a police cruiser comes past
+- [ ] Press M: the map shows the whole world; click Airport, close the map and follow the GPS route there
+- [ ] Drive up Grand Avenue North and along Meridian West: buildings, people and traffic all the way, green signs pointing the way
+- [ ] In a cab out by the airport, press P: a fare is waiting nearby and may want the terminal, the fort gate or Northgate
+- [ ] Settings → Gameplay → Always daytime: night turns to midday at once and stays that way
+- [ ] The title screen says v1.1 and What's new lists the update
 
 For developers, the automated checks need Node.js and Playwright:
 
