@@ -107,6 +107,54 @@
   };
 
   // ============================================================ model kit
+  /** A smooth curve through (x, y) keys that never overshoots them (monotone cubic). */
+  function monotone(xs, ys) {
+    const n = xs.length;
+    if (n === 1) return () => ys[0];
+    const d = [];
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i] || 1e-6));
+    const m = [d[0]];
+    for (let i = 1; i < n - 1; i++) m.push(d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2);
+    m.push(d[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) {
+        m[i] = m[i + 1] = 0;
+        continue;
+      }
+      const a = m[i] / d[i];
+      const b = m[i + 1] / d[i];
+      const h = a * a + b * b;
+      if (h > 9) {
+        const t = 3 / Math.sqrt(h);
+        m[i] = t * a * d[i];
+        m[i + 1] = t * b * d[i];
+      }
+    }
+    return (x) => {
+      if (x <= xs[0]) return ys[0];
+      if (x >= xs[n - 1]) return ys[n - 1];
+      let i = 0;
+      while (i < n - 2 && x > xs[i + 1]) i++;
+      const h = xs[i + 1] - xs[i];
+      const t = (x - xs[i]) / h;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
+    };
+  }
+
+  /** Half-thickness of a symmetric NACA four-digit airfoil at chord fraction x, thickness t. */
+  function naca(x, t) {
+    return 5 * t * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+  }
+  // Chord stations of an airfoil, trailing edge → leading edge (denser at the nose).
+  const FOIL = [1, 0.86, 0.68, 0.5, 0.34, 0.21, 0.11, 0.05, 0.016, 0];
+
+  const _p0 = new THREE.Vector3();
+  const _p1 = new THREE.Vector3();
+  const _t0 = new THREE.Vector3();
+  const _t1 = new THREE.Vector3();
+
   /** Collects coloured primitives and merges them into one geometry. */
   class Kit {
     constructor() {
@@ -200,6 +248,427 @@
       return this.add(g, color);
     }
 
+    /** One triangle with per-vertex normals and colours, turned to face along its normals. */
+    tri(a, b, c, na, nb, nc, ca, cb, cc) {
+      // Orientation from the geometry: flip if it faces against the supplied normals.
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
+      if (gx * gx + gy * gy + gz * gz < 1e-14) return this;
+      const sx = na[0] + nb[0] + nc[0], sy = na[1] + nb[1] + nc[1], sz = na[2] + nb[2] + nc[2];
+      if (gx * sx + gy * sy + gz * sz < 0) {
+        let t = b;
+        b = c;
+        c = t;
+        t = nb;
+        nb = nc;
+        nc = t;
+        t = cb;
+        cb = cc;
+        cc = t;
+      }
+      this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+      this.nor.push(na[0], na[1], na[2], nb[0], nb[1], nb[2], nc[0], nc[1], nc[2]);
+      this.col.push(ca[0], ca[1], ca[2], cb[0], cb[1], cb[2], cc[0], cc[1], cc[2]);
+      return this;
+    }
+
+    /**
+     * A smooth body lofted through cross-sections along Z (fuselages, booms,
+     * nacelles, pods). stations: [{ z, w, h, y, n }] = half width, half
+     * height, centre height and squareness (a superellipse power: 2 is an
+     * ellipse, 3-5 boxier), curved smoothly between. Colour `color`, with
+     * hard-edged paint:
+     *   opts.bands  [[s0, s1, color]] round the body, s = angle from the top
+     *               (0 top, PI/2 the sides, PI the belly), both sides alike
+     *   opts.zBands [[z0, z1, color]] along it (a nose cone, a tail band);
+     *               these win over bands
+     *   opts.seg    points round (default 28), opts.steps between stations (5)
+     *   opts.caps   { front: color, back: color } closes open ends in a colour
+     *   opts.x      moves it sideways (an engine pod under a wing)
+     * Returns the surface, for decals: surf.at(z, s, side) → { p, n, tz, ts }.
+     */
+    loft(stations, color, opts) {
+      opts = opts || {};
+      const ox = opts.x || 0;
+      const S = stations.slice().sort((a, b) => a.z - b.z);
+      const zs = S.map((q) => q.z);
+      const fw = monotone(zs, S.map((q) => q.w));
+      const fh = monotone(zs, S.map((q) => (q.h === undefined ? q.w : q.h)));
+      const fy = monotone(zs, S.map((q) => q.y || 0));
+      const fn = monotone(zs, S.map((q) => q.n || 2));
+      const zMin = zs[0];
+      const zMax = zs[zs.length - 1];
+      const P = (z, s, side, out) => {
+        if (s < 0) {
+          s = -s;
+          side = -side;
+        } else if (s > Math.PI) {
+          s = 2 * Math.PI - s;
+          side = -side;
+        }
+        const w = Math.max(fw(z), 0);
+        const h = Math.max(fh(z), 0);
+        const e = 2 / Math.max(fn(z), 1.2);
+        const sn = Math.sin(s);
+        const cs = Math.cos(s);
+        out.set(ox + side * w * Math.pow(Math.abs(sn), e), fy(z) + h * Math.sign(cs) * Math.pow(Math.abs(cs), e), z);
+        return out;
+      };
+      const frame = (z, s, side) => {
+        const p = P(z, s, side, new THREE.Vector3());
+        const dz = 0.01;
+        const za = Math.max(zMin, z - dz);
+        const zb = Math.min(zMax, z + dz);
+        const tz = P(zb, s, side, _t0).sub(P(za, s, side, _t1)).clone();
+        const ts = P(z, s + 0.01, side, _t0).sub(P(z, s - 0.01, side, _t1)).clone(); // "down" round the side
+        const n = new THREE.Vector3().crossVectors(tz, ts).multiplyScalar(side < 0 ? -1 : 1);
+        if (n.lengthSq() < 1e-12 || ts.lengthSq() < 1e-10) {
+          n.set(0, 0, z >= (zMin + zMax) / 2 ? 1 : -1);
+        } else {
+          n.normalize();
+          // Outward, whatever the maths above made of it.
+          const out = _p0.set(p.x - ox, p.y - fy(z), 0);
+          if (out.lengthSq() > 1e-8 && n.dot(out) < 0) n.negate();
+        }
+        return { p, n, tz: tz.normalize(), ts: ts.lengthSq() > 1e-10 ? ts.normalize() : new THREE.Vector3(0, -1, 0) };
+      };
+      const base = VH.col(color);
+      const bandList = (opts.bands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const zBandList = (opts.zBands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const colS = (s) => {
+        for (const [a, b, c] of bandList) if (s >= a && s < b) return c;
+        return base;
+      };
+      const colZ = (z) => {
+        for (const [a, b, c] of zBandList) if (z >= a && z < b) return c;
+        return null;
+      };
+      // Columns round the body: down the +X side, then back up the -X side; band edges doubled.
+      const seg = opts.seg || 28;
+      const half = Math.max(4, Math.round(seg / 2));
+      const cuts = new Set();
+      for (const [a, b] of bandList) {
+        if (a > 1e-4 && a < Math.PI - 1e-4) cuts.add(+a.toFixed(5));
+        if (b > 1e-4 && b < Math.PI - 1e-4) cuts.add(+b.toFixed(5));
+      }
+      const sv = new Set();
+      for (let k = 0; k <= half; k++) sv.add(+((Math.PI * k) / half).toFixed(5));
+      for (const c of cuts) sv.add(c);
+      const sList = [...sv].sort((a, b) => a - b);
+      const cols = [];
+      for (const s of sList) {
+        if (cuts.has(s)) cols.push({ s, side: 1, c: colS(s - 1e-4) }, { s, side: 1, c: colS(s + 1e-4) });
+        else cols.push({ s, side: 1, c: colS(s) });
+      }
+      for (let i = sList.length - 2; i >= 1; i--) {
+        const s = sList[i];
+        if (cuts.has(s)) cols.push({ s, side: -1, c: colS(s + 1e-4) }, { s, side: -1, c: colS(s - 1e-4) });
+        else cols.push({ s, side: -1, c: colS(s) });
+      }
+      // Rings along Z: the stations, the steps between, and zBand edges doubled.
+      const steps = opts.steps || 5;
+      const zv = new Set();
+      for (let i = 0; i < S.length - 1; i++) for (let k = 0; k < steps; k++) zv.add(+(S[i].z + ((S[i + 1].z - S[i].z) * k) / steps).toFixed(5));
+      zv.add(+zMax.toFixed(5));
+      const zc = new Set();
+      for (const [a, b] of zBandList) {
+        for (const v of [a, b]) if (v > zMin + 1e-4 && v < zMax - 1e-4) zc.add(+v.toFixed(5));
+      }
+      for (const v of zc) zv.add(v);
+      const zList = [...zv].sort((a, b) => a - b);
+      const rings = [];
+      for (const z of zList) {
+        const fr = cols.map((cl) => frame(z, cl.s, cl.side));
+        if (zc.has(z)) {
+          rings.push({ z, fr, cz: colZ(z - 1e-4) }, { z, fr, cz: colZ(z + 1e-4) });
+        } else rings.push({ z, fr, cz: colZ(z) });
+      }
+      const nc = cols.length;
+      const arr = (v) => [v.x, v.y, v.z];
+      for (let r = 0; r < rings.length - 1; r++) {
+        const A = rings[r];
+        const B = rings[r + 1];
+        if (B.z - A.z < 1e-6) continue;
+        for (let j = 0; j < nc; j++) {
+          const j2 = (j + 1) % nc;
+          if (cols[j].s === cols[j2].s && cols[j].side === cols[j2].side) continue;
+          const c1 = A.cz || cols[j].c;
+          const c2 = A.cz || cols[j2].c;
+          const c3 = B.cz || cols[j].c;
+          const c4 = B.cz || cols[j2].c;
+          const a = A.fr[j], b = A.fr[j2], c = B.fr[j], d = B.fr[j2];
+          this.tri(arr(a.p), arr(b.p), arr(c.p), arr(a.n), arr(b.n), arr(c.n), c1, c2, c3);
+          this.tri(arr(b.p), arr(d.p), arr(c.p), arr(b.n), arr(d.n), arr(c.n), c2, c4, c3);
+        }
+      }
+      // Close open ends.
+      const caps = opts.caps || {};
+      for (const [ring, dir, key] of [[rings[0], -1, 'back'], [rings[rings.length - 1], 1, 'front']]) {
+        if (Math.max(fw(ring.z), fh(ring.z)) < 0.01) continue;
+        const cc = caps[key] !== undefined ? VH.col(caps[key]) : ring.cz || base;
+        const ctr = [ox, fy(ring.z), ring.z];
+        const nn = [0, 0, dir];
+        for (let j = 0; j < nc; j++) {
+          const j2 = (j + 1) % nc;
+          this.tri(ctr, arr(ring.fr[j].p), arr(ring.fr[j2].p), nn, nn, nn, cc, cc, cc);
+        }
+      }
+      return {
+        at: (z, s, side) => frame(z, s, side || 1),
+        width: (z) => fw(z),
+        height: (z) => fh(z),
+        centre: (z) => fy(z),
+      };
+    }
+
+    /**
+     * Paint on a loft (windows, doors, panels): a flat patch on the surface at
+     * (z, s, side), w long (along Z) and h tall (round the body). opts.round
+     * rounds the corners (0-1); opts.lift lifts it off the skin (default 1.2 cm).
+     */
+    decal(surf, z, s, side, w, h, color, opts) {
+      opts = opts || {};
+      const f = surf.at(z, s, side);
+      const lift = opts.lift === undefined ? 0.012 : opts.lift;
+      const o = f.p.clone().addScaledVector(f.n, lift);
+      const c = VH.col(color);
+      const n = [f.n.x, f.n.y, f.n.z];
+      const pt = (u, v) => {
+        const q = o.clone().addScaledVector(f.tz, u).addScaledVector(f.ts, v);
+        return [q.x, q.y, q.z];
+      };
+      const r = Math.min(1, Math.max(0, opts.round || 0));
+      const hw = w / 2;
+      const hh = h / 2;
+      let outline;
+      if (r > 0) {
+        const cr = Math.min(hw, hh) * r;
+        outline = [];
+        for (const [cx, cy, a0] of [[hw - cr, hh - cr, 0], [-hw + cr, hh - cr, Math.PI / 2], [-hw + cr, -hh + cr, Math.PI], [hw - cr, -hh + cr, Math.PI * 1.5]]) {
+          for (let k = 0; k <= 3; k++) {
+            const a = a0 + (k / 3) * (Math.PI / 2);
+            outline.push([cx + Math.cos(a) * cr, cy + Math.sin(a) * cr]);
+          }
+        }
+      } else outline = [[hw, hh], [-hw, hh], [-hw, -hh], [hw, -hh]];
+      const ctr = pt(0, 0);
+      for (let i = 0; i < outline.length; i++) {
+        const a = outline[i];
+        const b = outline[(i + 1) % outline.length];
+        this.tri(ctr, pt(a[0], a[1]), pt(b[0], b[1]), n, n, n, c, c, c);
+      }
+      return this;
+    }
+
+    /**
+     * A curved panel that follows a loft (windscreens, canopies' frames, big
+     * painted areas): from z0 to z1, between s angles that may change along
+     * it, sA = [top, bottom] at z0 and sB at z1 (a trapezoid). opts.lift as
+     * for decals; opts.nz / opts.ns: how finely it bends (6 × 4).
+     */
+    patch(surf, z0, z1, sA, sB, side, color, opts) {
+      opts = opts || {};
+      const lift = opts.lift === undefined ? 0.012 : opts.lift;
+      const nz = opts.nz || 6;
+      const ns = opts.ns || 4;
+      const c = VH.col(color);
+      const G = [];
+      for (let i = 0; i <= nz; i++) {
+        const t = i / nz;
+        const z = z0 + (z1 - z0) * t;
+        const sT = sA[0] + (sB[0] - sA[0]) * t;
+        const sBt = sA[1] + (sB[1] - sA[1]) * t;
+        const row = [];
+        for (let j = 0; j <= ns; j++) {
+          const f = surf.at(z, sT + (sBt - sT) * (j / ns), side);
+          const q = f.p.clone().addScaledVector(f.n, lift);
+          row.push({ p: [q.x, q.y, q.z], n: [f.n.x, f.n.y, f.n.z] });
+        }
+        G.push(row);
+      }
+      for (let i = 0; i < nz; i++) {
+        for (let j = 0; j < ns; j++) {
+          const a = G[i][j], b = G[i][j + 1], d = G[i + 1][j], e = G[i + 1][j + 1];
+          this.tri(a.p, b.p, d.p, a.n, b.n, d.n, c, c, c);
+          this.tri(b.p, e.p, d.p, b.n, e.n, d.n, c, c, c);
+        }
+      }
+      return this;
+    }
+
+    /**
+     * A wing, tailplane or fin lofted through airfoil sections from the root
+     * out: sections [{ x, y, z, c, t }] place the leading edge, the chord
+     * (running back along -Z) and the thickness (a fraction of the chord).
+     * opts.axis 'y' makes a fin (thickness across X); opts.mirror adds the
+     * other side; opts.bands [[f0, f1, color]] paint spanwise (0 root, 1 tip);
+     * opts.camber bows it a little (wings, not fins).
+     */
+    wing(sections, color, opts) {
+      opts = opts || {};
+      const fin = opts.axis === 'y';
+      const base = VH.col(color);
+      const bands = (opts.bands || []).map(([a, b, c]) => [a, b, VH.col(c)]);
+      const span = (q) => (fin ? q.y : Math.abs(q.x));
+      const s0 = span(sections[0]);
+      const s1 = span(sections[sections.length - 1]);
+      const frac = (q) => (s1 === s0 ? 0 : (span(q) - s0) / (s1 - s0));
+      const colAt = (f) => {
+        for (const [a, b, c] of bands) if (f >= a && f < b) return c;
+        return base;
+      };
+      const lerpSec = (a, b, t) => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t), c: lerp(a.c, b.c, t), t: lerp(a.t, b.t, t) });
+      // Sections, with band edges doubled.
+      const secs = [];
+      for (let i = 0; i < sections.length; i++) {
+        const q = sections[i];
+        const f = frac(q);
+        if (i > 0) {
+          const p = sections[i - 1];
+          const fp = frac(p);
+          const edges = [];
+          for (const [a, b] of bands) for (const e of [a, b]) if (e > fp + 1e-4 && e < f - 1e-4) edges.push(e);
+          edges.sort((u, v) => u - v);
+          for (const e of edges) {
+            const t = (e - fp) / (f - fp);
+            const m = lerpSec(p, q, t);
+            secs.push({ q: m, c: colAt(e - 1e-4) }, { q: m, c: colAt(e + 1e-4) });
+          }
+        }
+        secs.push({ q, c: colAt(Math.min(f, 1 - 1e-4)) });
+      }
+      const camber = fin ? 0 : opts.camber || 0;
+      // The outline: upper surface trailing edge → nose, then the lower surface back.
+      const loop = [];
+      for (const x of FOIL) loop.push([x, 1]);
+      for (let i = FOIL.length - 2; i >= 0; i--) loop.push([FOIL[i], -1]);
+      const point = (q, x, side) => {
+        const th = naca(Math.max(x, 0), q.t) * q.c * side + camber * q.c * 4 * x * (1 - x);
+        return fin ? [q.x + th, q.y, q.z - x * q.c] : [q.x, q.y + th, q.z - x * q.c];
+      };
+      const sideSign = sections[sections.length - 1].x < sections[0].x ? -1 : 1;
+      // Positions for every section × outline point, then smooth normals.
+      const G = secs.map((sc) => loop.map(([x, side]) => point(sc.q, x, side)));
+      const L = loop.length;
+      const norms = G.map(() => loop.map(() => [0, 0, 0]));
+      const quad = (i, j) => {
+        const a = G[i][j], b = G[i][j + 1], c = G[i + 1][j], d = G[i + 1][j + 1];
+        return [a, b, c, d];
+      };
+      const addN = (i, j, n) => {
+        const v = norms[i][j];
+        v[0] += n[0];
+        v[1] += n[1];
+        v[2] += n[2];
+      };
+      const faceN = (a, b, c) => {
+        const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+        const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+        return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      };
+      // Which way a face looks: up (or +X on a fin) on the upper surface, down on the lower, forward at the nose.
+      const outward = (i, j) => {
+        const side = loop[j][0] > 0 ? loop[j][1] : loop[j + 1][1];
+        const nose = loop[j][0] < 0.06 && loop[j + 1][0] < 0.06 ? 0.6 : 0;
+        return fin ? [side, 0, nose] : [0, side, nose];
+      };
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q === secs[i].q) continue;
+        for (let j = 0; j < L - 1; j++) {
+          const [a, b, c, d] = quad(i, j);
+          let n1 = faceN(a, b, c);
+          let n2 = faceN(b, d, c);
+          const ref = outward(i, j);
+          if (n1[0] * ref[0] + n1[1] * ref[1] + n1[2] * ref[2] < 0) n1 = n1.map((v) => -v);
+          if (n2[0] * ref[0] + n2[1] * ref[1] + n2[2] * ref[2] < 0) n2 = n2.map((v) => -v);
+          for (const [ii, jj, n] of [[i, j, n1], [i, j + 1, n1], [i + 1, j, n1], [i, j + 1, n2], [i + 1, j + 1, n2], [i + 1, j, n2]]) addN(ii, jj, n);
+        }
+      }
+      // Band seams share normals with their twin, so the paint edge doesn't show in the shading.
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q !== secs[i].q) continue;
+        for (let j = 0; j < L; j++) {
+          const a = norms[i][j], b = norms[i + 1][j];
+          const m = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+          norms[i][j] = m;
+          norms[i + 1][j] = m.slice();
+        }
+      }
+      const unit = (v) => {
+        const l = Math.hypot(v[0], v[1], v[2]) || 1;
+        return [v[0] / l, v[1] / l, v[2] / l];
+      };
+      const N = norms.map((row) => row.map(unit));
+      const out = new Kit();
+      for (let i = 0; i < G.length - 1; i++) {
+        if (secs[i + 1].q === secs[i].q) continue;
+        const ca = secs[i].c, cb = secs[i + 1].c;
+        for (let j = 0; j < L - 1; j++) {
+          out.tri(G[i][j], G[i][j + 1], G[i + 1][j], N[i][j], N[i][j + 1], N[i + 1][j], ca, ca, cb);
+          out.tri(G[i][j + 1], G[i + 1][j + 1], G[i + 1][j], N[i][j + 1], N[i + 1][j + 1], N[i + 1][j], ca, cb, cb);
+        }
+      }
+      // Root and tip caps.
+      for (const [i, dir] of [[0, -1], [G.length - 1, 1]]) {
+        const ring = G[i];
+        const q = secs[i].q;
+        const nn = fin ? [0, dir, 0] : [dir * sideSign, 0, 0];
+        const c = secs[i].c;
+        const mid = [q.x, q.y, q.z - 0.35 * q.c];
+        for (let j = 0; j < L - 1; j++) out.tri(mid, ring[j], ring[j + 1], nn, nn, nn, c, c, c);
+      }
+      this._absorb(out);
+      if (opts.mirror) this._absorb(out, true);
+      return this;
+    }
+
+    /** Copy another kit's triangles in (optionally mirrored across X = 0, winding fixed). */
+    _absorb(k, mirror) {
+      const P = k.pos, Nn = k.nor, C = k.col;
+      for (let i = 0; i < P.length; i += 9) {
+        const v = (o) => [mirror ? -P[i + o] : P[i + o], P[i + o + 1], P[i + o + 2]];
+        const n = (o) => [mirror ? -Nn[i + o] : Nn[i + o], Nn[i + o + 1], Nn[i + o + 2]];
+        const c = (o) => [C[i + o], C[i + o + 1], C[i + o + 2]];
+        if (mirror) this.tri(v(0), v(6), v(3), n(0), n(6), n(3), c(0), c(6), c(3));
+        else this.tri(v(0), v(3), v(6), n(0), n(3), n(6), c(0), c(3), c(6));
+      }
+      return this;
+    }
+
+    /** Mirror everything added after `from` (a vertex count) across X = 0. */
+    mirrorFrom(from) {
+      const tmp = new Kit();
+      tmp.pos = this.pos.slice(from * 3);
+      tmp.nor = this.nor.slice(from * 3);
+      tmp.col = this.col.slice(from * 3);
+      return this._absorb(tmp, true);
+    }
+
+    get count() {
+      return this.pos.length / 3;
+    }
+
+    /** A tyre (a rounded ring) with its axle along X, centred at (x, y, z). */
+    tyre(r, w, x, y, z, color, seg) {
+      const prof = [];
+      const ri = r * 0.62;
+      const rr = Math.min(w * 0.42, (r - ri) * 0.5);
+      prof.push(new THREE.Vector2(ri, -w / 2));
+      for (let k = 0; k <= 4; k++) {
+        const a = -Math.PI / 2 + (k / 4) * (Math.PI / 2);
+        prof.push(new THREE.Vector2(r - rr + Math.cos(a) * rr, -w / 2 + rr + Math.sin(a) * rr));
+      }
+      for (let k = 0; k <= 4; k++) {
+        const a = (k / 4) * (Math.PI / 2);
+        prof.push(new THREE.Vector2(r - rr + Math.cos(a) * rr, w / 2 - rr + Math.sin(a) * rr));
+      }
+      prof.push(new THREE.Vector2(ri, w / 2));
+      const g = new THREE.LatheGeometry(prof, seg || 16);
+      g.rotateZ(Math.PI / 2);
+      return this.add(g, color, mat(x, y, z));
+    }
+
     geometry() {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -227,11 +696,14 @@
       white: hdr(5, 5, 4.6),
       burner: new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 2.2, 0.8), transparent: true, opacity: 0.85, depthWrite: false }),
       blur: new THREE.MeshBasicMaterial({ color: 0x1c1f24, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }),
+      // Bare metal (engine parts, gear legs, spinners) and rubber or matte plastic.
+      metal: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.85 }),
+      matte: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }),
     };
     return MATS;
   }
   function paintMaterial() {
-    return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.25 });
+    return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.2 });
   }
 
   const WHITE = 0xf1f2ef;
@@ -240,7 +712,10 @@
   const RUBBER = 0x161616;
 
   // ---------------------------------------------------- model definitions
-  // Each returns { kit (paint), glass (kit), lights: [[mat, x, y, z, r]], spin: {...} }.
+  // Each returns { kit (paint), metal, matte, glass (kits), gear (kit that
+  // retracts), lights: [[mat, x, y, z, r]], prop / rotor / tailRotor (kits that
+  // spin, at a pivot), strobe, beaconLow, burner }. More can be added to
+  // VH.AircraftDefs from other files (loaded after this one).
   const DEFS = {
     skylark(c) {
       const k = new Kit();
@@ -406,15 +881,21 @@
     },
   };
 
+  // Other files may add or replace models: VH.AircraftDefs[type] = (color, Kit) => def.
+  VH.AircraftDefs = VH.AircraftDefs || {};
+
   // Geometry is cached per type and colour; materials per aircraft (damage tint).
   const GEO = new Map();
   function geometryFor(type, color) {
     const key = type + '|' + color;
     let g = GEO.get(key);
     if (g) return g;
-    const d = DEFS[type](color);
+    const d = (VH.AircraftDefs[type] || DEFS[type])(color, Kit);
+    const some = (k) => (k && k.pos.length ? k.geometry() : null);
     g = {
       body: d.kit.geometry(),
+      metal: some(d.metal),
+      matte: some(d.matte),
       glass: d.glass ? d.glass.geometry() : null,
       gear: d.gear ? d.gear.geometry() : null,
       prop: d.prop ? { geo: d.prop.kit.geometry(), at: d.prop.at, disc: d.prop.disc } : null,
@@ -453,6 +934,8 @@
         return mesh;
       };
       add(g.body, this.paint);
+      if (g.metal) add(g.metal, M.metal);
+      if (g.matte) add(g.matte, M.matte);
       if (g.glass) add(g.glass, M.glass);
       this.gear = g.gear ? add(g.gear, this.paint) : null;
       const spinner = (part) => {

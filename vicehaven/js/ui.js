@@ -63,7 +63,7 @@
         { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
         { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
           help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
-        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. T (or D-pad right) switches it in the game.' },
+        { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. The Daytime key (T, or D-pad right) switches it in the game.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
           help: 'Catches an accidental Ctrl+W while crouch-walking. Your progress is saved either way.' },
@@ -270,7 +270,8 @@
       if (!this.dayBtn || !this.actions.isDaytime) return;
       const on = this.actions.isDaytime();
       this.dayBtn.querySelector('.btn-label').textContent = on ? '☀ Daytime: On' : '☾ Daytime: Off';
-      this.dayBtn.title = (on ? 'The sun stays up' : 'Day and night cycle') + ' (T in the game)';
+      const key = this.actions.daytimeKey && this.actions.daytimeKey();
+      this.dayBtn.title = (on ? 'The sun stays up' : 'Day and night cycle') + (key ? ' (' + key + ' in the game)' : '');
     }
 
     // --------------------------------------------------------- settings

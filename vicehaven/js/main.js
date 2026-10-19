@@ -25,6 +25,7 @@
   // stores.js, airfield.js, fort.js, ambient.js.
   const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
+  const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
   const TIPS = [
@@ -242,6 +243,7 @@
           },
           toggleDaytime: () => this.toggleDaytime(),
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
+          daytimeKey: () => this._dayKey(),
           jobLog: () => this.jobLog(),
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
@@ -954,13 +956,38 @@
 
     /** T, D-pad right or the pause menu: the sun stays up (Always daytime), or the day and night cycle comes back. */
     toggleDaytime() {
+      const env = this.environment;
       const on = !this.settings.get('gameplay.alwaysDay');
+      if (on) this._hourBeforeDay = env.hours;
       this.settings.set('gameplay.alwaysDay', on);
-      this._nightTipShown = true; // they know about it now
-      const key = this.input.labelFor('daytime');
+      // Off again: back to the hour it was (so the switch undoes itself, even with the clock stopped).
+      if (!on && typeof this._hourBeforeDay === 'number') {
+        env.setTime(this._hourBeforeDay);
+        if (this.world && this.world.setNightFactor) this.world.setNightFactor(env.shared.uWindowGlow.value);
+        this._hourBeforeDay = null;
+      }
+      this._markNightTip();
+      const key = this._dayKey();
+      const press = key ? 'Press ' + key : 'Use the pause menu';
       this.hud.notify(on
-        ? { title: 'Daytime on', text: 'The sun stays up. Press ' + key + ' again for the day and night cycle.', icon: '☀', duration: 4000 }
-        : { title: 'Day and night', text: 'Night falls again in the evening. Press ' + key + ' any time to bring the sun back.', icon: '☾', duration: 4000 });
+        ? { title: 'Daytime on', text: 'The sun stays up. ' + press + ' again for day and night.', icon: '☀', duration: 4000 }
+        : { title: 'Day and night', text: 'The clock carries on from where it was. ' + press + ' any time to bring the sun back.', icon: '☾', duration: 4000 });
+    },
+
+    /** The key (or button) that switches daytime, or null when it is unbound. */
+    _dayKey() {
+      const k = this.input.labelFor('daytime');
+      return k && k !== '—' ? k : null;
+    },
+
+    /** The "Too dark?" tip is shown once, ever (and never after the player has used the switch). */
+    _markNightTip() {
+      this._nightTipShown = true;
+      try {
+        localStorage.setItem(NIGHT_TIP_KEY, '1');
+      } catch (e) {
+        // Private mode: it may show once more next time.
+      }
     },
 
     /** "F  Get in" prompt next to an enterable car. */
@@ -1149,8 +1176,15 @@
       this._updateWaypoint(dt);
       // The first time it gets properly dark, say how to bring the sun back.
       if (!this._nightTipShown && this.environment.nightFactor > 0.6 && !this.settings.get('gameplay.alwaysDay') && this.state === 'playing' && !document.body.classList.contains('cutscene')) {
-        this._nightTipShown = true;
-        this.hud.notify({ title: 'Too dark?', text: 'Press ' + this.input.labelFor('daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
+        let seen = false;
+        try {
+          seen = localStorage.getItem(NIGHT_TIP_KEY) === '1';
+        } catch (e) {
+          seen = false;
+        }
+        this._markNightTip();
+        const key = this._dayKey();
+        if (!seen) this.hud.notify({ title: 'Too dark?', text: (key ? 'Press ' + key : 'Pause and choose Daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
       }
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {

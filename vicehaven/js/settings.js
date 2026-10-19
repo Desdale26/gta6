@@ -181,11 +181,19 @@
         }
         const saved = JSON.parse(raw);
         const merged = mergeKnown(defaults(), saved);
-        // Bindings may gain new actions in later phases; keep defaults for those.
+        // Bindings may gain new actions in later phases; keep defaults for those,
+        // unless the player already uses that key for something else.
         if (saved && saved.controls && saved.controls.bindings) {
+          const sb = saved.controls.bindings;
           for (const action of Object.keys(DEFAULT_BINDINGS)) {
-            const b = saved.controls.bindings[action];
+            const b = sb[action];
             if (Array.isArray(b)) merged.controls.bindings[action] = [b[0] || null, b[1] || null];
+          }
+          const used = new Set();
+          for (const action of Object.keys(sb)) if (Array.isArray(sb[action])) for (const c of sb[action]) if (c) used.add(c);
+          for (const action of Object.keys(DEFAULT_BINDINGS)) {
+            if (Array.isArray(sb[action])) continue;
+            merged.controls.bindings[action] = merged.controls.bindings[action].map((c) => (c && used.has(c) ? null : c));
           }
         }
         this.data = merged;
