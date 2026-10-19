@@ -62,7 +62,7 @@
       kind: 'plane', name: 'Albatross 300', make: 'Meridian Aero', cls: 'plane', length: 38, width: 4.2, height: 11.5, mass: 70000, seats: 180,
       palette: [0x1fa3a3, 0xff4f8b, 0x1d4fb8, 0xd29a1c],
       air: {
-        span: 34, stall: 50, top: 118, thrust: 4.4, pitchRate: 0.55, rollRate: 0.85, yawRate: 0.25, turnK: 1.7, align: 2.2,
+        span: 34, stall: 40, top: 118, thrust: 6.8, pitchRate: 0.55, rollRate: 0.85, yawRate: 0.25, turnK: 1.7, align: 2.2,
         taxiTurn: 0.45, rollRes: 0.25, brakeDecel: 3.5, crashVs: 5.5, crashSpeed: 22, rotateMax: 0.16,
         camDist: 52, camLift: 6, camUp: 4, cockpit: { z: 16.6, y: 4.55 }, doorZ: 13.5,
         voice: 'jet', voiceRef: 45,
@@ -651,7 +651,8 @@
       const ph = this.sys.physics;
       for (const p of this.air.probes) {
         _w.set(p[0], p[1], p[2]).applyQuaternion(this.q).add(this.pos);
-        if (!ph.overlaps(_w.x, _w.z, 0.22, _w.y - 0.22, _w.y + 0.22, VH.COLLIDE.SOLID)) continue;
+        // The road and the kerbs aren't walls: a tail that dips onto the runway as the nose comes up is fine.
+        if (!ph.overlaps(_w.x, _w.z, 0.22, _w.y - 0.22, _w.y + 0.22, VH.COLLIDE.SOLID, 0.35)) continue;
         const sp = this.vel.length();
         VH.events.emit('vehicle:impact', { v: this, other: null, speed: sp, slide: 0, x: _w.x, y: _w.y, z: _w.z, nx: 0, nz: 0 });
         if (sp > this.air.crashSpeed || (this.kind === 'heli' && sp > 11 && p[1] >= this.air.rotorY - 0.01)) {
@@ -821,6 +822,7 @@
      * swings back behind after a moment.
      */
     playerControls(inp, dt, game) {
+      flightHint(game, this.kind);
       const pad = inp.pad && inp.pad.connected ? inp.pad : null;
       const cam = game.cameraRig;
       const up = inp.down('moveForward') ? 1 : 0;
@@ -837,10 +839,13 @@
       }
       const c = this.ctl;
       if (!this.flying) {
-        this.brake = (down && this.throttle < 0.02) || (inp.down('jump') && this.vF < this.air.stall * 0.5) ? 1 : 0;
+        // S brakes once the throttle is closed; Space only ever lifts the nose.
+        this.brake = down && this.throttle < 0.02 ? 1 : 0;
         c.yaw = roll;
         c.roll = 0;
         c.pitch = Math.max(0, pitch);
+        // Flat out and fast enough: she lifts off on her own (Space just makes it sooner).
+        if (this.throttle > 0.7 && this.vF > this.air.stall * 0.85) c.pitch = Math.max(c.pitch, 0.6);
         // Taking off by the view: look up while fast enough and the nose comes up.
         if (pitch === 0 && cam.pitch > 0.12 && this.vF > this.air.stall * 0.8) c.pitch = 1;
         if (cam._lookIdle > 1.2) {
@@ -952,12 +957,37 @@
     }
 
     /** In the air. */
+    /**
+     * Flying help for Jay: climb only as steeply as the speed allows (so
+     * holding Space never stalls the plane), no vertical dives, pull up when
+     * plunging at the ground, and wings no further over than about 70°.
+     */
+    _assist(speedF, ground) {
+      const A = this.air;
+      const c = this.ctl;
+      const f = _f.set(0, 0, 1).applyQuaternion(this.q);
+      const nose = Math.asin(clamp(f.y, -1, 1));
+      const margin = clamp((speedF - A.stall) / (A.stall * 0.5), 0, 1);
+      const maxClimb = lerp(0.05, 0.42, margin);
+      if (nose > maxClimb && c.pitch > 0) c.pitch = 0;
+      if (nose > maxClimb + 0.08) c.pitch = Math.min(c.pitch, -0.5);
+      if (nose < -0.7 && c.pitch < 0) c.pitch = 0;
+      if (this.pos.y - ground < 30 && this.vel.y < -7) c.pitch = Math.max(c.pitch, 0.8);
+      const l = _l.set(1, 0, 0).applyQuaternion(this.q);
+      const u = _u.set(0, 1, 0).applyQuaternion(this.q);
+      const bank = Math.atan2(l.y, u.y); // + = right wing down
+      if (bank > 1.2 && c.roll > 0) c.roll = 0;
+      if (bank < -1.2 && c.roll < 0) c.roll = 0;
+      if (Math.abs(bank) > 1.4) c.roll = -Math.sign(bank) * 0.6;
+    }
+
     _fly(h, thrust, speedF, ground) {
       const A = this.air;
       const q = this.q;
       const auth = smoothstep(A.stall * 0.45, A.stall * 0.95, speedF);
       const ca = 0.3 + 0.7 * auth;
       const c = this.ctl;
+      if (this.driver === 'player') this._assist(speedF, ground);
       q.multiply(_q.setFromAxisAngle(AX, -c.pitch * A.pitchRate * ca * h));
       q.multiply(_q.setFromAxisAngle(AZ, c.roll * A.rollRate * ca * h));
       q.multiply(_q.setFromAxisAngle(AY, -c.yaw * A.yawRate * ca * h));
@@ -1043,6 +1073,18 @@
     }
   }
 
+  // The first time Jay takes the controls of each kind: how to fly it.
+  const HINTS = {
+    plane: 'Hold W to speed up; she lifts off by herself at full speed (Space lifts the nose sooner). A/D roll, Space/Ctrl nose up and down, or just look where you want to go. Line up with a runway first!',
+    heli: 'Space to climb, Ctrl to come down. W/S fly forward and back, A/D or the mouse turn.',
+  };
+  const hinted = {};
+  function flightHint(game, kind) {
+    if (hinted[kind] || !HINTS[kind] || !game.hud) return;
+    hinted[kind] = true;
+    game.hud.notify({ title: kind === 'heli' ? 'Flying a helicopter' : 'Flying a plane', text: HINTS[kind], icon: '✈', duration: 9000 });
+  }
+
   // ========================================================== helicopter
   class Heli extends Aircraft {
     constructor(system, typeId, opts) {
@@ -1061,6 +1103,7 @@
 
     /** Drone-style: it turns to face the view; A/D swing the view (and so the helicopter). */
     playerControls(inp, dt, game) {
+      flightHint(game, this.kind);
       const pad = inp.pad && inp.pad.connected ? inp.pad : null;
       const cam = game.cameraRig;
       const c = this.ctl;

@@ -232,11 +232,12 @@
     }
 
     /** True if a vertical capsule at (x, z) spanning y0..y1 touches any solid collider. */
-    overlaps(x, z, r, y0, y1, flags) {
+    overlaps(x, z, r, y0, y1, flags, minTop) {
       const mask = flags || FLAGS.SOLID;
       let hit = false;
       this.query(x - r, z - r, x + r, z + r, (col) => {
         if (!(col.flags & mask)) return;
+        if (minTop !== undefined && col.maxY < minTop) return; // ground slabs (roads, kerbs) don't count
         if (col.minY >= y1 || col.maxY <= y0) return;
         const dx = x - col.cx;
         const dz = z - col.cz;

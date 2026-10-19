@@ -355,7 +355,8 @@
       const nctx = world.ctxAt(-1435, 236);
       for (const [x, z] of [[-1442, 228], [-1428, 228], [-1442, 244], [-1428, 244]]) nctx.prop.box(x - 0.08, 0, z - 0.08, x + 0.08, 3.6, z + 0.08, VH.col(0x3a3d36));
       nctx.propMatte.box(-1444, 3.5, 226, -1426, 3.62, 246, VH.col(0x4b5320), { bottom: true });
-      for (const [x, z] of [[-1190, 0], [-1300, -140], [-1300, 140], [-1400, -200], [-1400, 200], [-1180, 250], [-1180, -200]]) floodMast(world, x, z, 34);
+      // (Clear of the airstrip: masts beside it, not on its centre line.)
+      for (const [x, z] of [[-1190, 0], [-1300, -140], [-1300, 140], [-1440, -200], [-1440, 200], [-1180, 250], [-1180, -200]]) floodMast(world, x, z, 34);
       return data;
     }
 
