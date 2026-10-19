@@ -907,7 +907,7 @@
 
     // ---------------------------------------------------------- contract
     blips(out, missionRunning) {
-      if (!this.ok || missionRunning) return;
+      if (!this.ok) return; // shown during jobs too: they're places, not distractions
       for (const s of this.list) {
         if (!this.isOpen(s)) continue;
         out.push({ x: s.door.x, z: s.door.z, type: 'store', label: BRANDS[s.brand].name, noRim: true });

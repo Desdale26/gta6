@@ -86,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -106,8 +106,12 @@
     ['store', 'Corner shop'],
     ['plane', 'Aircraft'],
     ['tank', 'Military vehicle'],
+    ['waypoint', 'Your waypoint'],
+    ['airport', 'Airport'],
+    ['fort', 'Army base'],
+    ['skyline', 'Skyscrapers'],
   ];
-  const ALWAYS_ON = { player: true, route: true, landmark: true };
+  const ALWAYS_ON = { player: true, route: true, landmark: true, airport: true, fort: true, skyline: true };
 
   const NO_DASH = [];
   const DASH_SEARCH = [6, 5];
@@ -184,7 +188,8 @@
   /**
    * paint: the area pre-rendered (a margin of open land and plenty of bay);
    * land: the playable area (the full map's zoom-out limit and pan bounds);
-   * fit: what the full map frames when it opens (the city and the pier).
+   * fit: the city view (the grid, Northgate Heights and the pier);
+   * world: the whole-map view, out to the airport and the army base.
    */
   function extentsOf(layout) {
     const cfg = layout.config;
@@ -194,11 +199,18 @@
     const lines = cfg.lines;
     const lo = lines[0];
     const hi = lines[lines.length - 1];
+    const zones = cfg.zones || {};
     return {
       paint: { minX: b.minX - 70, maxX: east + 210, minZ: b.minZ - 70, maxZ: b.maxZ + 70 },
       land: { minX: b.minX - 24, maxX: east + 40, minZ: b.minZ - 24, maxZ: b.maxZ + 24 },
       // The city, Northgate Heights and the edge of the countryside.
       fit: { minX: Math.max(b.minX, lo - 70), maxX: east + 36, minZ: Math.max(b.minZ, lo - 300), maxZ: Math.min(b.maxZ, hi + 60) },
+      world: {
+        minX: Math.min(Math.max(b.minX, lo - 70), zones.fort ? zones.fort.minX - 40 : Infinity),
+        maxX: east + 36,
+        minZ: Math.min(Math.max(b.minZ, lo - 300), zones.airport ? zones.airport.minZ - 40 : Infinity),
+        maxZ: Math.min(b.maxZ, hi + 60),
+      },
     };
   }
 
@@ -253,6 +265,30 @@
     g.lineWidth = 1.3;
     g.strokeStyle = '#ffffff';
     g.stroke();
+  }
+
+  /** The plane silhouette, nose up (the Aircraft blip and the airport badge). */
+  function planeShape(g) {
+    g.beginPath();
+    g.moveTo(0, -7.6);
+    g.lineTo(1.4, -4.4);
+    g.lineTo(1.4, -1.6);
+    g.lineTo(7.4, 1.6);
+    g.lineTo(7.4, 3);
+    g.lineTo(1.4, 1.6);
+    g.lineTo(1, 5);
+    g.lineTo(3.4, 6.6);
+    g.lineTo(3.4, 7.6);
+    g.lineTo(0, 6.8);
+    g.lineTo(-3.4, 7.6);
+    g.lineTo(-3.4, 6.6);
+    g.lineTo(-1, 5);
+    g.lineTo(-1.4, 1.6);
+    g.lineTo(-7.4, 3);
+    g.lineTo(-7.4, 1.6);
+    g.lineTo(-1.4, -1.6);
+    g.lineTo(-1.4, -4.4);
+    g.closePath();
   }
 
   const GLYPHS = {
@@ -341,26 +377,7 @@
     },
     // Aircraft, drawn nose-up and turned to face their heading.
     plane(g) {
-      g.beginPath();
-      g.moveTo(0, -7.6);
-      g.lineTo(1.4, -4.4);
-      g.lineTo(1.4, -1.6);
-      g.lineTo(7.4, 1.6);
-      g.lineTo(7.4, 3);
-      g.lineTo(1.4, 1.6);
-      g.lineTo(1, 5);
-      g.lineTo(3.4, 6.6);
-      g.lineTo(3.4, 7.6);
-      g.lineTo(0, 6.8);
-      g.lineTo(-3.4, 7.6);
-      g.lineTo(-3.4, 6.6);
-      g.lineTo(-1, 5);
-      g.lineTo(-1.4, 1.6);
-      g.lineTo(-7.4, 3);
-      g.lineTo(-7.4, 1.6);
-      g.lineTo(-1.4, -1.6);
-      g.lineTo(-1.4, -4.4);
-      g.closePath();
+      planeShape(g);
       inkThenFill(g, '#e9f6ff', 2.6);
     },
     heli(g) {
@@ -440,6 +457,66 @@
       g.lineWidth = 0.8;
       g.strokeStyle = 'rgba(255, 255, 255, 0.85)';
       g.stroke();
+    },
+    // A GPS waypoint you set on the map: a magenta pin.
+    waypoint(g) {
+      glow(g, 12, '255,79,216', 0.4);
+      g.beginPath();
+      g.moveTo(0, 8.4);
+      g.bezierCurveTo(-1.6, 4.6, -6.2, 1.2, -6.2, -3);
+      g.arc(0, -3, 6.2, Math.PI, 0);
+      g.bezierCurveTo(6.2, 1.2, 1.6, 4.6, 0, 8.4);
+      g.closePath();
+      inkThenFill(g, '#ff4fd8', 3);
+      g.beginPath();
+      g.arc(0, -3, 2.3, 0, TAU);
+      g.fillStyle = '#ffffff';
+      g.fill();
+    },
+    // Badges for the big places outside the grid.
+    airport(g) {
+      glow(g, 14, '120,200,255', 0.38);
+      roundRectPath(g, -8.6, -8.6, 17.2, 17.2, 4.6);
+      inkThenFill(g, '#0d2236', 3);
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#7fd0ff';
+      g.stroke();
+      g.save();
+      g.scale(0.92, 0.92);
+      planeShape(g);
+      g.fillStyle = '#e9f6ff';
+      g.fill();
+      g.restore();
+    },
+    fort(g) {
+      glow(g, 14, '181,196,106', 0.38);
+      roundRectPath(g, -8.6, -8.6, 17.2, 17.2, 4.6);
+      inkThenFill(g, '#1f2610', 3);
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#c9d77a';
+      g.stroke();
+      g.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = i & 1 ? 2.6 : 6.2;
+        g.lineTo(Math.cos(a) * r, Math.sin(a) * r + 0.4);
+      }
+      g.closePath();
+      g.fillStyle = '#e8f0b8';
+      g.fill();
+    },
+    skyline(g) {
+      glow(g, 14, '255,207,138', 0.38);
+      roundRectPath(g, -8.6, -8.6, 17.2, 17.2, 4.6);
+      inkThenFill(g, '#2a1d0c', 3);
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#ffcf8a';
+      g.stroke();
+      g.fillStyle = '#ffe2b3';
+      g.fillRect(-5.6, -1.6, 3, 7);
+      g.fillRect(-1.6, -6.4, 3.2, 11.8);
+      g.fillRect(2.6, -3.6, 3, 9);
+      g.fillRect(-0.3, -8, 0.6, 1.8);
     },
     landmark(g) {
       glow(g, 10, '255,140,110', 0.3);
@@ -1771,7 +1848,7 @@
 
       const head = el('div', 'vh-map-head');
       this._whereEl = el('div', 'vh-map-where');
-      head.append(el('div', 'vh-map-kicker', 'Vicehaven'), el('div', 'vh-map-title', 'City Map'), this._whereEl);
+      head.append(el('div', 'vh-map-kicker', 'Vicehaven'), el('div', 'vh-map-title', 'Map'), this._whereEl);
 
       const compass = el('div', 'vh-map-compass');
       compass.append(el('span', 'vh-map-compass-needle'), el('span', 'vh-map-compass-n', 'N'));
@@ -1808,6 +1885,26 @@
         btn('◎', 'Centre on me', () => this.focusPlayer())
       );
 
+      // Quick views and the big places: a click shows the place and sets the GPS there.
+      const places = el('div', 'vh-map-places');
+      const chip = (text, title, fn, cls) => {
+        const b = btn(text, title, fn);
+        b.className = 'vh-map-chip' + (cls ? ' ' + cls : '');
+        return b;
+      };
+      this._modeChips = {
+        world: chip('Whole map', 'Show the whole map', () => this.setMode('world'), 'is-view'),
+        city: chip('City', 'Show the city', () => this.setMode('city'), 'is-view'),
+      };
+      places.append(this._modeChips.world, this._modeChips.city);
+      for (const lm of VH.Data.landmarks || []) {
+        if (!lm.major) continue;
+        places.append(chip(lm.short || lm.name, 'Show ' + lm.name + ' and set the GPS there', () => this.goTo(lm), 'is-place is-' + lm.kind));
+      }
+      places.append(chip('Nearest shop', 'Set the GPS to the nearest corner shop', () => this.goToNearestShop(), 'is-place is-store'));
+      this._clearChip = chip('Clear GPS', 'Remove your waypoint', () => this._emitWaypoint(null), 'is-clear');
+      places.append(this._clearChip);
+
       const scale = el('div', 'vh-map-scale');
       this._scaleBar = el('div', 'vh-map-scale-bar');
       this._scaleLabel = el('div', 'vh-map-scale-label');
@@ -1820,9 +1917,10 @@
         return s;
       };
       this._closeHint = hint(this.opts.closeKey, 'Close');
-      foot.append(this._closeHint, hint('Wheel', 'Zoom'), hint('Drag', 'Pan'), hint('Double-click', 'Centre on me'));
+      foot.append(this._closeHint, hint('Wheel', 'Zoom'), hint('Drag', 'Pan'), hint('Click', 'Set GPS'), hint('Right-click', 'Clear GPS'));
 
-      o.append(canvas, head, compass, legend, zoom, scale, foot);
+      o.append(canvas, head, places, compass, legend, zoom, scale, foot);
+      this._placesEl = places;
       this.root.append(o);
       this.fullEl = o;
       this._legendEl = legend;
@@ -1844,7 +1942,7 @@
       o.addEventListener('pointerdown', (ev) => {
         if (ev.button !== 0 || (ev.target.closest && ev.target.closest('button'))) return;
         ev.preventDefault();
-        this._drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
+        this._drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0, t: performance.now() };
         try {
           o.setPointerCapture(ev.pointerId);
         } catch (err) {
@@ -1859,23 +1957,27 @@
         const dy = ev.clientY - dr.y;
         dr.x = ev.clientX;
         dr.y = ev.clientY;
+        dr.moved += Math.abs(dx) + Math.abs(dy);
         this.panFull(dx, dy);
       });
-      const end = (ev) => {
-        if (this._drag && ev.pointerId === this._drag.id) {
+      const end = (ev, click) => {
+        const dr = this._drag;
+        if (dr && ev.pointerId === dr.id) {
           this._drag = null;
           o.classList.remove('is-dragging');
+          // A press that hardly moved is a click: put the GPS waypoint there.
+          if (click && dr.moved < 6 && performance.now() - dr.t < 600) this._clickAt(ev.clientX, ev.clientY);
         }
       };
-      o.addEventListener('pointerup', end);
-      o.addEventListener('pointercancel', end);
+      o.addEventListener('pointerup', (ev) => end(ev, true));
+      o.addEventListener('pointercancel', (ev) => end(ev, false));
       // Keep keyboard focus where the game left it (the M key must still reach the game).
       o.addEventListener('mousedown', (ev) => ev.preventDefault());
-      o.addEventListener('dblclick', (ev) => {
+      o.addEventListener('dblclick', (ev) => ev.preventDefault());
+      o.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
-        this.focusPlayer();
+        if (this._fullOpen) this._emitWaypoint(null);
       });
-      o.addEventListener('contextmenu', (ev) => ev.preventDefault());
     }
 
     /** Relabel the close hint if the player rebinds the map key. */
@@ -1894,6 +1996,8 @@
       document.body.classList.add('map-open');
       this._legendW = this._legendEl.offsetWidth || 200;
       this._legendH = this._legendEl.offsetHeight || 380;
+      const pr = this._placesEl.getBoundingClientRect();
+      this._placesBox = pr.width ? [pr.left, pr.top, pr.right, pr.bottom] : null;
       this._resizeFull();
       this._fitView();
       this._drawLegendIcons();
@@ -1961,6 +2065,86 @@
       this._requestFullDraw();
     }
 
+    /** Centre the full map on a world point at a scale (px per metre). */
+    jumpTo(x, z, s) {
+      const v = this._view;
+      if (!v) return;
+      v.s = clamp(s || v.s, this._minS, this._maxS);
+      v.cx = x;
+      v.cz = z;
+      this._clampView();
+      this._staticDirty = true;
+      this._requestFullDraw();
+    }
+
+    /** 'world' (everything, the default) or 'city'; remembered while the game runs. */
+    setMode(mode) {
+      this._mode = mode;
+      if (this._fullOpen) {
+        this._fitView();
+        this._requestFullDraw();
+      }
+    }
+
+    /** Show one of the big places and put the GPS waypoint at its road entrance. */
+    goTo(lm) {
+      this.jumpTo(lm.x, lm.z, this._fitS * 1.7);
+      this._emitWaypoint({ x: typeof lm.gx === 'number' ? lm.gx : lm.x, z: typeof lm.gz === 'number' ? lm.gz : lm.z, name: lm.name });
+    }
+
+    goToNearestShop() {
+      const st = this._state || {};
+      let best = null;
+      let bestD = Infinity;
+      for (const s of this.layout.stores || []) {
+        const d = Math.hypot(s.door.x - (st.x || 0), s.door.z - (st.z || 0));
+        if (d < bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      if (!best) return;
+      this.jumpTo(best.door.x, best.door.z, Math.max(this._view.s, this._fitS * 1.8));
+      this._emitWaypoint({ x: best.door.x, z: best.door.z, name: best.name });
+    }
+
+    _emitWaypoint(wp) {
+      VH.events.emit('map:waypoint', wp);
+    }
+
+    /** A click on the map: on the waypoint clears it; on a place or blip names it; anywhere else marks the spot. */
+    _clickAt(sx, sy) {
+      const v = this._view;
+      if (!v || !this._fullOpen) return;
+      const st = this._state || {};
+      const toS = (x, z) => [v.ox + (x - v.cx) * v.s, v.oy + (z - v.cz) * v.s];
+      const near = (x, z, r) => {
+        const [X, Y] = toS(x, z);
+        return Math.hypot(X - sx, Y - sy) < r;
+      };
+      const wp = st.waypoint;
+      if (wp && near(wp.x, wp.z, 16)) return this._emitWaypoint(null);
+      for (const lm of VH.Data.landmarks || []) {
+        if (lm.major && near(lm.x, lm.z, 24)) return this.goTo(lm);
+      }
+      let best = null;
+      let bestD = 16;
+      for (const bl of st.blips || []) {
+        if (!bl.label || bl.type === 'waypoint') continue;
+        const [X, Y] = toS(bl.x, bl.z);
+        const d = Math.hypot(X - sx, Y - sy);
+        if (d < bestD) {
+          bestD = d;
+          best = bl;
+        }
+      }
+      if (best) return this._emitWaypoint({ x: best.x, z: best.z, name: best.label });
+      const L = this._ext.land;
+      const x = clamp(v.cx + (sx - v.ox) / v.s, L.minX, L.maxX);
+      const z = clamp(v.cz + (sy - v.oy) / v.s, L.minZ, L.maxZ);
+      this._emitWaypoint({ x, z, name: 'Waypoint' });
+    }
+
     _zoomAt(sx, sy, factor) {
       const v = this._view;
       if (!v) return;
@@ -2014,18 +2198,28 @@
       const W = this._fw;
       const H = this._fh;
       const F = this._ext.fit;
+      const Wd = this._ext.world;
       const L = this._ext.land;
       const narrow = W < 900;
-      const pad = { l: 32, r: narrow ? 32 : this._legendW + 64, t: 100, b: 76 };
+      const top = this._placesBox ? Math.max(100, this._placesBox[3] + 14) : 100; // below the places bar
+      const pad = { l: 32, r: narrow ? 32 : this._legendW + 64, t: top, b: 76 };
       const aw = Math.max(160, W - pad.l - pad.r);
       const ah = Math.max(160, H - pad.t - pad.b);
+      // The city scale stays the yardstick (label sizes, zoom limits); the whole map is the default view.
       const s = Math.min(aw / (F.maxX - F.minX), ah / (F.maxZ - F.minZ));
+      const sW = Math.min(aw / (Wd.maxX - Wd.minX), ah / (Wd.maxZ - Wd.minZ));
       this._pad = pad;
       this._fitS = s;
       // Zoom out far enough to see the whole playable area, in to street level.
-      this._minS = Math.min(s * 0.85, Math.min(aw / (L.maxX - L.minX), ah / (L.maxZ - L.minZ)) * 0.95);
+      this._minS = Math.min(sW * 0.9, s * 0.85, Math.min(aw / (L.maxX - L.minX), ah / (L.maxZ - L.minZ)) * 0.95);
       this._maxS = s * 8;
-      this._view = { cx: (F.minX + F.maxX) / 2, cz: (F.minZ + F.maxZ) / 2, s, ox: pad.l + aw / 2, oy: pad.t + ah / 2 };
+      const mode = this._mode || 'world';
+      const B = mode === 'city' ? F : Wd;
+      this._view = { cx: (B.minX + B.maxX) / 2, cz: (B.minZ + B.maxZ) / 2, s: mode === 'city' ? s : sW, ox: pad.l + aw / 2, oy: pad.t + ah / 2 };
+      if (this._modeChips) {
+        this._modeChips.world.classList.toggle('is-active', mode !== 'city');
+        this._modeChips.city.classList.toggle('is-active', mode === 'city');
+      }
       this._staticDirty = true;
     }
 
@@ -2188,10 +2382,15 @@
       }
       let mask = 0;
       for (const bl of blips) {
-        const i = LEGEND.findIndex((l) => l[0] === bl.type);
+        const i = LEGEND.findIndex((l) => l[0] === (bl.type === 'heli' ? 'plane' : bl.type));
         if (i >= 0) mask |= 1 << i;
       }
       if (st.searchArea) mask |= 1 << 5;
+      const hasWp = !!st.waypoint;
+      if (hasWp !== this._clearOn && this._clearChip) {
+        this._clearOn = hasWp;
+        this._clearChip.classList.toggle('is-hidden', !hasWp);
+      }
       if (mask !== this._legendMask) {
         this._legendMask = mask;
         this._legendItems.forEach((it, i) => it.li.classList.toggle('is-dim', !ALWAYS_ON[it.key] && !(mask & (1 << i))));
@@ -2280,7 +2479,11 @@
       for (const lm of VH.Data.landmarks || []) {
         if (lm.block || typeof lm.x !== 'number') continue;
         if (lm.kind === 'pier' && wfPier) marks.push({ name: lm.name, x: (wfPier.x0 + wfPier.x1) / 2, z: (wfPier.z0 + wfPier.z1) / 2 });
-        else marks.push({ name: lm.name, x: lm.x, z: lm.z });
+        else if (lm.major) {
+          const did = lm.kind === 'skyline' ? 'northgate' : lm.kind;
+          const dist = districts.find((d) => d.id === did);
+          marks.push({ name: lm.name, x: lm.x, z: lm.z, kind: lm.kind, major: true, tagline: dist ? dist.tagline : '' });
+        } else marks.push({ name: lm.name, x: lm.x, z: lm.z });
       }
       this._marks = marks;
 
@@ -2314,7 +2517,8 @@
       if (wfPier) avoid.push({ minX: wfPier.x0, maxX: Infinity, minZ: wfPier.z0, maxZ: wfPier.z1, pad: 70 });
       const bb = cfgL.bounds;
       const area = { minX: bb.minX, maxX: this._ext.land.maxX, minZ: bb.minZ, maxZ: bb.maxZ };
-      this._openSpots = openDistrictSpots(lay, area, avoid);
+      const badged = new Set(['northgate', 'airport', 'fort']); // these have a badge and a big name instead
+      this._openSpots = openDistrictSpots(lay, area, avoid).filter((sp) => !badged.has(sp.district && sp.district.id));
 
       // Road label candidates: each road's stretches between junctions, in order.
       this._roadSegs = lay.roads.map((r) => lay.segments.filter((s) => s.road === r).sort((p, q) => p.from - q.from));
@@ -2437,15 +2641,54 @@
       // Keep the panels clear of labels: legend, header, compass, zoom buttons, scale bar and hints.
       if (W >= 900) this._claim(W - this._legendW - 44, H / 2 - this._legendH / 2 - 12, W, H / 2 + this._legendH / 2 + 12);
       this._claim(0, 0, 330, 100);
+      if (this._placesBox) this._claim(this._placesBox[0] - 6, this._placesBox[1] - 6, this._placesBox[2] + 6, this._placesBox[3] + 6);
       this._claim(W - 100, 0, W, 90);
       this._claim(W - 90, H - 180, W, H);
       this._claim(0, H - 62, W, H);
+
+      // 0. The big places: a badge, a bold name and the tagline, at every zoom.
+      for (const m of this._marks) {
+        if (!m.major) continue;
+        const X = sx(m.x);
+        const Y = sy(m.z);
+        if (!onScreen(X, Y, 160)) continue;
+        const sp = spr[m.kind] || spr.landmark;
+        const S = sp.size * 1.55;
+        g.drawImage(sp.canvas, X - S / 2, Y - S / 2, S, S);
+        this._claim(X - 14, Y - 14, X + 14, Y + 14);
+        const txt = m.name.toUpperCase();
+        const size = clamp(12 + s * 5, 13, 19);
+        g.font = '800 ' + size.toFixed(1) + 'px ' + FONT;
+        setSpacing(g, 2.2);
+        const w = g.measureText(txt).width;
+        g.font = 'italic 500 11px ' + FONT;
+        setSpacing(g, 0.4);
+        const tw = m.tagline ? g.measureText(m.tagline).width : 0;
+        const bw = Math.max(w, tw) / 2 + 4;
+        for (const dir of [1, -1]) {
+          const ty = Y + dir * (size + 10);
+          const y0 = dir > 0 ? ty - size / 2 - 2 : ty - size / 2 - 16;
+          const y1 = dir > 0 ? ty + size / 2 + 16 : ty + size / 2 + 2;
+          if (this._collides(X - bw, y0, X + bw, y1)) continue;
+          g.font = '800 ' + size.toFixed(1) + 'px ' + FONT;
+          setSpacing(g, 2.2);
+          this._haloText(g, txt, X + 1, ty, 'rgba(6, 9, 20, 0.92)', '#ffffff', 5);
+          if (m.tagline) {
+            g.font = 'italic 500 11px ' + FONT;
+            setSpacing(g, 0.4);
+            this._haloText(g, m.tagline, X, dir > 0 ? ty + size / 2 + 8 : ty - size / 2 - 8, 'rgba(6, 9, 20, 0.85)', '#ffcf8a', 3.5);
+          }
+          this._claim(X - bw, y0, X + bw, y1);
+          break;
+        }
+      }
 
       // 1. Landmarks.
       g.font = '700 ' + (zoomed > 2 ? 11.5 : 10.5) + 'px ' + FONT;
       setSpacing(g, 1.6);
       const marks = [];
       for (const m of this._marks) {
+        if (m.major) continue;
         const X = sx(m.x);
         const Y = sy(m.z);
         if (!onScreen(X, Y, 80)) continue;

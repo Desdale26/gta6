@@ -238,8 +238,8 @@ body.map-open .vh-radar {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  padding: 0.14rem 0;
-  font-size: 0.86rem;
+  padding: 0.06rem 0;
+  font-size: 0.82rem;
   letter-spacing: 0.04em;
   color: rgba(241, 244, 255, 0.92);
   transition: opacity 0.3s;
@@ -252,7 +252,100 @@ body.map-open .vh-radar {
 .vh-map-legend-icon {
   flex: none;
   width: 30px;
-  height: 22px;
+  height: 20px;
+}
+
+/* ------------------------------------------------ quick views and places */
+.vh-map-places {
+  position: absolute;
+  left: 2rem;
+  top: 6.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-width: calc(100% - 22rem);
+  transform: translateY(-6px);
+  opacity: 0;
+  transition: transform 0.4s ease 0.07s, opacity 0.4s ease 0.07s;
+}
+
+.vh-map.is-open .vh-map-places {
+  transform: none;
+  opacity: 1;
+}
+
+.vh-map-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.05rem;
+  padding: 0 0.85rem;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 11, 24, 0.8);
+  color: var(--vh-text);
+  font-family: var(--vh-font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.vh-map-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 122, 89, 0.7);
+}
+
+.vh-map-chip:active {
+  transform: translateY(1px);
+}
+
+.vh-map-chip:focus {
+  outline: none;
+}
+
+.vh-map-chip.is-active {
+  background: var(--vh-sunset);
+  border-color: transparent;
+  color: #0b0d18;
+}
+
+.vh-map-chip.is-place::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 3px;
+  background: #ff9a76;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.vh-map-chip.is-airport::before {
+  background: #7fd0ff;
+}
+
+.vh-map-chip.is-fort::before {
+  background: #c9d77a;
+}
+
+.vh-map-chip.is-skyline::before {
+  background: #ffcf8a;
+}
+
+.vh-map-chip.is-store::before {
+  background: #ffd447;
+}
+
+.vh-map-chip.is-clear {
+  border-color: rgba(255, 79, 216, 0.75);
+  color: #ffc2f2;
+}
+
+.vh-map-chip.is-hidden {
+  display: none;
 }
 
 /* ------------------------------------------------------ zoom controls */
@@ -348,6 +441,16 @@ body.map-open .vh-radar {
 @media (max-width: 900px) {
   .vh-map-legend {
     display: none;
+  }
+
+  .vh-map-places {
+    max-width: calc(100% - 4rem);
+  }
+
+  .vh-map-chip {
+    height: 1.8rem;
+    padding: 0 0.6rem;
+    font-size: 0.72rem;
   }
 
   .vh-map-foot .vh-map-hint:nth-child(n + 3) {

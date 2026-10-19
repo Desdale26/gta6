@@ -24,6 +24,7 @@
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
   const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
+  const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
   const TIPS = [
@@ -235,7 +236,7 @@
           },
           openMap: () => {
             this.resume();
-            setTimeout(() => this.minimap && this.minimap.openFull(), 50);
+            setTimeout(() => this.openMap(), 50);
           },
           jobLog: () => this.jobLog(),
           toggleFullscreen: () => this.toggleFullscreen(),
@@ -335,8 +336,14 @@
         else audio.click();
       });
       VH.events.on('ui:click', () => audio.click());
+      VH.events.on('map:waypoint', (wp) => this.setWaypoint(wp));
       VH.events.on('input:lockchange', (e) => {
-        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice)) this.pause(); // a choice frees the mouse on purpose
+        // The map keeps the mouse free, even if a lock asked for earlier arrives after it opened.
+        if (e.locked && this.minimap && this.minimap.isFullOpen) {
+          this.input.exitLock();
+          return;
+        }
+        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice) && !(this.minimap && this.minimap.isFullOpen)) this.pause(); // a choice and the map free the mouse on purpose
       });
       VH.events.on('input:lockerror', () => {
         if (this.state === 'playing') this.hud.showToast('Click the game to capture the mouse');
@@ -433,6 +440,9 @@
     toTitle() {
       if (this.club) this.club.stop();
       for (const s of this.systems || []) if (s.stop) s.stop();
+      if (this.minimap) this.minimap.closeFull();
+      this.waypoint = null;
+      this._wpRoute = null;
       this.state = 'title';
       this.environment.setShadowExtent(260);
       this.input.enabled = false;
@@ -505,6 +515,8 @@
     continueGame() {
       const data = VH.MissionEngine.loadSave();
       if (!data) return this.newGame();
+      this.waypoint = null;
+      this._wpRoute = null;
       this.input.requestLock();
       this.audio.unlock();
       this.audio.setPaused(false);
@@ -531,6 +543,8 @@
     },
 
     newGame() {
+      this.waypoint = null;
+      this._wpRoute = null;
       this.input.requestLock();
       this.audio.unlock();
       this.audio.setPaused(false);
@@ -742,7 +756,10 @@
           if (this._introTime > 2.2) this._startPlaying();
         }
         if (this.state === 'playing') this.challenges.update(FIXED_DT);
-        if (this.state === 'playing' || this.state === 'dialog') this._tickPlayTime(FIXED_DT);
+        if (this.state === 'playing' || this.state === 'dialog') {
+          this._tickPlayTime(FIXED_DT);
+          this._tickExtras(FIXED_DT);
+        }
         this._acc = 0;
         this._simulate(FIXED_DT, this.state === 'playing');
         this.vehicles.update(FIXED_DT, 1, this.player.pos);
@@ -779,6 +796,12 @@
           road: this.world.roadNameAt(this.player.pos.x, this.player.pos.z), place: this.world.placeAt(this.player.pos.x, this.player.pos.z),
           fps: this.fps, locked: true, playing: true, lookedAround: false,
         });
+        // The radar too, so stills show it (and the full map, if it's open).
+        if (this.minimap) {
+          const state = this._mapState();
+          this.minimap.update(1 / 60, state);
+          if (this.minimap.isFullOpen) this.minimap.updateFull(state);
+        }
       }
       this.world.update(1, this.renderer.camera.position);
       this.environment.update(0, this.state === 'title' ? new THREE.Vector3(40, 0, -150) : this.player.renderPos);
@@ -822,7 +845,8 @@
       // because browsers only grant pointer lock from a real user gesture.)
       if (input.consume('pause')) {
         const recent = performance.now() - this._statePausedAt < 400;
-        if ((this.state === 'playing' || this.state === 'dialog') && !recent) this.pause();
+        if (this.minimap && this.minimap.isFullOpen && (this.state === 'playing' || this.state === 'dialog')) this.closeMap();
+        else if ((this.state === 'playing' || this.state === 'dialog') && !recent) this.pause();
       }
 
       const env = this.environment;
@@ -850,6 +874,7 @@
         case 'playing':
         case 'dialog': {
           this._tickPlayTime(dt);
+          this._tickExtras(dt);
           if (this.state === 'playing') {
             if (!(this.combat && this.combat.wheelOpen)) this.cameraRig.handleInput(dt, this.player.aiming);
             this._vehicleInput();
@@ -896,10 +921,7 @@
           this.hud.showToast(this.radio.station.name);
         }
       }
-      if (inp.consume('map') && this.minimap) {
-        if (this.minimap.isFullOpen) this.minimap.closeFull();
-        else this.minimap.openFull();
-      }
+      if (inp.consume('map') && this.minimap) this.toggleMap();
     },
 
     /** "F  Get in" prompt next to an enterable car. */
@@ -1012,7 +1034,130 @@
       if (this.activities && this.activities.blips && !(this.missions && this.missions.run)) this.activities.blips(out);
       if (this.club && !(this.missions && this.missions.run)) this.club.blips(out);
       for (const s of this.systems || []) if (s.blips) s.blips(out, !!(this.missions && this.missions.run));
+      if (this.waypoint) out.push({ x: this.waypoint.x, z: this.waypoint.z, type: 'waypoint', label: this.waypoint.name });
       return out;
+    },
+
+    // ------------------------------------------------------- map and GPS
+    /** Everything the radar and the full map need this frame. */
+    _mapState() {
+      const player = this.player;
+      const pv = player.vehicle;
+      return {
+        x: player.pos.x, z: player.pos.z, heading: pv ? pv.yaw : player.heading, camYaw: this.cameraRig.yaw,
+        speed: pv ? pv.speed : player.speed, blips: this.blips ? this.blips() : [], searchArea: this.police ? this.police.searchArea : null,
+        route: this.route || this._wpRoute || null, waypoint: this.waypoint || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
+      };
+    },
+
+    /** The full map frees the mouse so it can be dragged, zoomed and clicked. */
+    openMap() {
+      if (!this.minimap || this.minimap.isFullOpen) return;
+      this.minimap.openFull();
+      this.input.exitLock();
+      this._sawMap = true;
+      try {
+        localStorage.setItem(SEEN_KEY, '1');
+      } catch (e) {
+        // Private mode: the tip just shows again next time.
+      }
+    },
+
+    closeMap() {
+      if (!this.minimap || !this.minimap.isFullOpen) return;
+      this.minimap.closeFull();
+      if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked) this.input.requestLock();
+    },
+
+    toggleMap() {
+      if (this.minimap && this.minimap.isFullOpen) this.closeMap();
+      else this.openMap();
+    },
+
+    /** Per-frame odds and ends while playing: the GPS, and the update tip. */
+    _tickExtras(dt) {
+      this._updateWaypoint(dt);
+      if (this._sawMap || this._tipShown) return;
+      if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
+        this._tipT = 0;
+        return;
+      }
+      this._tipT = (this._tipT || 0) + dt;
+      if (this._tipT < 4) return;
+      this._tipShown = true;
+      let seen = false;
+      try {
+        seen = localStorage.getItem(SEEN_KEY) === '1';
+      } catch (e) {
+        seen = false;
+      }
+      if (seen) return;
+      this.hud.notify({
+        title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
+        text: 'Press ' + this.input.labelFor('map') + ' for the map: the airport, the army base, the Northgate skyscrapers and 14 corner shops are on it. Click a place to set your GPS.',
+        icon: '★',
+        duration: 14000,
+      });
+    },
+
+    /** A waypoint from the map ({ x, z, name }), or null to clear it. */
+    setWaypoint(wp) {
+      if (!wp) {
+        if (this.waypoint) this.hud.showToast('GPS cleared');
+        this.waypoint = null;
+        this._wpRoute = null;
+        return;
+      }
+      this.waypoint = { x: wp.x, z: wp.z, name: wp.name || 'Waypoint' };
+      this._wpRoute = null;
+      this._wpT = 0;
+      this.hud.showToast('GPS set: ' + this.waypoint.name);
+      if (this.audio && this.audio.click) this.audio.click();
+    },
+
+    /** Keep the waypoint's route fresh; clear it on arrival. */
+    _updateWaypoint(dt) {
+      const w = this.waypoint;
+      if (!w) return;
+      const p = this.player.pos;
+      if (Math.hypot(p.x - w.x, p.z - w.z) < 20) {
+        this.hud.notify({ title: 'You have arrived', text: w.name, icon: '📍', duration: 3500 });
+        this.waypoint = null;
+        this._wpRoute = null;
+        return;
+      }
+      this._wpT = (this._wpT || 0) - dt;
+      if (this._wpT > 0) return;
+      this._wpT = 1;
+      this._wpRoute = this._gpsRoute(p.x, p.z, w.x, w.z);
+    },
+
+    /**
+     * Road route to a point. Inside the airport's fence or the army base's
+     * walls the roads don't reach, so the route goes in by the gate.
+     */
+    _gpsRoute(fx, fz, tx, tz) {
+      if (!VH.Minimap || !VH.Minimap.route) return null;
+      const lay = this.layout;
+      const zn = lay.config.zones || {};
+      const inside = (r, x, z) => r && x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ;
+      let gate = null;
+      let zone = null;
+      if (lay.airport && inside(zn.airport, tx, tz) && tz < lay.airport.fenceZ) {
+        gate = { x: 45, z: lay.airport.fenceZ + 8 }; // the service gate off Airport Road
+        zone = zn.airport;
+      } else if (lay.fort && inside(zn.fort, tx, tz)) {
+        gate = { x: -1100, z: 0 }; // the end of Meridian Boulevard
+        zone = zn.fort;
+      }
+      if (gate && inside(zone, fx, fz)) return [[fx, fz], [tx, tz]]; // already in there
+      if (gate) {
+        const r = Math.hypot(fx - gate.x, fz - gate.z) > 30 ? VH.Minimap.route(lay, fx, fz, gate.x, gate.z) || [[fx, fz], [gate.x, gate.z]] : [[fx, fz]];
+        r.push([tx, tz]);
+        return r;
+      }
+      if (Math.hypot(fx - tx, fz - tz) < 30) return null;
+      return VH.Minimap.route(lay, fx, fz, tx, tz);
     },
 
     /** Caught: the arrest sequence, a fine, and release outside the precinct. */
@@ -1193,12 +1338,7 @@
       this.fx.setNight(glow);
       this.fx.update(sdt, this.renderer.camera, this.renderer.height || window.innerHeight);
       if (this.minimap) {
-        const pv = player.vehicle;
-        const state = {
-          x: player.pos.x, z: player.pos.z, heading: pv ? pv.yaw : player.heading, camYaw: this.cameraRig.yaw,
-          speed: pv ? pv.speed : player.speed, blips: this.blips ? this.blips() : [], searchArea: this.police ? this.police.searchArea : null,
-          route: this.route || null, heat: this.police ? this.police.level : 0, visible: this.state === 'playing' || this.state === 'dialog',
-        };
+        const state = this._mapState();
         this.minimap.update(dt, state);
         if (this.minimap.isFullOpen) this.minimap.updateFull(state);
       }

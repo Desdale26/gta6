@@ -21,8 +21,9 @@
   'use strict';
 
   const VH = (window.VH = window.VH || {});
-  VH.VERSION = '1.0.0';
+  VH.VERSION = '1.1.0';
   VH.BUILD_NAME = 'Ten and Two';
+  VH.UPDATE_NAME = 'Open world update';
 
   // ---------------------------------------------------------------- events
   class EventBus {

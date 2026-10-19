@@ -632,7 +632,7 @@
     }
 
     blips(out, missionRunning) {
-      if (!this.ok || missionRunning) return;
+      if (!this.ok) return; // parked military vehicles show during jobs too
       for (const s of this.spots) {
         const v = s.v;
         if (!v || v.removed || v.wrecked || v.driver) continue;

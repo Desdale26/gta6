@@ -106,6 +106,7 @@
       this._buildSettings();
       this._buildStats();
       this._buildCredits();
+      this._buildWhatsNew();
       this._buildQuit();
       this._buildDialog();
       this._buildIntro();
@@ -173,7 +174,7 @@
         return;
       }
       if (this.input._capture) return;
-      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits')) {
+      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew')) {
         this.back();
         return;
       }
@@ -196,16 +197,19 @@
         if (this.actions.hasSave && this.actions.hasSave() && !confirm('Start a new story? Your saved progress will be replaced when the game next saves.')) return;
         this.actions.newGame();
       });
+      const news = this._button("What's new", () => this.show('whatsnew', true));
+      news.classList.add('btn-new');
       menu.append(
         this.continueBtn,
         this.newGameBtn,
+        news,
         this._button('Settings', () => this.show('settings', true)),
         this._button('Credits', () => this.show('credits', true)),
         this._button('Quit', () => this.show('quit', true))
       );
       const foot = el('div', 'title-footer');
       foot.append(
-        el('span', '', 'v' + VH.VERSION),
+        el('span', '', 'v' + VH.VERSION.replace(/\.0$/, '') + ' · ' + VH.UPDATE_NAME),
         el('span', 'title-footer-hint', VH.features.isEdge ? 'Running in Microsoft Edge ✓' : 'Built for Microsoft Edge')
       );
       const left = el('div', 'title-left');
@@ -470,7 +474,32 @@
       para('three.js r186 — © 2010–2026 three.js authors, MIT licence.');
       para('Fonts: whatever your system provides (Bahnschrift and Segoe UI on Windows).');
       body.append(el('h3', '', 'This build'));
-      para(VH.BUILD_NAME + ' (v' + VH.VERSION + '): the full city from Crestline Estates to the Saltmarsh docks, 18 cars, 11 weapons, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
+      para(VH.BUILD_NAME + ' (v' + VH.VERSION + ', ' + VH.UPDATE_NAME + '): the full city from Crestline Estates to the Saltmarsh docks, Northgate Heights, the airport and Fort Breakwater, 19 cars, five aircraft and a tank, 11 weapons, 14 corner shops, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
+      const foot = el('div', 'panel-foot');
+      foot.append(this._button('Back', () => this.back(), { primary: true }));
+      panel.append(head, body, foot);
+      s.append(panel);
+    }
+
+    /** What the open world update added, and where to find it. */
+    _buildWhatsNew() {
+      const s = this._screen('whatsnew', 'screen-whatsnew');
+      const panel = el('div', 'panel credits-panel whatsnew-panel');
+      const head = el('div', 'panel-head');
+      head.append(el('h2', '', "What's new in v" + VH.VERSION.replace(/\.0$/, '')));
+      const body = el('div', 'credits-body whatsnew-body');
+      const item = (title, text) => {
+        const row = el('div', 'whatsnew-item');
+        row.append(el('h3', '', title), el('p', '', text));
+        body.append(row);
+      };
+      body.append(el('p', 'whatsnew-lead', 'Press M in the game: the map now opens on the whole world, with buttons that take you to each new place and set your GPS. Click anywhere on the map to set a waypoint; right-click clears it.'));
+      item('✈  Vicehaven International', 'Drive north up Grand Avenue to the airport. Steal a Skylark plane or the Sparrow helicopter, or the big Albatross jet, and fly. Airliners take off and land every few minutes.');
+      item('★  Fort Breakwater', 'The army base at the far west end of Meridian Boulevard. Tanks, army jeeps, a fighter jet and a gunship, if you can get past the soldiers. Five stars if you take one.');
+      item('▮  Northgate Heights', 'Eight new skyscrapers just north of downtown on Skyline Drive, one with a helipad on the roof.');
+      item('$  14 corner shops', 'Walk in, press E at the counter for snacks (they heal you), or aim a gun at the clerk to hold the shop up. Yellow bags on the map.');
+      item('🚓  A busier city', 'Police chases tear past now and then, office workers fill the plazas, and a tour helicopter flies over the bay.');
+      item('Flying', 'W/S throttle, A/D roll, Space/Ctrl nose up and down, mouse to look. Jump out high up and the parachute opens.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, body, foot);

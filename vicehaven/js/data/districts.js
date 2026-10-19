@@ -226,8 +226,10 @@
     { id: 'founders_park', name: 'Founders Park', block: [1, 5], kind: 'park' },
     { id: 'vicehaven_tower', name: 'Vicehaven Tower', block: [4, 2], kind: 'tower' },
     { id: 'oceanview_pier', name: 'Oceanview Pier', kind: 'pier', x: 420, z: 0 },
-    { id: 'northgate_heights', name: 'Northgate Heights', kind: 'skyline', x: 100, z: -520 },
-    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -300, z: -1300 },
-    { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0 },
+    // The big places outside the old grid get a badge on the map and a "go"
+    // point the GPS can reach by road (major: true; gx, gz).
+    { id: 'northgate_heights', name: 'Northgate Heights', kind: 'skyline', x: 100, z: -520, major: true, short: 'Skyscrapers', gx: 22, gz: -498 },
+    { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -300, z: -1300, major: true, short: 'Airport', gx: -255, gz: -1190 },
+    { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0, major: true, short: 'Army base', gx: -1092, gz: 0 },
   ];
 })();

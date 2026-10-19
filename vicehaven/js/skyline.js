@@ -109,8 +109,11 @@
     for (let k = 0; k < 4; k++) world.physics.addOrientedBox(cx, cz, r, r * t, (k * Math.PI) / 4, 0, top, 'building');
   }
 
+  const LOBBIES = []; // footprints of the tower being built (for the map)
+
   /** Storefront lobby on a footprint: two tall floors of glass under a canopy line. */
   function lobby(ctx, pts, cx, cz, color, seed) {
+    LOBBIES.push(pts);
     const b = ctx.b;
     const p = inset(pts, cx, cz, 1.0);
     prism(b, p, KERB, KERB + 9, { wall: color, style: 4, ww: 0.9, wh: 0.82, bay: 4.2, floorH: 4.5, seed });
@@ -459,9 +462,10 @@
       const towers = [];
       let tallest = 0;
       for (const t of TOWERS) {
+        LOBBIES.length = 0;
         const r = t.fn(world, t.x, t.z);
         obstacles.push(...r.obstacles);
-        towers.push({ name: t.name, x: t.x, z: t.z, top: r.top, r: r.obstacles[0][2], obstacles: r.obstacles, helipad: r.helipad || null });
+        towers.push({ name: t.name, x: t.x, z: t.z, top: r.top, r: r.obstacles[0][2], obstacles: r.obstacles, foot: LOBBIES.slice(), helipad: r.helipad || null });
         tallest = Math.max(tallest, r.top);
       }
       for (const P of PARCELS) parcel(world, P, obstacles);
@@ -491,12 +495,34 @@
       g.fillStyle = '#bdb8ae';
       o.R(P.x0 + SIDEWALK, P.z0 + SIDEWALK, P.x1 - SIDEWALK, P.z1 - SIDEWALK);
     }
+    // Each tower's real footprint, with a drop shadow and a lit roof.
+    const poly = (pts, dx, dz, k, cx, cz) => {
+      g.beginPath();
+      pts.forEach(([x, z], i) => {
+        const px = cx + (x - cx) * k + dx;
+        const pz = cz + (z - cz) * k + dz;
+        if (i) g.lineTo(px, pz);
+        else g.moveTo(px, pz);
+      });
+      g.closePath();
+      g.fill();
+    };
     for (const t of s.towers) {
-      for (const [x, z, r] of t.obstacles) {
-        g.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        o.circle(x + 2.5, z + 2.5, r * 0.82);
-        g.fillStyle = '#8e9aa8';
-        o.circle(x, z, r * 0.82);
+      for (const pts of t.foot || []) {
+        let cx = 0;
+        let cz = 0;
+        for (const [x, z] of pts) {
+          cx += x;
+          cz += z;
+        }
+        cx /= pts.length;
+        cz /= pts.length;
+        g.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        poly(pts, 4, 4, 1, cx, cz);
+        g.fillStyle = '#5d6878';
+        poly(pts, 0, 0, 1, cx, cz);
+        g.fillStyle = '#8796a8';
+        poly(pts, 0, 0, 0.72, cx, cz);
       }
     }
   });

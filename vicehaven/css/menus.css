@@ -111,6 +111,7 @@
 .screen-settings,
 .screen-stats,
 .screen-credits,
+.screen-whatsnew,
 .screen-quit {
   display: flex;
   align-items: center;
@@ -421,6 +422,49 @@ select {
 
 .credits-body h3:first-child {
   margin-top: 0;
+}
+
+.whatsnew-panel {
+  width: min(640px, 94vw);
+  max-height: 88vh;
+}
+
+.whatsnew-body {
+  max-height: 64vh;
+}
+
+.whatsnew-lead {
+  margin: 0 0 0.6rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(255, 122, 89, 0.12);
+  border: 1px solid rgba(255, 122, 89, 0.35);
+  color: #fff;
+}
+
+.whatsnew-item h3 {
+  margin: 0.8rem 0 0.15rem;
+}
+
+.whatsnew-item p {
+  margin: 0;
+}
+
+.title-menu .btn-new {
+  border-color: rgba(255, 179, 71, 0.55);
+}
+
+.title-menu .btn-new::after {
+  content: 'NEW';
+  margin-left: 0.6rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 6px;
+  background: var(--vh-sunset);
+  color: #0b0d18;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  vertical-align: middle;
 }
 
 .quit-panel {
