@@ -171,6 +171,8 @@
       this.layout = VH.CityGen.generate('vicehaven');
       // Corner shops claim their lots before the city is built (stores.js).
       if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
+      // Then the roadside strips along the roads out of town (suburbs.js).
+      if (VH.Suburbs && VH.Suburbs.plan) VH.Suburbs.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));

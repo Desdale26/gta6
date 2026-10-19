@@ -243,6 +243,11 @@
       progress(0.858, 'Fencing off Fort Breakwater');
       if (VH.Fort) this.fort = VH.Fort.build(this, layout);
       await slicer.tick();
+      // The roads out of town: roadside strips (suburbs.js) and direction signs (roadsigns.js).
+      progress(0.859, 'Opening the motels on the airport road');
+      if (VH.Suburbs) this.suburbs = VH.Suburbs.build(this, layout);
+      if (VH.RoadSigns) this.roadsigns = VH.RoadSigns.build(this, layout);
+      await slicer.tick();
 
       progress(0.86, 'Planting palms and street lights');
       this._buildBoundary(layout);
