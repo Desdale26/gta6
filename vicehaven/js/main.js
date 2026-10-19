@@ -403,6 +403,8 @@
         this._needsRender = true;
         // The clock follows the Time of day setting straight away, not on the next load.
         if (this.environment && this.state !== 'title' && this.state !== 'loading') this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
+        // Lit windows and street lights follow the sky straight away (Always daytime).
+        if (this.environment && this.world && this.world.setNightFactor) this.world.setNightFactor(this.environment.shared.uWindowGlow.value);
       });
       VH.events.on('renderer:resize', () => {
         this._needsRender = true;

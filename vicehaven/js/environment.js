@@ -242,6 +242,9 @@
           this._applyKeys(this.sunDir.y);
         }
       });
+      VH.events.on('settings:changed', (e) => {
+        if (e.path === 'gameplay.alwaysDay' || e.path === '*') this.setTime(this.hours);
+      });
       VH.events.on('postfx:changed', () => this._applyKeys(this.sunDir.y));
       this.setTime(this.hours);
     }
@@ -288,6 +291,8 @@
     /** Set the time of day (hours, 0–24) and recompute all lighting. */
     setTime(hours) {
       this.hours = ((hours % 24) + 24) % 24;
+      // Always daytime (Settings → Gameplay): daytime hours stand, anything else becomes midday.
+      if (this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
       // Sunrise ~06:00, sunset ~18:00; the sun crosses the southern sky (+Z).
       const t = ((this.hours - 6) / 12) * Math.PI;
       const maxAlt = 66 * VH.math.DEG;
@@ -381,7 +386,7 @@
     /** Per-frame: advance time (if running), follow the focus with the shadow map. */
     update(dt, focus) {
       this.shared.uTime.value += dt;
-      if (this.clockRunning) this.setTime(this.hours + dt / 60);
+      if (this.clockRunning && !this.settings.get('gameplay.alwaysDay')) this.setTime(this.hours + dt / 60);
 
       // Reflections follow the sky at most every 2 s of *real* time: fast-forwarding
       // the simulation must not queue up hundreds of PMREM renders on the GPU.

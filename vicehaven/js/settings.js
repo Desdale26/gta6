@@ -130,6 +130,7 @@
         showHints: true,
         slowMotion: true,
         timeOfDay: 'cycle',
+        alwaysDay: false,
         voicedDialogue: true,
         policeVoice: true,
         blood: 'lots',
