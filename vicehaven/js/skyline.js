@@ -489,10 +489,11 @@
   VH.MapPainters.push((g, layout, o) => {
     const s = layout.skyline;
     if (!s) return;
+    // Pavement like the city's blocks, the plaza paving a shade lighter.
     for (const P of s.parcels) {
-      g.fillStyle = '#c9c4ba';
+      g.fillStyle = (o.PAL && o.PAL.pave) || '#283042';
       o.R(P.x0, P.z0, P.x1, P.z1);
-      g.fillStyle = '#bdb8ae';
+      g.fillStyle = '#323a4e';
       o.R(P.x0 + SIDEWALK, P.z0 + SIDEWALK, P.x1 - SIDEWALK, P.z1 - SIDEWALK);
     }
     // Each tower's real footprint, with a drop shadow and a lit roof.
@@ -519,9 +520,9 @@
         cz /= pts.length;
         g.fillStyle = 'rgba(0, 0, 0, 0.4)';
         poly(pts, 4, 4, 1, cx, cz);
-        g.fillStyle = '#5d6878';
+        g.fillStyle = (o.PAL && o.PAL.building) || '#1a2031';
         poly(pts, 0, 0, 1, cx, cz);
-        g.fillStyle = '#8796a8';
+        g.fillStyle = '#2c3650';
         poly(pts, 0, 0, 0.72, cx, cz);
       }
     }

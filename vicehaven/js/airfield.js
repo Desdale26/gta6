@@ -164,7 +164,7 @@
       Airfield._terminal(world);
       Airfield._tower(world);
       Airfield._hangars(world);
-      Airfield._landside(world);
+      Airfield._landside(world, layout);
       Airfield._fences(world);
       return data;
     }
@@ -377,7 +377,7 @@
       }
     }
 
-    static _landside(world) {
+    static _landside(world, layout) {
       // Car park: bays and lamp posts.
       const C = CARPARK;
       pave(world, C.x0, C.z0, C.x1, C.z1, 0x8f8f8f, 0.014);
@@ -386,16 +386,22 @@
         mark(world, x, C.z1 - 9, x + 0.12, C.z1 - 4, 0xf4f4ef, 0.022);
       }
       for (let x = C.x0 + 20; x < C.x1; x += 40) world.addProp('streetlight', x, 0, (C.z0 + C.z1) / 2, 0, 1);
-      // Street lights along Grand Avenue to the airport and along Airport Road.
+      // Street lights along Grand Avenue to the airport and along Airport Road,
+      // where the roadside strips (suburbs.js) don't already light the pavement.
+      const strips = layout.strips || [];
+      const onStrip = (x, z) => strips.some((s) => x >= s.x0 - 1 && x <= s.x1 + 1 && z >= s.z0 - 1 && z <= s.z1 + 1);
+      const lamp = (x, z, yaw) => {
+        if (!onStrip(x, z)) world.addProp('streetlight', x, 0, z, yaw, 1);
+      };
       for (let z = -1160; z < -660; z += 38) {
-        world.addProp('streetlight', 15.5, 0, z, -Math.PI / 2, 1);
-        world.addProp('streetlight', -15.5, 0, z + 19, Math.PI / 2, 1);
+        lamp(15.5, z, -Math.PI / 2);
+        if (z + 19 < -655) lamp(-15.5, z + 19, Math.PI / 2); // not inside the Northgate plaza
       }
       for (let x = -740; x < 330; x += 40) {
         if (x > -440 && x < -70) continue; // the terminal's canopy
         if (Math.abs(x) < 20 || (x > 20 && x < 70)) continue; // the junction, the gate
-        world.addProp('streetlight', x, 0, -1191.5, 0, 1);
-        world.addProp('streetlight', x + 20, 0, -1168.5, Math.PI, 1);
+        lamp(x, -1191.5, 0);
+        if (Math.abs(x + 20) > 20) lamp(x + 20, -1168.5, Math.PI); // not on Grand Avenue itself
       }
       (world.signs || (world.signs = [])).push({ x: 26, y: 3.2, z: -1150, yaw: -Math.PI / 2, w: 9, h: 3, lines: ['VICEHAVEN', 'INTERNATIONAL ✈'], style: 'welcome' });
       const ctx = world.ctxAt(26, -1150);

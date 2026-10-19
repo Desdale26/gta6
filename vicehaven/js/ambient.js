@@ -145,6 +145,24 @@
       for (let x = T.x1 - 12; x >= T.x0 + 12; x -= 22) pts.push([x, z + 1.2]);
       zones.push({ id: 'terminal', x: (T.x0 + T.x1) / 2, z, near: 220, far: 290, loops: [{ pts, count: 12 }], look: 'travel' });
     }
+    // The pavements of the roadside strips (suburbs.js), in pieces of about 150 m.
+    for (const S of layout.strips || []) {
+      const len = S.a1 - S.a0;
+      const pieces = Math.max(1, Math.round(len / 150));
+      const pt = (along, d) => {
+        const c = S.edge + S.out * d;
+        return S.axis === 'z' ? [c, along] : [along, c];
+      };
+      for (let k = 0; k < pieces; k++) {
+        const a0 = S.a0 + (len * k) / pieces + 3;
+        const a1 = S.a0 + (len * (k + 1)) / pieces - 3;
+        const pts = [];
+        for (let a = a0; a <= a1; a += 12) pts.push(pt(a, 2.4));
+        for (let a = a1; a >= a0; a -= 12) pts.push(pt(a, 3.0));
+        const [cx, cz] = pt((a0 + a1) / 2, 2);
+        zones.push({ id: 'strip_' + S.id + '_' + k, x: cx, z: cz, near: 170, far: 220, loops: [{ pts, count: 3 }], look: S.id.startsWith('ar') ? 'travel' : 'street' });
+      }
+    }
     return zones;
   }
 
@@ -177,8 +195,37 @@
       this._tourT = Math.random() * 100;
       this._fogK = 1;
       this.chases = 0;
+      this._parkStrips();
       VH.events.on('gunshot', (e) => this._panic(e.x, e.z, 70));
       VH.events.on('vehicle:enter', (e) => this._entered(e.v));
+    }
+
+    /** Parked cars in the roadside car parks: extra spots for the vehicle system's own streaming. */
+    _parkStrips() {
+      const V = this.game.vehicles;
+      if (!V || !V.spots || !V.spots.length) return;
+      const types = V.spots.map((s) => s.type);
+      for (const S of this.game.layout.strips || []) {
+        for (const lot of S.lots) {
+          if (lot.kind !== 'parking' || lot.store) continue;
+          const alongX = lot.maxX - lot.minX >= lot.maxZ - lot.minZ;
+          // The bays buildings.js paints: two rows, 2.7 m apart, 5.2 m deep, 1 m in from the edges.
+          const rows = alongX ? [[lot.minZ + 3.6, 0], [lot.maxZ - 3.6, Math.PI]] : [[lot.minX + 3.6, Math.PI / 2], [lot.maxX - 3.6, -Math.PI / 2]];
+          const a0 = (alongX ? lot.minX : lot.minZ) + 2;
+          const a1 = (alongX ? lot.maxX : lot.maxZ) - 2;
+          for (const [c, heading] of rows) {
+            for (let a = a0; a + 2.7 <= a1; a += 2.7) {
+              const h = VH.math.hash2(Math.round(a * 10), Math.round(c * 10) + 31);
+              if (h > 0.4) continue;
+              const m = a + 1.35;
+              V.spots.push({
+                x: alongX ? m : c, z: alongX ? c : m, heading: heading + (h < 0.2 ? Math.PI : 0), road: null,
+                type: types[Math.floor(h * 1e4) % types.length], seed: Math.floor(h * 1e6), vehicle: null, used: false,
+              });
+            }
+          }
+        }
+      }
     }
 
     update(dt) {

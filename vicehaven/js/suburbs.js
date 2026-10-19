@@ -230,10 +230,86 @@
     for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) fn(xs[i], zs[j], xs[i + 1], zs[j + 1]);
   }
 
-  function buildStrip(world, layout, S) {
-    // Placeholder until the full build lands (kept so the hooks can be tested).
-    chunked(S.pave.x0, S.pave.z0, S.pave.x1, S.pave.z1, () => {});
+  /** A point at distance `along` the road and `d` metres in from the road edge. */
+  function at(S, along, d) {
+    const c = S.edge + S.out * d;
+    return S.axis === 'z' ? [c, along] : [along, c];
   }
+
+  /** Street lights face the road: their arm points away from the strip. */
+  function lampYaw(S) {
+    if (S.axis === 'z') return S.out < 0 ? Math.PI / 2 : -Math.PI / 2;
+    return S.out < 0 ? 0 : Math.PI;
+  }
+
+  function buildStrip(world, layout, S) {
+    // One kerbed slab under the pavement and the lots, like a city block.
+    chunked(S.x0, S.z0, S.x1, S.z1, (a0, b0, a1, b1) => {
+      const ctx = world.ctxAt((a0 + a1) / 2, (b0 + b1) / 2);
+      ctx.concrete.box(a0, 0, b0, a1, KERB, b1, VH.col(0xcfcac0), { skip: { top: true } });
+      ctx.sidewalk.topRect(a0, b0, a1, b1, KERB, VH.col(0xffffff), 3);
+    });
+    world.physics.addBox(S.x0, -0.5, S.z0, S.x1, KERB, S.z1, 'kerb');
+
+    // The buildings: the city's own generator (or a corner shop / petrol station).
+    for (const lot of S.lots) {
+      const ctx = world.ctxAt(lot.cx, lot.cz);
+      const top = lot.store && VH.Stores ? VH.Stores.buildLot(world, ctx, lot) : VH.Buildings.buildLot(ctx, lot);
+      lot.top = top || 0;
+      if (top > 0) world.stats.buildings++;
+      world.stats.tallest = Math.max(world.stats.tallest || 0, top || 0);
+    }
+
+    // Street lights, palms, benches, bins and hydrants along the pavement.
+    const rng = new VH.RNG('strip-furniture-' + S.id);
+    const yaw = lampYaw(S);
+    const storeAt = (along) => S.lots.some((l) => l.store && along > l.a0 - 2 && along < l.a1 + 2);
+    for (let a = S.a0 + 8; a < S.a1 - 4; a += 26) {
+      const [x, z] = at(S, a, 0.7);
+      world.addProp('streetlight', x, KERB, z, yaw, 1);
+    }
+    const tree = S.id.startsWith('mw') ? 'tree' : 'palmTall';
+    for (let a = S.a0 + 21; a < S.a1 - 6; a += 26) {
+      if (storeAt(a) || rng.next() < 0.15) continue; // keep shop forecourts open
+      const [x, z] = at(S, a, 1.6);
+      world.addProp(tree === 'tree' && rng.next() < 0.5 ? 'treeB' : tree, x, KERB, z, rng.range(0, 6.28), rng.range(0.85, 1.1));
+    }
+    for (let a = S.a0 + 14; a < S.a1 - 8; a += 52) {
+      if (storeAt(a)) continue;
+      const [x, z] = at(S, a + rng.range(-3, 3), 3.2);
+      const roll = rng.next();
+      if (roll < 0.45) world.addProp('bench', x, KERB, z, yaw + Math.PI, 1);
+      else if (roll < 0.75) world.addProp('bin', x, KERB, z, 0, 1);
+      else world.addProp('hydrant', x, KERB, z, yaw, 1);
+    }
+  }
+
+  // ------------------------------------------------------------------ map
+  VH.MapPainters = VH.MapPainters || [];
+  VH.MapPainters.push((g, layout, o) => {
+    const R = o.R;
+    for (const S of layout.strips || []) {
+      g.fillStyle = o.PAL.pave || '#283042';
+      R(S.x0, S.z0, S.x1, S.z1);
+      for (const lot of S.lots) {
+        const x0 = lot.minX + 0.8;
+        const z0 = lot.minZ + 0.8;
+        const x1 = lot.maxX - 0.8;
+        const z1 = lot.maxZ - 0.8;
+        if (lot.kind === 'parking' && !lot.store) {
+          g.fillStyle = o.PAL.parking || '#20273a';
+          R(x0, z0, x1, z1);
+          continue;
+        }
+        if (lot.store) continue; // stores.js paints its own shops
+        const sh = Math.max(0.9, Math.min(3.2, 0.7 + (lot.top || 8) * 0.07));
+        g.fillStyle = 'rgba(2, 4, 10, 0.42)';
+        R(x0 + 0.7 * sh, z0 + sh, x1 + 0.7 * sh, z1 + sh);
+        g.fillStyle = o.PAL.building || '#1a2031';
+        R(x0, z0, x1, z1);
+      }
+    }
+  });
 
   VH.Suburbs = Suburbs;
 })();
