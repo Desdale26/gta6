@@ -636,6 +636,28 @@
       return this;
     }
 
+    /** Copy another kit's triangles in, moved by a matrix (a rotor blade built once, placed four times). */
+    place(src, m) {
+      const nm = new THREE.Matrix3().getNormalMatrix(m);
+      const P = src.pos, Nn = src.nor, C = src.col;
+      const v = new THREE.Vector3();
+      const n = new THREE.Vector3();
+      for (let i = 0; i < P.length; i += 9) {
+        const pts = [];
+        const ns = [];
+        const cs = [];
+        for (let o = 0; o < 9; o += 3) {
+          v.set(P[i + o], P[i + o + 1], P[i + o + 2]).applyMatrix4(m);
+          n.set(Nn[i + o], Nn[i + o + 1], Nn[i + o + 2]).applyMatrix3(nm).normalize();
+          pts.push([v.x, v.y, v.z]);
+          ns.push([n.x, n.y, n.z]);
+          cs.push([C[i + o], C[i + o + 1], C[i + o + 2]]);
+        }
+        this.tri(pts[0], pts[1], pts[2], ns[0], ns[1], ns[2], cs[0], cs[1], cs[2]);
+      }
+      return this;
+    }
+
     /** Mirror everything added after `from` (a vertex count) across X = 0. */
     mirrorFrom(from) {
       const tmp = new Kit();
