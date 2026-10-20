@@ -300,7 +300,9 @@ at red lights, queues, overtakes parked cars and honks at you. Pedestrians
 walk the blocks, wait at crossings, and scatter from gunfire and
 pavement-driving.
 
-**Police.** Crimes that someone sees raise your heat (1–5). Patrol cars
+**Police.** Crimes that someone sees raise your heat (1–5). If a passer-by
+phones it in, the police know where you are for the first 12 seconds or so
+(longer at higher heat) and come straight for you. Patrol cars
 chase and try to box you in, officers shoot from heat 3, roadblocks go up,
 and from heat 4 a helicopter's searchlight follows you. Break line of sight
 and get out of the search area to lose them. Getting caught costs a fine
@@ -485,6 +487,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Shoot (aim with right mouse); hold Tab for the weapon wheel; R reloads
 - [ ] Get hit by a thug: a short red flash, the picture stays clear, and health refills a few seconds after the fight
 - [ ] Commit a crime in front of a police car: heat rises, police chase; lose them
+- [ ] Run someone over with nobody official around: a star comes a few seconds later and patrol cars turn up within about 15 seconds
 - [ ] Fail a job (die or get caught) and retry with E: every car is fresh, the last attempt's cars and people are gone
 - [ ] Tail the paint van in *Casa Palma*: it never sits stuck at a red light or behind a queue, it shoves through
 - [ ] Shoot someone: they fall as a ragdoll and bleed; Settings → Gameplay → Blood turns it down or off

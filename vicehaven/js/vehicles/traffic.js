@@ -35,6 +35,7 @@
       this.gap = opts.gap || 1.6 + Math.random() * 0.8; // time headway (s)
       this.obeySignals = opts.obeySignals !== false;
       this.destination = null; // { x, z } → turns head toward it
+      this.uturns = !!opts.uturns; // may turn round in a junction to reach it
       this.state = 'drive'; // drive | shaken | stuck
       this._stateT = 0;
       this._sense = 0;
@@ -67,6 +68,15 @@
       this._fill();
     }
 
+    /** Throw away the turns queued ahead and choose them again (the destination moved). */
+    replan() {
+      // Keep everything up to the end of the next straight run (a turn or U-turn under way finishes first).
+      const i = this.pieces.findIndex((q) => q.type === 'line');
+      if (i < 0 || i + 1 >= this.pieces.length) return;
+      this.pieces.length = i + 1;
+      this._fill();
+    }
+
     /** Re-acquire the nearest lane (after being knocked off the road); reach: how far to look. */
     reacquire(v, reach) {
       const lp = this.net.nearestLane(v.pos.x, v.pos.z, v.yaw, reach);
@@ -91,6 +101,12 @@
             bestD = d;
             best = e;
           }
+        }
+        // Drivers with somewhere to be (the police) turn round in the junction when that's much shorter.
+        if (this.uturns) {
+          const enter = RoadNet().edges(road, dir, j).enter;
+          const back = this.net.lanePoint(road, -dir, 0, enter - dir * 60);
+          if (Math.hypot(back.x - this.destination.x, back.z - this.destination.z) + 12 < bestD) return { uturn: true, at: enter };
         }
         return best;
       }
@@ -124,6 +140,10 @@
           }
           const exit = this._chooseExit(last.road, last.dir, j);
           if (!exit) return;
+          if (exit.uturn) {
+            this._uturn(last, exit.at);
+            continue;
+          }
           const turn = this.net.turnPiece(last.road, last.dir, last.lane, j, exit);
           turn.signal = j.signal ? RoadNet().signalGroup(last.road) : null;
           this.pieces.push(turn);
@@ -147,11 +167,11 @@
      * back into the inner lane the other way, then the run back to the next
      * junction.
      */
-    _uturn(last) {
+    _uturn(last, at) {
       const road = last.road;
       const dir = last.dir;
       const back = -dir;
-      const aE = dir > 0 ? road.to : road.from;
+      const aE = at !== undefined ? at : dir > 0 ? road.to : road.from; // the road's end, or a junction's edge
       const T = this.net.lanePoint(road, back, 0, aE);
       const fx = road.axis === 'z' ? 0 : dir;
       const fz = road.axis === 'z' ? dir : 0;

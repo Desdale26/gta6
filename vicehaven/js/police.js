@@ -7,6 +7,8 @@
  * pursuit (with ramming and PIT attempts) when they have you in sight.
  * From 3 there are roadblocks and armed officers; from 4 the helicopter.
  *
+ * When a crime is phoned in, the police know where you are for a while
+ * (the callers keep watching), so units come straight for you.
  * Losing them: break line of sight. A search zone appears around where
  * you were last seen; get out of it and stay unseen until the pips stop
  * flashing. Stopping near a unit gets you arrested.
@@ -24,6 +26,9 @@
   const SIGHT = [0, 62, 70, 78, 86, 95];
   const EVADE_TIME = [0, 7, 10, 12, 14, 16];
   const SEARCH_R = [0, 85, 110, 135, 150, 165];
+  // After a call comes in, how long the police know where Jay is (callers keep
+  // reporting where the car went) before they have to find him themselves.
+  const FIX_TIME = [0, 12, 14, 16, 18, 20];
   // The helicopter: how far out it can pick Jay up, how far it keeps him
   // once it has him, and how fast it flies (a fast car can outrun it).
   const HELI_ACQUIRE = 70;
@@ -39,7 +44,7 @@
     constructor(police, v) {
       this.police = police;
       this.game = police.game;
-      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.35, ignoreRed: true, gap: 0.8 });
+      this.lane = new VH.LaneDriver(this.game.traffic, { aggressive: true, speedMul: 1.35, ignoreRed: true, gap: 0.8, uturns: true });
       this.lane.maxSpeed = 32;
       this.mode = 'road';
       this._routeT = 0;
@@ -49,8 +54,13 @@
       this._avoid = 0;
       this.deployed = false;
       this.v = v;
+      this._planned = null;
+      // Head for Jay from the first junction on (the turns queued at the start count too).
+      const t = this.game.player.inVehicle ? this.game.player.vehicle.pos : this.game.player.pos;
+      this.lane.destination = { x: t.x, z: t.z };
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
+      this._planned = { x: t.x, z: t.z };
     }
 
     onBump(v, other, speed) {
@@ -108,9 +118,16 @@
           const goal = pol.seen ? { x: tx + tgt.vel.x * 2, z: tz + tgt.vel.z * 2 } : pol.searchArea ? { x: pol.searchArea.x + (Math.random() - 0.5) * pol.searchArea.r, z: pol.searchArea.z + (Math.random() - 0.5) * pol.searchArea.r } : { x: tx, z: tz };
           this.lane.destination = goal;
           this.lane.maxSpeed = pol.seen ? 36 : 22;
+          // On his tail they drive well over the limit; searching, a little over.
+          this.lane.speedMul = pol.seen ? 2.0 : 1.35;
           // Off the road after a direct chase: get back on it.
           const lp = game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
           if (lp && lp.dist > 6) this.lane.initAt(lp);
+          // The target has moved: choose the turns ahead again (a U-turn at the next junction if he's behind).
+          if (!this._planned || Math.hypot(goal.x - this._planned.x, goal.z - this._planned.z) > 20) {
+            this.lane.replan();
+            this._planned = { x: goal.x, z: goal.z };
+          }
         }
         this.lane.update(v, dt);
         this.mode = 'road';
@@ -265,6 +282,7 @@
       this.playerArmed = false;
       this.heli = null;
       this._losT = 0;
+      this.fixT = 0;
       this._spawnT = 0;
       this._blockT = 20;
       this._reports = [];
@@ -336,7 +354,7 @@
       }
       // Bystanders phone it in.
       if (Math.random() < info.report && this._civilianWitness(x, z)) {
-        this._reports.push({ t: 4 + Math.random() * 5, heat: info.heat, x, z, kind });
+        this._reports.push({ t: 2 + Math.random() * 3, heat: info.heat, x, z, kind });
       }
     }
 
@@ -378,7 +396,12 @@
       const dz = tz - oz;
       const d = Math.hypot(dx, dy, dz);
       if (d < 1) return true;
-      const hit = this.game.physics.raycast(ox, oy, oz, dx / d, dy / d, dz / d, d - 1.2, { flags: VH.COLLIDE.CAMERA, ground: false });
+      // Right next to them (and not up on a roof): they see him, whatever the ray says about car bodies.
+      if (Math.hypot(dx, dz) < 14 && Math.abs(dy) < 4) return true;
+      // Stop short of his own car's bodywork, which would otherwise hide him from himself.
+      const reach = d - (p.inVehicle ? 3.2 : 1.2);
+      if (reach <= 0) return true;
+      const hit = this.game.physics.raycast(ox, oy, oz, dx / d, dy / d, dz / d, reach, { flags: VH.COLLIDE.CAMERA, ground: false });
       return !hit;
     }
 
@@ -397,6 +420,7 @@
         if (this.game.audio.heatUp) this.game.audio.heatUp(lvl);
         if (was === 0) {
           this.pursuitT = 0;
+          this.fixT = Math.max(this.fixT, FIX_TIME[lvl]); // they've been told where he is
           this._dispatch('start');
         } else if (lvl === 4) this._dispatch('air');
         else this._dispatch('escalate');
@@ -431,15 +455,19 @@
     update(dt) {
       const game = this.game;
       const p = game.player;
-      // Delayed reports from bystanders.
+      // Delayed reports from bystanders. The callers say where Jay went, not just
+      // where it happened: for a while the police know where he is and come for him.
       for (const r of this._reports) r.t -= dt;
       for (const r of this._reports.filter((q) => q.t <= 0)) {
         if (this.level < r.heat) {
           this.setLevel(r.heat, r.kind);
-          this.lastSeen = { x: r.x, z: r.z };
-          this.seen = false;
-          this.searchArea = { x: r.x, z: r.z, r: SEARCH_R[this.level] * 0.8 };
+          this.fixT = FIX_TIME[this.level];
+          this._sawPlayer();
           this._dispatch('report', r);
+        } else if (this.level > 0) {
+          // Another crime while wanted: they're back on him for a bit.
+          this.fixT = Math.max(this.fixT, FIX_TIME[this.level] * 0.5);
+          this._sawPlayer();
         }
       }
       this._reports = this._reports.filter((q) => q.t > 0);
@@ -452,6 +480,7 @@
         return;
       }
       this.pursuitT += dt;
+      this.fixT = Math.max(0, this.fixT - dt);
       // A long chase keeps getting hotter (up to 3 on its own).
       if (this.pursuitT > 75 && this.level < 3 && this.seen) {
         this.pursuitT = 0;
@@ -482,6 +511,7 @@
           }
         }
         if (!seen && this.heli && this.heli.tracking) seen = true;
+        if (!seen && this.fixT > 0) seen = true; // the callers still have him
         if (seen) this._sawPlayer();
         else this.seen = false;
       }
@@ -505,10 +535,21 @@
         }
       }
 
-      // Keep the right number of units on the job.
+      // Keep the right number of units on the job. A unit left far behind, out
+      // of view, is stood down so a fresh one can come in ahead of him.
       this._spawnT -= dt;
       if (this._spawnT <= 0) {
         this._spawnT = 1.2;
+        for (const v of this.units) {
+          if (v.removed || v.wrecked || v.driver === 'player') continue;
+          // Stuck somewhere (jammed in traffic, nosed into a wall) for a while counts as left behind too.
+          v._polStill = v.speed < 1 ? (v._polStill || 0) + 1.2 : 0;
+          const d = Math.hypot(v.pos.x - t.x, v.pos.z - t.z);
+          const far = this.seen && d > 170;
+          const jammed = v._polStill > 8 && d > 40;
+          if ((far || jammed) && !game.isVisible(v.pos.x, v.pos.y + 1, v.pos.z, 4)) game.vehicles.remove(v);
+        }
+        this.units = this.units.filter((v) => !v.removed);
         const alive = this.units.filter((v) => !v.removed && !v.wrecked).length;
         if (alive < UNITS[this.level]) this._spawnUnit(t);
       }
@@ -531,11 +572,11 @@
       // Prefer ahead of the player's travel, out of sight. Once they've lost
       // him, new units come to the search area: they don't know where he is.
       const lost = !this.seen && this.searchArea;
-      const cx = lost ? this.searchArea.x : t.x + vel.x * 4;
-      const cz = lost ? this.searchArea.z : t.z + vel.z * 4;
+      const cx = lost ? this.searchArea.x : t.x + vel.x * 5;
+      const cz = lost ? this.searchArea.z : t.z + vel.z * 5;
       let best = null;
       for (let i = 0; i < 12; i++) {
-        const lp = game.roadnet.randomLanePoint(Math.random, cx, cz, lost ? 30 : 80, lost ? 140 : 170);
+        const lp = game.roadnet.randomLanePoint(Math.random, cx, cz, lost ? 30 : 60, lost ? 140 : 140);
         if (!lp) continue;
         if (game.isVisible(lp.x, 1, lp.z, 4) && lp.dist < 120) continue;
         best = lp;
@@ -640,6 +681,7 @@
 
     _clear(hard) {
       this.seen = false;
+      this.fixT = 0;
       this.searchArea = null;
       this.lastSeen = null;
       this.evade = 0;
