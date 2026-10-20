@@ -86,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, property: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, property: 0, owned: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -105,6 +105,8 @@
     ['landmark', 'Landmark'],
     ['store', 'Corner shop'],
     ['spray', 'Fresh Coat body shop'],
+    ['property', 'Business for sale'],
+    ['owned', 'Your business'],
     ['plane', 'Aircraft'],
     ['tank', 'Military vehicle'],
     ['waypoint', 'Your waypoint'],
@@ -258,6 +260,24 @@
     g.fill();
   }
 
+  function houseGlyph(g, fill, mark) {
+    g.beginPath();
+    g.moveTo(0, -7);
+    g.lineTo(6.8, -1);
+    g.lineTo(5, -1);
+    g.lineTo(5, 6.2);
+    g.lineTo(-5, 6.2);
+    g.lineTo(-5, -1);
+    g.lineTo(-6.8, -1);
+    g.closePath();
+    inkThenFill(g, fill, 3);
+    g.fillStyle = mark;
+    g.font = '700 8px ' + FONT;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('$', 0, 2.4);
+  }
+
   function policeDot(g, rgb) {
     glow(g, 11, rgb.join(','), 0.6);
     g.beginPath();
@@ -390,6 +410,13 @@
         g.arc(x, y, 0.9, 0, TAU);
         g.fill();
       }
+    },
+    // A house with a dollar sign: a business for sale (gold), or one Jay owns (green).
+    property(g) {
+      houseGlyph(g, '#ffd447', INK);
+    },
+    owned(g) {
+      houseGlyph(g, '#4fe08a', INK);
     },
     // Aircraft, drawn nose-up and turned to face their heading.
     plane(g) {

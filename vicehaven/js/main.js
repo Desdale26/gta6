@@ -23,7 +23,7 @@
   const FIXED_DT = 1 / 60;
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
-  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Achievements'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'Achievements'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';

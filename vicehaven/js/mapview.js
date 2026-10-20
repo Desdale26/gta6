@@ -77,6 +77,8 @@
     race: { name: 'Street race', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Drive into the marker to start the race.' },
     challenge: { name: 'Side job', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Walk into the marker to start.' },
     store: { name: 'Corner shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Snacks inside. Point a gun at the clerk to hold it up, but the police will come.' },
+    property: { name: 'Business for sale', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Walk up to the For Sale sign and press E to buy it. It pays out every payday (every eight minutes of play).' },
+    owned: { name: 'Your business', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Yours. The takings arrive every payday.' },
     spray: { name: 'Body shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Drive in and stop: a new colour and a full repair. If the police didn’t see you go in, they lose you.' },
     shop: { name: 'Club', cat: 'shops', cluster: true, labelAt: 0.7, tip: 'Open every night.' },
     safehouse: { name: 'Safehouse', cat: 'places', labelAt: 0.5 },
