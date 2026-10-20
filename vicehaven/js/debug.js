@@ -176,7 +176,7 @@
           this.print('tp <x> <z> | tp <plaza|park|tower|pier|boardwalk|market|downtown|palm|harbor|yard|roof>');
           this.print('noclip · god · heal · hurt <n> · money <n> · armor <n>');
           this.print('car <type> · heat <0-5> · give <weapon|all> · job <id> · pass <id> · flag <name>');
-          this.print('time <0-24> · clouds <0-1> · fov <deg> · quality <low|medium|high|ultra>');
+          this.print('time <0-24> · clouds <0-1> · weather <clear|cloudy|overcast|rain|storm> · fov <deg> · quality <low|medium|high|ultra>');
           this.print('colliders · pos · respawn · clear · complete (pass the current job) · spawn <faction> (an enemy)');
           break;
         case 'tp': {
@@ -290,6 +290,12 @@
         case 'clouds':
           g.environment.setCloudCover(num(0, 0.4));
           this.print('Cloud cover ' + g.environment.cloudCover.toFixed(2));
+          break;
+        case 'weather':
+          if (g.weather && VH.Weather.names().includes(args[0])) {
+            g.weather.setState(args[0], 3);
+            this.print('Weather: ' + args[0]);
+          } else this.print('usage: weather <' + VH.Weather.names().join('|') + '>', 'bad');
           break;
         case 'fov':
           VH.settings.set('graphics.fov', VH.math.clamp(num(0, 65), 40, 100));

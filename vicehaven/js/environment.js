@@ -36,6 +36,7 @@
   // exact on-screen colour of the sky's horizon.
   // Moonlight and the orange bounce of street lamps fill the shadows at night.
   const NIGHT_SKY = new THREE.Color(0x5a6ca4);
+  const _grey = new THREE.Color();
   // Night brightness at 100% sits a quarter above where nights started out (players found them too dark).
   const NIGHT_LIFT = 1.25;
   const NIGHT_GROUND = new THREE.Color(0x4a3a2a);
@@ -285,9 +286,10 @@
       }
       this.shadowExtent = tier.extent;
       this.shadowMapSize = tier.mapSize;
-      // Exponential fog reaching ~95% at the draw distance.
+      // Exponential fog reaching ~95% at the draw distance (thicker in bad weather).
       const dd = this.settings.get('graphics.drawDistance');
-      this.scene.fog.density = 1.75 / dd;
+      this._fogBase = 1.75 / dd;
+      this.scene.fog.density = this._fogBase * (1 + 2.4 * ((this.weather && this.weather.fog) || 0));
     }
 
     /** Set the time of day (hours, 0–24) and recompute all lighting. */
@@ -310,6 +312,25 @@
       this._envDirty = true;
     }
 
+    /**
+     * The weather (weather.js): { cloud, dim, fog } 0..1. Dims the sun and greys
+     * the sky, thickens the fog. Cheap to call every frame; the reflections
+     * catch up when it has changed enough.
+     */
+    setWeather(w) {
+      const was = this.weather || { cloud: 0, dim: 0, fog: 0 };
+      this.weather = { cloud: w.cloud, dim: w.dim, fog: w.fog };
+      this.skyUniforms.uCloud.value = this.cloudCover = clamp(0.38 + w.cloud * 0.62, 0, 1);
+      if (this._fogBase) this.scene.fog.density = this._fogBase * (1 + 2.4 * w.fog);
+      if (Math.abs(was.dim - w.dim) > 0.002 || Math.abs(was.cloud - w.cloud) > 0.002) {
+        this._applyKeys(this.sunDir.y);
+        if (Math.abs((this._envDim || 0) - w.dim) > 0.06) {
+          this._envDim = w.dim;
+          this._envDirty = true;
+        }
+      }
+    }
+
     _applyKeys(s) {
       let i = 0;
       while (i < KEYS.length - 2 && s > KEYS[i + 1].s) i++;
@@ -325,8 +346,16 @@
       const zenith = mixHex(a.zenith, b.zenith, this.shared.uSkyZenith.value);
       const horizon = mixHex(a.horizon, b.horizon, this.shared.uSkyHorizon.value);
       const lightColor = mixHex(a.light, b.light, new THREE.Color());
-      const intensity = lerp(a.intensity, b.intensity, k);
-      const envIntensity = lerp(a.env, b.env, k);
+      // Bad weather: less sun, a greyer sky (the fog takes the horizon's colour too).
+      const wd = (this.weather && this.weather.dim) || 0;
+      if (wd > 0) {
+        for (const c of [zenith, horizon]) {
+          const l = (c.r + c.g + c.b) / 3;
+          c.lerp(_grey.setRGB(l * 0.9, l * 0.94, l * 1.0), wd * 0.75).multiplyScalar(1 - wd * 0.3);
+        }
+      }
+      const intensity = lerp(a.intensity, b.intensity, k) * (1 - wd * 0.82);
+      const envIntensity = lerp(a.env, b.env, k) * (1 - wd * 0.25);
       const night = smoothstep(-0.04, -0.22, s);
       // Settings → Night brightness scales everything night adds on top of the day.
       const nb = this.nightBrightness;

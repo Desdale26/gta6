@@ -132,6 +132,7 @@
         showHints: true,
         slowMotion: true,
         timeOfDay: 'cycle',
+        weather: 'dynamic',
         alwaysDay: false,
         voicedDialogue: true,
         policeVoice: true,

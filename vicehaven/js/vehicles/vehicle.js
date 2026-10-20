@@ -332,7 +332,7 @@
       let NR = m * G * (this.a / L) + (m * this.ax * T.h) / L + down * 0.55;
       NF = Math.max(NF, m * G * 0.12);
       NR = Math.max(NR, m * G * 0.12);
-      let mu = this.mu * (this.surface === 'grass' ? 0.68 : this.surface === 'gravel' ? 0.78 : 1);
+      let mu = this.mu * (this.surface === 'grass' ? 0.68 : this.surface === 'gravel' ? 0.78 : 1) * (VH.weatherGrip || 1);
       if (this.burning > 0 || this.wrecked) mu *= 0.8;
 
       // Longitudinal forces per axle.

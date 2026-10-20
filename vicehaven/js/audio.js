@@ -98,6 +98,9 @@
       this.city = this._loop(this.brown, 'lowpass', 360, 0.6);
       this.wind = this._loop(this.white, 'bandpass', 500, 0.7);
       this.sea = this._loop(this.brown, 'lowpass', 700, 0.4);
+      this.rain = this._loop(this.white, 'highpass', 900, 0.5);
+      this.rainLow = this._loop(this.brown, 'lowpass', 420, 0.5);
+      this.rainK = 0;
       this.applyVolumes();
     }
 
@@ -168,6 +171,10 @@
       this.wind.gain.gain.setTargetAtTime(wind, t, 0.4);
       this.wind.filter.frequency.setTargetAtTime(320 + s.speed * 55 + s.height * 9 + gust * 120, t, 0.3);
       this.sea.gain.gain.setTargetAtTime(sea * (0.75 + 0.25 * Math.sin(this._gust * 0.9)), t, 0.8);
+      // Rain (weather.js): a hiss on everything, and a softer drum when sheltered.
+      const rain = s.playing ? this.rainK * (s.sheltered ? 0.35 : 1) : 0;
+      this.rain.gain.gain.setTargetAtTime(rain * 0.11, t, 0.8);
+      this.rainLow.gain.gain.setTargetAtTime(rain * 0.16, t, 0.8);
 
       if (!s.playing) return;
       this._gullTimer -= dt;
@@ -180,6 +187,21 @@
         this._hornTimer = 16 + Math.random() * 26;
         if (s.sea < 0.6 && s.height < 30) this.distantHorn();
       }
+    }
+
+    /** How hard it is raining, 0..1 (weather.js). */
+    setRain(k) {
+      this.rainK = clamp(k, 0, 1);
+    }
+
+    /** Thunder: a crack, then a long rumble (quieter and later when the strike is far off). */
+    thunder(near) {
+      if (!this.ready) return;
+      const t = this.ctx.currentTime;
+      const k = clamp(near, 0.15, 1);
+      if (k > 0.55) this._hit({ t, freq: 1400, freqEnd: 180, type: 'bandpass', q: 0.7, attack: 0.004, decay: 0.7, peak: 0.22 * k, bus: this.amb });
+      this._hit({ t: t + 0.05, brown: true, rate: 0.45, freq: 170, freqEnd: 60, type: 'lowpass', q: 0.6, attack: 0.25, decay: 3.2, peak: 0.55 * k, bus: this.amb });
+      this._hit({ t: t + 0.7, brown: true, rate: 0.35, freq: 120, type: 'lowpass', q: 0.5, attack: 0.4, decay: 2.6, peak: 0.3 * k, bus: this.amb });
     }
 
     // ---------------------------------------------------------- building blocks
