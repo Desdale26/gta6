@@ -112,6 +112,7 @@
       this._buildStats();
       this._buildCredits();
       this._buildWhatsNew();
+      this._buildProgress();
       this._buildQuit();
       this._buildDialog();
       this._buildIntro();
@@ -142,6 +143,7 @@
       if (focusable) focusable.focus({ preventScroll: true });
       if (id === 'settings') this._refreshSettingsValues();
       if (id === 'stats') this._refreshStats();
+      if (id === 'progress') this._refreshProgress();
       if (id === 'pause') this._refreshDaytime();
     }
 
@@ -181,7 +183,7 @@
         return;
       }
       if (this.input._capture) return;
-      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew')) {
+      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew' || this.current === 'progress')) {
         this.back();
         return;
       }
@@ -246,6 +248,7 @@
         (this.dayBtn = this._button('Daytime: Off', () => this.actions.toggleDaytime && this.actions.toggleDaytime())),
         this._button('Job log', () => this.openDialog('jobLog')),
         this._button('Settings', () => this.show('settings', true)),
+        this._button('Progress', () => this.show('progress', true)),
         this._button('Statistics', () => this.show('stats', true)),
         this._button('Save game', () => this.actions.save()),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
@@ -464,6 +467,60 @@
       foot.append(this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, this.statsGrid, el('p', 'pane-note', 'More statistics (vehicles, missions, accuracy, police escapes) are tracked as those systems arrive.'), foot);
       s.append(panel);
+    }
+
+    // --------------------------------------------------------- progress
+    _buildProgress() {
+      const s = this._screen('progress', 'screen-progress');
+      const panel = el('div', 'panel progress-panel');
+      const head = el('div', 'panel-head');
+      head.append(el('h2', '', 'Progress'));
+      const top = el('div', 'progress-top');
+      this.progRing = el('div', 'progress-ring');
+      this.progPct = el('div', 'progress-pct');
+      this.progRing.append(this.progPct);
+      this.progCats = el('div', 'progress-cats');
+      top.append(this.progRing, this.progCats);
+      this.progAchHead = el('h3', 'progress-ach-head');
+      this.progAch = el('div', 'progress-ach');
+      const body = el('div', 'progress-body');
+      body.append(top, this.progAchHead, this.progAch);
+      const foot = el('div', 'panel-foot');
+      foot.append(this._button('Back', () => this.back(), { primary: true }));
+      panel.append(head, body, foot);
+      s.append(panel);
+    }
+
+    _refreshProgress() {
+      const p = this.actions.getProgress && this.actions.getProgress();
+      if (!p) return;
+      this.progPct.textContent = p.percent + '%';
+      this.progRing.style.setProperty('--pct', Math.min(100, p.percent));
+      this.progCats.textContent = '';
+      for (const c of p.cats) {
+        if (!c.total) continue;
+        const row = el('div', 'progress-cat');
+        const bar = el('div', 'progress-bar');
+        const fill = el('div', 'progress-fill');
+        fill.style.width = Math.round(Math.min(1, c.done / c.total) * 100) + '%';
+        bar.append(fill);
+        row.append(el('div', 'progress-cat-label', c.label), bar, el('div', 'progress-cat-num', c.done + ' / ' + c.total));
+        this.progCats.append(row);
+      }
+      this.progAchHead.textContent = 'Achievements · ' + p.unlocked + ' of ' + p.total;
+      this.progAch.textContent = '';
+      let cat = null;
+      for (const a of p.list) {
+        if (a.cat !== cat) {
+          cat = a.cat;
+          this.progAch.append(el('div', 'progress-ach-cat', cat));
+        }
+        const card = el('div', 'ach-card' + (a.unlocked ? ' is-unlocked' : ''));
+        const text = el('div', 'ach-card-text');
+        text.append(el('div', 'ach-card-title', a.title), el('div', 'ach-card-how', a.how));
+        card.append(el('div', 'ach-card-icon', a.unlocked ? a.icon : '🔒'), text, el('div', 'ach-card-date', a.unlocked ? a.unlocked : ''));
+        this.progAch.append(card);
+      }
     }
 
     _refreshStats() {
