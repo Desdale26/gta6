@@ -2269,6 +2269,7 @@
       const B = buildBody(id, this.lod, color);
       this.stats = { triangles: B.tris, buildMs: B.ms };
       this.finish = d.finishFor ? d.finishFor(color) : d.finish || '';
+      this.livery = !!d.livery; // the colours are painted into the body: no respray
       this._paintHex = d.livery ? 0xffffff : color;
       this._paintShared = paintMaterial(this._paintHex, this.finish);
       this._dmgMat = null;
@@ -2393,6 +2394,21 @@
         this._apply();
       }
       return r;
+    }
+
+    /** A new coat of paint (the body shop). Liveries can't be resprayed: false. */
+    setColor(hex) {
+      if (this.livery) return false;
+      const d = DEFS[this.id];
+      this.color = hex;
+      this.finish = d.finishFor ? d.finishFor(hex) : d.finish || '';
+      this._paintHex = hex;
+      this._paintShared = paintMaterial(hex, this.finish);
+      if (this._dmgMat) this._dmgMat.dispose();
+      this._dmgMat = null;
+      this.paintMesh.material = this._paintShared;
+      this.setDamage(this.state.damage);
+      return true;
     }
 
     /** 0..1: dents at the nose and tail, darker, rougher, dulled paint. */

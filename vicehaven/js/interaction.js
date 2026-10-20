@@ -75,6 +75,7 @@
       }
       if (this.input.consume('interact')) {
         if (best) this.use(best);
+        else VH.events.emit('interaction:idle', {}); // nothing here: the body shop's colour card takes it
       }
     }
 

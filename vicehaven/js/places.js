@@ -255,11 +255,13 @@
       const lots = [];
       for (const b of this._districtBlocks(district)) for (const lot of b.lots) if (lot.kind === 'parking' && !this.usedLots.has(lot.id)) lots.push(lot);
       if (!lots.length) return null;
-      // A car park with a corner shop on it (stores.js) is taken: try the next one.
-      // The shops stay in the list so every other pick lands where it always did.
+      // A car park with a corner shop or a body shop on it (stores.js, sprayshops.js)
+      // is taken: try the next one. They stay in the list so every other pick lands
+      // where it always did.
+      const taken = (l) => l.store || l.spray;
       let k = h % lots.length;
-      for (let i = 0; i < lots.length && lots[k].store; i++) k = (k + 1) % lots.length;
-      if (lots[k].store) return null;
+      for (let i = 0; i < lots.length && taken(lots[k]); i++) k = (k + 1) % lots.length;
+      if (taken(lots[k])) return null;
       const lot = lots[k];
       this.usedLots.add(lot.id);
       return { x: lot.cx, z: lot.cz, y: KERB, yaw: 0, lot };

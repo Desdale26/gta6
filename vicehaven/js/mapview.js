@@ -77,6 +77,7 @@
     race: { name: 'Street race', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Drive into the marker to start the race.' },
     challenge: { name: 'Side job', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Walk into the marker to start.' },
     store: { name: 'Corner shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Snacks inside. Point a gun at the clerk to hold it up, but the police will come.' },
+    spray: { name: 'Body shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Drive in and stop: a new colour and a full repair. If the police didn’t see you go in, they lose you.' },
     shop: { name: 'Club', cat: 'shops', cluster: true, labelAt: 0.7, tip: 'Open every night.' },
     safehouse: { name: 'Safehouse', cat: 'places', labelAt: 0.5 },
     plane: { name: 'Aircraft', cat: 'vehicles', cluster: true, labelAt: 1.1, tip: 'Parked and unlocked. Walk up to it and get in.' },

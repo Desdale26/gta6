@@ -1741,3 +1741,146 @@ body.map-open .hud-notify-stack {
 body.map-open .ach-banner {
   z-index: 32;
 }
+
+/* Fresh Coat's colour card (sprayshops.js): up while the car is parked in the booth. */
+.spray-card {
+  position: absolute;
+  top: 50%;
+  right: 1.6rem;
+  z-index: 12;
+  width: 19rem;
+  padding: 0.9rem 1rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 79, 139, 0.45);
+  background: linear-gradient(160deg, rgba(34, 14, 36, 0.92), rgba(10, 12, 26, 0.92));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translate(1.5rem, -50%);
+  transition: opacity 0.2s, transform 0.25s;
+  pointer-events: none;
+}
+
+.spray-card.visible {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.spray-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.spray-head b {
+  white-space: nowrap;
+  font-family: var(--vh-font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  background: linear-gradient(90deg, #ff4f8b, #b77bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.spray-head span {
+  white-space: nowrap;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}
+
+.spray-swatches {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.spray-swatches i {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.35), inset 0 3px 5px rgba(255, 255, 255, 0.25);
+  transition: transform 0.12s, border-color 0.12s;
+}
+
+.spray-swatches i.on {
+  border-color: #fff;
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px rgba(255, 79, 139, 0.8), inset 0 -3px 6px rgba(0, 0, 0, 0.35), inset 0 3px 5px rgba(255, 255, 255, 0.25);
+}
+
+.spray-name {
+  margin: 0.6rem 0 0.4rem;
+  font-family: var(--vh-font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.spray-lines div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: rgba(241, 244, 255, 0.8);
+  line-height: 1.5;
+}
+
+.spray-lines em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.spray-lines .total {
+  margin-top: 0.2rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+  color: #fff;
+}
+
+.spray-lines .total em {
+  color: var(--vh-accent-2);
+}
+
+.spray-warn {
+  min-height: 0;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ff8a8a;
+}
+
+.spray-warn:empty {
+  display: none;
+}
+
+.spray-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: var(--vh-muted);
+}
+
+.spray-keys kbd {
+  display: inline-block;
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #fff;
+  text-align: center;
+}
+
+.spray-card.blocked .spray-lines .total em {
+  color: #ff8a8a;
+}
+
+body.cutscene .spray-card,
+body.map-open .spray-card {
+  visibility: hidden;
+}

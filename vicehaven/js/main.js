@@ -23,7 +23,7 @@
   const FIXED_DT = 1 / 60;
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
-  const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Achievements'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Achievements'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
@@ -174,6 +174,8 @@
       if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
       // Then the roadside strips along the roads out of town (suburbs.js).
       if (VH.Suburbs && VH.Suburbs.plan) VH.Suburbs.plan(this.layout);
+      // And the body shops take a few of the car parks that are left (sprayshops.js).
+      if (VH.SprayShops && VH.SprayShops.plan) VH.SprayShops.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -1430,6 +1432,8 @@
           cam.quaternion.slerpQuaternions(q0, q1, t * t);
         }
         cam.updateMatrixWorld();
+      } else if (this.cameraShot && this.cameraShot(dt, this.renderer.camera)) {
+        // A system's own shot (the body shop's door coming down).
       } else if (!(this.missions && this.missions.updateCamera(dt, this.renderer.camera))) {
         this.cameraRig.update(dt, player);
       }

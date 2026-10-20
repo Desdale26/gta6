@@ -970,5 +970,7 @@
     }
   });
 
+  // The lot frames and the frame drawer, for the other buildings on car parks (sprayshops.js).
+  Stores.kit = { KERB, T, frameFor, P, local, rect, drawer, hashString, AVOID_BLOCKS };
   VH.Stores = Stores;
 })();

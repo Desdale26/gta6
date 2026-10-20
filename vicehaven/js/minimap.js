@@ -86,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, property: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -104,6 +104,7 @@
     ['challenge', 'Challenge'],
     ['landmark', 'Landmark'],
     ['store', 'Corner shop'],
+    ['spray', 'Fresh Coat body shop'],
     ['plane', 'Aircraft'],
     ['tank', 'Military vehicle'],
     ['waypoint', 'Your waypoint'],
@@ -374,6 +375,21 @@
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText('$', 0, 1.8);
+    },
+    // A spray can: a Fresh Coat body shop (respray, repair, lose the heat).
+    spray(g) {
+      roundRectPath(g, -4.4, -3.6, 8.8, 11, 2.2);
+      inkThenFill(g, '#ff4f8b', 3);
+      roundRectPath(g, -2.2, -6.6, 4.4, 3.4, 1);
+      inkThenFill(g, '#f1f4ff', 2.4);
+      g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      g.fillRect(-4.4, 0.4, 8.8, 1.6);
+      g.fillStyle = '#f1f4ff';
+      for (const [x, y] of [[5.4, -6.4], [7, -4.8], [6.8, -7.8]]) {
+        g.beginPath();
+        g.arc(x, y, 0.9, 0, TAU);
+        g.fill();
+      }
     },
     // Aircraft, drawn nose-up and turned to face their heading.
     plane(g) {
