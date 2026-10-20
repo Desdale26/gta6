@@ -245,6 +245,7 @@
       menu.append(
         this._button('Resume', () => this.actions.resume(), { primary: true }),
         this._button('City map', () => this.actions.openMap()),
+        this._button('Photo mode', () => this.actions.photoMode && this.actions.photoMode()),
         (this.dayBtn = this._button('Daytime: Off', () => this.actions.toggleDaytime && this.actions.toggleDaytime())),
         this._button('Job log', () => this.openDialog('jobLog')),
         this._button('Settings', () => this.show('settings', true)),
@@ -548,7 +549,7 @@
       para('three.js r186 — © 2010–2026 three.js authors, MIT licence.');
       para('Fonts: whatever your system provides (Bahnschrift and Segoe UI on Windows).');
       body.append(el('h3', '', 'This build'));
-      para(VH.BUILD_NAME + ' (v' + VH.VERSION + ', ' + VH.UPDATE_NAME + '): the full city from Crestline Estates to the Saltmarsh docks, Northgate Heights, the airport and Fort Breakwater, 19 cars, five aircraft and a tank, 11 weapons, 14 corner shops, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
+      para(VH.BUILD_NAME + ' (v' + VH.VERSION + ', ' + VH.UPDATE_NAME + '): the full city from Crestline Estates to the Saltmarsh docks, Northgate Heights, the airport and Fort Breakwater, 19 cars, five aircraft and a tank, 11 weapons, 14 corner shops, four body shops, eight businesses, weather, 42 achievements, photo mode, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, body, foot);
@@ -567,7 +568,14 @@
         row.append(el('h3', '', title), el('p', '', text));
         body.append(row);
       };
-      body.append(el('p', 'whatsnew-lead', 'Press M in the game for the new map: full screen, with a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.'));
+      body.append(el('p', 'whatsnew-lead', 'Weather, body shops, businesses to buy, 42 achievements with a 100% Progress screen, and photo mode. Everything new is on the map (M).'));
+      item('⛈  Weather', 'Clouds roll in, then rain, then thunderstorms. The roads go dark and shiny (and a little slippery), lightning flashes and the thunder follows. Settings → Gameplay → Weather picks Changing, Always clear, Rainy or Stormy.');
+      item('🎨  Fresh Coat body shops', 'Four of them (a pink spray can on the map). Drive in and stop, pick one of 13 colours, and the car comes out repainted and good as new. If the police couldn\u2019t see you go in, they lose you too.');
+      item('🏢  Businesses for sale', 'Eight businesses, from a laundromat to an office block. Walk up to the For Sale sign and press E. Every eight minutes is payday: the takings land in your pocket.');
+      item('🏆  Achievements and 100%', '42 achievements to earn, from your first stolen car to standing on top of a skyscraper. Pause → Progress shows how close you are to 100%.');
+      item('📷  Photo mode', 'Pause → Photo mode. Fly the camera round, set the time and the weather, pick a filter and a frame, and press Enter to save the picture.');
+      body.append(el('h3', 'whatsnew-sub', 'Also new since v1.0'));
+      item('🗺  The map', 'Press M in the game for the full-screen map: a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.');
       item('✈  New aircraft and tank', 'The airliner, the Skylark, the Talon jet, both helicopters and the Bastion tank have all been rebuilt: real wings and engines, windows and doors, cockpits, liveries, tread links and camouflage. Airliner windows light up at night.');
       item('🗺  A brand new map', 'Search for places, shops and streets; filter what shows; click a place for how far it is and how long the drive takes; right-click to drop coloured pins (they show on the radar too). The game pauses while it is open, and it works with a controller.');
       item('✈  Vicehaven International', 'Drive north up Grand Avenue to the airport. Steal a Skylark plane or the Sparrow helicopter, or the big Albatross jet, and fly. Airliners take off and land every few minutes.');

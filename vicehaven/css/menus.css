@@ -815,3 +815,199 @@ select {
     grid-template-columns: 8rem 1fr 3.8rem;
   }
 }
+
+/* -------------------------------------------------- photo mode (photomode.js) */
+.photo-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  display: none;
+}
+
+.photo-ui.visible {
+  display: block;
+}
+
+.photo-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.85) 100%);
+  opacity: 0;
+}
+
+.photo-bars i {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.photo-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
+.photo-flash.go {
+  animation: photo-flash 0.45s ease-out;
+}
+
+@keyframes photo-flash {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+.photo-panel {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--vh-line, rgba(255, 255, 255, 0.1));
+  background: rgba(10, 12, 24, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.photo-panel.hidden {
+  opacity: 0;
+  transform: translateX(-1rem);
+  pointer-events: none;
+}
+
+.photo-title {
+  margin: 0 0 0.7rem;
+  font-family: var(--vh-font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+}
+
+.photo-row {
+  display: grid;
+  grid-template-columns: 4.6rem 1fr;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+  font-size: 0.85rem;
+}
+
+.photo-label {
+  color: var(--vh-muted);
+}
+
+.photo-cycle {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr 1.8rem;
+  align-items: center;
+  text-align: center;
+}
+
+.photo-cycle button,
+.photo-chips button,
+.photo-toggle {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.photo-cycle button:hover,
+.photo-chips button:hover,
+.photo-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.photo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.photo-chips button {
+  font-size: 0.76rem;
+}
+
+.photo-chips button.on,
+.photo-toggle.on {
+  border-color: var(--vh-accent-2);
+  background: rgba(255, 179, 71, 0.18);
+  color: #fff;
+}
+
+.photo-slider {
+  display: grid;
+  grid-template-columns: 1fr 3rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.photo-slider input {
+  width: 100%;
+  accent-color: var(--vh-accent);
+}
+
+.photo-slider em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.photo-actions .btn {
+  flex: 1 1 auto;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.photo-help {
+  margin: 0.7rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--vh-muted);
+}
+
+.photo-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 9px;
+  background: rgba(10, 12, 24, 0.85);
+  font-size: 0.85rem;
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.photo-toast.show {
+  animation: photo-toast 3s ease forwards;
+}
+
+@keyframes photo-toast {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.credits-body .whatsnew-sub {
+  margin: 1rem 0 0.3rem;
+  font-family: var(--vh-font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}

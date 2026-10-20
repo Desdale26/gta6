@@ -296,7 +296,8 @@
     setTime(hours) {
       this.hours = ((hours % 24) + 24) % 24;
       // Always daytime (Settings → Gameplay): daytime hours stand, anything else becomes midday.
-      if (this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
+      // (Photo mode sets freeTime: any hour goes there.)
+      if (!this.freeTime && this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
       // Sunrise ~06:00, sunset ~18:00; the sun crosses the southern sky (+Z).
       const t = ((this.hours - 6) / 12) * Math.PI;
       const maxAlt = 66 * VH.math.DEG;

@@ -87,6 +87,7 @@
       this._t = 0;
       this._dirty = false;
       this._queue = [];
+      this._later = new Set(); // earned in photo mode: awarded back in the game
       this._showing = false;
       this._maxHeat = 0;
       this._stormT = 0;
@@ -107,6 +108,7 @@
       const a = BY_ID.get(id);
       if (!a || this.has(id)) return false;
       const g = this.game;
+      if (g.state === 'photo') this._later.add(id);
       if (g.state !== 'playing' && g.state !== 'dialog') return false;
       this.profile.unlocked[id] = new Date().toISOString().slice(0, 10);
       this._save();
@@ -227,6 +229,10 @@
     // ------------------------------------------------------------- update
     update(dt) {
       const g = this.game;
+      if (this._later.size) {
+        for (const id of this._later) this.unlock(id);
+        this._later.clear();
+      }
       const p = g.player;
       const v = p.inVehicle ? p.vehicle : null;
       if (v && v.kind === 'car' && !v.wrecked) {

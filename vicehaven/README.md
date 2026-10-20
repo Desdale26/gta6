@@ -22,6 +22,9 @@ buying the city block by block with money Jay once helped steal.
   and the walled mansions of Crestline Estates, with a running day and night.
 - **18 cars, 11 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
+- **New in v1.2 (City life update):** rain and thunderstorms, Fresh Coat
+  body shops, eight businesses to buy, 42 achievements with a Progress
+  screen counting to 100%, and photo mode.
 
 ---
 
@@ -148,6 +151,18 @@ look up) once you're fast enough. Land gently on something flat.
 | **Left mouse · right mouse** | Main gun (it reloads) · machine gun |
 
 **In a shop:** **E** at the counter buys snacks; aim a gun at the clerk to hold the place up.
+
+**At Fresh Coat (the body shop):** drive in and stop; **A / D** pick a colour, **E** sprays, drive off to leave.
+
+**Photo mode** (pause menu → Photo mode)
+
+| Key | Action |
+|-----|--------|
+| **W A S D** · **Space / C** | Move the camera · up / down (**Shift** faster) |
+| **Drag the mouse** · **wheel** | Look · zoom |
+| **Q / E** · **R** | Tilt · level again |
+| **Enter** | Take the photo (saved as a PNG to your downloads) |
+| **H** · **Esc** | Hide the panel · back to the pause menu |
 
 **The map (M).** A full-screen road atlas; the game pauses while it is open.
 It opens on Jay at street level. **Drag** to move (flick it and it glides),
@@ -384,6 +399,38 @@ for the day and night cycle. The pause menu has the same switch, and so does
 **Settings → Gameplay → Always daytime**. The first time it gets dark, a
 notice reminds you.
 
+**Weather.** The sky changes every few minutes: clear, cloudy, overcast,
+rain and thunderstorms, easing from one to the next. Rain falls round the
+camera (not under a roof), the roads go dark and shiny and a little
+slippery, and storms bring lightning and thunder. **Settings → Gameplay →
+Weather** picks Changing, Always clear, Rainy or Stormy.
+
+**Fresh Coat body shops.** Four of them, one in each of Old Market, Palm
+Crescent, downtown and Harbor Point (a pink spray can on the map). Drive in
+and stop: a colour card comes up with 13 paints and the bill (the paint,
+the repairs, and a fee for each wanted star). The roller door comes down,
+and the car rolls out repainted and good as new. If the police couldn't see
+you go in, they lose you too. Cars only, and not police cars, cabs, buses
+or vans in a fleet livery.
+
+**Businesses for sale.** Eight of them, from a laundromat ($25,000) to
+Meridian Office Suites ($300,000): walk up to the **For Sale** sign and
+press **E**. Every eight minutes of play is payday, and the takings from
+everything Jay owns go straight into his pocket. Gold houses on the map are
+for sale, green ones are yours.
+
+**Achievements and 100%.** 42 achievements (story, driving, flying, crime,
+exploring and life) pop up as you earn them and stay earned across new
+games. **Pause → Progress** shows your completion: story jobs, side
+stories, races and jobs, stunt jumps, lanterns, districts, businesses and
+achievements, with every achievement and how to get it.
+
+**Photo mode.** Pause and choose **Photo mode**: the world freezes and the
+camera comes loose (up to 60 m from Jay). Pick a filter (Vivid, Noir,
+Sunset, Retro, Cool, Dream), a frame (Cinema, Wide, Square), the time of
+day, the weather, the zoom, a tilt and a vignette; hide Jay if you like (the job markers are hidden unless you turn them on).
+**Enter** saves the shot as a PNG.
+
 **Time and light.** The clock runs (a full day is about 24 minutes) unless
 you fix the time in Settings. Night is moonlit blue rather than black, with
 street-light pools, headlights, lit windows and neon. If nights are still too
@@ -519,7 +566,13 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Settings → Gameplay → Always daytime: night turns to midday at once and stays that way
 - [ ] At night press T: midday at once, with a notice; T again brings the cycle back; the pause menu button says On / Off to match
 - [ ] Settings → Graphics → Film grain: Off, Light (default) and Strong change the picture live
-- [ ] The title screen says v1.1 and What's new lists the update
+- [ ] Settings → Gameplay → Weather → Stormy: rain streaks, wet shiny roads, lightning and thunder; under a bridge the rain stops in front of you
+- [ ] Drive into a Fresh Coat with a star or two and nobody watching: pick a colour, E, the door comes down, the car comes out repainted and repaired and the stars are gone
+- [ ] With a police car right behind you, the colour card says to lose them first
+- [ ] Buy a business at its For Sale sign: the sign changes, the map icon turns green, and a payday arrives within eight minutes
+- [ ] Earn an achievement (get a wanted star): the banner drops in at the top; Pause → Progress lists it with the date
+- [ ] Pause → Photo mode: fly round, change the filter, time and weather, press Enter: a PNG downloads; Esc puts everything back
+- [ ] The title screen says v1.2 and What's new lists the update
 
 For developers, the automated checks need Node.js and Playwright:
 

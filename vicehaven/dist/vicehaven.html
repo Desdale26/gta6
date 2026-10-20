@@ -2256,6 +2256,213 @@ body.map-open .hud-toast,
 body.map-open .hud-notify-stack {
   visibility: hidden;
 }
+
+/* Achievement unlocked (achievements.js): slides down at the top of the screen. */
+.ach-banner {
+  position: absolute;
+  top: 1.1rem;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 20rem;
+  max-width: min(32rem, 90vw);
+  padding: 0.7rem 1.2rem 0.7rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 179, 71, 0.55);
+  background: linear-gradient(90deg, rgba(30, 20, 34, 0.95), rgba(12, 14, 28, 0.95));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 122, 89, 0.25);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -140%);
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1.15), opacity 0.3s;
+}
+
+.ach-banner.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.ach-icon {
+  flex: none;
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 179, 71, 0.35), rgba(255, 79, 139, 0.15));
+  font-size: 1.7rem;
+}
+
+.ach-kicker {
+  font-family: var(--vh-font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.ach-title {
+  font-family: var(--vh-font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.ach-how {
+  font-size: 0.82rem;
+  color: rgba(241, 244, 255, 0.75);
+}
+
+body.map-open .ach-banner {
+  z-index: 32;
+}
+
+/* Fresh Coat's colour card (sprayshops.js): up while the car is parked in the booth. */
+.spray-card {
+  position: absolute;
+  top: 50%;
+  right: 1.6rem;
+  z-index: 12;
+  width: 19rem;
+  padding: 0.9rem 1rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 79, 139, 0.45);
+  background: linear-gradient(160deg, rgba(34, 14, 36, 0.92), rgba(10, 12, 26, 0.92));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translate(1.5rem, -50%);
+  transition: opacity 0.2s, transform 0.25s;
+  pointer-events: none;
+}
+
+.spray-card.visible {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.spray-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.spray-head b {
+  white-space: nowrap;
+  font-family: var(--vh-font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  background: linear-gradient(90deg, #ff4f8b, #b77bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.spray-head span {
+  white-space: nowrap;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}
+
+.spray-swatches {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.spray-swatches i {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.35), inset 0 3px 5px rgba(255, 255, 255, 0.25);
+  transition: transform 0.12s, border-color 0.12s;
+}
+
+.spray-swatches i.on {
+  border-color: #fff;
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px rgba(255, 79, 139, 0.8), inset 0 -3px 6px rgba(0, 0, 0, 0.35), inset 0 3px 5px rgba(255, 255, 255, 0.25);
+}
+
+.spray-name {
+  margin: 0.6rem 0 0.4rem;
+  font-family: var(--vh-font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.spray-lines div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: rgba(241, 244, 255, 0.8);
+  line-height: 1.5;
+}
+
+.spray-lines em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.spray-lines .total {
+  margin-top: 0.2rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+  color: #fff;
+}
+
+.spray-lines .total em {
+  color: var(--vh-accent-2);
+}
+
+.spray-warn {
+  min-height: 0;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ff8a8a;
+}
+
+.spray-warn:empty {
+  display: none;
+}
+
+.spray-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: var(--vh-muted);
+}
+
+.spray-keys kbd {
+  display: inline-block;
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #fff;
+  text-align: center;
+}
+
+.spray-card.blocked .spray-lines .total em {
+  color: #ff8a8a;
+}
+
+body.cutscene .spray-card,
+body.map-open .spray-card {
+  visibility: hidden;
+}
 </style>
   <style data-src="css/menus.css">
 /*
@@ -2372,6 +2579,7 @@ body.map-open .hud-notify-stack {
 .screen-stats,
 .screen-credits,
 .screen-whatsnew,
+.screen-progress,
 .screen-quit {
   display: flex;
   align-items: center;
@@ -2902,6 +3110,373 @@ select {
     top: 8vh;
     animation: none;
   }
+}
+
+/* ------------------------------------------------- progress (pause menu) */
+.progress-panel {
+  width: min(860px, 94vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.progress-body {
+  overflow-y: auto;
+  padding-right: 0.3rem;
+  scrollbar-width: thin;
+}
+
+.progress-top {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 1.4rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.progress-ring {
+  --pct: 0;
+  position: relative;
+  width: 9.5rem;
+  height: 9.5rem;
+  border-radius: 50%;
+  background: conic-gradient(#ffb347 0%, #ff4f8b calc(var(--pct) * 1%), rgba(255, 255, 255, 0.08) calc(var(--pct) * 1%));
+}
+
+.progress-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0.7rem;
+  border-radius: 50%;
+  background: rgb(10, 13, 26);
+}
+
+.progress-pct {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--vh-font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-cats {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.progress-cat {
+  display: grid;
+  grid-template-columns: 11rem 1fr 4.5rem;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.86rem;
+}
+
+.progress-cat-label {
+  color: var(--vh-muted);
+}
+
+.progress-bar {
+  height: 0.5rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #ffb347, #ff4f8b);
+}
+
+.progress-cat-num {
+  text-align: right;
+  font-family: var(--vh-font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-ach-head {
+  margin: 0.6rem 0 0.4rem;
+  font-family: var(--vh-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.progress-ach {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+}
+
+.progress-ach-cat {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}
+
+.ach-card {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  opacity: 0.55;
+}
+
+.ach-card.is-unlocked {
+  opacity: 1;
+  background: linear-gradient(90deg, rgba(255, 179, 71, 0.12), rgba(255, 79, 139, 0.06));
+  border-color: rgba(255, 179, 71, 0.35);
+}
+
+.ach-card-icon {
+  font-size: 1.5rem;
+  text-align: center;
+  filter: grayscale(1);
+}
+
+.ach-card.is-unlocked .ach-card-icon {
+  filter: none;
+}
+
+.ach-card-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.ach-card-how {
+  font-size: 0.76rem;
+  color: var(--vh-muted);
+}
+
+.ach-card-date {
+  font-size: 0.7rem;
+  color: var(--vh-accent-2);
+}
+
+@media (max-width: 700px) {
+  .progress-top,
+  .progress-ach {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-ring {
+    margin: 0 auto;
+  }
+
+  .progress-cat {
+    grid-template-columns: 8rem 1fr 3.8rem;
+  }
+}
+
+/* -------------------------------------------------- photo mode (photomode.js) */
+.photo-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  display: none;
+}
+
+.photo-ui.visible {
+  display: block;
+}
+
+.photo-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.85) 100%);
+  opacity: 0;
+}
+
+.photo-bars i {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.photo-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
+.photo-flash.go {
+  animation: photo-flash 0.45s ease-out;
+}
+
+@keyframes photo-flash {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+.photo-panel {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--vh-line, rgba(255, 255, 255, 0.1));
+  background: rgba(10, 12, 24, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.photo-panel.hidden {
+  opacity: 0;
+  transform: translateX(-1rem);
+  pointer-events: none;
+}
+
+.photo-title {
+  margin: 0 0 0.7rem;
+  font-family: var(--vh-font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+}
+
+.photo-row {
+  display: grid;
+  grid-template-columns: 4.6rem 1fr;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+  font-size: 0.85rem;
+}
+
+.photo-label {
+  color: var(--vh-muted);
+}
+
+.photo-cycle {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr 1.8rem;
+  align-items: center;
+  text-align: center;
+}
+
+.photo-cycle button,
+.photo-chips button,
+.photo-toggle {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.photo-cycle button:hover,
+.photo-chips button:hover,
+.photo-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.photo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.photo-chips button {
+  font-size: 0.76rem;
+}
+
+.photo-chips button.on,
+.photo-toggle.on {
+  border-color: var(--vh-accent-2);
+  background: rgba(255, 179, 71, 0.18);
+  color: #fff;
+}
+
+.photo-slider {
+  display: grid;
+  grid-template-columns: 1fr 3rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.photo-slider input {
+  width: 100%;
+  accent-color: var(--vh-accent);
+}
+
+.photo-slider em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.photo-actions .btn {
+  flex: 1 1 auto;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.photo-help {
+  margin: 0.7rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--vh-muted);
+}
+
+.photo-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 9px;
+  background: rgba(10, 12, 24, 0.85);
+  font-size: 0.85rem;
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.photo-toast.show {
+  animation: photo-toast 3s ease forwards;
+}
+
+@keyframes photo-toast {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.credits-body .whatsnew-sub {
+  margin: 1rem 0 0.3rem;
+  font-family: var(--vh-font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
 }
 </style>
   <style data-src="css/map.css">
@@ -9401,9 +9976,9 @@ void main() {
   'use strict';
 
   const VH = (window.VH = window.VH || {});
-  VH.VERSION = '1.1.0';
+  VH.VERSION = '1.2.0';
   VH.BUILD_NAME = 'Ten and Two';
-  VH.UPDATE_NAME = 'Open world update';
+  VH.UPDATE_NAME = 'City life update';
 
   // ---------------------------------------------------------------- events
   class EventBus {
@@ -9913,6 +10488,7 @@ void main() {
         showHints: true,
         slowMotion: true,
         timeOfDay: 'cycle',
+        weather: 'dynamic',
         alwaysDay: false,
         voicedDialogue: true,
         policeVoice: true,
@@ -11942,6 +12518,7 @@ void main() {
   // exact on-screen colour of the sky's horizon.
   // Moonlight and the orange bounce of street lamps fill the shadows at night.
   const NIGHT_SKY = new THREE.Color(0x5a6ca4);
+  const _grey = new THREE.Color();
   // Night brightness at 100% sits a quarter above where nights started out (players found them too dark).
   const NIGHT_LIFT = 1.25;
   const NIGHT_GROUND = new THREE.Color(0x4a3a2a);
@@ -12191,16 +12768,18 @@ void main() {
       }
       this.shadowExtent = tier.extent;
       this.shadowMapSize = tier.mapSize;
-      // Exponential fog reaching ~95% at the draw distance.
+      // Exponential fog reaching ~95% at the draw distance (thicker in bad weather).
       const dd = this.settings.get('graphics.drawDistance');
-      this.scene.fog.density = 1.75 / dd;
+      this._fogBase = 1.75 / dd;
+      this.scene.fog.density = this._fogBase * (1 + 2.4 * ((this.weather && this.weather.fog) || 0));
     }
 
     /** Set the time of day (hours, 0–24) and recompute all lighting. */
     setTime(hours) {
       this.hours = ((hours % 24) + 24) % 24;
       // Always daytime (Settings → Gameplay): daytime hours stand, anything else becomes midday.
-      if (this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
+      // (Photo mode sets freeTime: any hour goes there.)
+      if (!this.freeTime && this.settings.get('gameplay.alwaysDay') && (this.hours < 9 || this.hours > 16.5)) this.hours = 12.5;
       // Sunrise ~06:00, sunset ~18:00; the sun crosses the southern sky (+Z).
       const t = ((this.hours - 6) / 12) * Math.PI;
       const maxAlt = 66 * VH.math.DEG;
@@ -12214,6 +12793,25 @@ void main() {
       this.cloudCover = clamp(c, 0, 1);
       this.skyUniforms.uCloud.value = this.cloudCover;
       this._envDirty = true;
+    }
+
+    /**
+     * The weather (weather.js): { cloud, dim, fog } 0..1. Dims the sun and greys
+     * the sky, thickens the fog. Cheap to call every frame; the reflections
+     * catch up when it has changed enough.
+     */
+    setWeather(w) {
+      const was = this.weather || { cloud: 0, dim: 0, fog: 0 };
+      this.weather = { cloud: w.cloud, dim: w.dim, fog: w.fog };
+      this.skyUniforms.uCloud.value = this.cloudCover = clamp(0.38 + w.cloud * 0.62, 0, 1);
+      if (this._fogBase) this.scene.fog.density = this._fogBase * (1 + 2.4 * w.fog);
+      if (Math.abs(was.dim - w.dim) > 0.002 || Math.abs(was.cloud - w.cloud) > 0.002) {
+        this._applyKeys(this.sunDir.y);
+        if (Math.abs((this._envDim || 0) - w.dim) > 0.06) {
+          this._envDim = w.dim;
+          this._envDirty = true;
+        }
+      }
     }
 
     _applyKeys(s) {
@@ -12231,8 +12829,16 @@ void main() {
       const zenith = mixHex(a.zenith, b.zenith, this.shared.uSkyZenith.value);
       const horizon = mixHex(a.horizon, b.horizon, this.shared.uSkyHorizon.value);
       const lightColor = mixHex(a.light, b.light, new THREE.Color());
-      const intensity = lerp(a.intensity, b.intensity, k);
-      const envIntensity = lerp(a.env, b.env, k);
+      // Bad weather: less sun, a greyer sky (the fog takes the horizon's colour too).
+      const wd = (this.weather && this.weather.dim) || 0;
+      if (wd > 0) {
+        for (const c of [zenith, horizon]) {
+          const l = (c.r + c.g + c.b) / 3;
+          c.lerp(_grey.setRGB(l * 0.9, l * 0.94, l * 1.0), wd * 0.75).multiplyScalar(1 - wd * 0.3);
+        }
+      }
+      const intensity = lerp(a.intensity, b.intensity, k) * (1 - wd * 0.82);
+      const envIntensity = lerp(a.env, b.env, k) * (1 - wd * 0.25);
       const night = smoothstep(-0.04, -0.22, s);
       // Settings → Night brightness scales everything night adds on top of the day.
       const nb = this.nightBrightness;
@@ -20139,9 +20745,1626 @@ void main() {
     }
   });
 
+  // The lot frames and the frame drawer, for the other buildings on car parks (sprayshops.js).
+  Stores.kit = { KERB, T, frameFor, P, local, rect, drawer, hashString, AVOID_BLOCKS };
   VH.Stores = Stores;
 })();
 //# sourceURL=js/stores.js
+</script>
+    <script data-src="js/sprayshops.js">
+/*
+ * sprayshops.js — Fresh Coat body shops: drive in, pick a colour, and the
+ * car comes back out repainted and repaired. If the police didn't see you
+ * go in, they've lost you.
+ *
+ *   VH.SprayShops.plan(layout)              picks car parks for the shops
+ *                                           (after stores.js has had its pick)
+ *   VH.SprayShops.buildLot(world, ctx, lot) builds one: a body shop with a
+ *                                           wide roller door, a paint booth
+ *                                           inside and a forecourt in front
+ *   new VH.SprayShops(game)                 the colour card and the respray
+ *
+ * Drive in and stop: a colour card comes up (A / D or the stick to choose,
+ * E to spray, drive off to leave). Spraying brings the roller door down for
+ * a few seconds and costs the paint, the repairs and a fee per wanted star.
+ * With the police watching, the shop won't touch the car. Cars only, and
+ * not the ones in a fleet livery (police, taxi, bus), whose colours are
+ * part of the body.
+ *
+ * Each shop is laid out in its car park's frame (stores.js): u runs along
+ * the street front, v runs in from the front edge of the lot.
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const { clamp } = VH.math;
+  const SALT = 'fresh-coat-3'; // the plan's shuffle (none of these car parks is a story place)
+  const QUOTA = { oldmarket: 1, harborpoint: 1, palmcrescent: 1, downtown: 1 };
+  const SPACING = 260; //  metres between body shops
+  const WALL_H = 6.2; //   top of the walls above the kerb
+  const CEIL = 5.6; //     inside ceiling above the kerb
+  const DOOR_W = 5.6;
+  const DOOR_H = 4.3;
+  const PAINT = 150; //    the paint job
+  const REPAIR = 0.6; //   dollars per point of damage (a wreck-to-new repair is $600)
+  const HEAT = 200; //     per wanted star
+  // The card's colours: [name, hex].
+  const PAINTS = [
+    ['Candy Red', 0xc8102e],
+    ['Sunset Orange', 0xff6a1f],
+    ['Vice Pink', 0xff4f8b],
+    ['Lemon Zest', 0xf2c500],
+    ['Lime Fizz', 0x7ccf2a],
+    ['Lagoon Teal', 0x14a3a0],
+    ['Ocean Blue', 0x1f6fd1],
+    ['Midnight Blue', 0x16224a],
+    ['Royal Purple', 0x6a2fa0],
+    ['Pearl White', 0xf0efe9],
+    ['Silver Mist', 0xb7bcc3],
+    ['Gunmetal', 0x4a4f57],
+    ['Gloss Black', 0x101113],
+  ];
+  const BRAND = { sign: ['FRESH COAT', 'RESPRAY · REPAIR'], bg: ['#ff4f8b', '#7a2bd0'], fg: '#ffffff', band: 0xd23a7f, trim: 0xffd27a };
+  // The roller door's timing (seconds): down, sprayed, up.
+  const CLOSE = 1.3;
+  const HOLD = 2.4;
+  const OPEN = 1.3;
+
+  let K = null; // the frame helpers from stores.js
+
+  function kit() {
+    if (!K) K = VH.Stores && VH.Stores.kit;
+    return K;
+  }
+
+  function smooth(t) {
+    t = clamp(t, 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  /** Which way the lot can face a street with room for the shop and a forecourt. */
+  function fit(lot) {
+    for (const side of ['s', 'n', 'e', 'w']) {
+      if (!lot.front[side]) continue;
+      const f = kit().frameFor(lot, side);
+      if (f.W >= 15 && f.D >= 18) return side;
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------ the shop
+  function buildShop(world, ctx, s) {
+    const { KERB, T, P, rect } = kit();
+    const f = s.f;
+    const D = kit().drawer(ctx, f);
+    const rng = new VH.RNG(s.seed);
+    const a0 = s.a;
+    const a1 = s.a + s.GW;
+    const v0 = s.vb0;
+    const v1 = s.vb1;
+    const y0 = KERB;
+    const yTop = KERB + WALL_H;
+    const d0 = s.d0;
+    const d1 = s.d1;
+    const band = VH.col(BRAND.band);
+    const trim = VH.col(BRAND.trim);
+    const wallCol = VH.col(rng.pick([0xe4e0d8, 0xd8dade, 0xe9e2d6]));
+    const seed = rng.range(0, 100);
+    const blankF = { style: 0, bay: 4, seed };
+    const lot = s.lot;
+    const metal = VH.col(0x2b2f35);
+    const steel = VH.col(0x8a9097);
+
+    // --- forecourt: asphalt round the shop, guide lines to the door, a hazard strip at it
+    const W = f.W;
+    for (const [u0, q0, u1, q1] of [[0, 0, W, v0], [0, v1, W, f.D], [0, v0, a0, v1], [a1, v0, W, v1]]) {
+      if (u1 - u0 < 0.05 || q1 - q0 < 0.05) continue;
+      const r = rect(f, u0, q0, u1, q1);
+      ctx.asphaltTop.topRect(r[0], r[1], r[2], r[3], KERB, VH.col(0xd0d0d0), 6);
+    }
+    const flat = { skip: { n: true, s: true, e: true, w: true } };
+    const mark = (u0, q0, u1, q1, col) => {
+      const r = rect(f, u0, q0, u1, q1);
+      ctx.marks.box(r[0], KERB, r[1], r[2], KERB + 0.001, r[3], col, flat);
+    };
+    const yellow = VH.col(0xf2c500);
+    mark(d0 + 0.2, 0.8, d0 + 0.34, v0 - 0.6, yellow);
+    mark(d1 - 0.34, 0.8, d1 - 0.2, v0 - 0.6, yellow);
+    for (let u = d0, i = 0; u < d1 - 0.01; u += 0.5, i++) mark(u, v0 - 0.5, Math.min(u + 0.5, d1), v0 - 0.05, i % 2 ? VH.col(0x1b1b1b) : yellow);
+    // An arrow painted on the way in.
+    const uc = (d0 + d1) / 2;
+    const white = VH.col(0xe8e8e0);
+    mark(uc - 0.12, v0 - 4.2, uc + 0.12, v0 - 2.0, white);
+    for (let i = 0; i < 6; i++) {
+      const w = 0.8 - i * 0.13;
+      mark(uc - w, v0 - 2.0 + i * 0.13, uc + w, v0 - 1.87 + i * 0.13, white);
+    }
+
+    // --- shell
+    const wallBox = (u0, q0, u1, q1, h0, h1, skipLocal, bottom) =>
+      D.box('b', u0, h0, q0, u1, h1, q1, wallCol, { skipLocal, bottom, skip: { top: true } });
+    const leftStreet = !!lot.front[D.sides.left];
+    const rightStreet = !!lot.front[D.sides.right];
+    const backStreet = !!lot.front[D.sides.back];
+    const backSkip = ['front'];
+    if (backStreet) backSkip.push('back');
+    if (leftStreet) backSkip.push('left');
+    if (rightStreet) backSkip.push('right');
+    wallBox(a0, v1 - T, a1, v1, y0, yTop, backSkip);
+    wallBox(a0, v0, a0 + T, v1 - T, y0, yTop, leftStreet ? ['left', 'right', 'front'] : ['right', 'front']);
+    wallBox(a1 - T, v0, a1, v1 - T, y0, yTop, rightStreet ? ['right', 'left', 'front'] : ['left', 'front']);
+    if (leftStreet) D.facade(a0, v1, a0, v0, y0, WALL_H, -1, 0, wallCol, blankF);
+    if (rightStreet) D.facade(a1, v0, a1, v1, y0, WALL_H, 1, 0, wallCol, blankF);
+    if (backStreet) D.facade(a1, v1, a0, v1, y0, WALL_H, 0, 1, wallCol, blankF);
+    // The front: wall either side of the door, the lintel over it, the fascia above.
+    wallBox(a0 + T, v0, d0, v0 + T, y0, yTop, ['front', 'back']);
+    wallBox(d1, v0, a1 - T, v0 + T, y0, yTop, ['front', 'back']);
+    D.facade(a0, v0, d0, v0, y0, WALL_H, 0, -1, wallCol, blankF);
+    D.facade(d1, v0, a1, v0, y0, WALL_H, 0, -1, wallCol, blankF);
+    wallBox(d0, v0, d1, v0 + T, y0 + DOOR_H, yTop, ['back'], true);
+    D.box('b', a0 - 0.15, y0 + DOOR_H + 0.35, v0 - 0.25, a1 + 0.15, yTop + 0.2, v0, band, { bottom: true });
+    D.box('prop', a0 - 0.16, y0 + DOOR_H + 0.23, v0 - 0.27, a1 + 0.16, y0 + DOOR_H + 0.35, v0, trim, { bottom: true });
+    // Door guides, the bottom of the rolled-up door and its drum inside.
+    D.box('prop', d0 - 0.14, y0, v0 - 0.08, d0, y0 + DOOR_H, v0 + T, metal);
+    D.box('prop', d1, y0, v0 - 0.08, d1 + 0.14, y0 + DOOR_H, v0 + T, metal);
+    D.box('prop', d0, y0 + DOOR_H - 0.32, v0 + 0.04, d1, y0 + DOOR_H, v0 + 0.12, steel, { bottom: true });
+    D.box('prop', d0, y0 + DOOR_H - 0.36, v0 + 0.03, d1, y0 + DOOR_H - 0.32, v0 + 0.13, metal, { bottom: true });
+    D.box('interior', d0 - 0.1, y0 + DOOR_H, v0 + T, d1 + 0.1, y0 + DOOR_H + 0.6, v0 + T + 0.6, VH.col(0x5d636a), { bottom: true });
+    // Roof: gravel, parapet, the booth's extraction stack.
+    const r = rect(f, a0, v0 - 0.25, a1, v1);
+    ctx.b.quad([r[0], yTop, r[3]], [r[2], yTop, r[3]], [r[2], yTop, r[1]], [r[0], yTop, r[1]], [0, 1, 0], VH.col(0x8f8c86), null, null, [0, 0, -1, seed]);
+    const par = VH.colMul(wallCol, 0.9);
+    D.box('b', a0, yTop, v1 - 0.25, a1, yTop + 0.5, v1, par);
+    D.box('b', a0, yTop, v0 + T - 0.25, a0 + 0.25, yTop + 0.5, v1 - 0.25, par);
+    D.box('b', a1 - 0.25, yTop, v0 + T - 0.25, a1, yTop + 0.5, v1 - 0.25, par);
+    const su = a0 + s.GW * 0.7;
+    const sv = v1 - 2.2;
+    D.box('prop', su - 0.7, yTop, sv - 0.7, su + 0.7, yTop + 1.8, sv + 0.7, VH.col(0xa9afb5));
+    D.box('prop', su - 0.9, yTop + 1.8, sv - 0.9, su + 0.9, yTop + 1.95, sv + 0.9, VH.col(0x6d737a));
+    D.box('prop', a0 + 2, yTop, v0 + 3, a0 + 3.4, yTop + 1.0, v0 + 4.2, VH.col(0xb9bcbf));
+
+    // Colliders: walls, the lintel, the roof.
+    const FLAGS = VH.COLLIDE.ALL;
+    D.collide(a0, 0, v1 - T, a1, yTop + 0.5, v1, 'building', FLAGS);
+    D.collide(a0, 0, v0, a0 + T, yTop + 0.5, v1, 'building', FLAGS);
+    D.collide(a1 - T, 0, v0, a1, yTop + 0.5, v1, 'building', FLAGS);
+    D.collide(a0, 0, v0 - 0.25, d0, yTop + 0.5, v0 + T, 'building', FLAGS);
+    D.collide(d1, 0, v0 - 0.25, a1, yTop + 0.5, v0 + T, 'building', FLAGS);
+    D.collide(d0, y0 + DOOR_H, v0 - 0.25, d1, yTop + 0.5, v0 + T, 'building', FLAGS);
+    D.collide(a0, y0 + CEIL, v0, a1, yTop + 0.5, v1, 'building', FLAGS);
+
+    // --- inside: a white paint booth with a grated floor and strip lights
+    const i0 = a0 + T;
+    const i1 = a1 - T;
+    const q0 = v0 + T;
+    const q1 = v1 - T;
+    const yc = y0 + CEIL;
+    const dado = VH.col(0x474c53);
+    const paint = VH.col(0xeef0f1);
+    const two = (u0, w0, u1, w1, nu, nv) => {
+      D.vquad('interior', u0, w0, u1, w1, y0, y0 + 1.2, nu, nv, dado);
+      D.vquad('interior', u0, w0, u1, w1, y0 + 1.2, yc, nu, nv, paint);
+    };
+    two(i0, q1, i1, q1, 0, -1);
+    two(i0, q0, i0, q1, 1, 0);
+    two(i1, q0, i1, q1, -1, 0);
+    two(i0, q0, d0, q0, 0, 1);
+    two(d1, q0, i1, q0, 0, 1);
+    D.vquad('interior', d0, q0, d1, q0, y0 + DOOR_H + 0.6, yc, 0, 1, paint);
+    // Floor: grey epoxy, the booth's grate down the middle, yellow lines round it.
+    D.hquad('interior', i0, q0, i1, q1, y0 + 0.012, 1, VH.col(0x80868d));
+    const g0 = uc - 2.2;
+    const g1 = uc + 2.2;
+    const gq0 = q0 + 1.6;
+    const gq1 = q1 - 1.2;
+    D.hquad('interior', g0, gq0, g1, gq1, y0 + 0.02, 1, VH.col(0x9aa1a8));
+    for (let q = gq0 + 0.4; q < gq1 - 0.1; q += 0.5) D.hquad('interior', g0, q, g1, q + 0.06, y0 + 0.025, 1, VH.col(0x4c5258));
+    for (const [u, w] of [[g0 - 0.18, g0 - 0.06], [g1 + 0.06, g1 + 0.18]]) D.hquad('interior', u, gq0, w, gq1, y0 + 0.025, 1, yellow);
+    // Ceiling and two long strip lights.
+    D.hquad('interior', i0, q0, i1, q1, yc, -1, VH.col(0xe3e5e7));
+    const lamp = VH.col(0xffffff, 1.6);
+    for (const u of [uc - 2.3, uc + 2.0]) D.hquad('screen', u, q0 + 1.2, u + 0.3, q1 - 1.0, yc - 0.01, -1, lamp);
+    // Filter panels on the back wall (the booth's extraction).
+    for (let u = i0 + 1.0; u < i1 - 1.4; u += 1.6) {
+      D.vquad('interior', u, q1 - 0.01, u + 1.3, q1 - 0.01, y0 + 2.0, y0 + 4.6, 0, -1, VH.col(0xc9ced2));
+      for (let y = y0 + 2.25; y < y0 + 4.5; y += 0.3) D.vquad('interior', u + 0.05, q1 - 0.02, u + 1.25, q1 - 0.02, y, y + 0.04, 0, -1, VH.col(0x9fa6ad));
+    }
+    // Left wall: shelves of paint tins.
+    const sv0 = q0 + 1.2;
+    const sv1 = q1 - 2.6;
+    const tins = [0xc8102e, 0xff6a1f, 0xff4f8b, 0xf2c500, 0x7ccf2a, 0x14a3a0, 0x1f6fd1, 0x6a2fa0, 0xf0efe9, 0xb7bcc3, 0x101113];
+    D.box('interior', i0, y0, sv0, i0 + 0.5, y0 + 2.4, sv1, VH.col(0x3b4047));
+    for (let lvl = 0; lvl < 4; lvl++) {
+      const y = y0 + 0.35 + lvl * 0.55;
+      D.box('interior', i0 + 0.5, y - 0.04, sv0, i0 + 0.56, y, sv1, steel);
+      for (let q = sv0 + 0.12; q < sv1 - 0.3; q += 0.32) {
+        if (rng.chance(0.15)) continue;
+        D.box('interior', i0 + 0.22, y, q, i0 + 0.5, y + 0.3, q + 0.24, VH.col(rng.pick(tins)));
+      }
+    }
+    D.collide(i0, 0, sv0, i0 + 0.56, y0 + 2.4, sv1, 'shelf', FLAGS);
+    // Right wall: a bench, a red tool chest and the spray gun on its stand.
+    const bv0 = q0 + 1.4;
+    const bv1 = bv0 + 3.0;
+    D.box('interior', i1 - 0.7, y0 + 0.85, bv0, i1, y0 + 0.95, bv1, VH.col(0x6b5a48));
+    D.box('interior', i1 - 0.65, y0, bv0 + 0.1, i1 - 0.05, y0 + 0.85, bv0 + 0.2, metal);
+    D.box('interior', i1 - 0.65, y0, bv1 - 0.2, i1 - 0.05, y0 + 0.85, bv1 - 0.1, metal);
+    D.box('interior', i1 - 0.02, y0 + 1.2, bv0, i1, y0 + 2.3, bv1, VH.col(0x9a8466)); // pegboard
+    for (let q = bv0 + 0.25; q < bv1 - 0.2; q += 0.35) D.box('interior', i1 - 0.1, y0 + 1.5 + rng.range(0, 0.5), q, i1 - 0.02, y0 + 1.75 + rng.range(0, 0.4), q + 0.06, metal);
+    const tv0 = bv1 + 0.4;
+    D.box('interior', i1 - 0.65, y0, tv0, i1 - 0.05, y0 + 1.1, tv0 + 1.1, VH.col(0xc0262d));
+    for (let k = 0; k < 4; k++) D.box('interior', i1 - 0.67, y0 + 0.2 + k * 0.24, tv0 + 0.15, i1 - 0.64, y0 + 0.24 + k * 0.24, tv0 + 0.95, steel);
+    D.collide(i1 - 0.7, 0, bv0, i1, y0 + 1.1, tv0 + 1.1, 'shelf', FLAGS);
+    const gv = q1 - 1.4;
+    D.box('interior', i1 - 0.55, y0, gv - 0.2, i1 - 0.15, y0 + 0.08, gv + 0.2, metal);
+    D.box('interior', i1 - 0.38, y0, gv - 0.03, i1 - 0.32, y0 + 1.5, gv + 0.03, steel);
+    D.box('interior', i1 - 0.44, y0 + 1.4, gv - 0.06, i1 - 0.26, y0 + 1.62, gv + 0.12, VH.col(0x2c6bd1));
+    D.box('interior', i1 - 0.36, y0 + 1.62, gv + 0.0, i1 - 0.34, y0 + 1.85, gv + 0.02, steel);
+
+    // --- signs and light
+    const yawOut = Math.atan2(-f.vx, -f.vz);
+    const [sx, sz] = P(f, (a0 + a1) / 2, v0 - 0.27);
+    const signs = world.signs || (world.signs = []);
+    signs.push({ x: sx, y: y0 + DOOR_H + 0.35 + (WALL_H - DOOR_H - 0.15) / 2, z: sz, yaw: yawOut, w: Math.min(s.GW - 1.2, 10), h: 1.25, lines: BRAND.sign, style: 'brand', colors: { bg: BRAND.bg, fg: BRAND.fg }, frame: BRAND.band });
+    const [nx, nz] = P(f, (a0 + d0) / 2, v0 - 0.02);
+    signs.push({ x: nx, y: y0 + 2.6, z: nz, yaw: yawOut, w: Math.min(d0 - a0 - 0.5, 2.2), h: 0.5, lines: ['OPEN'], style: 'neon' });
+    const pools = world.floodlights || (world.floodlights = []);
+    const [cx, cz] = P(f, uc, (v0 + v1) / 2);
+    pools.push({ x: cx, z: cz, r: Math.min(s.GW, s.GD) * 0.5, y: KERB + 0.03 });
+    const [fx, fz] = P(f, uc, v0 - 3);
+    pools.push({ x: fx, z: fz, r: 5.5, y: KERB + 0.03 });
+    return yTop + 0.5;
+  }
+
+  // ---------------------------------------------------- the roller door
+  let doorTex = null;
+
+  function shutterTexture() {
+    if (doorTex) return doorTex;
+    const c = document.createElement('canvas');
+    c.width = 8;
+    c.height = 32;
+    const g = c.getContext('2d');
+    g.fillStyle = '#c4c9ce';
+    g.fillRect(0, 0, 8, 32);
+    g.fillStyle = '#e6e9ec';
+    g.fillRect(0, 4, 8, 10);
+    g.fillStyle = '#7f868d';
+    g.fillRect(0, 28, 8, 4);
+    doorTex = new THREE.CanvasTexture(c);
+    doorTex.wrapS = doorTex.wrapT = THREE.RepeatWrapping;
+    return doorTex;
+  }
+
+  // ================================================================ shops
+  class SprayShops {
+    /** Choose the car parks that become body shops. Runs once, before the world is built. */
+    static plan(layout) {
+      const k = kit();
+      if (!k) return [];
+      const lots = [];
+      for (const b of layout.blocks) {
+        if (b.kind !== 'buildings' || k.AVOID_BLOCKS.has(b.id)) continue;
+        for (const l of b.lots) if (l.kind === 'parking' && !l.store) lots.push(l);
+      }
+      lots.sort((p, q) => k.hashString(p.id + SALT) - k.hashString(q.id + SALT));
+      const chosen = [];
+      const count = {};
+      const clear = (l) => chosen.every((c) => Math.hypot(c.lot.cx - l.cx, c.lot.cz - l.cz) > SPACING) && (layout.stores || []).every((s) => Math.hypot(s.lot.cx - l.cx, s.lot.cz - l.cz) > 40);
+      for (const l of lots) {
+        const d = l.district.id;
+        if (!QUOTA[d] || (count[d] || 0) >= QUOTA[d]) continue;
+        const side = fit(l);
+        if (!side || !clear(l)) continue;
+        chosen.push({ lot: l, side });
+        count[d] = (count[d] || 0) + 1;
+      }
+      chosen.sort((p, q) => p.lot.cx - q.lot.cx || p.lot.cz - q.lot.cz);
+      layout.sprays = chosen.map((c, i) => SprayShops._describe(layout, c, i));
+      for (const s of layout.sprays) s.lot.spray = s;
+      return layout.sprays;
+    }
+
+    static _describe(layout, c, i) {
+      const k = kit();
+      const lot = c.lot;
+      const f = k.frameFor(lot, c.side);
+      const GW = clamp(Math.floor(f.W - 4), 10, 12);
+      const GD = clamp(Math.floor(f.D - 6), 12, 15);
+      const a = (f.W - GW) / 2;
+      const vb1 = f.D - 0.6;
+      const vb0 = vb1 - GD;
+      const d0 = a + GW / 2 - DOOR_W / 2;
+      const d1 = d0 + DOOR_W;
+      const at = (u, v) => {
+        const [x, z] = k.P(f, u, v);
+        return { x, z };
+      };
+      const front = at((d0 + d1) / 2, -3);
+      const road = VH.CityGen.roadNameAt(layout, front.x, front.z);
+      return {
+        id: 'spray_' + (i + 1),
+        name: 'Fresh Coat' + (road ? ', ' + road : ''),
+        lot,
+        district: lot.district.id,
+        f, a, GW, GD, vb0, vb1, d0, d1,
+        door: at((d0 + d1) / 2, vb0 - 1.5),
+        centre: at(a + GW / 2, (vb0 + vb1) / 2),
+        yawIn: Math.atan2(f.vx, f.vz),
+        seed: k.hashString(lot.id + SALT),
+      };
+    }
+
+    static buildLot(world, ctx, lot) {
+      return buildShop(world, ctx, lot.spray);
+    }
+
+    static registerPlaces(world, places) {
+      for (const s of places.layout.sprays || []) {
+        places.add(s.id, { name: s.name, x: s.door.x, z: s.door.z, yaw: s.yawIn, kind: 'spray', district: s.district });
+      }
+    }
+
+    static paints() {
+      return PAINTS.slice();
+    }
+
+    // ------------------------------------------------------------ runtime
+    constructor(game) {
+      this.game = game;
+      this.list = game.layout.sprays || [];
+      this.ok = this.list.length > 0 && !!kit();
+      this.saveKey = 'sprayshops';
+      this.resprays = 0;
+      this.spent = 0;
+      this.here = null; //  the shop the player's car is in
+      this.card = false; // the colour card is up
+      this.pick = 0;
+      this.job = null; //   a respray under way
+      this._used = null; // the shop just used: no card until the car has left it
+      this._told = null;
+      this._stickX = 0;
+      this._shown = '';
+      if (!this.ok) return;
+      this._buildHud();
+      VH.events.on('interaction:idle', () => {
+        if (this.card && !this.job && this.game.state === 'playing') this._confirm();
+      });
+    }
+
+    /** The shop whose booth a vehicle is parked all the way inside, if any. */
+    shopAt(v) {
+      const { T, local } = kit();
+      for (const s of this.list) {
+        if (Math.abs(v.pos.x - s.centre.x) > 16 || Math.abs(v.pos.z - s.centre.z) > 16) continue;
+        const [u, q] = local(s.f, v.pos.x, v.pos.z);
+        const half = v.hz || 2.3;
+        if (u > s.a + T + 0.3 && u < s.a + s.GW - T - 0.3 && q - half > s.vb0 - 0.2 && q + half < s.vb1 - T + 0.2) return s;
+      }
+      return null;
+    }
+
+    update(dt) {
+      if (!this.ok) return;
+      if (this.job) {
+        this._runJob(dt);
+        return;
+      }
+      const g = this.game;
+      const p = g.player;
+      const v = p.inVehicle ? p.vehicle : null;
+      const s = v && !v.wrecked && v.driver === 'player' ? this.shopAt(v) : null;
+      if (s !== this.here) {
+        this.here = s;
+        if (!s) {
+          this._used = null;
+          this._told = null;
+        }
+      }
+      const busy = document.body.classList.contains('cutscene') || g.state !== 'playing';
+      const want = !!s && this._used !== s && Math.abs(v.speed) < 1.5 && !busy && this._fits(v, s);
+      if (want && !this.card) this._open(v);
+      else if (!want && this.card) this._close();
+      if (this.card) this._cardInput(v);
+    }
+
+    /** Cars only, and not a fleet livery: anything else gets a word from the shop (once). */
+    _fits(v, s) {
+      let no = null;
+      if (v.kind !== 'car') no = 'Fresh Coat only paints cars.';
+      else if (v.isPolice || (v.model && v.model.livery)) no = "Fresh Coat won't touch a fleet livery. Bring something civilian.";
+      if (!no) return true;
+      if (this._told !== s) {
+        this._told = s;
+        this.game.hud.showToast(no);
+      }
+      return false;
+    }
+
+    // ---------------------------------------------------------- the card
+    _buildHud() {
+      const el = document.createElement('div');
+      el.className = 'spray-card';
+      el.innerHTML =
+        '<div class="spray-head"><b>FRESH COAT</b><span>Respray · Repair</span></div>' +
+        '<div class="spray-swatches"></div>' +
+        '<div class="spray-name"></div>' +
+        '<div class="spray-lines"></div>' +
+        '<div class="spray-warn"></div>' +
+        '<div class="spray-keys"></div>';
+      const sw = el.querySelector('.spray-swatches');
+      this.swatches = PAINTS.map(([name, hex]) => {
+        const i = document.createElement('i');
+        i.style.background = '#' + hex.toString(16).padStart(6, '0');
+        i.title = name;
+        sw.appendChild(i);
+        return i;
+      });
+      this.game.hud.root.appendChild(el);
+      this.cardEl = el;
+      this.nameEl = el.querySelector('.spray-name');
+      this.linesEl = el.querySelector('.spray-lines');
+      this.warnEl = el.querySelector('.spray-warn');
+      this.keysEl = el.querySelector('.spray-keys');
+    }
+
+    _open(v) {
+      const inp = this.game.input;
+      for (const a of ['moveLeft', 'moveRight', 'interact']) inp.discard(a);
+      // Start on the colour after the car's own (the nearest on the card).
+      let best = 0;
+      let bestD = Infinity;
+      const c = new THREE.Color(v.model.color);
+      PAINTS.forEach(([, hex], i) => {
+        const o = new THREE.Color(hex);
+        const d = (c.r - o.r) ** 2 + (c.g - o.g) ** 2 + (c.b - o.b) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      this.pick = (best + 1) % PAINTS.length;
+      this.card = true;
+      this._shown = '';
+      this.cardEl.classList.add('visible');
+      this._refresh(v);
+    }
+
+    _close() {
+      this.card = false;
+      this.cardEl.classList.remove('visible');
+    }
+
+    _cardInput(v) {
+      const inp = this.game.input;
+      let step = 0;
+      if (inp.consume('moveLeft')) step--;
+      if (inp.consume('moveRight')) step++;
+      const pad = inp.pad;
+      const sx = pad && pad.connected ? pad.move.x : 0;
+      if (Math.abs(sx) > 0.6 && Math.abs(this._stickX) <= 0.6) step += Math.sign(sx);
+      this._stickX = sx;
+      if (step) {
+        this.pick = (this.pick + step + PAINTS.length) % PAINTS.length;
+        if (this.game.audio.click) this.game.audio.click();
+      }
+      this._refresh(v);
+    }
+
+    /** What it costs: the paint, the repairs, and the heat. */
+    quote(v) {
+      const police = this.game.police;
+      const stars = police ? police.level : 0;
+      const repair = Math.round((clamp(1000 - v.health, 0, 1000) * REPAIR) / 10) * 10;
+      return { paint: PAINT, repair, stars, heat: stars * HEAT, total: PAINT + repair + stars * HEAT };
+    }
+
+    /** Why the shop won't do it right now, if it won't. */
+    _blocked(q) {
+      const g = this.game;
+      if (g.police && g.police.level > 0 && g.police.seen) return 'The police can see you. Lose them first.';
+      if (g.player.money < q.total) return 'You need ' + VH.util.formatMoney(q.total) + '.';
+      return null;
+    }
+
+    _refresh(v) {
+      const q = this.quote(v);
+      const why = this._blocked(q);
+      const inp = this.game.input;
+      const key = this.pick + '|' + q.total + '|' + (why || '') + '|' + inp.lastDevice;
+      if (key === this._shown) return;
+      this._shown = key;
+      this.swatches.forEach((el, i) => el.classList.toggle('on', i === this.pick));
+      this.nameEl.textContent = PAINTS[this.pick][0];
+      const money = VH.util.formatMoney;
+      const rows = [['Paint', money(q.paint)]];
+      if (q.repair) rows.push(['Repairs', money(q.repair)]);
+      if (q.stars) rows.push(['Lose the heat (' + '★'.repeat(q.stars) + ')', money(q.heat)]);
+      rows.push(['Total', money(q.total)]);
+      this.linesEl.replaceChildren(
+        ...rows.map(([a, b], i) => {
+          const row = document.createElement('div');
+          if (i === rows.length - 1) row.className = 'total';
+          const l = document.createElement('span');
+          l.textContent = a;
+          const r = document.createElement('em');
+          r.textContent = b;
+          row.append(l, r);
+          return row;
+        })
+      );
+      this.warnEl.textContent = why || '';
+      this.cardEl.classList.toggle('blocked', !!why);
+      const pad = inp.lastDevice === 'gamepad';
+      const left = pad ? 'Stick' : inp.labelFor('moveLeft') + ' ' + inp.labelFor('moveRight');
+      this.keysEl.innerHTML = '';
+      for (const [k, t] of [[left, 'colour'], [inp.labelFor('interact'), 'spray'], [null, 'Drive off to leave']]) {
+        const span = document.createElement('span');
+        if (k) {
+          const b = document.createElement('kbd');
+          b.textContent = k;
+          span.append(b, ' ' + t);
+        } else span.textContent = t;
+        this.keysEl.appendChild(span);
+      }
+    }
+
+    _confirm() {
+      const g = this.game;
+      const v = g.player.inVehicle ? g.player.vehicle : null;
+      const s = this.here;
+      if (!v || !s) return;
+      const q = this.quote(v);
+      const why = this._blocked(q);
+      if (why) {
+        g.hud.showToast(why);
+        if (g.audio.fail) g.audio.fail();
+        return;
+      }
+      this._close();
+      this.job = { s, v, t: 0, paint: PAINTS[this.pick], q, applied: false, cleared: false, cues: 0 };
+      g.frozenControls = true;
+      v.vel.x = 0;
+      v.vel.z = 0;
+      this._door(s);
+      g.cameraShot = (dt, cam) => this._shot(cam);
+    }
+
+    // ---------------------------------------------------------- the job
+    _runJob(dt) {
+      const j = this.job;
+      const g = this.game;
+      j.t += dt;
+      if (j.v.wrecked || j.v.removed || !g.player.inVehicle || g.player.vehicle !== j.v) {
+        this._finish();
+        return;
+      }
+      let k;
+      if (j.t < CLOSE) k = smooth(j.t / CLOSE);
+      else if (j.t < CLOSE + HOLD) k = 1;
+      else k = 1 - smooth((j.t - CLOSE - HOLD) / OPEN);
+      this._setDoor(j.s, k);
+      this._sounds(j);
+      if (!j.applied && j.t > CLOSE + HOLD * 0.5) this._apply(j);
+      if (j.t >= CLOSE + HOLD + OPEN + 0.25) this._finish();
+    }
+
+    /** The rattle of the door, the hiss of the gun. */
+    _sounds(j) {
+      const a = this.game.audio;
+      if (!a || !a.ready || !a._hit) return;
+      const cues = [0, CLOSE + 0.25, CLOSE + 0.95, CLOSE + 1.6, CLOSE + HOLD];
+      while (j.cues < cues.length && j.t >= cues[j.cues]) {
+        const i = j.cues++;
+        const t = a.ctx.currentTime;
+        if (i === 0 || i === cues.length - 1) {
+          for (let n = 0; n < 16; n++) a._hit({ t: t + n * 0.075, type: 'bandpass', freq: 700 + (n % 3) * 140, q: 2.5, peak: 0.07, attack: 0.003, decay: 0.05 });
+          a._hit({ t: t + (i === 0 ? CLOSE - 0.05 : 1.25), type: 'lowpass', freq: 220, q: 0.8, peak: 0.22, attack: 0.004, decay: 0.18, brown: true });
+        } else {
+          a._hit({ t, type: 'highpass', freq: 3800, q: 0.5, peak: 0.12, attack: 0.08, decay: 0.55 });
+        }
+      }
+    }
+
+    _apply(j) {
+      const g = this.game;
+      const v = j.v;
+      j.applied = true;
+      v.model.setColor(j.paint[1]);
+      v.repair();
+      g.player.money = Math.max(0, g.player.money - j.q.total);
+      this.resprays++;
+      this.spent += j.q.total;
+      j.cleared = !!(g.police && g.police.level > 0);
+      if (j.cleared) {
+        g.police.setLevel(0, 'respray');
+        VH.events.emit('police:evaded', { respray: true });
+      }
+      VH.events.emit('respray:done', { v, color: j.paint[1], name: j.paint[0], cleared: j.cleared });
+    }
+
+    _finish() {
+      const g = this.game;
+      const j = this.job;
+      this.job = null;
+      g.frozenControls = false;
+      g.cameraShot = null;
+      this._setDoor(j.s, 0);
+      this._used = j.s;
+      const p = g.player;
+      if (p.inVehicle && g.cameraRig.snapToCar) g.cameraRig.snapToCar(p.vehicle);
+      if (!j.applied) return;
+      const bits = [j.paint[0] + (j.q.repair ? ', and fixed up' : '') + '.'];
+      if (j.cleared) bits.push('The police have lost you.');
+      bits.push(VH.util.formatMoney(j.q.total) + '.');
+      g.hud.notify({ title: 'Fresh Coat', text: bits.join(' '), icon: '🎨', duration: 5000 });
+    }
+
+    /** Out on the forecourt, looking at the door. */
+    _shot(cam) {
+      const j = this.job;
+      if (!j) return false;
+      const { KERB, P } = kit();
+      const s = j.s;
+      const uc = (s.d0 + s.d1) / 2;
+      const [x, z] = P(s.f, uc + 3.2, s.vb0 - 10.5);
+      const [lx, lz] = P(s.f, uc, s.vb0);
+      cam.position.set(x, KERB + 2.6, z);
+      cam.lookAt(lx, KERB + 2.4, lz);
+      cam.updateMatrixWorld();
+      return true;
+    }
+
+    _door(s) {
+      if (s._doorMesh) return s._doorMesh;
+      const { KERB, P } = kit();
+      const tex = shutterTexture();
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, metalness: 0.5, roughness: 0.45 });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(s.d1 - s.d0, 1, 0.06), mat);
+      const [x, z] = P(s.f, (s.d0 + s.d1) / 2, s.vb0 + 0.08);
+      m.position.set(x, KERB + DOOR_H / 2, z);
+      m.rotation.y = Math.atan2(s.f.vx, s.f.vz);
+      m.castShadow = true;
+      m.visible = false;
+      m.name = 'spray-door';
+      this.game.scene.add(m);
+      s._doorMesh = m;
+      return m;
+    }
+
+    /** 0: rolled up, 1: down. */
+    _setDoor(s, k) {
+      const m = s._doorMesh;
+      if (!m) return;
+      const { KERB } = kit();
+      const h = Math.max(0.001, DOOR_H * k);
+      m.visible = k > 0.002;
+      m.scale.y = h;
+      m.position.y = KERB + DOOR_H - h / 2;
+      m.material.map.repeat.set(1, h / 0.24);
+    }
+
+    // ---------------------------------------------------------- contract
+    blips(out) {
+      if (!this.ok) return;
+      for (const s of this.list) out.push({ x: s.door.x, z: s.door.z, type: 'spray', label: s.name, noRim: true });
+    }
+
+    stats() {
+      if (!this.ok) return [];
+      return [['Resprays', String(this.resprays)], ['Spent at Fresh Coat', VH.util.formatMoney(this.spent)]];
+    }
+
+    serialize() {
+      return { resprays: this.resprays, spent: this.spent };
+    }
+
+    load(d) {
+      d = d || {};
+      this.resprays = d.resprays || 0;
+      this.spent = d.spent || 0;
+    }
+
+    stop() {
+      if (!this.ok) return;
+      if (this.job) {
+        const j = this.job;
+        this.job = null;
+        this.game.frozenControls = false;
+        this.game.cameraShot = null;
+        this._setDoor(j.s, 0);
+      }
+      if (this.card) this._close();
+    }
+
+    reset() {
+      if (!this.ok) return;
+      this.stop();
+      this.resprays = 0;
+      this.spent = 0;
+      this.here = null;
+      this._used = null;
+      this._told = null;
+    }
+  }
+
+  // ------------------------------------------------------------------ map
+  VH.MapPainters = VH.MapPainters || [];
+  VH.MapPainters.push((g, layout, o) => {
+    const k = kit();
+    if (!k) return;
+    for (const s of layout.sprays || []) {
+      const r = k.rect(s.f, s.a, s.vb0, s.a + s.GW, s.vb1);
+      g.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      o.R(r[0] + 1, r[1] + 1, r[2] + 1, r[3] + 1);
+      g.fillStyle = '#d23a7f';
+      o.R(r[0], r[1], r[2], r[3]);
+    }
+  });
+
+  VH.SprayShops = SprayShops;
+})();
+//# sourceURL=js/sprayshops.js
+</script>
+    <script data-src="js/properties.js">
+/*
+ * properties.js — businesses for sale across Vicehaven. Buy one at its
+ * For Sale sign (walk up, E) and it pays out every payday: every eight
+ * minutes of play, the takings from everything Jay owns land in his pocket.
+ *
+ * A world system (main.js WORLD_SYSTEMS). Each business takes a building
+ * on a street front in its district that no story place, shop or body shop
+ * is using; the sign stands on the pavement in front of it. The map shows
+ * the ones for sale and the ones Jay owns.
+ *
+ *   game.properties.list        every business: { id, name, price, income, ... }
+ *   game.properties.owned[id]   true once bought
+ *   property:bought { p }       (achievements.js)
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const PAYDAY = 480; // seconds of play between paydays
+  const SALT = 'realty-2';
+  // [id, name, district, price, income per payday, what it is, colours]
+  const DEFS = [
+    ['lucky_lantern', 'Lucky Lantern Noodle Bar', 'oldmarket', 60000, 1600, 'Noodle bar', ['#c8102e', '#ffd27a']],
+    ['pawn_loan', 'Old Market Pawn & Loan', 'oldmarket', 45000, 1200, 'Pawn shop', ['#2f6b3a', '#f2e6c4']],
+    ['sunny_side', 'Sunny Side Car Wash', 'palmcrescent', 35000, 900, 'Car wash', ['#1f8fd1', '#fff27a']],
+    ['neon_palms', 'Neon Palms Arcade', 'palmcrescent', 80000, 2200, 'Arcade', ['#7a2bd0', '#35e0d0']],
+    ['harbor_lights', 'Harbor Lights Laundromat', 'harborpoint', 25000, 650, 'Laundromat', ['#14a3a0', '#ffffff']],
+    ['tidewater_shack', 'Tidewater Seafood Shack', 'harborpoint', 55000, 1500, 'Seafood restaurant', ['#ff6a1f', '#fff1dc']],
+    ['coastline_cabs', 'Coastline Cab Co.', 'downtown', 150000, 4000, 'Taxi firm', ['#f2c500', '#16181c']],
+    ['meridian_suites', 'Meridian Office Suites', 'downtown', 300000, 8000, 'Office block', ['#1b2a55', '#b7c6e8']],
+  ];
+
+  function hashString(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  // ------------------------------------------------------------- the sign
+  function drawSign(c, p, owned) {
+    const g = c.getContext('2d');
+    const W = c.width;
+    const H = c.height;
+    const font = (w, s) => w + ' ' + s + "px 'Bahnschrift', 'Arial Narrow', 'Segoe UI', sans-serif";
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const money = VH.util.formatMoney;
+    if (!owned) {
+      g.fillStyle = '#f6f3ee';
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = '#ff4f8b';
+      g.fillRect(0, 0, W, 64);
+      g.fillStyle = '#ffffff';
+      g.font = font('700', 30);
+      g.fillText('VICEHAVEN REALTY', W / 2, 34);
+      g.fillStyle = '#d6224f';
+      g.font = font('800', 88);
+      g.fillText('FOR SALE', W / 2, 128);
+      g.fillStyle = '#1b1d24';
+      g.font = font('700', 30);
+      g.fillText(p.name, W / 2, 196, W - 40);
+      g.fillStyle = '#454a57';
+      g.font = font('600', 26);
+      g.fillText(money(p.price) + '  ·  pays ' + money(p.income) + ' a payday', W / 2, 244, W - 40);
+      g.strokeStyle = '#ff4f8b';
+      g.lineWidth = 10;
+      g.strokeRect(5, 5, W - 10, H - 10);
+    } else {
+      const q = g.createLinearGradient(0, 0, 0, H);
+      q.addColorStop(0, p.colors[0]);
+      q.addColorStop(1, '#14161d');
+      g.fillStyle = q;
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = p.colors[1];
+      g.font = font('800', 44);
+      g.fillText(p.name, W / 2, 74, W - 40);
+      g.fillStyle = '#ffffff';
+      g.font = font('600', 28);
+      g.fillText('Under new management', W / 2, 136);
+      g.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      g.font = font('600', 24);
+      g.fillText('Owner: Jay Mercer', W / 2, 186);
+      g.fillText('Pays ' + money(p.income) + ' every payday', W / 2, 226);
+      g.strokeStyle = '#ffb347';
+      g.lineWidth = 10;
+      g.strokeRect(5, 5, W - 10, H - 10);
+    }
+  }
+
+  function buildSign(p) {
+    const grp = new THREE.Group();
+    grp.name = 'sale-sign-' + p.id;
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 288;
+    const tex = new THREE.CanvasTexture(c);
+    if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const face = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.7 });
+    const frame = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.6, metalness: 0.4 });
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.07), face);
+    board.position.set(0, 1.85, 0.035);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(1.98, 1.15, 0.06), frame);
+    back.position.set(0, 1.85, 0);
+    for (const x of [-0.8, 0.8]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.4, 0.07), frame);
+      post.position.set(x, 1.2, -0.05);
+      grp.add(post);
+    }
+    grp.add(back, board);
+    grp.traverse((m) => {
+      if (m.isMesh) m.castShadow = true;
+    });
+    grp.position.set(p.sign.x, p.sign.y, p.sign.z);
+    grp.rotation.y = p.sign.yaw;
+    return { grp, canvas: c, tex };
+  }
+
+  // ================================================================ system
+  class Properties {
+    constructor(game) {
+      this.game = game;
+      this.saveKey = 'properties';
+      this.owned = {};
+      this.earned = 0;
+      this.paydayT = PAYDAY;
+      this.list = this._place();
+      this.ok = this.list.length > 0;
+      if (!this.ok) return;
+      for (const p of this.list) {
+        p.view = buildSign(p);
+        drawSign(p.view.canvas, p, false);
+        p.view.tex.needsUpdate = true;
+        game.scene.add(p.view.grp);
+        game.interaction.register({ id: 'property_' + p.id, kind: 'property', propertyId: p.id, x: p.stand.x, y: p.sign.y + 1, z: p.stand.z, radius: 2.4, label: 'Buy ' + p.name, price: p.price });
+        p.item = game.interaction.items[game.interaction.items.length - 1]; // register() keeps its own copy
+      }
+      game.interaction.on('property', (item) => {
+        this.buy(item.propertyId);
+        return 1;
+      });
+    }
+
+    /** Pick a building for each business: on a street front, nobody else's. */
+    _place() {
+      const g = this.game;
+      const K = VH.Stores && VH.Stores.kit;
+      if (!K || !g.layout) return [];
+      const used = (g.places && g.places.usedLots) || new Set();
+      const spots = g.places ? Array.from(g.places.map.values()) : [];
+      const taken = [];
+      for (const s of g.layout.stores || []) taken.push(s.centre);
+      for (const s of g.layout.sprays || []) taken.push(s.centre);
+      const out = [];
+      for (const [id, name, district, price, income, kind, colors] of DEFS) {
+        const lots = [];
+        for (const b of g.layout.blocks) {
+          if (b.kind !== 'buildings' || K.AVOID_BLOCKS.has(b.id)) continue;
+          for (const l of b.lots) {
+            if (l.kind !== 'building' || l.district.id !== district || used.has(l.id) || l.store || l.spray) continue;
+            if ((l.top || 0) < 5 || (l.top || 0) > 45) continue;
+            lots.push(l);
+          }
+        }
+        lots.sort((a, b) => hashString(id + a.id + SALT) - hashString(id + b.id + SALT));
+        for (const l of lots) {
+          const side = ['s', 'n', 'e', 'w'].find((sd) => l.front[sd]);
+          if (!side) continue;
+          const f = K.frameFor(l, side);
+          if (f.W < 8) continue;
+          const [x, z] = K.P(f, f.W / 2 + 1.5, -1.1);
+          if (spots.some((p) => Math.hypot(p.x - x, p.z - z) < 20)) continue;
+          if (taken.some((t) => Math.hypot(t.x - x, t.z - z) < 70)) continue;
+          const [sx, sz] = K.P(f, f.W / 2 + 1.5, -2.4);
+          const y = g.physics.groundHeight(x, z, 2);
+          out.push({
+            id, name, district, price, income, kind, colors,
+            lot: l.id,
+            sign: { x, y, z, yaw: Math.atan2(-f.vx, -f.vz) },
+            stand: { x: sx, z: sz },
+          });
+          taken.push({ x, z });
+          break;
+        }
+      }
+      return out;
+    }
+
+    get(id) {
+      return this.list.find((p) => p.id === id) || null;
+    }
+
+    buy(id) {
+      const g = this.game;
+      const p = this.get(id);
+      if (!p || this.owned[id]) return;
+      if (g.player.money < p.price) {
+        g.hud.showToast('You need ' + VH.util.formatMoney(p.price) + ' for ' + p.name + '.');
+        if (g.audio.fail) g.audio.fail();
+        return;
+      }
+      g.player.money -= p.price;
+      this._own(p);
+      if (g.audio.purchase) g.audio.purchase();
+      const n = Object.keys(this.owned).length;
+      g.hud.notify({ title: p.name + ' is yours', text: 'It pays ' + VH.util.formatMoney(p.income) + ' every payday (every ' + PAYDAY / 60 + ' minutes of play). ' + n + ' of ' + this.list.length + ' businesses owned.', icon: '🏢', duration: 7000 });
+      VH.events.emit('property:bought', { p });
+    }
+
+    _own(p) {
+      this.owned[p.id] = true;
+      p.item.enabled = false;
+      drawSign(p.view.canvas, p, true);
+      p.view.tex.needsUpdate = true;
+    }
+
+    /** What everything Jay owns pays each payday. */
+    income() {
+      let sum = 0;
+      for (const p of this.list) if (this.owned[p.id]) sum += p.income;
+      return sum;
+    }
+
+    update(dt) {
+      if (!this.ok) return;
+      const pay = this.income();
+      if (!pay) return;
+      this.paydayT -= dt;
+      if (this.paydayT > 0) return;
+      this.paydayT = PAYDAY;
+      const g = this.game;
+      g.player.money += pay;
+      this.earned += pay;
+      const n = Object.keys(this.owned).length;
+      g.hud.notify({ title: 'Payday', text: VH.util.formatMoney(pay) + ' from your ' + (n === 1 ? 'business' : n + ' businesses') + '.', icon: '💵', duration: 5000 });
+      if (g.audio.purchase) g.audio.purchase();
+    }
+
+    // ---------------------------------------------------------- contract
+    blips(out) {
+      if (!this.ok) return;
+      const money = VH.util.formatMoney;
+      for (const p of this.list) {
+        if (this.owned[p.id]) out.push({ x: p.sign.x, z: p.sign.z, type: 'owned', label: p.name, noRim: true });
+        else out.push({ x: p.sign.x, z: p.sign.z, type: 'property', label: p.name + ' · ' + money(p.price), noRim: true });
+      }
+    }
+
+    stats() {
+      if (!this.ok) return [];
+      const n = Object.keys(this.owned).length;
+      const rows = [['Businesses owned', n + ' / ' + this.list.length], ['Business takings', VH.util.formatMoney(this.earned)]];
+      if (n) rows.push(['Next payday', Math.ceil(this.paydayT / 60) + ' min']);
+      return rows;
+    }
+
+    serialize() {
+      return { owned: Object.keys(this.owned), earned: this.earned, payday: Math.round(this.paydayT) };
+    }
+
+    load(d) {
+      if (!this.ok) return;
+      d = d || {};
+      this.reset();
+      for (const id of d.owned || []) {
+        const p = this.get(id);
+        if (p) this._own(p);
+      }
+      this.earned = d.earned || 0;
+      this.paydayT = d.payday > 0 ? Math.min(PAYDAY, d.payday) : PAYDAY;
+    }
+
+    reset() {
+      if (!this.ok) return;
+      for (const p of this.list) {
+        if (!this.owned[p.id]) continue;
+        p.item.enabled = true;
+        drawSign(p.view.canvas, p, false);
+        p.view.tex.needsUpdate = true;
+      }
+      this.owned = {};
+      this.earned = 0;
+      this.paydayT = PAYDAY;
+    }
+
+    stop() {}
+  }
+
+  VH.Properties = Properties;
+})();
+//# sourceURL=js/properties.js
+</script>
+    <script data-src="js/photomode.js">
+/*
+ * photomode.js — Photo mode (pause menu → Photo mode). The world stands
+ * still and the camera comes loose: fly it round Jay, set the time of day
+ * and the weather, pick a filter, a frame, a zoom and a tilt, then take the
+ * shot. Photos are saved as PNG files (to the browser's downloads).
+ *
+ *   W A S D / arrows   move          Space / C   up / down
+ *   drag the mouse     look          wheel       zoom
+ *   Q / E              tilt          Shift       faster
+ *   Enter              take photo    H           hide the panel
+ *   Esc                back to the pause menu
+ *
+ * main.js runs it as its own state ('photo'): nothing simulates, and
+ * frame() draws the scene from the free camera every frame. Everything it
+ * changes (camera, time, weather, Jay's visibility) goes back on close.
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const { clamp } = VH.math;
+  const RANGE = 60; // metres the camera may stray from Jay
+  const FILTERS = [
+    ['None', ''],
+    ['Vivid', 'saturate(1.45) contrast(1.08)'],
+    ['Noir', 'grayscale(1) contrast(1.35) brightness(0.95)'],
+    ['Sunset', 'sepia(0.35) saturate(1.45) hue-rotate(-12deg) brightness(1.04)'],
+    ['Retro', 'sepia(0.55) contrast(1.12) saturate(1.2) brightness(0.98)'],
+    ['Cool', 'saturate(0.85) hue-rotate(14deg) contrast(1.06) brightness(1.02)'],
+    ['Dream', 'saturate(1.3) brightness(1.08) contrast(0.9)'],
+  ];
+  const FRAMES = [['Full', 0], ['Cinema', 2.39], ['Wide', 16 / 9], ['Square', 1]];
+  const WEATHER = [['Clear', 'clear'], ['Cloudy', 'cloudy'], ['Overcast', 'overcast'], ['Rain', 'rain'], ['Storm', 'storm']];
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function clock(h) {
+    const hh = Math.floor(h) % 24;
+    const mm = Math.round((h - Math.floor(h)) * 60) % 60;
+    return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  }
+
+  class PhotoMode {
+    constructor(game) {
+      this.game = game;
+      this.active = false;
+      this.shots = 0;
+      this.filter = 0;
+      this.frameIdx = 0;
+      this.vignette = 0.25;
+      this.tilt = 0;
+      this.showJay = true;
+      this.showMarkers = false;
+      this.keys = new Set();
+      this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+      this._v = new THREE.Vector3();
+      this._build();
+      this._onKeyDown = (e) => this._key(e, true);
+      this._onKeyUp = (e) => this._key(e, false);
+      this._onMove = (e) => this._drag(e);
+      this._onUp = () => {
+        this.dragging = false;
+      };
+      this._onDown = (e) => {
+        if (!this.active) return;
+        this.dragging = true;
+        e.preventDefault();
+      };
+      this._onWheel = (e) => {
+        if (!this.active) return;
+        e.preventDefault();
+        this._setFov(this.fov + Math.sign(e.deltaY) * 3);
+      };
+      this._onMenu = (e) => {
+        if (this.active) e.preventDefault();
+      };
+    }
+
+    // ------------------------------------------------------------ panel
+    _build() {
+      const root = el('div', 'photo-ui');
+      this.vigEl = el('div', 'photo-vignette');
+      this.barsEl = el('div', 'photo-bars');
+      this.barA = el('i');
+      this.barB = el('i');
+      this.barsEl.append(this.barA, this.barB);
+      this.flashEl = el('div', 'photo-flash');
+      const panel = el('div', 'photo-panel');
+      this.panel = panel;
+      panel.append(el('h2', 'photo-title', 'Photo mode'));
+      const row = (label, ...kids) => {
+        const r = el('div', 'photo-row');
+        r.append(el('span', 'photo-label', label), ...kids);
+        panel.append(r);
+        return r;
+      };
+      const cycler = (list, get, set) => {
+        const wrap = el('div', 'photo-cycle');
+        const name = el('b');
+        const prev = el('button', '', '‹');
+        const next = el('button', '', '›');
+        const show = () => {
+          name.textContent = list[get()][0];
+        };
+        prev.onclick = () => {
+          set((get() - 1 + list.length) % list.length);
+          show();
+        };
+        next.onclick = () => {
+          set((get() + 1) % list.length);
+          show();
+        };
+        wrap.append(prev, name, next);
+        show();
+        return { wrap, show };
+      };
+      const slider = (min, max, step, get, set, fmt) => {
+        const wrap = el('div', 'photo-slider');
+        const input = el('input');
+        input.type = 'range';
+        input.min = min;
+        input.max = max;
+        input.step = step;
+        const out = el('em');
+        const show = () => {
+          input.value = get();
+          out.textContent = fmt(get());
+        };
+        input.oninput = () => {
+          set(+input.value);
+          out.textContent = fmt(+input.value);
+        };
+        input.onchange = () => input.blur();
+        wrap.append(input, out);
+        show();
+        return { wrap, show };
+      };
+      this.filterCtl = cycler(FILTERS, () => this.filter, (i) => {
+        this.filter = i;
+        this._applyLook();
+      });
+      row('Filter', this.filterCtl.wrap);
+      this.frameCtl = cycler(FRAMES, () => this.frameIdx, (i) => {
+        this.frameIdx = i;
+        this._applyLook();
+      });
+      row('Frame', this.frameCtl.wrap);
+      this.timeCtl = slider(0, 23.75, 0.25, () => this.hours || 12, (h) => this._setTime(h), clock);
+      row('Time', this.timeCtl.wrap);
+      const wx = el('div', 'photo-chips');
+      this.weatherBtns = WEATHER.map(([label, id]) => {
+        const b = el('button', '', label);
+        b.onclick = () => this._setWeather(id);
+        wx.append(b);
+        return [id, b];
+      });
+      row('Weather', wx);
+      this.fovCtl = slider(20, 90, 1, () => this.fov || 60, (v) => this._setFov(v), (v) => Math.round(v) + '°');
+      row('Zoom', this.fovCtl.wrap);
+      this.tiltCtl = slider(-30, 30, 1, () => this.tilt, (v) => {
+        this.tilt = v;
+      }, (v) => Math.round(v) + '°');
+      row('Tilt', this.tiltCtl.wrap);
+      this.vigCtl = slider(0, 1, 0.05, () => this.vignette, (v) => {
+        this.vignette = v;
+        this._applyLook();
+      }, (v) => Math.round(v * 100) + '%');
+      row('Vignette', this.vigCtl.wrap);
+      const jay = el('button', 'photo-toggle');
+      jay.onclick = () => {
+        this.showJay = !this.showJay;
+        this._applyJay();
+      };
+      this.jayBtn = jay;
+      row('Jay', jay);
+      const marks = el('button', 'photo-toggle');
+      marks.onclick = () => {
+        this.showMarkers = !this.showMarkers;
+        this._applyMarkers();
+      };
+      this.marksBtn = marks;
+      row('Markers', marks);
+      const actions = el('div', 'photo-actions');
+      const take = el('button', 'btn btn-primary', 'Take photo');
+      take.onclick = () => this.capture();
+      const hide = el('button', 'btn', 'Hide panel');
+      hide.onclick = () => this.togglePanel();
+      const done = el('button', 'btn', 'Done');
+      done.onclick = () => this.game.closePhoto();
+      actions.append(take, hide, done);
+      panel.append(actions);
+      panel.append(el('p', 'photo-help', 'WASD move · Space / C up and down · drag to look · wheel to zoom · Q / E tilt · Shift faster · Enter take photo · H hide panel · Esc done'));
+      // A clicked button gives the keyboard straight back to the camera.
+      panel.addEventListener('click', (e) => {
+        if (e.target && e.target.tagName === 'BUTTON') e.target.blur();
+      });
+      window.addEventListener('resize', () => {
+        if (this.active) this._applyLook();
+      });
+      this.toastEl = el('div', 'photo-toast');
+      root.append(this.vigEl, this.barsEl, this.flashEl, panel, this.toastEl);
+      document.body.append(root);
+      this.root = root;
+    }
+
+    _applyLook() {
+      const g = this.game;
+      const canvas = g.renderer.canvas;
+      canvas.style.filter = this.active && FILTERS[this.filter][1] ? FILTERS[this.filter][1] : '';
+      this.vigEl.style.opacity = this.active ? String(this.vignette) : '0';
+      // Bars show the frame's crop.
+      const r = FRAMES[this.frameIdx][1];
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      this.barsEl.className = 'photo-bars';
+      if (!this.active || !r) {
+        this.barA.style.cssText = this.barB.style.cssText = 'display:none';
+        return;
+      }
+      if (W / H > r) {
+        const w = (W - H * r) / 2;
+        this.barA.style.cssText = 'left:0;top:0;bottom:0;width:' + w + 'px';
+        this.barB.style.cssText = 'right:0;top:0;bottom:0;width:' + w + 'px';
+      } else {
+        const h = (H - W / r) / 2;
+        this.barA.style.cssText = 'left:0;right:0;top:0;height:' + h + 'px';
+        this.barB.style.cssText = 'left:0;right:0;bottom:0;height:' + h + 'px';
+      }
+    }
+
+    _applyJay() {
+      const p = this.game.player;
+      if (p.model && p.model.root) p.model.root.visible = this.showJay || !this.active ? this._jayWas !== false : false;
+      this.jayBtn.textContent = this.showJay ? 'Shown' : 'Hidden';
+      this.jayBtn.classList.toggle('on', this.showJay);
+    }
+
+    /** The glowing job and challenge markers: hidden for photos unless asked for. */
+    _markerObjects() {
+      const g = this.game;
+      const out = [];
+      if (g.missions) {
+        for (const mk of g.missions.markers || []) if (mk.g) out.push(mk.g);
+        if (g.missions._objGroup) out.push(g.missions._objGroup);
+      }
+      if (g.challenges) for (const mk of g.challenges.markers || []) if (mk.group) out.push(mk.group);
+      return out;
+    }
+
+    _applyMarkers() {
+      if (this.active) {
+        if (!this._markWas) this._markWas = new Map(this._markerObjects().map((o) => [o, o.visible]));
+        for (const [o, was] of this._markWas) o.visible = was && this.showMarkers;
+      } else if (this._markWas) {
+        for (const [o, was] of this._markWas) o.visible = was;
+        this._markWas = null;
+      }
+      this.marksBtn.textContent = this.showMarkers ? 'Shown' : 'Hidden';
+      this.marksBtn.classList.toggle('on', this.showMarkers);
+    }
+
+    _refreshWeather() {
+      const w = this.game.weather;
+      for (const [id, b] of this.weatherBtns) b.classList.toggle('on', !!w && w.state === id);
+    }
+
+    // ------------------------------------------------------------ open / close
+    open() {
+      const g = this.game;
+      const cam = g.renderer.camera;
+      const env = g.environment;
+      const w = g.weather;
+      this.active = true;
+      this.saved = {
+        pos: cam.position.clone(),
+        quat: cam.quaternion.clone(),
+        fov: cam.fov,
+        hours: env.hours,
+        weather: w && w.ok ? { state: w.state, cur: Object.assign({}, w.cur), from: Object.assign({}, w.from), blend: w.blend, len: w._blendLen, hold: w.holdT, wet: w.wet, fixed: w.fixed } : null,
+      };
+      this._euler.setFromQuaternion(cam.quaternion, 'YXZ');
+      this.yaw = this._euler.y;
+      this.pitch = this._euler.x;
+      this.tilt = 0;
+      this.fov = cam.fov;
+      this.hours = env.hours;
+      env.freeTime = true; // night photos even with Always daytime on
+      if (w) w.fixed = true; // the sky holds still
+      const p = g.player;
+      this._jayWas = p.model && p.model.root ? p.model.root.visible : true;
+      this.showJay = true;
+      g.hud.root.style.visibility = 'hidden';
+      this.root.classList.add('visible');
+      this.panel.classList.remove('hidden');
+      document.body.classList.add('photo-mode');
+      window.addEventListener('keydown', this._onKeyDown, true);
+      window.addEventListener('keyup', this._onKeyUp, true);
+      window.addEventListener('mousemove', this._onMove);
+      window.addEventListener('mouseup', this._onUp);
+      g.renderer.canvas.addEventListener('mousedown', this._onDown);
+      g.renderer.canvas.addEventListener('wheel', this._onWheel, { passive: false });
+      g.renderer.canvas.addEventListener('contextmenu', this._onMenu);
+      this.keys.clear();
+      for (const c of [this.timeCtl, this.fovCtl, this.tiltCtl, this.vigCtl, this.filterCtl, this.frameCtl]) c.show();
+      this._applyLook();
+      this._applyJay();
+      this._applyMarkers();
+      this._refreshWeather();
+      const first = this.panel.querySelector('button');
+      if (first) first.blur();
+    }
+
+    close() {
+      if (!this.active) return;
+      const g = this.game;
+      const cam = g.renderer.camera;
+      const env = g.environment;
+      const s = this.saved;
+      this.active = false;
+      cam.position.copy(s.pos);
+      cam.quaternion.copy(s.quat);
+      cam.fov = s.fov;
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      env.freeTime = false;
+      env.setTime(s.hours);
+      const w = g.weather;
+      if (w && s.weather) {
+        const sw = s.weather;
+        w.state = sw.state;
+        w.cur = sw.cur;
+        w.from = sw.from;
+        w.blend = sw.blend;
+        w._blendLen = sw.len;
+        w.holdT = sw.hold;
+        w.wet = sw.wet;
+        w.fixed = sw.fixed;
+        w._apply(0);
+      }
+      g.world.setNightFactor(env.shared.uWindowGlow.value);
+      if (g.fx) g.fx.setNight(env.shared.uWindowGlow.value);
+      const p = g.player;
+      if (p.model && p.model.root) p.model.root.visible = this._jayWas !== false;
+      this._applyMarkers();
+      g.hud.root.style.visibility = '';
+      this.root.classList.remove('visible');
+      document.body.classList.remove('photo-mode');
+      window.removeEventListener('keydown', this._onKeyDown, true);
+      window.removeEventListener('keyup', this._onKeyUp, true);
+      window.removeEventListener('mousemove', this._onMove);
+      window.removeEventListener('mouseup', this._onUp);
+      g.renderer.canvas.removeEventListener('mousedown', this._onDown);
+      g.renderer.canvas.removeEventListener('wheel', this._onWheel);
+      g.renderer.canvas.removeEventListener('contextmenu', this._onMenu);
+      this.dragging = false;
+      this._applyLook();
+    }
+
+    togglePanel() {
+      this.panel.classList.toggle('hidden');
+    }
+
+    // ------------------------------------------------------------ input
+    _key(e, down) {
+      if (!this.active) return;
+      const typing = document.activeElement && document.activeElement.tagName === 'INPUT' && /Arrow/.test(e.code);
+      if (down) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          this.game.closePhoto();
+          return;
+        }
+        if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+          e.preventDefault();
+          this.capture();
+          return;
+        }
+        if (e.code === 'KeyH') this.togglePanel();
+        if (e.code === 'KeyR') {
+          this.tilt = 0;
+          this.tiltCtl.show();
+        }
+        if (!typing) {
+          this.keys.add(e.code);
+          if (e.code === 'Space' || /Arrow/.test(e.code)) e.preventDefault();
+        }
+      } else this.keys.delete(e.code);
+      // Keep the game's own key handlers out of it while the camera is loose.
+      if (!typing && e.code !== 'F12') e.stopPropagation();
+    }
+
+    _drag(e) {
+      if (!this.active || !this.dragging) return;
+      this.yaw -= e.movementX * 0.0032;
+      this.pitch = clamp(this.pitch - e.movementY * 0.0032, -1.5, 1.5);
+    }
+
+    _setFov(v) {
+      this.fov = clamp(v, 20, 90);
+      this.fovCtl.show();
+    }
+
+    _setTime(h) {
+      const g = this.game;
+      this.hours = h;
+      g.environment.setTime(h);
+      const glow = g.environment.shared.uWindowGlow.value;
+      g.world.setNightFactor(glow);
+      if (g.fx) g.fx.setNight(glow);
+    }
+
+    _setWeather(id) {
+      const w = this.game.weather;
+      if (!w || !w.ok) return;
+      w.setState(id, 1.5);
+      w.fixed = true;
+      this._refreshWeather();
+    }
+
+    // ------------------------------------------------------------ frame
+    frame(dt) {
+      if (!this.active) return;
+      const g = this.game;
+      const k = this.keys;
+      const pad = g.input.pad;
+      g.input.pollGamepad();
+      let f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+      let r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+      const u = (k.has('Space') ? 1 : 0) - (k.has('KeyC') || k.has('ControlLeft') ? 1 : 0);
+      if (pad && pad.connected) {
+        if (Math.abs(pad.move.y) > 0.15) f = -pad.move.y;
+        if (Math.abs(pad.move.x) > 0.15) r = pad.move.x;
+        this.yaw -= pad.look.x * dt * 2.2;
+        this.pitch = clamp(this.pitch - pad.look.y * dt * 2.2, -1.5, 1.5);
+      }
+      if (k.has('KeyQ')) this.tilt = clamp(this.tilt - dt * 30, -30, 30);
+      if (k.has('KeyE')) this.tilt = clamp(this.tilt + dt * 30, -30, 30);
+      if (k.has('KeyQ') || k.has('KeyE')) this.tiltCtl.show();
+      const speed = k.has('ShiftLeft') || k.has('ShiftRight') ? 18 : 5;
+      const cam = g.renderer.camera;
+      const fx = -Math.sin(this.yaw) * Math.cos(this.pitch);
+      const fy = Math.sin(this.pitch);
+      const fz = -Math.cos(this.yaw) * Math.cos(this.pitch);
+      const rx = Math.cos(this.yaw);
+      const rz = -Math.sin(this.yaw);
+      const p = cam.position;
+      p.x += (fx * f + rx * r) * speed * dt;
+      p.y += (fy * f + u) * speed * dt;
+      p.z += (fz * f + rz * r) * speed * dt;
+      // Stay near Jay, above the ground and below the clouds.
+      const c = g.player.renderPos || g.player.pos;
+      const dx = p.x - c.x;
+      const dz = p.z - c.z;
+      const d = Math.hypot(dx, dz);
+      if (d > RANGE) {
+        p.x = c.x + (dx / d) * RANGE;
+        p.z = c.z + (dz / d) * RANGE;
+      }
+      const ground = g.physics.groundHeight(p.x, p.z, p.y + 0.5);
+      p.y = clamp(p.y, ground + 0.25, c.y + 60);
+      this._euler.set(this.pitch, this.yaw, (this.tilt * Math.PI) / 180, 'YXZ');
+      cam.quaternion.setFromEuler(this._euler);
+      if (Math.abs(cam.fov - this.fov) > 0.01) {
+        cam.fov = this.fov;
+        cam.updateProjectionMatrix();
+      }
+      cam.updateMatrixWorld();
+      // The sky follows the camera; the weather finishes any change asked for.
+      if (g.weather && g.weather.ok) g.weather._apply(dt);
+      g.world.update(0, p);
+      g.environment.update(0, p);
+      if (g._updateFrustum) g._updateFrustum();
+      g.renderer.render(g.scene, 0);
+    }
+
+    // ------------------------------------------------------------ the shot
+    capture() {
+      if (!this.active) return;
+      const g = this.game;
+      // Draw a fresh frame and copy it out in the same task (the canvas keeps no back buffer).
+      g.renderer.render(g.scene, 0);
+      const src = g.renderer.canvas;
+      const W = src.width;
+      const H = src.height;
+      const r = FRAMES[this.frameIdx][1];
+      let cw = W;
+      let ch = H;
+      if (r && W / H > r) cw = Math.round(H * r);
+      else if (r) ch = Math.round(W / r);
+      const out = document.createElement('canvas');
+      out.width = cw;
+      out.height = ch;
+      const x = out.getContext('2d');
+      const css = FILTERS[this.filter][1];
+      if (css && 'filter' in x) x.filter = css;
+      x.drawImage(src, (W - cw) / 2, (H - ch) / 2, cw, ch, 0, 0, cw, ch);
+      x.filter = 'none';
+      if (this.vignette > 0) {
+        const q = x.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.35, cw / 2, ch / 2, Math.hypot(cw, ch) / 2);
+        q.addColorStop(0, 'rgba(0,0,0,0)');
+        q.addColorStop(1, 'rgba(0,0,0,' + (0.85 * this.vignette).toFixed(3) + ')');
+        x.fillStyle = q;
+        x.fillRect(0, 0, cw, ch);
+      }
+      const s = Math.max(12, Math.round(ch * 0.022));
+      x.font = '700 ' + s + "px 'Bahnschrift', 'Arial Narrow', sans-serif";
+      x.textAlign = 'right';
+      x.textBaseline = 'bottom';
+      x.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      x.fillText('VICEHAVEN', cw - s, ch - s * 0.8);
+      const d = new Date();
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const name = 'vicehaven-' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()) + '.png';
+      this.lastShot = out;
+      const save = (url, revoke) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        if (revoke) setTimeout(() => URL.revokeObjectURL(url), 5000);
+      };
+      try {
+        if (out.toBlob) out.toBlob((b) => (b ? save(URL.createObjectURL(b), true) : save(out.toDataURL('image/png'))), 'image/png');
+        else save(out.toDataURL('image/png'));
+      } catch (e) {
+        this._toast("Couldn't save the photo here.");
+        return;
+      }
+      this.shots++;
+      this.flashEl.classList.remove('go');
+      void this.flashEl.offsetWidth;
+      this.flashEl.classList.add('go');
+      const a = g.audio;
+      if (a && a.ready && a._hit) {
+        const t = a.ctx.currentTime;
+        a._hit({ t, type: 'bandpass', freq: 2400, q: 1.2, peak: 0.12, attack: 0.002, decay: 0.04, bus: a.ui });
+        a._hit({ t: t + 0.07, type: 'bandpass', freq: 1500, q: 1.2, peak: 0.09, attack: 0.002, decay: 0.06, bus: a.ui });
+      }
+      this._toast('Saved ' + name + ' to your downloads');
+      VH.events.emit('photo:taken', { name });
+    }
+
+    _toast(text) {
+      this.toastEl.textContent = text;
+      this.toastEl.classList.remove('show');
+      void this.toastEl.offsetWidth;
+      this.toastEl.classList.add('show');
+    }
+  }
+
+  VH.PhotoMode = PhotoMode;
+})();
+//# sourceURL=js/photomode.js
 </script>
     <script data-src="js/suburbs.js">
 /*
@@ -21210,8 +23433,11 @@ void main() {
         if (block.alley) this._buildAlley(ctx, block);
         for (const lot of block.lots) {
           const lctx = this.ctxAt(lot.cx, lot.cz);
-          // A corner shop (stores.js) stands on some of the car parks.
-          const top = lot.store && VH.Stores ? VH.Stores.buildLot(this, lctx, lot) : VH.Buildings.buildLot(lctx, lot);
+          // A corner shop (stores.js) or a body shop (sprayshops.js) stands on some of the car parks.
+          let top;
+          if (lot.store && VH.Stores) top = VH.Stores.buildLot(this, lctx, lot);
+          else if (lot.spray && VH.SprayShops) top = VH.SprayShops.buildLot(this, lctx, lot);
+          else top = VH.Buildings.buildLot(lctx, lot);
           lot.top = top || 0;
           if (top > 0) this.stats.buildings++;
           this.stats.tallest = Math.max(this.stats.tallest, top || 0);
@@ -24860,6 +27086,7 @@ void main() {
       }
       if (this.input.consume('interact')) {
         if (best) this.use(best);
+        else VH.events.emit('interaction:idle', {}); // nothing here: the body shop's colour card takes it
       }
     }
 
@@ -25012,6 +27239,9 @@ void main() {
       this.city = this._loop(this.brown, 'lowpass', 360, 0.6);
       this.wind = this._loop(this.white, 'bandpass', 500, 0.7);
       this.sea = this._loop(this.brown, 'lowpass', 700, 0.4);
+      this.rain = this._loop(this.white, 'highpass', 900, 0.5);
+      this.rainLow = this._loop(this.brown, 'lowpass', 420, 0.5);
+      this.rainK = 0;
       this.applyVolumes();
     }
 
@@ -25082,6 +27312,10 @@ void main() {
       this.wind.gain.gain.setTargetAtTime(wind, t, 0.4);
       this.wind.filter.frequency.setTargetAtTime(320 + s.speed * 55 + s.height * 9 + gust * 120, t, 0.3);
       this.sea.gain.gain.setTargetAtTime(sea * (0.75 + 0.25 * Math.sin(this._gust * 0.9)), t, 0.8);
+      // Rain (weather.js): a hiss on everything, and a softer drum when sheltered.
+      const rain = s.playing ? this.rainK * (s.sheltered ? 0.35 : 1) : 0;
+      this.rain.gain.gain.setTargetAtTime(rain * 0.11, t, 0.8);
+      this.rainLow.gain.gain.setTargetAtTime(rain * 0.16, t, 0.8);
 
       if (!s.playing) return;
       this._gullTimer -= dt;
@@ -25094,6 +27328,21 @@ void main() {
         this._hornTimer = 16 + Math.random() * 26;
         if (s.sea < 0.6 && s.height < 30) this.distantHorn();
       }
+    }
+
+    /** How hard it is raining, 0..1 (weather.js). */
+    setRain(k) {
+      this.rainK = clamp(k, 0, 1);
+    }
+
+    /** Thunder: a crack, then a long rumble (quieter and later when the strike is far off). */
+    thunder(near) {
+      if (!this.ready) return;
+      const t = this.ctx.currentTime;
+      const k = clamp(near, 0.15, 1);
+      if (k > 0.55) this._hit({ t, freq: 1400, freqEnd: 180, type: 'bandpass', q: 0.7, attack: 0.004, decay: 0.7, peak: 0.22 * k, bus: this.amb });
+      this._hit({ t: t + 0.05, brown: true, rate: 0.45, freq: 170, freqEnd: 60, type: 'lowpass', q: 0.6, attack: 0.25, decay: 3.2, peak: 0.55 * k, bus: this.amb });
+      this._hit({ t: t + 0.7, brown: true, rate: 0.35, freq: 120, type: 'lowpass', q: 0.5, attack: 0.4, decay: 2.6, peak: 0.3 * k, bus: this.amb });
     }
 
     // ---------------------------------------------------------- building blocks
@@ -31012,6 +33261,7 @@ void main() {
       const B = buildBody(id, this.lod, color);
       this.stats = { triangles: B.tris, buildMs: B.ms };
       this.finish = d.finishFor ? d.finishFor(color) : d.finish || '';
+      this.livery = !!d.livery; // the colours are painted into the body: no respray
       this._paintHex = d.livery ? 0xffffff : color;
       this._paintShared = paintMaterial(this._paintHex, this.finish);
       this._dmgMat = null;
@@ -31136,6 +33386,21 @@ void main() {
         this._apply();
       }
       return r;
+    }
+
+    /** A new coat of paint (the body shop). Liveries can't be resprayed: false. */
+    setColor(hex) {
+      if (this.livery) return false;
+      const d = DEFS[this.id];
+      this.color = hex;
+      this.finish = d.finishFor ? d.finishFor(hex) : d.finish || '';
+      this._paintHex = hex;
+      this._paintShared = paintMaterial(hex, this.finish);
+      if (this._dmgMat) this._dmgMat.dispose();
+      this._dmgMat = null;
+      this.paintMesh.material = this._paintShared;
+      this.setDamage(this.state.damage);
+      return true;
     }
 
     /** 0..1: dents at the nose and tail, darker, rougher, dulled paint. */
@@ -31549,7 +33814,7 @@ void main() {
       let NR = m * G * (this.a / L) + (m * this.ax * T.h) / L + down * 0.55;
       NF = Math.max(NF, m * G * 0.12);
       NR = Math.max(NR, m * G * 0.12);
-      let mu = this.mu * (this.surface === 'grass' ? 0.68 : this.surface === 'gravel' ? 0.78 : 1);
+      let mu = this.mu * (this.surface === 'grass' ? 0.68 : this.surface === 'gravel' ? 0.78 : 1) * (VH.weatherGrip || 1);
       if (this.burning > 0 || this.wrecked) mu *= 0.8;
 
       // Longitudinal forces per axle.
@@ -42913,11 +45178,13 @@ void main() {
       const lots = [];
       for (const b of this._districtBlocks(district)) for (const lot of b.lots) if (lot.kind === 'parking' && !this.usedLots.has(lot.id)) lots.push(lot);
       if (!lots.length) return null;
-      // A car park with a corner shop on it (stores.js) is taken: try the next one.
-      // The shops stay in the list so every other pick lands where it always did.
+      // A car park with a corner shop or a body shop on it (stores.js, sprayshops.js)
+      // is taken: try the next one. They stay in the list so every other pick lands
+      // where it always did.
+      const taken = (l) => l.store || l.spray;
       let k = h % lots.length;
-      for (let i = 0; i < lots.length && lots[k].store; i++) k = (k + 1) % lots.length;
-      if (lots[k].store) return null;
+      for (let i = 0; i < lots.length && taken(lots[k]); i++) k = (k + 1) % lots.length;
+      if (taken(lots[k])) return null;
       const lot = lots[k];
       this.usedLots.add(lot.id);
       return { x: lot.cx, z: lot.cz, y: KERB, yaw: 0, lot };
@@ -60571,7 +62838,7 @@ void main() {
       const types = V.spots.map((s) => s.type);
       for (const S of this.game.layout.strips || []) {
         for (const lot of S.lots) {
-          if (lot.kind !== 'parking' || lot.store) continue;
+          if (lot.kind !== 'parking' || lot.store || lot.spray) continue;
           const alongX = lot.maxX - lot.minX >= lot.maxZ - lot.minZ;
           // The bays buildings.js paints: two rows, 2.7 m apart, 5.2 m deep, 1 m in from the edges.
           const rows = alongX ? [[lot.minZ + 3.6, 0], [lot.maxZ - 3.6, Math.PI]] : [[lot.minX + 3.6, Math.PI / 2], [lot.maxX - 3.6, -Math.PI / 2]];
@@ -60869,6 +63136,677 @@ void main() {
 })();
 //# sourceURL=js/ambient.js
 </script>
+    <script data-src="js/weather.js">
+/*
+ * weather.js — clear skies, cloud, rain and thunderstorms over Vicehaven.
+ *
+ * A world system (main.js WORLD_SYSTEMS). The sky drifts between states
+ * every few minutes, easing from one to the next:
+ *   clear → cloudy → overcast → rain → storm (and back)
+ * Bad weather dims the sun and greys the sky (environment.setWeather),
+ * thickens the fog, makes the roads wet (darker and shiny, and a little
+ * slippery for cars: VH.weatherGrip), and brings rain: streaks falling round
+ * the camera, the hiss and drum of it, lightning flashes and thunder.
+ * Under a roof the rain stops falling in front of you and sounds muffled.
+ *
+ * Settings → Gameplay → Weather: Changing (the default), Always clear,
+ * Rainy or Stormy.
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const { clamp, lerp } = VH.math;
+
+  // cloud, dim and fog feed the environment; rain is how hard it falls.
+  const STATES = {
+    clear: { cloud: 0.0, dim: 0.0, fog: 0.0, rain: 0, storm: false, weight: 40, name: 'Clear' },
+    cloudy: { cloud: 0.55, dim: 0.12, fog: 0.08, rain: 0, storm: false, weight: 24, name: 'Cloudy' },
+    overcast: { cloud: 0.9, dim: 0.38, fog: 0.28, rain: 0, storm: false, weight: 12, name: 'Overcast' },
+    rain: { cloud: 0.95, dim: 0.55, fog: 0.5, rain: 0.6, storm: false, weight: 15, name: 'Rain' },
+    storm: { cloud: 1.0, dim: 0.72, fog: 0.7, rain: 1, storm: true, weight: 9, name: 'Thunderstorm' },
+  };
+  const ORDER = ['clear', 'cloudy', 'overcast', 'rain', 'storm'];
+  const BLEND = 35; //     seconds to ease into the next weather
+  const HOLD = [150, 330]; // seconds each weather lasts (real time)
+  const DROPS = 7000; //   rain streaks at full strength
+  const BOX = [56, 30, 56]; // the box of rain kept round the camera (m)
+  const WET_SURFACES = ['road', 'asphaltTop', 'sidewalk', 'plaza', 'concrete', 'markings'];
+
+  const RAIN_VERTEX = /* glsl */ `
+    attribute float aEnd;
+    uniform float uTime;
+    uniform vec3 uBox;
+    uniform vec3 uCam;
+    uniform vec2 uWind;
+    uniform float uFall;
+    uniform float uLen;
+    varying float vFade;
+    void main() {
+      vec3 p = position * uBox;
+      p.y -= uTime * uFall;
+      p.xz += uWind * uTime;
+      // Keep every drop in a box round the camera (the whole streak wraps as one).
+      vec3 origin = uCam - uBox * 0.5;
+      p = origin + mod(p - origin, uBox);
+      vec3 vel = normalize(vec3(uWind.x, -uFall, uWind.y));
+      p -= vel * uLen * aEnd;
+      float d = length(p - uCam);
+      vFade = (1.0 - aEnd * 0.85) * smoothstep(27.0, 6.0, d) * smoothstep(0.6, 2.0, d);
+      gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    }
+  `;
+  const RAIN_FRAGMENT = /* glsl */ `
+    uniform vec3 uColor;
+    uniform float uAlpha;
+    varying float vFade;
+    void main() {
+      gl_FragColor = vec4(uColor, uAlpha * vFade);
+    }
+  `;
+
+  class Weather {
+    constructor(game) {
+      this.game = game;
+      this.saveKey = 'weather';
+      this.ok = !!(game.environment && game.environment.setWeather);
+      this.cur = Object.assign({}, STATES.clear);
+      this.from = Object.assign({}, STATES.clear);
+      this.state = 'clear';
+      this.blend = 1;
+      this.holdT = this._hold() + 120; // a dry first few minutes in a new game
+      this.wet = 0;
+      this.time = 0;
+      this.sheltered = false;
+      this._shelterT = 0;
+      this._boltT = 8;
+      this._thunder = [];
+      this._baseRough = {};
+      if (!this.ok) return;
+      this._buildRain();
+      this._apply(0);
+      VH.events.on('settings:changed', (e) => {
+        if (e.path === 'gameplay.weather' || e.path === '*') this._followSetting(true);
+      });
+      this._followSetting(true);
+    }
+
+    _hold() {
+      return HOLD[0] + Math.random() * (HOLD[1] - HOLD[0]);
+    }
+
+    _buildRain() {
+      const pos = new Float32Array(DROPS * 6);
+      const end = new Float32Array(DROPS * 2);
+      for (let i = 0; i < DROPS; i++) {
+        const x = Math.random();
+        const y = Math.random();
+        const z = Math.random();
+        pos.set([x, y, z, x, y, z], i * 6);
+        end[i * 2 + 1] = 1;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+      g.setDrawRange(0, 0);
+      this.uniforms = {
+        uTime: { value: 0 },
+        uBox: { value: new THREE.Vector3(BOX[0], BOX[1], BOX[2]) },
+        uCam: { value: new THREE.Vector3() },
+        uWind: { value: new THREE.Vector2(2.5, 1.2) },
+        uFall: { value: 19 },
+        uLen: { value: 0.85 },
+        uColor: { value: new THREE.Color(0.72, 0.78, 0.86) },
+        uAlpha: { value: 0.4 },
+      };
+      const m = new THREE.ShaderMaterial({ vertexShader: RAIN_VERTEX, fragmentShader: RAIN_FRAGMENT, uniforms: this.uniforms, transparent: true, depthWrite: false });
+      this.rain = new THREE.LineSegments(g, m);
+      this.rain.frustumCulled = false;
+      this.rain.renderOrder = 5;
+      this.rain.visible = false;
+      this.game.scene.add(this.rain);
+    }
+
+    /** Settings → Weather: follow the cycle, or hold one kind of weather. */
+    _followSetting(quick) {
+      const want = this.game.settings.get('gameplay.weather') || 'dynamic';
+      const fixed = { clear: 'clear', rain: 'rain', storm: 'storm' }[want];
+      if (fixed) this.setState(fixed, quick ? 4 : BLEND);
+      this.fixed = !!fixed;
+    }
+
+    /** Ease to a weather state over `secs`. */
+    setState(name, secs) {
+      if (!STATES[name]) return;
+      this.from = Object.assign({}, this.cur);
+      this.state = name;
+      this.blend = 0;
+      this._blendLen = secs || BLEND;
+      this.holdT = this._hold();
+      const g = this.game;
+      if (STATES[name].rain > 0 && this.cur.rain < 0.05 && g.hud && g.state === 'playing') g.hud.showToast(name === 'storm' ? 'A storm is rolling in' : 'Rain moving in');
+    }
+
+    /** The next weather: a step or two along the scale, never straight from clear to a storm. */
+    _next() {
+      const i = ORDER.indexOf(this.state);
+      const pool = ORDER.filter((n, j) => n !== this.state && Math.abs(j - i) <= 2);
+      let total = 0;
+      for (const n of pool) total += STATES[n].weight;
+      let r = Math.random() * total;
+      for (const n of pool) {
+        r -= STATES[n].weight;
+        if (r <= 0) return n;
+      }
+      return pool[0];
+    }
+
+    update(dt) {
+      if (!this.ok) return;
+      this.time += dt;
+      if (!this.fixed) {
+        this.holdT -= dt;
+        if (this.holdT <= 0) this.setState(this._next());
+      }
+      this._apply(dt);
+      this._lightning(dt);
+    }
+
+    /** Blend toward the target and push it to the sky, the roads, the rain and the sound. */
+    _apply(dt) {
+      const to = STATES[this.state];
+      this.blend = Math.min(1, this.blend + dt / (this._blendLen || BLEND));
+      const k = this.blend * this.blend * (3 - 2 * this.blend);
+      for (const key of ['cloud', 'dim', 'fog', 'rain']) this.cur[key] = lerp(this.from[key], to[key], k);
+      this.cur.storm = to.storm && k > 0.6;
+      const g = this.game;
+      g.environment.setWeather(this.cur);
+      // Roads soak up quickly in rain and dry off slowly after.
+      const rain = this.cur.rain;
+      this.wet = rain > this.wet ? Math.min(rain * 1.4, this.wet + dt / 20) : Math.max(0, this.wet - dt / 120);
+      this.wet = clamp(this.wet, 0, 1);
+      this._wetRoads(this.wet);
+      VH.weatherGrip = 1 - 0.2 * this.wet;
+      // Shelter: something solid overhead (a roof, a bridge) stops the rain in front of the camera.
+      this._shelterT -= dt;
+      if (this._shelterT <= 0 && rain > 0.01) {
+        this._shelterT = 0.4;
+        const c = g.renderer.camera.position;
+        this.sheltered = !!g.physics.raycast(c.x, c.y + 0.2, c.z, 0, 1, 0, 30, { ground: false });
+      }
+      const show = rain > 0.01 && !this.sheltered;
+      this.rain.visible = show;
+      if (show) {
+        const u = this.uniforms;
+        u.uTime.value = this.time;
+        u.uCam.value.copy(g.renderer.camera.position);
+        u.uFall.value = 17 + rain * 6;
+        u.uWind.value.set(2 + rain * 4, 1 + rain * 2);
+        // Bright streaks by day, dim ones at night.
+        const night = g.environment.nightFactor || 0;
+        u.uAlpha.value = (0.26 + rain * 0.2) * (1 - night * 0.55);
+        this.rain.geometry.setDrawRange(0, Math.floor(DROPS * Math.min(1, rain * 1.1)) * 2);
+      }
+      if (g.audio && g.audio.setRain) g.audio.setRain(rain);
+    }
+
+    /** Wet: darker, glossy paving (the sky shows in it). */
+    _wetRoads(w) {
+      if (this._wetShown !== undefined && Math.abs(this._wetShown - w) < 0.01) return;
+      this._wetShown = w;
+      const list = VH.Materials && VH.Materials.list;
+      if (!list) return;
+      for (const id of WET_SURFACES) {
+        const m = list[id];
+        if (!m) continue;
+        if (this._baseRough[id] === undefined) this._baseRough[id] = m.roughness;
+        m.roughness = lerp(this._baseRough[id], 0.22, w * 0.9);
+        m.color.setScalar(1 - 0.32 * w);
+      }
+    }
+
+    /** In a storm: a flash every so often, and the thunder a moment later. */
+    _lightning(dt) {
+      const g = this.game;
+      for (const th of this._thunder) th.t -= dt;
+      for (const th of this._thunder.filter((q) => q.t <= 0)) if (g.audio && g.audio.thunder) g.audio.thunder(th.near);
+      this._thunder = this._thunder.filter((q) => q.t > 0);
+      if (!this.cur.storm) return;
+      this._boltT -= dt;
+      if (this._boltT > 0) return;
+      this._boltT = 6 + Math.random() * 14;
+      const near = Math.random();
+      if (g.renderer.post && g.renderer.post.pulse) g.renderer.post.pulse(0.25 + near * 0.35, [0.82, 0.86, 1]);
+      this._thunder.push({ t: 0.3 + (1 - near) * 3.5, near });
+    }
+
+    reset() {
+      if (!this.ok) return;
+      this._followSetting(true);
+    }
+
+    stop() {
+      if (this.game.audio && this.game.audio.setRain) this.game.audio.setRain(0);
+    }
+
+    stats() {
+      return [['Weather', STATES[this.state].name]];
+    }
+
+    serialize() {
+      return { state: this.state, wet: +this.wet.toFixed(2) };
+    }
+
+    load(d) {
+      if (!this.ok) return;
+      if (d && STATES[d.state] && !this.fixed) {
+        this.cur = Object.assign({}, STATES[d.state]);
+        this.from = Object.assign({}, this.cur);
+        this.state = d.state;
+        this.blend = 1;
+        this.holdT = this._hold();
+        this.wet = clamp(+d.wet || 0, 0, 1);
+      }
+      this._apply(0);
+    }
+
+    /** The debug console and photo mode: weather by name. */
+    static names() {
+      return ORDER.slice();
+    }
+  }
+
+  VH.Weather = Weather;
+})();
+//# sourceURL=js/weather.js
+</script>
+    <script data-src="js/achievements.js">
+/*
+ * achievements.js — trophies for the things worth doing in Vicehaven, and
+ * the 100% completion tally (pause menu → Progress).
+ *
+ * A world system (main.js WORLD_SYSTEMS). Achievements belong to the player,
+ * not the save: they're kept in this browser across new games. Completion
+ * is per save: story jobs, side stories, other jobs, stunt jumps, lanterns,
+ * districts visited, properties owned, and the achievements themselves.
+ *
+ * Unlocking shows a banner at the top of the screen with a chime. Most are
+ * checked twice a second from the game's state; some come from events.
+ *
+ *   game.achievements.unlock(id)      (other systems may call it)
+ *   game.achievements.progress()      → { percent, cats, list }
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+
+  const PROFILE_KEY = 'vicehaven.achievements.v1';
+
+  // [id, category, icon, title, how]
+  const LIST = [
+    ['first_job', 'Story', '🎬', 'Back in Business', 'Finish your first story job.'],
+    ['story_10', 'Story', '📈', 'Making a Name', 'Finish 10 story jobs.'],
+    ['story_all', 'Story', '👑', "Vicehaven's Finest", 'Finish the story.'],
+    ['side_story', 'Story', '🤝', 'Side Hustle', 'Finish a job in one of the side stories.'],
+    ['race_win', 'Story', '🏁', 'Street King', 'Win a street race.'],
+    ['challenge_gold', 'Story', '🥇', 'Gold Standard', 'Win a gold medal in a challenge.'],
+    ['first_steal', 'Driving', '🚗', 'Borrowed, Not Stolen', 'Take your first car.'],
+    ['steal_25', 'Driving', '🔑', 'Joyrider', 'Take 25 cars.'],
+    ['speed_200', 'Driving', '⚡', 'Speed Demon', 'Hit 200 km/h in a car.'],
+    ['big_air', 'Driving', '🚀', 'Big Air', 'Stay in the air for 3 seconds in a car.'],
+    ['stunt_5', 'Driving', '🎯', 'Daredevil', 'Clear 5 stunt jumps.'],
+    ['stunt_all', 'Driving', '🔥', 'Fearless', 'Clear every stunt jump.'],
+    ['near_miss', 'Driving', '😬', 'Close Shave', 'Make 25 near misses in traffic.'],
+    ['road_trip', 'Driving', '🛣', 'Road Trip', 'Drive 50 km.'],
+    ['taxi_10', 'Driving', '🚕', 'Fare Play', 'Finish 10 taxi fares.'],
+    ['respray', 'Driving', '🎨', 'Fresh Coat', 'Respray a car at a spray shop.'],
+    ['first_flight', 'Flying', '✈', 'Wheels Up', 'Take off in a plane.'],
+    ['heli', 'Flying', '🚁', 'Rotorhead', 'Take off in a helicopter.'],
+    ['jet', 'Flying', '🛩', 'Afterburner', 'Take off in the Talon jet.'],
+    ['airliner', 'Flying', '🛫', 'Captain Mercer', 'Take off in the Albatross airliner.'],
+    ['skydive', 'Flying', '🪂', 'Leap of Faith', 'Bail out of an aircraft in the air.'],
+    ['first_star', 'Crime', '⭐', 'Wanted', 'Get a wanted level.'],
+    ['five_stars', 'Crime', '🌟', 'Most Wanted', 'Reach five stars.'],
+    ['evade', 'Crime', '💨', 'Getaway', 'Lose the police.'],
+    ['evade_3', 'Crime', '👻', 'Ghost', 'Lose a wanted level of three stars or more.'],
+    ['holdup', 'Crime', '💰', 'Hands Up', 'Hold up a corner shop.'],
+    ['tank', 'Crime', '🪖', 'Heavy Metal', 'Take the tank for a drive.'],
+    ['busted', 'Crime', '🚓', 'Bad Day', 'Get arrested.'],
+    ['tourist', 'Explorer', '🗺', 'Tourist', 'Visit 6 districts.'],
+    ['explorer', 'Explorer', '🧭', 'Explorer', 'Visit every district.'],
+    ['pier_end', 'Explorer', '🌊', 'End of the Line', 'Walk to the end of Oceanview Pier.'],
+    ['sky_high', 'Explorer', '🏙', 'On Top of the World', 'Stand on the roof of one of the tallest towers.'],
+    ['lanterns_10', 'Explorer', '🏮', 'Lantern Keeper', 'Find 10 lost lanterns.'],
+    ['lanterns_all', 'Explorer', '✨', 'Every Last Light', 'Find every lost lantern.'],
+    ['storm', 'Explorer', '⛈', 'Singing in the Rain', 'Spend a minute out in a thunderstorm.'],
+    ['dance', 'Life', '💃', 'Dance Machine', 'Finish a dance at the Velvet Tide.'],
+    ['rich_100k', 'Life', '💵', 'Six Figures', 'Have $100,000.'],
+    ['rich_1m', 'Life', '💎', 'Millionaire', 'Have $1,000,000.'],
+    ['landlord', 'Life', '🏢', 'Landlord', 'Buy a property.'],
+    ['mogul', 'Life', '🏦', 'Mogul', 'Own every property in town.'],
+    ['photo', 'Life', '📷', 'Shutterbug', 'Take a picture in photo mode.'],
+    ['hundred', 'Life', '🏆', 'Vicehaven 100%', 'Reach 100% completion.'],
+  ].map(([id, cat, icon, title, how]) => ({ id, cat, icon, title, how }));
+  const BY_ID = new Map(LIST.map((a) => [a.id, a]));
+
+  function loadProfile() {
+    try {
+      const d = JSON.parse(localStorage.getItem(PROFILE_KEY));
+      if (d && typeof d === 'object') return { unlocked: d.unlocked || {}, n: d.n || {} };
+    } catch (e) {
+      // Fall through to a fresh profile.
+    }
+    return { unlocked: {}, n: {} };
+  }
+
+  class Achievements {
+    constructor(game) {
+      this.game = game;
+      this.saveKey = 'progress';
+      this.profile = loadProfile();
+      this.visited = new Set(); // districts seen in this save
+      this.driven = 0; //         metres driven in this save
+      this._t = 0;
+      this._dirty = false;
+      this._queue = [];
+      this._later = new Set(); // earned in photo mode: awarded back in the game
+      this._showing = false;
+      this._maxHeat = 0;
+      this._stormT = 0;
+      this._buildDom();
+      this._bind();
+    }
+
+    // ------------------------------------------------------------ profile
+    get count() {
+      return Object.keys(this.profile.unlocked).length;
+    }
+
+    has(id) {
+      return !!this.profile.unlocked[id];
+    }
+
+    unlock(id) {
+      const a = BY_ID.get(id);
+      if (!a || this.has(id)) return false;
+      const g = this.game;
+      if (g.state === 'photo') this._later.add(id);
+      if (g.state !== 'playing' && g.state !== 'dialog') return false;
+      this.profile.unlocked[id] = new Date().toISOString().slice(0, 10);
+      this._save();
+      this._queue.push(a);
+      this._next();
+      VH.events.emit('achievement:unlocked', { id, title: a.title });
+      return true;
+    }
+
+    _bump(key, by) {
+      this.profile.n[key] = (this.profile.n[key] || 0) + by;
+      this._dirty = true;
+      return this.profile.n[key];
+    }
+
+    _save() {
+      this._dirty = false;
+      try {
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(this.profile));
+      } catch (e) {
+        // Private mode: they last until the tab closes.
+      }
+    }
+
+    // ------------------------------------------------------------- banner
+    _buildDom() {
+      const el = (tag, cls, text) => {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text !== undefined) n.textContent = text;
+        return n;
+      };
+      const b = el('div', 'ach-banner');
+      this._bIcon = el('div', 'ach-icon');
+      const text = el('div', 'ach-text');
+      this._bTitle = el('div', 'ach-title');
+      this._bHow = el('div', 'ach-how');
+      text.append(el('div', 'ach-kicker', 'Achievement unlocked'), this._bTitle, this._bHow);
+      b.append(this._bIcon, text);
+      (this.game.hud && this.game.hud.root ? this.game.hud.root : document.body).append(b);
+      this._banner = b;
+    }
+
+    _next() {
+      if (this._showing || !this._queue.length) return;
+      const a = this._queue.shift();
+      this._showing = true;
+      this._bIcon.textContent = a.icon;
+      this._bTitle.textContent = a.title;
+      this._bHow.textContent = a.how;
+      this._banner.classList.add('is-on');
+      this._chime();
+      setTimeout(() => {
+        this._banner.classList.remove('is-on');
+        setTimeout(() => {
+          this._showing = false;
+          this._next();
+        }, 450);
+      }, 4200);
+    }
+
+    _chime() {
+      const au = this.game.audio;
+      if (!au || !au.ready || !au._tone) return;
+      const t = au.ctx.currentTime;
+      [659, 880, 1175].forEach((f, i) => au._tone({ t: t + i * 0.09, freq: f, wave: 'triangle', peak: 0.09, attack: 0.01, decay: 0.45 }));
+    }
+
+    // ------------------------------------------------------------- events
+    _bind() {
+      const g = this.game;
+      const mine = (v) => v && v === g.player.vehicle;
+      VH.events.on('mission:pass', (e) => {
+        const m = e.m || {};
+        if (m._chain) this.unlock('side_story');
+        if (m.giver === 'race') this.unlock('race_win');
+      });
+      VH.events.on('challenge:finish', (e) => {
+        if (e.medal === 'gold') this.unlock('challenge_gold');
+      });
+      VH.events.on('vehicle:land', (e) => {
+        if (mine(e.v) && e.v.kind === 'car' && e.airTime >= 3) this.unlock('big_air');
+      });
+      VH.events.on('vehicle:nearMiss', (e) => {
+        if (mine(e.v) && this._bump('nearMiss', 1) >= 25) this.unlock('near_miss');
+      });
+      VH.events.on('aircraft:takeoff', (e) => {
+        const v = e.v;
+        if (!v || v.driver !== 'player') return;
+        if (v.kind === 'heli') this.unlock('heli');
+        else this.unlock('first_flight');
+        if (v.type === 'talon') this.unlock('jet');
+        if (v.type === 'albatross') this.unlock('airliner');
+      });
+      VH.events.on('vehicle:exit', (e) => {
+        if (e.air && e.v && (e.v.kind === 'plane' || e.v.kind === 'heli')) this.unlock('skydive');
+      });
+      VH.events.on('vehicle:enter', (e) => {
+        if (e.v && e.v.kind === 'tank') this.unlock('tank');
+      });
+      VH.events.on('police:level', (e) => {
+        if (e.level >= 1) this.unlock('first_star');
+        if (e.level >= 5) this.unlock('five_stars');
+        if (e.level > 0) this._maxHeat = Math.max(this._maxHeat, e.level);
+        else if (e.reason !== 'evaded') this._maxHeat = 0;
+      });
+      VH.events.on('police:evaded', () => {
+        this.unlock('evade');
+        if (this._maxHeat >= 3) this.unlock('evade_3');
+        this._maxHeat = 0;
+      });
+      VH.events.on('player:arrested', () => this.unlock('busted'));
+      VH.events.on('respray:done', () => this.unlock('respray'));
+      VH.events.on('property:bought', () => this.unlock('landlord'));
+      VH.events.on('photo:taken', () => this.unlock('photo'));
+    }
+
+    // ------------------------------------------------------------- update
+    update(dt) {
+      const g = this.game;
+      if (this._later.size) {
+        for (const id of this._later) this.unlock(id);
+        this._later.clear();
+      }
+      const p = g.player;
+      const v = p.inVehicle ? p.vehicle : null;
+      if (v && v.kind === 'car' && !v.wrecked) {
+        const d = Math.abs(v.speed) * dt;
+        this.driven += d;
+        if (this._bump('driven', d) >= 50000) this.unlock('road_trip');
+        if (Math.abs(v.speed) * 3.6 >= 200) this.unlock('speed_200');
+      }
+      // Out in a storm, on foot and not under a roof.
+      const w = g.weather;
+      if (w && w.cur && w.cur.storm && !w.sheltered && !v) {
+        this._stormT += dt;
+        if (this._stormT >= 60) this.unlock('storm');
+      }
+      this._t -= dt;
+      if (this._t > 0) return;
+      this._t = 0.5;
+      this._check();
+      if (this._dirty) this._save();
+    }
+
+    /** The checks that read the game's state (twice a second). */
+    _check() {
+      const g = this.game;
+      const p = g.player;
+      const lay = g.layout;
+      const pos = p.pos;
+      const d = lay.districtAt ? lay.districtAt(pos.x, pos.z) : null;
+      if (d && !this.visited.has(d.id)) {
+        this.visited.add(d.id);
+        this._bump('district:' + d.id, 1);
+      }
+      const seen = (VH.Data.districts || []).filter((x) => this.profile.n['district:' + x.id]).length;
+      if (seen >= 6) this.unlock('tourist');
+      if (seen >= (VH.Data.districts || []).length) this.unlock('explorer');
+      const c = this._counts();
+      if (c.story >= 1) this.unlock('first_job');
+      if (c.story >= 10) this.unlock('story_10');
+      if (c.storyTotal && c.story >= c.storyTotal) this.unlock('story_all');
+      const s = p.stats;
+      if (s.carsStolen >= 1) this.unlock('first_steal');
+      if (s.carsStolen >= 25) this.unlock('steal_25');
+      if ((s.dances || 0) >= 1) this.unlock('dance');
+      if (p.money >= 100000) this.unlock('rich_100k');
+      if (p.money >= 1000000) this.unlock('rich_1m');
+      if (g.stores && g.stores.robbed >= 1) this.unlock('holdup');
+      if (c.jumps >= 5) this.unlock('stunt_5');
+      if (c.jumpsTotal && c.jumps >= c.jumpsTotal) this.unlock('stunt_all');
+      if (c.lanterns >= 10) this.unlock('lanterns_10');
+      if (c.lanternsTotal && c.lanterns >= c.lanternsTotal) this.unlock('lanterns_all');
+      if (c.fares >= 10) this.unlock('taxi_10');
+      if (c.propsTotal && c.props >= c.propsTotal) this.unlock('mogul');
+      // The end of the pier, and the top of the skyline.
+      const pier = lay.waterfront && lay.waterfront.pier;
+      if (pier && pos.x > pier.x1 - 10 && pos.z > pier.z0 && pos.z < pier.z1) this.unlock('pier_end');
+      const tallest = (g.world && g.world.stats && g.world.stats.tallest) || 150;
+      if (!p.inVehicle && pos.y >= Math.min(150, tallest * 0.75)) this.unlock('sky_high');
+      if (this.progress().percent >= 100) this.unlock('hundred');
+    }
+
+    /** Raw counts for completion and the checks. */
+    _counts() {
+      const g = this.game;
+      const m = g.missions;
+      const out = { story: 0, storyTotal: 0, side: 0, sideTotal: 0, jobs: 0, jobsTotal: 0, jumps: 0, jumpsTotal: 0, lanterns: 0, lanternsTotal: 0, fares: 0, props: 0, propsTotal: 0 };
+      if (m && m.all) {
+        for (const [id, def] of m.all) {
+          const done = !!(m.completed && m.completed[id]);
+          if (def._main) {
+            out.storyTotal++;
+            if (done) out.story++;
+          } else if (def._chain) {
+            out.sideTotal++;
+            if (done) out.side++;
+          } else if (def.activity && !def.repeatable) {
+            out.jobsTotal++;
+            if (done) out.jobs++;
+          }
+        }
+      }
+      const a = g.activities && g.activities.completion;
+      if (a) Object.assign(out, { jumps: a.jumps, jumpsTotal: a.jumpsTotal, lanterns: a.lanterns, lanternsTotal: a.lanternsTotal, fares: a.fares });
+      const pr = g.properties;
+      if (pr && pr.list) {
+        out.propsTotal = pr.list.length;
+        out.props = pr.list.filter((x) => pr.owned[x.id]).length;
+      }
+      return out;
+    }
+
+    /** Completion, by category, and every achievement (for the Progress screen). */
+    progress() {
+      const c = this._counts();
+      const districts = (VH.Data.districts || []).length;
+      const ach = LIST.filter((a) => a.id !== 'hundred');
+      const cats = [
+        { label: 'Story jobs', done: c.story, total: c.storyTotal, weight: 35 },
+        { label: 'Side stories', done: c.side, total: c.sideTotal, weight: 12 },
+        { label: 'Races and other jobs', done: c.jobs, total: c.jobsTotal, weight: 8 },
+        { label: 'Stunt jumps', done: c.jumps, total: c.jumpsTotal, weight: 7 },
+        { label: 'Lost lanterns', done: c.lanterns, total: c.lanternsTotal, weight: 7 },
+        { label: 'Districts visited', done: this.visited.size, total: districts, weight: 5 },
+        { label: 'Properties owned', done: c.props, total: c.propsTotal, weight: 8 },
+        { label: 'Achievements', done: ach.filter((a) => this.has(a.id)).length, total: ach.length, weight: 18 },
+      ];
+      let sum = 0;
+      let wsum = 0;
+      for (const k of cats) {
+        if (!k.total) continue;
+        sum += k.weight * Math.min(1, k.done / k.total);
+        wsum += k.weight;
+      }
+      const percent = wsum ? Math.floor((sum / wsum) * 1000) / 10 : 0;
+      return {
+        percent,
+        cats,
+        list: LIST.map((a) => Object.assign({ unlocked: this.profile.unlocked[a.id] || null }, a)),
+        unlocked: this.count,
+        total: LIST.length,
+      };
+    }
+
+    stats() {
+      return [['Achievements', this.count + ' / ' + LIST.length], ['Distance driven', (this.driven / 1000).toFixed(1) + ' km'], ['Completion', this.progress().percent + '%']];
+    }
+
+    serialize() {
+      return { visited: [...this.visited], driven: Math.round(this.driven) };
+    }
+
+    load(d) {
+      this.visited = new Set((d && d.visited) || []);
+      this.driven = (d && +d.driven) || 0;
+      this._maxHeat = 0;
+      this._stormT = 0;
+    }
+
+    /** A new game (or before loading one): this save's tallies start again; the trophies stay. */
+    reset() {
+      this.visited = new Set();
+      this.driven = 0;
+      this._maxHeat = 0;
+      this._stormT = 0;
+    }
+  }
+
+  Achievements.LIST = LIST;
+  VH.Achievements = Achievements;
+})();
+//# sourceURL=js/achievements.js
+</script>
   <script data-src="js/minimap.js">
 /*
  * minimap.js — the radar in the bottom-left corner and the full-screen city
@@ -60958,7 +63896,7 @@ void main() {
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, property: 0, owned: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -60976,6 +63914,9 @@ void main() {
     ['challenge', 'Challenge'],
     ['landmark', 'Landmark'],
     ['store', 'Corner shop'],
+    ['spray', 'Fresh Coat body shop'],
+    ['property', 'Business for sale'],
+    ['owned', 'Your business'],
     ['plane', 'Aircraft'],
     ['tank', 'Military vehicle'],
     ['waypoint', 'Your waypoint'],
@@ -61129,6 +64070,24 @@ void main() {
     g.fill();
   }
 
+  function houseGlyph(g, fill, mark) {
+    g.beginPath();
+    g.moveTo(0, -7);
+    g.lineTo(6.8, -1);
+    g.lineTo(5, -1);
+    g.lineTo(5, 6.2);
+    g.lineTo(-5, 6.2);
+    g.lineTo(-5, -1);
+    g.lineTo(-6.8, -1);
+    g.closePath();
+    inkThenFill(g, fill, 3);
+    g.fillStyle = mark;
+    g.font = '700 8px ' + FONT;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('$', 0, 2.4);
+  }
+
   function policeDot(g, rgb) {
     glow(g, 11, rgb.join(','), 0.6);
     g.beginPath();
@@ -61246,6 +64205,28 @@ void main() {
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText('$', 0, 1.8);
+    },
+    // A spray can: a Fresh Coat body shop (respray, repair, lose the heat).
+    spray(g) {
+      roundRectPath(g, -4.4, -3.6, 8.8, 11, 2.2);
+      inkThenFill(g, '#ff4f8b', 3);
+      roundRectPath(g, -2.2, -6.6, 4.4, 3.4, 1);
+      inkThenFill(g, '#f1f4ff', 2.4);
+      g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      g.fillRect(-4.4, 0.4, 8.8, 1.6);
+      g.fillStyle = '#f1f4ff';
+      for (const [x, y] of [[5.4, -6.4], [7, -4.8], [6.8, -7.8]]) {
+        g.beginPath();
+        g.arc(x, y, 0.9, 0, TAU);
+        g.fill();
+      }
+    },
+    // A house with a dollar sign: a business for sale (gold), or one Jay owns (green).
+    property(g) {
+      houseGlyph(g, '#ffd447', INK);
+    },
+    owned(g) {
+      houseGlyph(g, '#4fe08a', INK);
     },
     // Aircraft, drawn nose-up and turned to face their heading.
     plane(g) {
@@ -62856,6 +65837,9 @@ void main() {
     race: { name: 'Street race', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Drive into the marker to start the race.' },
     challenge: { name: 'Side job', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Walk into the marker to start.' },
     store: { name: 'Corner shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Snacks inside. Point a gun at the clerk to hold it up, but the police will come.' },
+    property: { name: 'Business for sale', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Walk up to the For Sale sign and press E to buy it. It pays out every payday (every eight minutes of play).' },
+    owned: { name: 'Your business', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Yours. The takings arrive every payday.' },
+    spray: { name: 'Body shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Drive in and stop: a new colour and a full repair. If the police didn’t see you go in, they lose you.' },
     shop: { name: 'Club', cat: 'shops', cluster: true, labelAt: 0.7, tip: 'Open every night.' },
     safehouse: { name: 'Safehouse', cat: 'places', labelAt: 0.5 },
     plane: { name: 'Aircraft', cat: 'vehicles', cluster: true, labelAt: 1.1, tip: 'Parked and unlocked. Walk up to it and get in.' },
@@ -66684,6 +69668,8 @@ void main() {
         { path: 'gameplay.slowMotion', label: 'Slow-motion moments', type: 'toggle', help: 'Big crashes, takedowns and getting busted play for a beat in slow motion.' },
         { path: 'gameplay.timeOfDay', label: 'Time of day', type: 'select', options: [['cycle', 'Day and night cycle'], ['stopped', 'Stopped where it is']],
           help: 'Story scenes still set their own time. Stopped keeps the sky as it is now.' },
+        { path: 'gameplay.weather', label: 'Weather', type: 'select', options: [['dynamic', 'Changing'], ['clear', 'Always clear'], ['rain', 'Rainy'], ['storm', 'Stormy']],
+          help: 'Sun, cloud, rain and thunderstorms come and go. Wet roads are a little slippery.' },
         { path: 'gameplay.alwaysDay', label: 'Always daytime', type: 'toggle', help: 'Keeps the sun up: no night at all, even in story scenes. The Daytime key (T, or D-pad right) switches it in the game.' },
         { path: 'gameplay.showHints', label: 'Show the getting-started checklist', type: 'toggle' },
         { path: 'gameplay.confirmClose', label: 'Ask before closing the tab', type: 'toggle',
@@ -66731,6 +69717,7 @@ void main() {
       this._buildStats();
       this._buildCredits();
       this._buildWhatsNew();
+      this._buildProgress();
       this._buildQuit();
       this._buildDialog();
       this._buildIntro();
@@ -66761,6 +69748,7 @@ void main() {
       if (focusable) focusable.focus({ preventScroll: true });
       if (id === 'settings') this._refreshSettingsValues();
       if (id === 'stats') this._refreshStats();
+      if (id === 'progress') this._refreshProgress();
       if (id === 'pause') this._refreshDaytime();
     }
 
@@ -66800,7 +69788,7 @@ void main() {
         return;
       }
       if (this.input._capture) return;
-      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew')) {
+      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew' || this.current === 'progress')) {
         this.back();
         return;
       }
@@ -66862,9 +69850,11 @@ void main() {
       menu.append(
         this._button('Resume', () => this.actions.resume(), { primary: true }),
         this._button('City map', () => this.actions.openMap()),
+        this._button('Photo mode', () => this.actions.photoMode && this.actions.photoMode()),
         (this.dayBtn = this._button('Daytime: Off', () => this.actions.toggleDaytime && this.actions.toggleDaytime())),
         this._button('Job log', () => this.openDialog('jobLog')),
         this._button('Settings', () => this.show('settings', true)),
+        this._button('Progress', () => this.show('progress', true)),
         this._button('Statistics', () => this.show('stats', true)),
         this._button('Save game', () => this.actions.save()),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
@@ -67085,6 +70075,60 @@ void main() {
       s.append(panel);
     }
 
+    // --------------------------------------------------------- progress
+    _buildProgress() {
+      const s = this._screen('progress', 'screen-progress');
+      const panel = el('div', 'panel progress-panel');
+      const head = el('div', 'panel-head');
+      head.append(el('h2', '', 'Progress'));
+      const top = el('div', 'progress-top');
+      this.progRing = el('div', 'progress-ring');
+      this.progPct = el('div', 'progress-pct');
+      this.progRing.append(this.progPct);
+      this.progCats = el('div', 'progress-cats');
+      top.append(this.progRing, this.progCats);
+      this.progAchHead = el('h3', 'progress-ach-head');
+      this.progAch = el('div', 'progress-ach');
+      const body = el('div', 'progress-body');
+      body.append(top, this.progAchHead, this.progAch);
+      const foot = el('div', 'panel-foot');
+      foot.append(this._button('Back', () => this.back(), { primary: true }));
+      panel.append(head, body, foot);
+      s.append(panel);
+    }
+
+    _refreshProgress() {
+      const p = this.actions.getProgress && this.actions.getProgress();
+      if (!p) return;
+      this.progPct.textContent = p.percent + '%';
+      this.progRing.style.setProperty('--pct', Math.min(100, p.percent));
+      this.progCats.textContent = '';
+      for (const c of p.cats) {
+        if (!c.total) continue;
+        const row = el('div', 'progress-cat');
+        const bar = el('div', 'progress-bar');
+        const fill = el('div', 'progress-fill');
+        fill.style.width = Math.round(Math.min(1, c.done / c.total) * 100) + '%';
+        bar.append(fill);
+        row.append(el('div', 'progress-cat-label', c.label), bar, el('div', 'progress-cat-num', c.done + ' / ' + c.total));
+        this.progCats.append(row);
+      }
+      this.progAchHead.textContent = 'Achievements · ' + p.unlocked + ' of ' + p.total;
+      this.progAch.textContent = '';
+      let cat = null;
+      for (const a of p.list) {
+        if (a.cat !== cat) {
+          cat = a.cat;
+          this.progAch.append(el('div', 'progress-ach-cat', cat));
+        }
+        const card = el('div', 'ach-card' + (a.unlocked ? ' is-unlocked' : ''));
+        const text = el('div', 'ach-card-text');
+        text.append(el('div', 'ach-card-title', a.title), el('div', 'ach-card-how', a.how));
+        card.append(el('div', 'ach-card-icon', a.unlocked ? a.icon : '🔒'), text, el('div', 'ach-card-date', a.unlocked ? a.unlocked : ''));
+        this.progAch.append(card);
+      }
+    }
+
     _refreshStats() {
       const list = this.actions.getStats();
       this.statsGrid.innerHTML = '';
@@ -67110,7 +70154,7 @@ void main() {
       para('three.js r186 — © 2010–2026 three.js authors, MIT licence.');
       para('Fonts: whatever your system provides (Bahnschrift and Segoe UI on Windows).');
       body.append(el('h3', '', 'This build'));
-      para(VH.BUILD_NAME + ' (v' + VH.VERSION + ', ' + VH.UPDATE_NAME + '): the full city from Crestline Estates to the Saltmarsh docks, Northgate Heights, the airport and Fort Breakwater, 19 cars, five aircraft and a tank, 11 weapons, 14 corner shops, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
+      para(VH.BUILD_NAME + ' (v' + VH.VERSION + ', ' + VH.UPDATE_NAME + '): the full city from Crestline Estates to the Saltmarsh docks, Northgate Heights, the airport and Fort Breakwater, 19 cars, five aircraft and a tank, 11 weapons, 14 corner shops, four body shops, eight businesses, weather, 42 achievements, photo mode, traffic, crowds, the police, three radio stations, and the story of Jay Mercer: 31 main jobs in four acts, four side stories and the jobs in between.');
       const foot = el('div', 'panel-foot');
       foot.append(this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, body, foot);
@@ -67129,7 +70173,14 @@ void main() {
         row.append(el('h3', '', title), el('p', '', text));
         body.append(row);
       };
-      body.append(el('p', 'whatsnew-lead', 'Press M in the game for the new map: full screen, with a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.'));
+      body.append(el('p', 'whatsnew-lead', 'Weather, body shops, businesses to buy, 42 achievements with a 100% Progress screen, and photo mode. Everything new is on the map (M).'));
+      item('⛈  Weather', 'Clouds roll in, then rain, then thunderstorms. The roads go dark and shiny (and a little slippery), lightning flashes and the thunder follows. Settings → Gameplay → Weather picks Changing, Always clear, Rainy or Stormy.');
+      item('🎨  Fresh Coat body shops', 'Four of them (a pink spray can on the map). Drive in and stop, pick one of 13 colours, and the car comes out repainted and good as new. If the police couldn\u2019t see you go in, they lose you too.');
+      item('🏢  Businesses for sale', 'Eight businesses, from a laundromat to an office block. Walk up to the For Sale sign and press E. Every eight minutes is payday: the takings land in your pocket.');
+      item('🏆  Achievements and 100%', '42 achievements to earn, from your first stolen car to standing on top of a skyscraper. Pause → Progress shows how close you are to 100%.');
+      item('📷  Photo mode', 'Pause → Photo mode. Fly the camera round, set the time and the weather, pick a filter and a frame, and press Enter to save the picture.');
+      body.append(el('h3', 'whatsnew-sub', 'Also new since v1.0'));
+      item('🗺  The map', 'Press M in the game for the full-screen map: a search box, filters, an info card for every place, pins, and a GPS bar with the drive time. Click anything to set your GPS.');
       item('✈  New aircraft and tank', 'The airliner, the Skylark, the Talon jet, both helicopters and the Bastion tank have all been rebuilt: real wings and engines, windows and doors, cockpits, liveries, tread links and camouflage. Airliner windows light up at night.');
       item('🗺  A brand new map', 'Search for places, shops and streets; filter what shows; click a place for how far it is and how long the drive takes; right-click to drop coloured pins (they show on the radar too). The game pauses while it is open, and it works with a controller.');
       item('✈  Vicehaven International', 'Drive north up Grand Avenue to the airport. Steal a Skylark plane or the Sparrow helicopter, or the big Albatross jet, and fly. Airliners take off and land every few minutes.');
@@ -67492,7 +70543,7 @@ void main() {
           this.print('tp <x> <z> | tp <plaza|park|tower|pier|boardwalk|market|downtown|palm|harbor|yard|roof>');
           this.print('noclip · god · heal · hurt <n> · money <n> · armor <n>');
           this.print('car <type> · heat <0-5> · give <weapon|all> · job <id> · pass <id> · flag <name>');
-          this.print('time <0-24> · clouds <0-1> · fov <deg> · quality <low|medium|high|ultra>');
+          this.print('time <0-24> · clouds <0-1> · weather <clear|cloudy|overcast|rain|storm> · fov <deg> · quality <low|medium|high|ultra>');
           this.print('colliders · pos · respawn · clear · complete (pass the current job) · spawn <faction> (an enemy)');
           break;
         case 'tp': {
@@ -67606,6 +70657,12 @@ void main() {
         case 'clouds':
           g.environment.setCloudCover(num(0, 0.4));
           this.print('Cloud cover ' + g.environment.cloudCover.toFixed(2));
+          break;
+        case 'weather':
+          if (g.weather && VH.Weather.names().includes(args[0])) {
+            g.weather.setState(args[0], 3);
+            this.print('Weather: ' + args[0]);
+          } else this.print('usage: weather <' + VH.Weather.names().join('|') + '>', 'bad');
           break;
         case 'fov':
           VH.settings.set('graphics.fov', VH.math.clamp(num(0, 65), 40, 100));
@@ -67761,8 +70818,9 @@ void main() {
   const FIXED_DT = 1 / 60;
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
-  const WORLD_SYSTEMS = ['Stores', 'Airfield', 'Fort', 'Ambient'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'Achievements'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
+  const NEWS_KEY = 'vicehaven.seen.news-v1.2'; // set once the v1.2 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
@@ -67912,6 +70970,8 @@ void main() {
       if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
       // Then the roadside strips along the roads out of town (suburbs.js).
       if (VH.Suburbs && VH.Suburbs.plan) VH.Suburbs.plan(this.layout);
+      // And the body shops take a few of the car parks that are left (sprayshops.js).
+      if (VH.SprayShops && VH.SprayShops.plan) VH.SprayShops.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -67959,6 +71019,7 @@ void main() {
           resume: () => this.resume(),
           quitToTitle: () => this.quitToTitle(),
           getStats: () => this.statsList(),
+          getProgress: () => (this.achievements ? this.achievements.progress() : null),
           abandonChallenge: () => {
             if (this.missions && this.missions.run) this.missions.fail('You abandoned the job.');
             else this.challenges.abandon();
@@ -67979,6 +71040,7 @@ void main() {
             this.resume();
             setTimeout(() => this.openMap(), 50);
           },
+          photoMode: () => this.openPhoto(),
           toggleDaytime: () => this.toggleDaytime(),
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
           daytimeKey: () => this._dayKey(),
@@ -68017,6 +71079,7 @@ void main() {
         this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
         this.systems.push(sys);
       }
+      if (VH.PhotoMode) this.photo = new VH.PhotoMode(this);
       if (VH.Minimap) {
         this.minimap = new VH.Minimap(this.layout, this.hud.root, {
           closeKey: this.input.labelFor('map'),
@@ -68653,6 +71716,9 @@ void main() {
           this._drawGameplay(dt, false);
           break;
         }
+        case 'photo':
+          this.photo.frame(dt);
+          break;
         case 'paused': {
           // Nothing moves; redraw only when something (settings, window size) changed.
           if (this._needsRender) {
@@ -68891,6 +71957,26 @@ void main() {
       if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked && !(this.dialogue && this.dialogue._choice)) this.input.requestLock();
     },
 
+    /** Pause menu → Photo mode: the world holds still and the camera comes loose (photomode.js). */
+    openPhoto() {
+      if (!this.photo || this.state !== 'paused') return;
+      this.ui.hideAll();
+      document.body.classList.remove('in-menu');
+      this.state = 'photo';
+      this.photo.open();
+    },
+
+    closePhoto() {
+      if (this.state !== 'photo') return;
+      this.photo.close();
+      this.state = 'paused';
+      this.input.clearPresses();
+      this.input.releaseAll();
+      document.body.classList.add('in-menu');
+      this.ui.show('pause');
+      this._needsRender = true;
+    },
+
     toggleMap() {
       if (this.minimap && this.minimap.isFullOpen) this.closeMap();
       else this.openMap();
@@ -68924,6 +72010,7 @@ void main() {
         const key = this._dayKey();
         if (!seen) this.hud.notify({ title: 'Too dark?', text: (key ? 'Press ' + key : 'Pause and choose Daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
       }
+      this._newsTip(dt);
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
         this._tipT = 0;
@@ -68944,6 +72031,29 @@ void main() {
         text: 'Press ' + this.input.labelFor('map') + ' for the map: the airport, the army base, the Northgate skyscrapers and 14 corner shops are on it. Click a place to set your GPS.',
         icon: '★',
         duration: 14000,
+      });
+    },
+
+    /** Once, a few seconds into play: what v1.2 added. */
+    _newsTip(dt) {
+      if (this._newsShown) return;
+      if (document.body.classList.contains('cutscene') || this.state !== 'playing') return;
+      this._newsT = (this._newsT || 0) + dt;
+      if (this._newsT < 20) return;
+      this._newsShown = true;
+      let seen = false;
+      try {
+        seen = localStorage.getItem(NEWS_KEY) === '1';
+        localStorage.setItem(NEWS_KEY, '1');
+      } catch (e) {
+        seen = false;
+      }
+      if (seen) return;
+      this.hud.notify({
+        title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
+        text: 'Weather, Fresh Coat body shops (drive in to respray and lose the police), businesses to buy, achievements, and Photo mode in the pause menu. Pause → Progress shows your 100%.',
+        icon: '★',
+        duration: 12000,
       });
     },
 
@@ -69167,6 +72277,8 @@ void main() {
           cam.quaternion.slerpQuaternions(q0, q1, t * t);
         }
         cam.updateMatrixWorld();
+      } else if (this.cameraShot && this.cameraShot(dt, this.renderer.camera)) {
+        // A system's own shot (the body shop's door coming down).
       } else if (!(this.missions && this.missions.updateCamera(dt, this.renderer.camera))) {
         this.cameraRig.update(dt, player);
       }
@@ -69217,6 +72329,7 @@ void main() {
         height: player.pos.y,
         speed: player.speed,
         sea: Math.max(onPier, VH.math.smoothstep(250, 420, px)),
+        sheltered: !!(this.weather && this.weather.sheltered),
       });
       this.renderer.render(this.scene, dt);
     },

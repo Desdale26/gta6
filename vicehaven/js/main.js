@@ -25,6 +25,7 @@
   // stores.js, airfield.js, fort.js, ambient.js.
   const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'Achievements'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
+  const NEWS_KEY = 'vicehaven.seen.news-v1.2'; // set once the v1.2 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
@@ -244,6 +245,7 @@
             this.resume();
             setTimeout(() => this.openMap(), 50);
           },
+          photoMode: () => this.openPhoto(),
           toggleDaytime: () => this.toggleDaytime(),
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
           daytimeKey: () => this._dayKey(),
@@ -282,6 +284,7 @@
         this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
         this.systems.push(sys);
       }
+      if (VH.PhotoMode) this.photo = new VH.PhotoMode(this);
       if (VH.Minimap) {
         this.minimap = new VH.Minimap(this.layout, this.hud.root, {
           closeKey: this.input.labelFor('map'),
@@ -918,6 +921,9 @@
           this._drawGameplay(dt, false);
           break;
         }
+        case 'photo':
+          this.photo.frame(dt);
+          break;
         case 'paused': {
           // Nothing moves; redraw only when something (settings, window size) changed.
           if (this._needsRender) {
@@ -1156,6 +1162,26 @@
       if ((this.state === 'playing' || this.state === 'dialog') && !this.input.locked && !(this.dialogue && this.dialogue._choice)) this.input.requestLock();
     },
 
+    /** Pause menu → Photo mode: the world holds still and the camera comes loose (photomode.js). */
+    openPhoto() {
+      if (!this.photo || this.state !== 'paused') return;
+      this.ui.hideAll();
+      document.body.classList.remove('in-menu');
+      this.state = 'photo';
+      this.photo.open();
+    },
+
+    closePhoto() {
+      if (this.state !== 'photo') return;
+      this.photo.close();
+      this.state = 'paused';
+      this.input.clearPresses();
+      this.input.releaseAll();
+      document.body.classList.add('in-menu');
+      this.ui.show('pause');
+      this._needsRender = true;
+    },
+
     toggleMap() {
       if (this.minimap && this.minimap.isFullOpen) this.closeMap();
       else this.openMap();
@@ -1189,6 +1215,7 @@
         const key = this._dayKey();
         if (!seen) this.hud.notify({ title: 'Too dark?', text: (key ? 'Press ' + key : 'Pause and choose Daytime') + ' to switch to daytime. Settings → Graphics → Night brightness lights up the night instead.', icon: '☀', duration: 9000 });
       }
+      this._newsTip(dt);
       if (this._sawMap || this._tipShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') {
         this._tipT = 0;
@@ -1209,6 +1236,29 @@
         text: 'Press ' + this.input.labelFor('map') + ' for the map: the airport, the army base, the Northgate skyscrapers and 14 corner shops are on it. Click a place to set your GPS.',
         icon: '★',
         duration: 14000,
+      });
+    },
+
+    /** Once, a few seconds into play: what v1.2 added. */
+    _newsTip(dt) {
+      if (this._newsShown) return;
+      if (document.body.classList.contains('cutscene') || this.state !== 'playing') return;
+      this._newsT = (this._newsT || 0) + dt;
+      if (this._newsT < 20) return;
+      this._newsShown = true;
+      let seen = false;
+      try {
+        seen = localStorage.getItem(NEWS_KEY) === '1';
+        localStorage.setItem(NEWS_KEY, '1');
+      } catch (e) {
+        seen = false;
+      }
+      if (seen) return;
+      this.hud.notify({
+        title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
+        text: 'Weather, Fresh Coat body shops (drive in to respray and lose the police), businesses to buy, achievements, and Photo mode in the pause menu. Pause → Progress shows your 100%.',
+        icon: '★',
+        duration: 12000,
       });
     },
 
