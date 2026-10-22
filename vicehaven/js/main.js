@@ -23,9 +23,9 @@
   const FIXED_DT = 1 / 60;
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
-  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'Achievements'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Achievements'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
-  const NEWS_KEY = 'vicehaven.seen.news-v1.2'; // set once the v1.2 notice has been shown
+  const NEWS_KEY = 'vicehaven.seen.news-v1.3'; // set once the v1.3 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
@@ -175,8 +175,10 @@
       if (VH.Stores && VH.Stores.plan) VH.Stores.plan(this.layout);
       // Then the roadside strips along the roads out of town (suburbs.js).
       if (VH.Suburbs && VH.Suburbs.plan) VH.Suburbs.plan(this.layout);
-      // And the body shops take a few of the car parks that are left (sprayshops.js).
+      // The body shops take a few of the car parks that are left (sprayshops.js).
       if (VH.SprayShops && VH.SprayShops.plan) VH.SprayShops.plan(this.layout);
+      // And Bayline Arms, the gun shops (gunshops.js).
+      if (VH.GunShops && VH.GunShops.plan) VH.GunShops.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -469,6 +471,7 @@
     // ------------------------------------------------------------ states
     toTitle() {
       if (this.club) this.club.stop();
+      if (this.combat) this.combat.stop(); // the minigun, fires, rockets in flight
       for (const s of this.systems || []) if (s.stop) s.stop();
       if (this.minimap) this.minimap.closeFull();
       this.waypoint = null;
@@ -611,6 +614,19 @@
       if (!this.input.locked) this.input.requestLock();
       this.environment.clockRunning = this.settings.get('gameplay.timeOfDay') === 'cycle';
       this.missions.refreshMarkers();
+      // Build every weapon model while nothing is happening, so the first draw of each doesn't stutter.
+      if (!this._modelsWarm && VH.WeaponModels && VH.WeaponModels.preload) {
+        this._modelsWarm = true;
+        const warm = () => {
+          try {
+            VH.WeaponModels.preload();
+          } catch (e) {
+            console.warn('[Vicehaven] weapon preload', e);
+          }
+        };
+        if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 });
+        else setTimeout(warm, 1500);
+      }
       if (this._continuing) {
         const job = this._interrupted;
         this._interrupted = null;
@@ -953,14 +969,17 @@
           if (t) this.vehicles.beginEnter(t);
         }
       }
-      if (p.inVehicle) {
+      // In a car R changes the station, unless Jay is aiming a drive-by (then it
+      // reloads) or has limpet charges set (then it sets them off): combat.js.
+      const charges = this.combat && this.combat.thrown.some((t) => t.stuck);
+      if (p.inVehicle && !charges && !(inp.down('aim') && this.combat && this.combat.weapon.drivebyAllowed)) {
         if (inp.consume('reload') && this.radio) {
           this.radio.next();
           this.hud.showToast(this.radio.station.name);
         }
       }
       if (inp.consume('map') && this.minimap) this.toggleMap();
-      if (inp.consume('daytime')) this.toggleDaytime();
+      if (!(this.combat && this.combat.wheelOpen) && inp.consume('daytime')) this.toggleDaytime();
     },
 
     /** T, D-pad right or the pause menu: the sun stays up (Always daytime), or the day and night cycle comes back. */
@@ -1256,7 +1275,7 @@
       if (seen) return;
       this.hud.notify({
         title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
-        text: 'Weather, Fresh Coat body shops (drive in to respray and lose the police), businesses to buy, achievements, and Photo mode in the pause menu. Pause → Progress shows your 100%.',
+        text: '12 new weapons and three Bayline Arms gun shops (the crosshair icon on the map) for guns, ammo and armour. Weapons, ammo and armour lie around the city too, and police cars carry spare ammo. Press 9 for heavy weapons.',
         icon: '★',
         duration: 12000,
       });
@@ -1503,8 +1522,13 @@
       }
       this.dialogue.update();
       const cw = this.combat.weapon;
-      this.hud.setWeapon(cw, this.combat.inventory[cw.id], this.combat.reloading);
-      if (this.combat.hitMarkerT > 0.17) this.hud.flashHit();
+      this.hud.setWeapon(cw, this.combat.inventory[cw.id] ? this.combat.ammoView(cw.id) : null, this.combat.reloading, this.combat.reloadProgress);
+      if (this.hud.setCrosshairState) this.hud.setCrosshairState(this.combat.crosshair, this.player, this.renderer.camera);
+      if (this.combat.hitEvent) {
+        this.hud.flashHit(this.combat.hitEvent);
+        if (this.audio.hitConfirm) this.audio.hitConfirm(this.combat.hitEvent === 'head', this.combat.hitEvent === 'kill');
+        this.combat.hitEvent = null;
+      }
       this.hud.setHeat(this.police.level, !this.police.seen && this.police.level > 0, this.police.bust);
       this.vehicleFeedback.update(sdt);
       this.fx.setNight(glow);

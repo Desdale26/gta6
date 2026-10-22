@@ -1293,17 +1293,17 @@
         a.damage(W.gunDamage, 'player', 'bullet', { x: aim.x, y: aim.y, z: aim.z, dx: aim.d.x, dy: aim.d.y, dz: aim.d.z, head: hit.head });
         if (a.brain && a.brain.setAlert) a.brain.setAlert(a);
         g.fx.impact(aim.x, aim.y, aim.z, -aim.d.x, -aim.d.y, -aim.d.z, 'flesh');
-        combat.hitMarkerT = 0.18;
+        combat._hit(a.dead ? 'kill' : hit.head ? 'head' : 'hit', hit.head);
       } else if (hit.type === 'car') {
         hit.v.damage(W.gunDamage * 0.6, 'player', 'bullet');
         hit.v.wake();
         g.fx.impact(aim.x, aim.y, aim.z, -aim.d.x, 0, -aim.d.z, 'car');
         if (hit.v.driver === 'ai' && hit.v.controller && hit.v.controller.onBump) hit.v.controller.onBump(hit.v, { driver: 'player' }, 6);
-        combat.hitMarkerT = 0.18;
+        combat._hit('hit');
       } else if (hit.type === 'world') {
         g.fx.impact(aim.x, aim.y, aim.z, hit.hit.nx, hit.hit.ny, hit.hit.nz, 'concrete');
       }
-      if (g.audio.gunshot) g.audio.gunshot(W.gunSound, 0, 0.9, false);
+      if (g.audio.gunshot) g.audio.gunshot('autocannon', 0, 0.9, 0, { noMech: true, pitch: W.gunSound === 'smg' ? 1.12 : 1 });
       g.cameraRig.addShake(0.05);
       VH.events.emit('gunshot', { x: this.pos.x, z: this.pos.z, byPlayer: true, loud: true });
     }
@@ -1315,7 +1315,7 @@
       const dir = new THREE.Vector3(aim.x - m.x, aim.y - m.y, aim.z - m.z).normalize();
       combat.thrown.push(new Rocket(g, this, m, dir, W.rocketSpeed + Math.max(0, this.vF), W.rocketBlast, W.rocketDamage));
       g.fx.muzzle(m.x, m.y, m.z, true);
-      if (g.audio.gunshot) g.audio.gunshot('shotgun', 0, 0.7, false);
+      if (g.audio.rocketLaunch) g.audio.rocketLaunch(0, 0.8);
       g.cameraRig.addShake(0.12);
       VH.events.emit('gunshot', { x: this.pos.x, z: this.pos.z, byPlayer: true, loud: true });
     }
@@ -1780,6 +1780,10 @@
       const g = this.game;
       g.vehicleFeedback.explosion(x, y, z, this.blast / 8, this.owner);
       g.combat.blastDamage(x, y, z, this.blast, this.damage, 'player');
+    }
+
+    _remove() {
+      this.done = true;
     }
   }
 

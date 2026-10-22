@@ -468,10 +468,11 @@
         if (block.alley) this._buildAlley(ctx, block);
         for (const lot of block.lots) {
           const lctx = this.ctxAt(lot.cx, lot.cz);
-          // A corner shop (stores.js) or a body shop (sprayshops.js) stands on some of the car parks.
+          // A corner shop (stores.js), a body shop (sprayshops.js) or a gun shop (gunshops.js) stands on some of the car parks.
           let top;
           if (lot.store && VH.Stores) top = VH.Stores.buildLot(this, lctx, lot);
           else if (lot.spray && VH.SprayShops) top = VH.SprayShops.buildLot(this, lctx, lot);
+          else if (lot.gun && VH.GunShops) top = VH.GunShops.buildLot(this, lctx, lot);
           else top = VH.Buildings.buildLot(lctx, lot);
           lot.top = top || 0;
           if (top > 0) this.stats.buildings++;

@@ -50,6 +50,12 @@
     ['holdup', 'Crime', '💰', 'Hands Up', 'Hold up a corner shop.'],
     ['tank', 'Crime', '🪖', 'Heavy Metal', 'Take the tank for a drive.'],
     ['busted', 'Crime', '🚓', 'Bad Day', 'Get arrested.'],
+    ['gunshop', 'Combat', '🛒', 'Shopping Spree', 'Buy something at Bayline Arms.'],
+    ['headshots', 'Combat', '🎯', 'Sharpshooter', 'Land 25 headshots.'],
+    ['stun', 'Combat', '⚡', 'Shocking', 'Drop someone with the Jolt stun gun.'],
+    ['rocket_car', 'Combat', '🚀', 'Special Delivery', 'Blow up a car with a rocket.'],
+    ['scavenger', 'Combat', '📦', 'Scavenger', 'Pick up 25 weapons, ammo, armour or first-aid kits.'],
+    ['arsenal', 'Combat', '🧰', 'Arsenal', 'Carry every weapon at once.'],
     ['tourist', 'Explorer', '🗺', 'Tourist', 'Visit 6 districts.'],
     ['explorer', 'Explorer', '🧭', 'Explorer', 'Visit every district.'],
     ['pier_end', 'Explorer', '🌊', 'End of the Line', 'Walk to the end of Oceanview Pier.'],
@@ -224,6 +230,17 @@
       VH.events.on('respray:done', () => this.unlock('respray'));
       VH.events.on('property:bought', () => this.unlock('landlord'));
       VH.events.on('photo:taken', () => this.unlock('photo'));
+      VH.events.on('gunshop:buy', () => this.unlock('gunshop'));
+      VH.events.on('agent:stunned', (e) => {
+        if (e.source === 'player') this.unlock('stun');
+      });
+      VH.events.on('combat:hit', (e) => {
+        if (e.head && this._bump('headshots', 1) >= 25) this.unlock('headshots');
+      });
+      VH.events.on('combat:rocketCar', () => this.unlock('rocket_car'));
+      VH.events.on('pickup:collected', () => {
+        if (this._bump('pickups', 1) >= 25) this.unlock('scavenger');
+      });
     }
 
     // ------------------------------------------------------------- update
@@ -279,6 +296,7 @@
       if (p.money >= 100000) this.unlock('rich_100k');
       if (p.money >= 1000000) this.unlock('rich_1m');
       if (g.stores && g.stores.robbed >= 1) this.unlock('holdup');
+      if (g.combat && (VH.Data.weapons || []).every((w) => g.combat.has(w.id))) this.unlock('arsenal');
       if (c.jumps >= 5) this.unlock('stunt_5');
       if (c.jumpsTotal && c.jumps >= c.jumpsTotal) this.unlock('stunt_all');
       if (c.lanterns >= 10) this.unlock('lanterns_10');

@@ -535,8 +535,7 @@
         combat.thrown.push(new VH.Rocket(g, this, b.m, b.d, 190, 10, 380));
         g.fx.muzzle(b.m.x, b.m.y, b.m.z, true);
         if (g.fx.dust) g.fx.dust(b.m.x, this.pos.y + 0.3, b.m.z, 14);
-        if (g.audio.explosion) g.audio.explosion(0.55, 0);
-        if (g.audio.gunshot) g.audio.gunshot('sniper', 0, 1, false);
+        if (g.audio.gunshot) g.audio.gunshot('cannon', 0, 1, 0, { noMech: true });
         g.cameraRig.addShake(0.45);
         this.vF -= 0.8;
         VH.events.emit('gunshot', { x: this.pos.x, z: this.pos.z, byPlayer: true, loud: true });
@@ -554,12 +553,12 @@
           hit.agent.damage(18, 'player', 'bullet', { x, y, z, dx: d.x, dy: d.y, dz: d.z, head: hit.head });
           if (hit.agent.brain && hit.agent.brain.setAlert) hit.agent.brain.setAlert(hit.agent);
           g.fx.impact(x, y, z, -d.x, -d.y, -d.z, 'flesh');
-          combat.hitMarkerT = 0.18;
+          combat._hit(hit.agent.dead ? 'kill' : hit.head ? 'head' : 'hit', hit.head);
         } else if (hit.type === 'car') {
           hit.v.damage(9, 'player', 'bullet');
           g.fx.impact(x, y, z, -d.x, 0, -d.z, 'car');
         } else if (hit.type === 'world') g.fx.impact(x, y, z, hit.hit.nx, hit.hit.ny, hit.hit.nz, 'concrete');
-        if (g.audio.gunshot) g.audio.gunshot('rifle', 0, 0.8, false);
+        if (g.audio.gunshot) g.audio.gunshot('autocannon', 0, 0.75, 0, { noMech: true, pitch: 1.15 });
         VH.events.emit('gunshot', { x: this.pos.x, z: this.pos.z, byPlayer: true, loud: true });
       }
     }

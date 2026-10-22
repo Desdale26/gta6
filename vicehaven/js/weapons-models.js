@@ -27,7 +27,15 @@
  *   sight            where the eye goes for a scope or sight picture, or null
  *   flashScale       muzzle-flash size for this weapon
  *   flame            molotov only: a small additive flame on the rag, hidden
+ *   eject            ejection port (Vector3) for spent casings, or null
+ *   barrels          minigun: the axis of the barrel cluster (its chrome
+ *                    mesh spins about it), or null
  *   drawCalls        number of meshes
+ *
+ * More models can live in other files: VH.WeaponModels.define(id, fn) adds
+ * one, where fn(kit, C) draws with the same Kit and palette (exposed as
+ * VH.WeaponModels.Kit and .C) and returns the meta above. An id with no
+ * model at all borrows one from its slot rather than failing.
  */
 (function () {
   'use strict';
@@ -400,11 +408,17 @@
       return this.put(mat, g, hex, [x, y, z], back ? [0, Math.PI, 0] : null);
     }
 
+    /** One geometry per material key. A key like 'poly@round' is the poly
+     *  material in a mesh of its own (a part the game can show or hide). */
     finish() {
       const geos = {};
-      for (const k of MAT_ORDER) {
-        const b = this.parts[k];
-        if (b && !b.isEmpty) geos[k] = b.build();
+      const keys = Object.keys(this.parts);
+      for (const m of MAT_ORDER) {
+        for (const k of keys) {
+          if (k !== m && k.split('@')[0] !== m) continue;
+          const b = this.parts[k];
+          if (b && !b.isEmpty) geos[k] = b.build();
+        }
       }
       return geos;
     }
@@ -956,13 +970,26 @@
   // ------------------------------------------------------------- public
   const cache = new Map();
 
+  const warned = new Set();
+
+  /** The model for an id, or a stand-in from the same slot (warned once). */
+  function modelFor(id) {
+    if (MODELS[id]) return MODELS[id];
+    const def = VH.Data && VH.Data.weaponsById ? VH.Data.weaponsById[id] : null;
+    const kin = def ? (VH.Data.weapons || []).find((w) => w.slot === def.slot && MODELS[w.id]) : null;
+    if (!warned.has(id)) {
+      warned.add(id);
+      console.warn('[WeaponModels] no model for "' + id + '", using ' + (kin ? kin.id : 'pistol'));
+    }
+    return kin ? MODELS[kin.id] : MODELS.pistol;
+  }
+
   function prepare(id) {
     let entry = cache.get(id);
     if (entry) return entry;
-    const fn = MODELS[id];
-    if (!fn) throw new Error('[WeaponModels] unknown weapon "' + id + '"');
+    const fn = modelFor(id);
     const kit = new Kit();
-    const meta = fn(kit) || {};
+    const meta = fn(kit, C) || {};
     const geos = kit.finish();
     const off = meta.offset;
     if (off) for (const k in geos) geos[k].translate(off.x, off.y, off.z);
@@ -975,6 +1002,9 @@
       tip: vec(meta.tip),
       sight: vec(meta.sight),
       flame: vec(meta.flame),
+      eject: vec(meta.eject),
+      barrels: vec(meta.barrels),
+      layFlat: meta.layFlat !== undefined ? !!meta.layFlat : !!(def && def.kind === 'melee'),
       twoHanded: meta.twoHanded !== undefined ? meta.twoHanded : !!meta.offHand && id !== 'smg',
       flashScale: meta.flashScale || (def ? def.flash : 1),
       scope: !!meta.scope,
@@ -989,13 +1019,13 @@
     const M = materials();
     const g = new THREE.Group();
     g.name = 'weapon:' + id;
-    for (const k of MAT_ORDER) {
-      if (!e.geos[k]) continue;
-      const mesh = new THREE.Mesh(e.geos[k], M[k]);
+    for (const k in e.geos) {
+      const m = k.split('@')[0];
+      const mesh = new THREE.Mesh(e.geos[k], M[m]);
       mesh.name = id + ':' + k;
-      mesh.castShadow = k !== 'glass';
+      mesh.castShadow = m !== 'glass';
       mesh.receiveShadow = true;
-      if (k === 'glass') mesh.renderOrder = 2;
+      if (m === 'glass') mesh.renderOrder = 2;
       g.add(mesh);
     }
     const drawCalls = g.children.length;
@@ -1013,6 +1043,8 @@
       offHand: e.offHand ? e.offHand.clone() : null,
       tip: e.tip ? e.tip.clone() : null,
       sight: e.sight ? e.sight.clone() : null,
+      eject: e.eject ? e.eject.clone() : null,
+      barrels: e.barrels ? e.barrels.clone() : null,
       scope: e.scope,
       flashScale: e.flashScale,
       flame,
@@ -1025,7 +1057,7 @@
   function pickup(id) {
     const model = build(id);
     model.scale.setScalar(1.3);
-    if (id === 'bat' || id === 'knife') model.rotation.x = Math.PI / 2;
+    if (prepare(id).layFlat) model.rotation.x = Math.PI / 2;
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const centre = box.getCenter(new THREE.Vector3());
@@ -1042,8 +1074,21 @@
     build,
     pickup,
     muzzleFlash,
+    /** Add (or replace) a model: fn(kit, C) → meta. */
+    define(id, fn) {
+      MODELS[id] = fn;
+      cache.delete(id);
+      warned.delete(id);
+    },
+    has(id) {
+      return !!MODELS[id];
+    },
     /** Ids that have a model (fists returns an empty group). */
-    ids: Object.keys(MODELS),
+    get ids() {
+      return Object.keys(MODELS);
+    },
+    Kit,
+    C,
     /** Build every model's geometry now (e.g. behind a loading screen). */
     preload() {
       for (const id of Object.keys(MODELS)) prepare(id);

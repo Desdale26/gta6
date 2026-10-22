@@ -160,7 +160,7 @@
         for (const b of g.layout.blocks) {
           if (b.kind !== 'buildings' || K.AVOID_BLOCKS.has(b.id)) continue;
           for (const l of b.lots) {
-            if (l.kind !== 'building' || l.district.id !== district || used.has(l.id) || l.store || l.spray) continue;
+            if (l.kind !== 'building' || l.district.id !== district || used.has(l.id) || l.store || l.spray || l.gun) continue;
             if ((l.top || 0) < 5 || (l.top || 0) > 45) continue;
             lots.push(l);
           }

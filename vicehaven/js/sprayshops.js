@@ -474,12 +474,14 @@
       this.card = true;
       this._shown = '';
       this.cardEl.classList.add('visible');
+      document.body.classList.add('shop-open'); // the checklist and weapon panel step aside
       this._refresh(v);
     }
 
     _close() {
       this.card = false;
       this.cardEl.classList.remove('visible');
+      document.body.classList.remove('shop-open');
     }
 
     _cardInput(v) {

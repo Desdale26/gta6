@@ -127,7 +127,7 @@
     /** Label for the first key bound to an action, e.g. "E". */
     labelFor(action) {
       if (this.lastDevice === 'gamepad') {
-        const pad = { jump: 'A', crouch: 'B', reload: 'X', interact: 'Y', aim: 'LT', fire: 'RT', sprint: 'L3', camera: 'RB', pause: 'Menu', daytime: 'D-pad →' };
+        const pad = { jump: 'A', crouch: 'B', reload: 'X', interact: 'Y', aim: 'LT', fire: 'RT', sprint: 'L3', camera: 'RB', pause: 'Menu', daytime: 'D-pad →', weaponWheel: 'LB', vehicle: 'Y', map: 'View' };
         if (pad[action]) return pad[action];
       }
       const b = this.bindings[action];

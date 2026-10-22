@@ -61,6 +61,16 @@
       this._eye = new THREE.Vector3();
       this._tmp = new THREE.Vector3();
       this.position = camera.position;
+      // Gun kick: a springy jolt of the view (pitch, yaw, field of view) on
+      // each shot that settles straight back. It is only for the eyes: shots
+      // follow aimQuaternion, the view without the kick.
+      this._kp = 0;
+      this._ky = 0;
+      this._kf = 0;
+      this._kvp = 0;
+      this._kvy = 0;
+      this._kvf = 0;
+      this.aimQuaternion = new THREE.Quaternion();
 
       VH.events.on('player:land', (e) => {
         this._dip = Math.min(0.3, Math.max(0, e.impact - 3) * 0.02);
@@ -79,6 +89,42 @@
     addShake(amount) {
       if (!this.settings.get('gameplay.cameraShake')) return;
       this._shake = Math.min(1, this._shake + amount);
+    }
+
+    /** A shot's kick: pitch and yaw (radians) and a field-of-view punch (degrees). */
+    kick(pitch, yaw, fov) {
+      if (!this.settings.get('gameplay.cameraShake')) {
+        pitch *= 0.4;
+        yaw *= 0.4;
+        fov = 0;
+      }
+      this._kvp += pitch * 40;
+      this._kvy += yaw * 40;
+      this._kvf += (fov || 0) * 40;
+    }
+
+    /** Integrate the kick springs (stiff and well damped: a snap, not a wobble). */
+    _tickKick(dt) {
+      const step = Math.min(dt, 1 / 30);
+      const K = 260;
+      const D = 26;
+      this._kvp += (-K * this._kp - D * this._kvp) * step;
+      this._kvy += (-K * this._ky - D * this._kvy) * step;
+      this._kvf += (-K * this._kf - D * this._kvf) * step;
+      this._kp += this._kvp * step;
+      this._ky += this._kvy * step;
+      this._kf += this._kvf * step;
+    }
+
+    /** After the view is placed: remember it for aiming, then add the kick and a little roll from shake. */
+    _applyKick(cam, dt) {
+      this._tickKick(dt);
+      this.aimQuaternion.copy(cam.quaternion);
+      if (Math.abs(this._kp) + Math.abs(this._ky) > 1e-5 || this._shake > 0.001) {
+        const t = performance.now() / 1000;
+        const roll = this._shake > 0.001 ? Math.sin(t * 31.7) * this._shake * 0.012 : 0;
+        cam.rotation.set(cam.rotation.x + this._kp, cam.rotation.y + this._ky, cam.rotation.z + roll, 'YXZ');
+      }
     }
 
     /** Point the camera the way the player faces (after spawning or respawning). */
@@ -104,14 +150,16 @@
       const inp = this.input;
       const md = inp.takeMouseDelta();
       if (md.x || md.y) this._lookIdle = 0;
-      const sens = 0.0022 * this.settings.get('gameplay.mouseSensitivity') * (aiming ? 0.62 : 1);
+      // Through a scope the view moves as much on screen as it would unscoped.
+      const scoped = this._scoped ? this.fov / this.settings.get('graphics.fov') : 1;
+      const sens = 0.0022 * this.settings.get('gameplay.mouseSensitivity') * (aiming ? 0.62 : 1) * scoped;
       const invert = this.settings.get('gameplay.invertY') ? -1 : 1;
       this.yaw -= md.x * sens;
       this.pitch -= md.y * sens * invert;
       const look = inp.lookVector();
       if (look.x || look.y) {
         this._lookIdle = 0;
-        const ps = this.settings.get('gameplay.gamepadSensitivity') * (aiming ? 0.55 : 1);
+        const ps = this.settings.get('gameplay.gamepadSensitivity') * (aiming ? 0.55 : 1) * scoped;
         this.yaw -= look.x * Math.abs(look.x) * 3.4 * ps * dt;
         this.pitch -= look.y * Math.abs(look.y) * 2.3 * ps * dt * invert;
       }
@@ -123,7 +171,9 @@
       this._lookIdle += dt;
 
       const wheel = inp.takeWheel();
-      if (wheel && !first) this.zoom = clamp(this.zoom + wheel * 0.55, -1.6, 3.5);
+      // Scoped, the wheel steps the scope's zoom (combat reads scopeZoom).
+      if (wheel && this._scoped) this.scopeZoom = clamp((this.scopeZoom || 1) * (wheel > 0 ? 1.25 : 0.8), 0.45, 1.6);
+      else if (wheel && !first) this.zoom = clamp(this.zoom + wheel * 0.55, -1.6, 3.5);
       if (inp.consume('camera')) this.cycleMode();
     }
 
@@ -217,9 +267,18 @@
 
       let targetFov = settings.get('graphics.fov');
       const sprintFactor = player.sprinting ? clamp((player.speed - 4.6) / 2.8, 0, 1) : 0;
-      targetFov += sprintFactor * 7 - aim * 16;
+      // Aiming zooms by the weapon's own amount (combat sets player.aimZoom);
+      // through a scope (player.scoped) the view goes to the eye.
+      const zoom = player.aimZoom || 0.8;
+      const scoped = !!player.scoped;
+      this._scoped = scoped;
+      targetFov = targetFov * lerp(1, scoped ? zoom / (this.scopeZoom || 1) : zoom, aim) + sprintFactor * 7;
 
-      if (first) {
+      if (scoped) {
+        player.model.setVisible(false);
+        cam.near = 0.05;
+        cam.position.set(eye.x + fwd.x * 0.25, eye.y + 0.02, eye.z + fwd.z * 0.25);
+      } else if (first) {
         player.model.setVisible(true);
         player.model.setHeadVisible(false);
         cam.near = 0.05;
@@ -268,13 +327,15 @@
         this._shake = damp(this._shake, 0, 6, dt);
       }
 
-      this.fov = damp(this.fov, targetFov, 8, dt);
-      if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
-        cam.fov = this.fov;
+      this.fov = damp(this.fov, targetFov, scoped ? 20 : 8, dt);
+      const fov = this.fov + this._kf;
+      if (Math.abs(cam.fov - fov) > 0.01 || cam.near !== this._lastNear) {
+        cam.fov = fov;
         cam.updateProjectionMatrix();
         this._lastNear = cam.near;
       }
       cam.rotation.set(pitch, yaw + Math.PI, 0, 'YXZ');
+      this._applyKick(cam, dt);
       cam.updateMatrixWorld();
     }
 
@@ -331,6 +392,9 @@
       const fwd = this._fwd.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
       const sp = smoothstepLocal(0, 45, speed);
       let targetFov = settings.get('graphics.fov') + sp * 13 + v.boostFx * 9;
+      // Aiming a drive-by: in closer, a little narrower, over the shoulder.
+      const dba = this._dbAim = damp(this._dbAim || 0, this._aimingInCar && this._driveby ? 1 : 0, 8, dt);
+      targetFov -= dba * 9;
 
       if (mode.id === 'bonnet') {
         const f = Math.sin(v.renderYaw);
@@ -342,10 +406,11 @@
       } else {
         cam.near = 0.15;
         const baseDist = (4.2 + v.hz * 0.95) * mode.dist + this.zoom * 0.8;
-        const dist = baseDist + sp * 1.6 + v.boostFx * 0.8;
+        const dist = (baseDist + sp * 1.6 + v.boostFx * 0.8) * (1 - dba * 0.3);
         const up = (0.55 + v.height * 0.35) * mode.height;
         const origin = this._shoulder.copy(pv);
         origin.y += up;
+        if (dba > 0.01) origin.addScaledVector(this._right.set(-Math.cos(yaw), 0, Math.sin(yaw)), 0.7 * dba);
         const hit = this.physics.raycast(origin.x, origin.y, origin.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
           { inflate: 0.25, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
         const allowed = hit ? Math.max(1.2, hit.t - 0.2) : dist;
@@ -369,11 +434,13 @@
       this._shake = damp(this._shake, 0, 5, dt);
 
       this.fov = damp(this.fov, targetFov, 5, dt);
-      if (Math.abs(cam.fov - this.fov) > 0.01 || cam.near !== this._lastNear) {
-        cam.fov = this.fov;
+      const fov = this.fov + this._kf;
+      if (Math.abs(cam.fov - fov) > 0.01 || cam.near !== this._lastNear) {
+        cam.fov = fov;
         cam.updateProjectionMatrix();
         this._lastNear = cam.near;
       }
+      this._applyKick(cam, dt);
       cam.updateMatrixWorld();
     }
 
@@ -445,6 +512,7 @@
         cam.updateProjectionMatrix();
         this._lastNear = cam.near;
       }
+      this.aimQuaternion.copy(cam.quaternion);
       cam.updateMatrixWorld();
     }
 

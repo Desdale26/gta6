@@ -20,9 +20,12 @@ buying the city block by block with money Jay once helped steal.
 - **The city:** downtown towers, Old Market alleys, Palm Crescent's pastel
   streets, the Harbor Point boardwalk and pier, the Saltmarsh container port
   and the walled mansions of Crestline Estates, with a running day and night.
-- **18 cars, 11 weapons, police with five heat levels and a helicopter,
+- **18 cars, 23 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
-- **New in v1.2 (City life update):** rain and thunderstorms, Fresh Coat
+- **New in v1.3 (Arsenal update):** 12 new weapons including a rocket
+  launcher, a minigun and a stun gun, Bayline Arms gun shops, ammo and
+  armour round the city, and guns that kick, flinch people and leave holes.
+- **v1.2 (City life update):** rain and thunderstorms, Fresh Coat
   body shops, eight businesses to buy, 42 achievements with a Progress
   screen counting to 100%, and photo mode.
 
@@ -108,9 +111,9 @@ Off or Strong in the same place.
 |-----|--------|
 | **Right mouse** (hold) | Aim |
 | **Left mouse** | Fire, swing or throw |
-| **R** | Reload |
+| **R** | Reload. With limpet charges out, sets them all off |
 | **Tab** (hold) | **Weapon wheel**: the world slows down; point at a weapon and let go |
-| **1 – 8** | Pick a weapon slot directly |
+| **1 – 9** | Pick a weapon slot directly (9: heavy weapons) |
 
 **Driving**
 
@@ -329,14 +332,41 @@ it. Once it has lost you it doesn't know where you are: it circles the
 search area. After about 75 seconds it goes back to refuel, and the next
 one is 40 seconds away, which is your best window.
 
-**Weapons.** Fists, a baseball bat, a combat knife, the Kestrel 9 pistol,
-the Hammerhead .44, the Wasp SMG, the Gator 12 shotgun, the Mantis AC-7
-rifle, the Heron LR sniper rifle, frag grenades and molotovs. Shots go
-exactly where the crosshair is; only the automatics (the Wasp and the
-Mantis) wander a little, more the longer you hold the trigger, and a
-shotgun's pellets spread round the centre. Recoil kicks the view up and
-settles back. Damage falls off with range, and headshots count extra.
-Enemies take cover, flank and shoot back.
+**Weapons.** 23 of them in nine slots (keys 1-9, or hold Tab for the
+wheel):
+
+| Slot | Weapons |
+|------|---------|
+| Melee | Baseball bat, combat knife, Fairway 7-Iron golf club, pry bar |
+| Pistol | Kestrel 9, Hammerhead .44, Jolt stun gun (drops someone for five seconds, no harm done) |
+| SMG | Wasp, Hornet PDW |
+| Shotgun | Gator 12 (loads shell by shell), Mule sawn-off (fires from a car), Bull 12 Auto |
+| Rifle | Mantis AC-7, Rhino LMG (100-round box; it climbs if you hold it) |
+| Sniper | Heron LR (6x scope; the wheel zooms), Osprey DMR (semi-auto, 3x scope) |
+| Thrown | Frag grenades, molotovs, limpet charges (they stick; R sets them off) |
+| Heavy | Thunderhead RPG (one rocket per car), Boomer grenade launcher, Buzzsaw minigun (spins up first; slows you down) |
+
+Aimed single shots go exactly where the crosshair is; from the hip or on
+the run they wander a little, automatics bloom the longer you hold the
+trigger, and shotgun pellets spread round the ring. Every shot kicks the
+view and leaves sparks and holes; tracers show where rounds go. Hit
+markers go gold for a headshot and red for a kill. Damage falls off with
+range, headshots count extra and ignore armour, and big guns throw people.
+Enemies hold their guns, take cover (crouched in cover they're harder to
+hit), flinch when hit, flank and shoot back.
+
+**Ammo.** Guns that take the same rounds share them (the Kestrel and the
+Wasp both take 9 mm; every shotgun takes 12 gauge). Ways to get more:
+**Bayline Arms**, the gun shops (crosshair icon on the map: Old Market,
+Palm Crescent and Harbor Point; walk to the counter and press **E**, W/S
+to choose, A/D for a box or fill up, E to buy, Space to leave); weapons,
+ammo, body armour and first aid lying round the city (35 spots, back a few
+minutes after you take them; a rocket launcher waits inside Fort
+Breakwater); what enemies drop (their gun if you haven't one, else their
+ammo, sometimes armour); the back of a police car or army truck the first
+time you get in; and story jobs, which top up guns you already carry. New
+guns come into the shops as the story goes on. Nobody sells to you with
+the police after you, and the clerk keeps a shotgun under the counter.
 
 **The radio.** Three stations of original, procedurally composed music:
 **VHR 88.1 Sunset Drive** (synthwave, with Del Starr), **Pulse 96.4**
@@ -572,7 +602,15 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Buy a business at its For Sale sign: the sign changes, the map icon turns green, and a payday arrives within eight minutes
 - [ ] Earn an achievement (get a wanted star): the banner drops in at the top; Pause → Progress lists it with the date
 - [ ] Pause → Photo mode: fly round, change the filter, time and weather, press Enter: a PNG downloads; Esc puts everything back
-- [ ] The title screen says v1.2 and What's new lists the update
+- [ ] Bayline Arms (crosshair icon on the map): E at the counter, W/S to choose, A/D box or fill, E to buy ammo, armour and a new gun; Space to leave
+- [ ] Aim a rifle: Jay holds it level at the shoulder; fire from the hip: he turns to face the crosshair dot
+- [ ] Shots kick the view, leave bullet holes and sparks; hit markers go gold for headshots and red for kills
+- [ ] The sniper rifle and the Osprey DMR show a scope when aimed; the wheel zooms the sniper's scope
+- [ ] Rocket launcher (9): one rocket wrecks a car; the minigun spins up before it fires; limpets stick and go off on R
+- [ ] The Jolt stun gun drops someone for five seconds with no blood
+- [ ] Enemies hold visible guns, flinch when hit and drop their weapon or ammo; police cars have ammo in the back
+- [ ] Walk over an armour pickup at Meridian Yard: +50 armour, gone for three minutes
+- [ ] The title screen says v1.3 and What's new lists the update
 
 For developers, the automated checks need Node.js and Playwright:
 

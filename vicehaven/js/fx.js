@@ -4,7 +4,9 @@
  *   particles   two GPU point clouds: "soft" (alpha-blended smoke, dust,
  *               water) and "glow" (additive fire, sparks, muzzle flashes,
  *               explosions). HDR colours above 1 bloom in post-processing.
- *   tracers     short additive line segments for bullets
+ *   tracers     bright streaks for bullets: camera-facing quads that race
+ *               from the muzzle to where the round lands
+ *   bullet holes a ring buffer of small scorched holes on walls and floors
  *   skid marks  a ring buffer of dark quads laid down by sliding tyres
  *   debris      knocked-over street furniture tumbling away; lamp posts
  *               topple from the base
@@ -322,6 +324,238 @@
     }
   }
 
+  // ---------------------------------------------------------- bullet holes
+  /** Small dark holes with a pale chipped rim, laid on whatever a shot hit, facing out of it. */
+  class BulletHoles {
+    constructor(max) {
+      this.max = max;
+      this.next = 0;
+      this.items = [];
+      const geo = new THREE.BufferGeometry();
+      this.pos = new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      this.nrm = new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      this.col = new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      const uv = new Float32Array(max * 8);
+      const idx = new Uint32Array(max * 6);
+      for (let i = 0; i < max; i++) {
+        uv.set([0, 0, 1, 0, 0, 1, 1, 1], i * 8);
+        idx.set([i * 4, i * 4 + 2, i * 4 + 1, i * 4 + 2, i * 4 + 3, i * 4 + 1], i * 6);
+      }
+      geo.setAttribute('position', this.pos);
+      geo.setAttribute('normal', this.nrm);
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setAttribute('color', this.col);
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      const mat = new THREE.MeshStandardMaterial({
+        map: BulletHoles.texture(), vertexColors: true, transparent: true, depthWrite: false, roughness: 0.9,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, side: THREE.DoubleSide,
+      });
+      this.mesh = new THREE.Mesh(geo, mat);
+      this.mesh.frustumCulled = false;
+      this.mesh.renderOrder = 3;
+      this.mesh.name = 'bullet holes';
+    }
+
+    static texture() {
+      if (BulletHoles._tex) return BulletHoles._tex;
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const x = c.getContext('2d');
+      const rim = x.createRadialGradient(32, 32, 6, 32, 32, 30);
+      rim.addColorStop(0, 'rgba(40,36,32,0.9)');
+      rim.addColorStop(0.45, 'rgba(90,84,76,0.55)');
+      rim.addColorStop(1, 'rgba(90,84,76,0)');
+      x.fillStyle = rim;
+      x.fillRect(0, 0, 64, 64);
+      // Chips flaking off round the edge.
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      x.fillStyle = 'rgba(60,55,50,0.5)';
+      for (let i = 0; i < 9; i++) {
+        const a = rnd() * Math.PI * 2;
+        const d = 9 + rnd() * 9;
+        x.beginPath();
+        x.arc(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, 1.5 + rnd() * 2.5, 0, Math.PI * 2);
+        x.fill();
+      }
+      const core = x.createRadialGradient(32, 32, 0, 32, 32, 8);
+      core.addColorStop(0, 'rgba(5,5,6,1)');
+      core.addColorStop(1, 'rgba(12,11,10,0.9)');
+      x.fillStyle = core;
+      x.beginPath();
+      x.arc(32, 32, 7, 0, Math.PI * 2);
+      x.fill();
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      BulletHoles._tex = t;
+      return t;
+    }
+
+    /** A hole at (x, y, z) on a surface facing (nx, ny, nz); size in metres. */
+    add(x, y, z, nx, ny, nz, size) {
+      const i = this.next;
+      this.next = (this.next + 1) % this.max;
+      const n = new THREE.Vector3(nx, ny, nz);
+      if (n.lengthSq() < 1e-6) n.set(0, 1, 0);
+      n.normalize();
+      // Two tangents: any vector not parallel to the normal, then crossed.
+      const t1 = Math.abs(n.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const u = t1.cross(n).normalize();
+      const v = new THREE.Vector3().crossVectors(n, u);
+      const a = Math.random() * Math.PI * 2;
+      const r = (size || 0.12) * 0.5 * (0.8 + Math.random() * 0.4);
+      const cu = Math.cos(a) * r;
+      const su = Math.sin(a) * r;
+      const ax = u.x * cu + v.x * su;
+      const ay = u.y * cu + v.y * su;
+      const az = u.z * cu + v.z * su;
+      const bx = -u.x * su + v.x * cu;
+      const by = -u.y * su + v.y * cu;
+      const bz = -u.z * su + v.z * cu;
+      const ox = x + n.x * 0.006;
+      const oy = y + n.y * 0.006;
+      const oz = z + n.z * 0.006;
+      this.pos.array.set([
+        ox - ax - bx, oy - ay - by, oz - az - bz,
+        ox + ax - bx, oy + ay - by, oz + az - bz,
+        ox - ax + bx, oy - ay + by, oz - az + bz,
+        ox + ax + bx, oy + ay + by, oz + az + bz,
+      ], i * 12);
+      for (let k = 0; k < 4; k++) {
+        this.nrm.array.set([n.x, n.y, n.z], i * 12 + k * 3);
+        this.col.array.set([1, 1, 1, 1], i * 16 + k * 4);
+      }
+      this.items[i] = { t: 0 };
+      this.pos.needsUpdate = true;
+      this.nrm.needsUpdate = true;
+      this.col.needsUpdate = true;
+    }
+
+    /** Holes fade out after a minute or so. */
+    update(dt) {
+      let dirty = false;
+      for (let i = 0; i < this.items.length; i++) {
+        const it = this.items[i];
+        if (!it) continue;
+        it.t += dt;
+        if (it.t > 50) {
+          const a = Math.max(0, 1 - (it.t - 50) / 10);
+          for (let k = 0; k < 4; k++) this.col.array[i * 16 + k * 4 + 3] = a;
+          dirty = true;
+          if (a <= 0) {
+            this.items[i] = null;
+            this.pos.array.fill(0, i * 12, i * 12 + 12);
+            this.pos.needsUpdate = true;
+          }
+        }
+      }
+      if (dirty) this.col.needsUpdate = true;
+    }
+
+    clear() {
+      this.items = [];
+      this.pos.array.fill(0);
+      this.pos.needsUpdate = true;
+    }
+  }
+
+  // --------------------------------------------------------------- tracers
+  const TRACER_VERT = /* glsl */ `
+    attribute vec4 aColor;
+    attribute float aSide;
+    varying vec4 vColor;
+    varying float vSide;
+    void main() {
+      vColor = aColor;
+      vSide = aSide;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+  const TRACER_FRAG = /* glsl */ `
+    varying vec4 vColor;
+    varying float vSide;
+    void main() {
+      float edge = 1.0 - abs(vSide);
+      gl_FragColor = vec4(vColor.rgb, vColor.a * edge * edge);
+    }
+  `;
+
+  /** Bullet streaks: a quad per round, turned to face the camera, racing from muzzle to target. */
+  class Tracers {
+    constructor(max) {
+      this.max = max;
+      this.list = [];
+      const geo = new THREE.BufferGeometry();
+      this.pos = new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      this.col = new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      const side = new Float32Array(max * 4);
+      const idx = new Uint32Array(max * 6);
+      for (let i = 0; i < max; i++) {
+        side.set([-1, 1, -1, 1], i * 4);
+        idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3], i * 6);
+      }
+      geo.setAttribute('position', this.pos);
+      geo.setAttribute('aColor', this.col);
+      geo.setAttribute('aSide', new THREE.BufferAttribute(side, 1));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.setDrawRange(0, 0);
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: TRACER_VERT, fragmentShader: TRACER_FRAG,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      });
+      this.mesh = new THREE.Mesh(geo, mat);
+      this.mesh.frustumCulled = false;
+      this.mesh.renderOrder = 4;
+      this.mesh.name = 'tracers';
+      this._d = new THREE.Vector3();
+      this._v = new THREE.Vector3();
+      this._s = new THREE.Vector3();
+    }
+
+    add(x0, y0, z0, x1, y1, z1, o) {
+      if (this.list.length >= this.max) this.list.shift();
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      // Rounds travel fast but not instantly: long shots take a frame or three.
+      const speed = (o && o.speed) || 650;
+      this.list.push({ x0, y0, z0, x1, y1, z1, len, t: 0, dur: Math.max(0.035, len / speed), w: (o && o.width) || 0.03, c: (o && o.color) || [7, 4.6, 2], tail: Math.min(len, (o && o.tail) || 7) });
+    }
+
+    update(dt, cam) {
+      const P = this.pos.array;
+      const C = this.col.array;
+      let n = 0;
+      for (const t of this.list) {
+        t.t += dt;
+        const k = t.t / t.dur;
+        const head = Math.min(1, k);
+        const tail = Math.max(0, head - t.tail / Math.max(0.01, t.len));
+        const fade = k > 1 ? Math.max(0, 1 - (k - 1) * 4) : 1;
+        const hx = lerp(t.x0, t.x1, head);
+        const hy = lerp(t.y0, t.y1, head);
+        const hz = lerp(t.z0, t.z1, head);
+        const tx = lerp(t.x0, t.x1, tail);
+        const ty = lerp(t.y0, t.y1, tail);
+        const tz = lerp(t.z0, t.z1, tail);
+        // Width at right angles to both the streak and the view.
+        const d = this._d.set(hx - tx, hy - ty, hz - tz);
+        const v = this._v.set((hx + tx) / 2 - cam.x, (hy + ty) / 2 - cam.y, (hz + tz) / 2 - cam.z);
+        const sd = this._s.crossVectors(d, v);
+        const l = sd.length() || 1;
+        // Wider far away, so a distant streak stays a line rather than a hair.
+        const w = t.w * Math.max(1, v.length() / 25);
+        sd.multiplyScalar(w / l);
+        P.set([tx - sd.x, ty - sd.y, tz - sd.z, tx + sd.x, ty + sd.y, tz + sd.z, hx - sd.x, hy - sd.y, hz - sd.z, hx + sd.x, hy + sd.y, hz + sd.z], n * 12);
+        const a = fade;
+        C.set([t.c[0] * 0.25, t.c[1] * 0.25, t.c[2] * 0.25, 0, t.c[0] * 0.25, t.c[1] * 0.25, t.c[2] * 0.25, 0, t.c[0], t.c[1], t.c[2], a, t.c[0], t.c[1], t.c[2], a], n * 16);
+        n++;
+      }
+      this.list = this.list.filter((t) => t.t < t.dur + 0.25);
+      this.mesh.geometry.setDrawRange(0, n * 6);
+      this.pos.needsUpdate = true;
+      this.col.needsUpdate = true;
+    }
+  }
+
   // ------------------------------------------------------------ skid marks
   class SkidMarks {
     constructor(max) {
@@ -506,17 +740,11 @@
       this.scene.add(this.bloodDecals.mesh);
       this._bindBlood();
 
-      // Tracers.
-      this.maxTracers = 64;
-      const tg = new THREE.BufferGeometry();
-      this.tracerPos = new THREE.BufferAttribute(new Float32Array(this.maxTracers * 6), 3).setUsage(THREE.DynamicDrawUsage);
-      tg.setAttribute('position', this.tracerPos);
-      tg.setDrawRange(0, 0);
-      this.tracerMat = new THREE.LineBasicMaterial({ color: new THREE.Color(5, 3.6, 1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-      this.tracers = new THREE.LineSegments(tg, this.tracerMat);
-      this.tracers.frustumCulled = false;
-      this.tracerList = [];
-      this.scene.add(this.tracers);
+      // Tracers and bullet holes.
+      this.tracers = new Tracers(96);
+      this.scene.add(this.tracers.mesh);
+      this.holes = new BulletHoles(220);
+      this.scene.add(this.holes.mesh);
 
       // The one moving flash light (explosions, muzzle flashes).
       this.flash = new THREE.PointLight(0xffa04a, 0, 30, 2);
@@ -692,11 +920,34 @@
       }
     }
 
-    /** Muzzle flash and a brief light. */
-    muzzle(x, y, z, big) {
-      this.glow.emit({ x, y, z, life: 0.05, size: big ? 0.9 : 0.55, size1: 0.2, r: 9, g: 6, b: 2.4, a: 1 });
-      this.soft.emit({ x, y, z, vy: 0.6, life: 0.5, size: 0.15, size1: 0.9, r: 0.6, g: 0.6, b: 0.6, a: 0.15, drag: 2 });
-      this._pulse(x, y, z, big ? 6 : 4, 0xffb060, 0.06, 12);
+    /** Muzzle flash and a brief light (scale: the weapon's flash size). */
+    muzzle(x, y, z, big, scale) {
+      const k = scale || 1;
+      this.glow.emit({ x, y, z, life: 0.05, size: (big ? 0.9 : 0.55) * k, size1: 0.2, r: 9, g: 6, b: 2.4, a: 1 });
+      this.soft.emit({ x, y, z, vy: 0.6, life: 0.5 + 0.2 * k, size: 0.15, size1: 0.9 * k, r: 0.6, g: 0.6, b: 0.6, a: 0.15 + 0.05 * k, drag: 2 });
+      this._pulse(x, y, z, (big ? 6 : 4) * k, 0xffb060, 0.06, 12 + 4 * k);
+    }
+
+    /** A spent case flicked out of the ejection port (brass, or red for a shotgun hull). */
+    casing(x, y, z, vx, vy, vz, shell) {
+      this.soft.emit({
+        x, y, z, vx, vy, vz, life: 0.65, size: shell ? 0.05 : 0.035, size1: shell ? 0.05 : 0.035,
+        r: shell ? 0.75 : 0.95, g: shell ? 0.12 : 0.72, b: shell ? 0.1 : 0.28, a: 1, drag: 0.3, grav: 9.8,
+      });
+    }
+
+    /** Rocket exhaust: flame at the nozzle and a grey trail that lingers. */
+    rocketTrail(x, y, z, vx, vy, vz) {
+      this.glow.emit({ x, y, z, vx: -vx * 0.05, vy: -vy * 0.05, vz: -vz * 0.05, life: 0.08, size: 0.6, size1: 0.2, r: 9, g: 5, b: 1.6, a: 1 });
+      this.soft.emit({
+        x: x + (Math.random() - 0.5) * 0.1, y, z: z + (Math.random() - 0.5) * 0.1, vx: (Math.random() - 0.5) * 0.4, vy: 0.3 + Math.random() * 0.3, vz: (Math.random() - 0.5) * 0.4,
+        life: 1.6 + Math.random() * 0.8, size: 0.35, size1: 1.8, r: 0.75, g: 0.74, b: 0.72, a: 0.5, drag: 1.2, grav: -0.2,
+      });
+    }
+
+    /** A bullet hole where a round hit the city. */
+    bulletHole(x, y, z, nx, ny, nz, size) {
+      this.holes.add(x, y, z, nx, ny, nz, size);
     }
 
     // ------------------------------------------------------------ blood
@@ -785,21 +1036,29 @@
 
     /** A bullet hitting something. */
     impact(x, y, z, nx, ny, nz, surface) {
-      if (surface === 'metal' || surface === 'car') this.sparks(x, y, z, nx, nz, 6, 4);
+      if (surface === 'metal' || surface === 'car') this.sparks(x, y, z, nx, nz, 8, 5);
       if (surface === 'flesh') return; // blood() handles wounds (agent:hurt / agent:died)
       if (surface === 'glass') this.glass(x, y, z, 8);
+      if (surface === 'concrete') this.sparks(x, y, z, nx, nz, 2, 3);
       const c = surface === 'wood' ? [0.45, 0.35, 0.22] : [0.62, 0.6, 0.56];
+      for (let i = 0; i < 4; i++) {
+        this.soft.emit({
+          x, y, z, vx: nx * 2.4 + (Math.random() - 0.5), vy: ny * 2 + Math.random() * 0.8, vz: nz * 2.4 + (Math.random() - 0.5),
+          life: 0.7 + Math.random() * 0.4, size: 0.12, size1: 0.75, r: c[0], g: c[1], b: c[2], a: 0.55, drag: 3,
+        });
+      }
+      // Chips that fly off and fall.
       for (let i = 0; i < 3; i++) {
         this.soft.emit({
-          x, y, z, vx: nx * 2 + (Math.random() - 0.5), vy: ny * 2 + Math.random() * 0.8, vz: nz * 2 + (Math.random() - 0.5),
-          life: 0.6 + Math.random() * 0.3, size: 0.1, size1: 0.6, r: c[0], g: c[1], b: c[2], a: 0.5, drag: 3,
+          x, y, z, vx: nx * 3 + (Math.random() - 0.5) * 3, vy: ny * 2 + 1.5 + Math.random() * 2, vz: nz * 3 + (Math.random() - 0.5) * 3,
+          life: 0.5 + Math.random() * 0.3, size: 0.035, size1: 0.03, r: c[0] * 0.6, g: c[1] * 0.6, b: c[2] * 0.6, a: 1, drag: 0.4, grav: 12,
         });
       }
     }
 
-    tracer(x0, y0, z0, x1, y1, z1) {
-      if (this.tracerList.length >= this.maxTracers) this.tracerList.shift();
-      this.tracerList.push({ x0, y0, z0, x1, y1, z1, t: 0 });
+    /** A bullet streak from (x0..) to (x1..); o: { width, color [r,g,b] HDR, speed m/s, tail m }. */
+    tracer(x0, y0, z0, x1, y1, z1, o) {
+      this.tracers.add(x0, y0, z0, x1, y1, z1, o);
     }
 
     nitro(x, y, z, dx, dz) {
@@ -954,6 +1213,8 @@
       this.geysers.length = 0;
       this.skids.clear();
       this.bloodDecals.clear();
+      this.holes.clear();
+      this.tracers.list.length = 0;
     }
 
     // ------------------------------------------------------------ frame
@@ -982,24 +1243,9 @@
       this.bloodDecals.update(dt);
       this._updateDebris(dt);
 
-      // Tracers.
-      const T = this.tracerPos.array;
-      let n = 0;
-      for (const t of this.tracerList) {
-        t.t += dt;
-        const k = Math.min(1, t.t / 0.05);
-        const x0 = lerp(t.x0, t.x1, Math.max(0, k - 0.35));
-        const y0 = lerp(t.y0, t.y1, Math.max(0, k - 0.35));
-        const z0 = lerp(t.z0, t.z1, Math.max(0, k - 0.35));
-        const x1 = lerp(t.x0, t.x1, k);
-        const y1 = lerp(t.y0, t.y1, k);
-        const z1 = lerp(t.z0, t.z1, k);
-        T.set([x0, y0, z0, x1, y1, z1], n * 6);
-        n++;
-      }
-      this.tracerList = this.tracerList.filter((t) => t.t < 0.07);
-      this.tracers.geometry.setDrawRange(0, n * 2);
-      this.tracerPos.needsUpdate = true;
+      // Tracers and bullet holes.
+      this.tracers.update(dt, this.game.renderer.camera.position);
+      this.holes.update(dt);
 
       // Flash light decay.
       if (this._flashPeak > 0) {

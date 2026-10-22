@@ -736,7 +736,8 @@
       const g = this.game;
       const p = g.player;
       const w = g.combat.weapon;
-      if (!w || (w.kind !== 'hitscan' && w.kind !== 'pellets')) return false;
+      // Any real gun (a launcher too); not the stun gun.
+      if (!w || (w.kind !== 'hitscan' && w.kind !== 'pellets' && w.kind !== 'projectile') || w.stun) return false;
       if (!p.aiming || p.aimAmount < 0.5 || a.dead) return false;
       const cam = g.renderer.camera;
       const dir = this._v.set(0, 0, -1).applyQuaternion(cam.quaternion);

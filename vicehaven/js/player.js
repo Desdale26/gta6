@@ -214,10 +214,13 @@
         return;
       }
       if (this.frozen) {
-        // Held in place (a challenge countdown): no movement, presses are dropped.
+        // Held in place (a challenge countdown): no movement, presses are dropped
+        // (unless a menu in the world wants them: the gun shop's card).
         this.vel.set(0, 0, 0);
-        this.input.discard('jump');
-        this.input.discard('crouch');
+        if (!this.keepPresses) {
+          this.input.discard('jump');
+          this.input.discard('crouch');
+        }
         return;
       }
       if (this.state === 'climb') {
@@ -243,9 +246,11 @@
       if (inp.consume('crouch')) this.wantCrouch = !this.wantCrouch;
       if (inp.consume('walk')) this.walkToggle = !this.walkToggle;
       this.aiming = inp.down('aim');
+      // Firing from the hip turns Jay to face where the shots go (combat.js).
+      if (this._fireFaceT > 0) this._fireFaceT -= dt;
       if (this.wantCrouch) this.crouched = true;
       else if (this.crouched && this.canStand()) this.crouched = false;
-      this.sprinting = inp.down('sprint') && !this.crouched && !this.aiming && mag > 0.3 && this.grounded;
+      this.sprinting = inp.down('sprint') && !this.crouched && !this.aiming && !(this.carrySlow > 0) && mag > 0.3 && this.grounded;
       if (this.sprinting && this.wantCrouch) this.wantCrouch = false;
 
       let target = P.runSpeed;
@@ -256,6 +261,7 @@
       // A gently pushed analogue stick walks.
       if (inp.lastDevice === 'gamepad' && mag < 0.55 && !this.sprinting) target = Math.min(target, P.walkSpeed);
       if (this._stagger > 0) target *= 0.35;
+      if (this.carrySlow > 0) target *= 1 - this.carrySlow; // a minigun or a launcher weighs Jay down
       // Keys are all-or-nothing; a stick scales speed with how far it is pushed.
       const scale = mag < 0.05 ? 0 : inp.lastDevice === 'gamepad' ? mag : 1;
       const desiredX = wx * target * scale;
@@ -405,9 +411,10 @@
       // Facing.
       const hSpeed = Math.hypot(this.vel.x, this.vel.z);
       let targetHeading = this.heading;
-      if (this.aiming) targetHeading = camYaw;
+      const facing = this.aiming || this._fireFaceT > 0;
+      if (facing) targetHeading = camYaw;
       else if (hSpeed > 0.4 && mag > 0.05) targetHeading = Math.atan2(this.vel.x, this.vel.z);
-      this.heading = dampAngle(this.heading, targetHeading, this.grounded ? (this.aiming ? 18 : 11) : 4, dt);
+      this.heading = dampAngle(this.heading, targetHeading, this.grounded ? (facing ? 18 : 11) : 4, dt);
 
       // Bookkeeping.
       const moved = Math.hypot(movedX, movedZ);
@@ -794,7 +801,9 @@
         grounded: this.grounded || this.state === 'climb',
         vy: this.vel.y,
         crouch: this.crouchAmount,
-        aim: this.aimAmount,
+        // Hip fire raises the gun for a moment without the aiming camera.
+        aim: Math.max(this.aimAmount, this._fireFaceT > 0 && this.weaponPose ? 0.9 : 0),
+        reload: this.reloadPhase || 0,
         climb: this.climb ? this.climb.t : -1,
         sprint: this.sprinting,
         backwards,

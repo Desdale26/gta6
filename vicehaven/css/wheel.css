@@ -2,6 +2,10 @@
  * wheel.css — the radial weapon wheel (js/ui-wheel.js) and the shared
  * weapon icon style. Dark navy glass, a sunset highlight, Bahnschrift.
  * Nothing here takes pointer events: the game feeds the wheel its input.
+ *
+ * Layout: the ring sits in the middle with the info card to its right (the
+ * ring stays centred while there is room for the card on both sides, then
+ * slides left); on narrow (portrait) screens the card drops below it.
  */
 
 .vhw {
@@ -32,17 +36,27 @@
 }
 
 .vhw-stack {
+  --vhw-card: 18rem;
+  --vhw-gap: 2rem;
+  --vhw-ring: min(34rem, 72vh, calc(100vw - 2rem - var(--vhw-card) - 2 * var(--vhw-gap)));
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, var(--vhw-card)) var(--vhw-ring) var(--vhw-card);
+  grid-template-areas:
+    '. ring info'
+    '. hint .';
+  column-gap: var(--vhw-gap);
+  row-gap: 1.1rem;
   align-items: center;
-  gap: 1.1rem;
+  max-width: calc(100vw - 2rem);
 }
 
 .vhw-ring {
+  grid-area: ring;
   position: relative;
-  width: min(34rem, 74vmin);
+  width: var(--vhw-ring);
   aspect-ratio: 1 / 1;
+  container-type: inline-size; /* the text on the ring scales with it (cqw) */
   transform: scale(0.94);
   transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.25, 1.15);
 }
@@ -139,7 +153,7 @@
   transition: opacity 0.12s ease;
 }
 
-/* Icons, ammo and multi-weapon pips on the ring. */
+/* Icons, ammo and multi-weapon pips on the ring (the JS sets each width). */
 .vhw-item {
   position: absolute;
   width: 21%;
@@ -165,18 +179,39 @@
   color: rgba(241, 244, 255, 0.5);
 }
 
+/* Nothing owned in the slot yet: its first weapon, greyed, with a padlock. */
+.vhw-item.locked {
+  color: rgba(241, 244, 255, 0.26);
+}
+
+.vhw-item.on.locked {
+  color: rgba(241, 244, 255, 0.62);
+}
+
+/* In a car: weapons that can't be fired from the window. */
+.vhw-item.nocar {
+  opacity: 0.34;
+}
+
+.vhw-item.on.nocar {
+  opacity: 0.55;
+}
+
 .vhw-icon {
   width: 100%;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
 }
 
-.vhw-item.on .vhw-icon {
+.vhw-item.on .vhw-icon,
+.vhw-item.locked .vhw-icon {
   filter: none;
 }
 
 .vhw-count {
+  display: flex;
+  align-items: center;
   min-height: 1em;
-  font-size: 0.78rem;
+  font-size: clamp(0.66rem, 2.3cqw, 0.78rem);
   font-weight: 600;
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
@@ -188,6 +223,12 @@
   opacity: 1;
 }
 
+.vhw-lock {
+  display: block;
+  width: 0.62rem;
+  height: 0.72rem;
+}
+
 .vhw-dots {
   display: flex;
   gap: 0.25rem;
@@ -197,6 +238,7 @@
 .vhw-dots i {
   width: 0.34rem;
   height: 0.34rem;
+  box-sizing: border-box;
   border-radius: 50%;
   background: currentColor;
   opacity: 0.35;
@@ -204,6 +246,50 @@
 
 .vhw-dots i.on {
   opacity: 1;
+}
+
+/* Locked weapons: hollow pips. */
+.vhw-dots i.off {
+  background: none;
+  border: 1px solid currentColor;
+  opacity: 0.5;
+}
+
+.vhw-dots i.off.on {
+  opacity: 1;
+}
+
+/* Quick-select key badges in each segment's outer corner (hidden for a gamepad). */
+.vhw-key {
+  position: absolute;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.28rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  border-radius: 0.32rem;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  font-size: clamp(0.58rem, 1.95cqw, 0.66rem);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgba(241, 244, 255, 0.72);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.vhw-key.on {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  color: #1b0b16;
+}
+
+.vhw-key[hidden],
+.vhw.pad .vhw-key {
+  display: none;
 }
 
 /* Centre readout. */
@@ -219,13 +305,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 1rem;
+  padding: 0 2.6%;
+  box-sizing: border-box;
   text-align: center;
   background: radial-gradient(circle at 50% 28%, rgba(34, 42, 78, 0.95) 0%, rgba(10, 13, 28, 0.97) 72%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 -12px 30px rgba(0, 0, 0, 0.35);
 }
 
-.vhw-center.bump .vhw-name {
+.vhw-center.bump .vhw-name,
+.vhw-info.bump .vhw-info-name {
   animation: vhw-bump 0.22s ease;
 }
 
@@ -235,7 +323,7 @@
 }
 
 .vhw-slot {
-  font-size: 0.72rem;
+  font-size: clamp(0.6rem, 2.1cqw, 0.72rem);
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--vh-accent-2);
@@ -245,7 +333,7 @@
 .vhw-name {
   margin-top: 0.3rem;
   max-width: 100%;
-  font-size: 1.32rem;
+  font-size: clamp(0.95rem, 3.9cqw, 1.32rem);
   font-weight: 700;
   line-height: 1.08;
   letter-spacing: 0.02em;
@@ -268,7 +356,7 @@
 }
 
 .vhw-ammo b {
-  font-size: 1.9rem;
+  font-size: clamp(1.2rem, 5.6cqw, 1.9rem);
   font-weight: 700;
   background: var(--vh-sunset);
   -webkit-background-clip: text;
@@ -283,16 +371,31 @@
 
 .vhw-ammo span {
   margin-left: 0.3rem;
-  font-size: 0.95rem;
+  font-size: clamp(0.72rem, 2.8cqw, 0.95rem);
   font-weight: 600;
   color: var(--vh-muted);
 }
 
 .vhw-ammo .vhw-none {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0;
-  font-size: 0.8rem;
+  font-size: clamp(0.64rem, 2.35cqw, 0.8rem);
   letter-spacing: 0.2em;
   text-transform: uppercase;
+}
+
+.vhw-note:empty {
+  display: none;
+}
+
+.vhw-note {
+  margin-top: 0.4rem;
+  font-size: clamp(0.58rem, 2cqw, 0.68rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff9a8a;
 }
 
 .vhw-cycle {
@@ -300,7 +403,7 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.72rem;
+  font-size: clamp(0.6rem, 2.1cqw, 0.72rem);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--vh-muted);
@@ -313,8 +416,171 @@
   color: var(--vh-accent-2);
 }
 
+/* Info card for the highlighted weapon. */
+.vhw-info {
+  grid-area: info;
+  position: relative;
+  box-sizing: border-box;
+  width: var(--vhw-card);
+  padding: 1rem 1.15rem 1.05rem;
+  border-radius: 14px;
+  background: rgba(10, 13, 27, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  font-family: var(--vh-font);
+}
+
+.vhw-info::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--vh-sunset);
+}
+
+.vhw-info.locked::before,
+.vhw-info.empty::before {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.vhw-info [hidden] {
+  display: none;
+}
+
+.vhw-info-slot {
+  font-family: var(--vh-font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.vhw-info-name {
+  margin-top: 0.2rem;
+  font-family: var(--vh-font-display);
+  font-size: 1.28rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.vhw-info.locked .vhw-info-name,
+.vhw-info.empty .vhw-info-name {
+  color: rgba(241, 244, 255, 0.6);
+}
+
+.vhw-info-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--vh-muted);
+}
+
+.vhw-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.16rem 0.45rem;
+  border-radius: 6px;
+  font-family: var(--vh-font-display);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.vhw-tag.lock {
+  background: rgba(255, 179, 71, 0.14);
+  color: var(--vh-accent-2);
+}
+
+.vhw-tag.car {
+  background: rgba(255, 110, 90, 0.16);
+  color: #ff9a8a;
+}
+
+.vhw-unlock {
+  color: rgba(241, 244, 255, 0.82);
+}
+
+.vhw-info-desc {
+  margin: 0.55rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: rgba(241, 244, 255, 0.78);
+}
+
+.vhw-stats {
+  display: grid;
+  gap: 0.32rem;
+  margin-top: 0.75rem;
+}
+
+.vhw-stat {
+  display: grid;
+  grid-template-columns: 4.9rem 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.vhw-stat span {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--vh-muted);
+}
+
+.vhw-stat i {
+  height: 0.38rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.vhw-stat b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffb347, #ff6f6a 60%, #ff4f8b);
+  transition: width 0.2s ease;
+}
+
+.vhw-info.locked .vhw-stat b {
+  background: rgba(241, 244, 255, 0.38);
+}
+
+.vhw-info-ammo {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--vh-muted);
+}
+
+.vhw-info-ammo b {
+  font-family: var(--vh-font-display);
+  font-size: 1.05rem;
+  color: var(--vh-text);
+}
+
+.vhw-info-ammo b.out {
+  color: var(--vh-danger);
+}
+
 /* Control hint under the wheel. */
 .vhw-hint {
+  grid-area: hint;
+  justify-self: center;
+  width: max-content;
+  max-width: calc(var(--vhw-ring) + 2 * var(--vhw-gap));
+  box-sizing: border-box;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -340,6 +606,34 @@
   text-transform: none;
 }
 
+/* Narrow (portrait) screens: the card goes under the ring. */
+@media (max-aspect-ratio: 1/1) {
+  .vhw-stack {
+    --vhw-ring: min(34rem, calc(100vw - 2rem), 52vh);
+    grid-template-columns: auto;
+    grid-template-areas:
+      'ring'
+      'info'
+      'hint';
+    justify-items: center;
+    row-gap: 0.9rem;
+  }
+
+  .vhw-info {
+    width: min(28rem, calc(100vw - 2rem));
+  }
+
+  .vhw-hint {
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+@media (max-aspect-ratio: 1/1) and (max-height: 760px) {
+  .vhw-info-desc {
+    display: none;
+  }
+}
+
 /* Shared weapon icon (the wheel and the HUD's current-weapon display). */
 .vh-wicon {
   display: block;
@@ -357,7 +651,8 @@
   .vhw,
   .vhw-ring,
   .vhw-hl,
-  .vhw-item {
+  .vhw-item,
+  .vhw-stat b {
     transition: none;
   }
 }

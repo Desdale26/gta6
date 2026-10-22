@@ -23,6 +23,9 @@
   const { clamp, lerp, smoothstep, dampAngle } = VH.math;
 
   const MAX_RAGDOLLS = 14; // bodies simulated at once; any more just fall flat
+  // A weapon in the right hand: the hand sits at the end of the forearm, the
+  // barrel along it (the same hold as Jay's, combat.js _attachModel).
+  const GRIP = new THREE.Matrix4().compose(new THREE.Vector3(0, -0.31, 0.03), new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), new THREE.Vector3(1, 1, 1));
   const SLOTS = { skin: 0, hair: 1, top: 2, trim: 3, shirt: 4, bottom: 5, belt: 6, shoes: 7, sole: 8, dark: 9, stubble: 10, metal: 11, cap: 12, hairLong: 13, bag: 14 };
   const JOINTS = ['pelvis', 'spine', 'neck', 'head', 'shoulderL', 'elbowL', 'shoulderR', 'elbowR', 'hipL', 'kneeL', 'ankleL', 'hipR', 'kneeR', 'ankleR'];
 
@@ -268,6 +271,10 @@
       this.health = opts && opts.health ? opts.health : 100;
       this.maxHealth = this.health;
       this.armor = (opts && opts.armor) || 0;
+      this.maxArmor = this.armor;
+      this.flinchT = 0; //  a hit makes them flinch for a moment (and spoils their aim)
+      this.flinch = 0; //   which way: -1..1
+      this.gun = null; //   the weapon model in their hand (combat weapons)
       this.dead = false;
       this.visible = true;
       this.radius = 0.3;
@@ -291,14 +298,19 @@
       return !this.dead;
     }
 
-    /** Knock over with a velocity. */
-    knock(vx, vy, vz, damage, source) {
+    /** Knock over with a velocity (stun: seconds on the ground before getting up). */
+    knock(vx, vy, vz, damage, source, stun) {
       if (this.dead && this.down) return;
       if (this.inCar) return; // riding in a car: the car takes the hit, not the passenger
-      this.down = { t: 0, vx, vy, vz, spin: (Math.random() - 0.5) * 6, rest: false, flip: 0 };
+      this.down = { t: 0, vx, vy, vz, spin: (Math.random() - 0.5) * 6, rest: false, flip: 0, stun: stun || 0 };
       this.state = 'down';
       this.grounded = false;
-      this.damage(damage, source, 'impact');
+      // A shove or a stun with no harm in it: no wound (and no blood).
+      if (damage > 0) this.damage(damage, source, 'impact');
+      else {
+        this.hitTime = VH.game ? VH.game.time : 0;
+        this.lastAttacker = source;
+      }
     }
 
     /** hit (optional) = { x, y, z, dx, dy, dz, head }: where it struck and which way it was going. */
@@ -308,7 +320,8 @@
       this.lastHit = hit || null;
       this.lastKind = kind;
       let rest = amount;
-      if (this.armor > 0) {
+      // Armour soaks body hits, not headshots.
+      if (this.armor > 0 && !(hit && hit.head)) {
         const a = Math.min(this.armor, rest * 0.6);
         this.armor -= a;
         rest -= a;
@@ -316,6 +329,12 @@
       this.health -= rest;
       this.hitTime = VH.game ? VH.game.time : 0;
       this.lastAttacker = source;
+      if (kind !== 'fire' && amount > 1) {
+        this.flinchT = 0.28;
+        // Twist away from the side the hit came from.
+        if (hit && (hit.dx || hit.dz)) this.flinch = Math.sign(Math.sin(this.heading) * hit.dz - Math.cos(this.heading) * hit.dx) || 1;
+        else this.flinch = Math.random() < 0.5 ? -1 : 1;
+      }
       if (this.health <= 0) {
         this.health = 0;
         this.dead = true;
@@ -366,7 +385,8 @@
           const k = 1 - d / e.radius;
           const nx = (a.pos.x - e.x) / (d || 1);
           const nz = (a.pos.z - e.z) / (d || 1);
-          a.knock(nx * 9 * k, 4 + 5 * k, nz * 9 * k, 160 * k, e.source && e.source.driver === 'player' ? 'player' : e.source);
+          const bySelf = e.source === 'player' || (e.source && e.source.driver === 'player');
+          a.knock(nx * 9 * k, 4 + 5 * k, nz * 9 * k, (e.damage || 160) * k, bySelf ? 'player' : e.source);
         }
       });
       VH.events.on('vehicle:impact', (e) => {
@@ -423,6 +443,7 @@
       const i = this.agents.indexOf(a);
       if (i >= 0) this.agents.splice(i, 1);
       a.removed = true;
+      this._dropGun(a);
     }
 
     _corner(block, c) {
@@ -699,8 +720,13 @@
         a.deadTime += dt;
         return;
       }
+      // Stunned: twitching on the ground.
+      if (d.stun && d.rest && d.t < d.stun) {
+        a.heading += Math.sin(d.t * 40) * dt * 0.6;
+        if (Math.random() < dt * 3 && this.game.audio && this.game.audio.stunCrackle && a.camDist < 30) this.game.audio.stunCrackle(this.game.combat ? this.game.combat.pan(a.pos.x, a.pos.z) : 0, this.game.combat ? this.game.combat.gain(a.pos.x, a.pos.z, 6) : 0.3);
+      }
       // Get up after a while.
-      if (d.rest && d.t > 2.8) {
+      if (d.rest && d.t > Math.max(2.8, d.stun || 0)) {
         a.down = null;
         a.state = 'flee';
         a.flee = { x: a.pos.x + (Math.random() - 0.5), z: a.pos.z + (Math.random() - 0.5), t: 6 };
@@ -742,6 +768,8 @@
       for (const a of this.agents) {
         const dist = Math.hypot(a.pos.x - cam.x, a.pos.z - cam.z);
         a.camDist = dist;
+        // A flinch wears off on or off screen (it holds their fire meanwhile).
+        if (a.flinchT > 0) a.flinchT = Math.max(0, a.flinchT - dt);
         // Think.
         if (a.state === 'down') this._downStep(a, dt);
         else if (a.brain && a.brain.update) a.brain.update(a, dt);
@@ -755,6 +783,10 @@
         // Draw and animate only what can be seen.
         a.visible = dist < 115 && (dist < 12 || game.isVisible(a.pos.x, a.pos.y + 1, a.pos.z, 1.2)) && !a.hidden;
         if (a.visible) this._animate(a, dt, dist);
+        if (a.gun && (a.dead || !a.visible)) {
+          if (a.dead) this._dropGun(a);
+          else a.gun.visible = false;
+        }
       }
       this._separate(dt);
       if (player && !player.inVehicle) this._scareNearCars();
@@ -910,7 +942,8 @@
       rig.root.rotation.set(0, a.heading, 0);
       const d = a.down;
       const h = a.lastHit;
-      const power = !h ? 0 : (h.head ? 5.5 : 4) * (a.lastKind === 'melee' ? 0.8 : 1);
+      // How hard the hit throws them: the weapon's own punch (a shotgun up close, a rifle round), or a default.
+      const power = !h ? 0 : h.power || (h.head ? 5.5 : 4) * (a.lastKind === 'melee' ? 0.8 : 1);
       a.ragdoll = new VH.Ragdoll(rig, this.physics, {
         // A shot already carries its own push (hit); a car or blast throws the whole body.
         vx: (d.vx || 0) * (h ? 0.5 : 1), vy: Math.min(d.vy || 0, 6), vz: (d.vz || 0) * (h ? 0.5 : 1),
@@ -960,6 +993,9 @@
       if (a._animFrame === 0) {
         const an = a.anim;
         a.rig.animate(a._animAcc, {
+          weaponPose: an.weaponPose,
+          recoil: a._recoilT || 0,
+          flinch: a.flinchT > 0 ? a.flinch * (a.flinchT / 0.28) : 0,
           speed: a.state === 'down' ? 0 : a.speed,
           grounded: a.state !== 'down' || (a.down && a.down.rest),
           vy: a.state === 'down' ? -6 : 0,
@@ -983,7 +1019,47 @@
         });
         a._animAcc = 0;
       }
+      if (a._recoilT > 0) a._recoilT = Math.max(0, a._recoilT - dt * 8);
       root.updateMatrixWorld(true);
+      this._holdGun(a, dist);
+    }
+
+    /**
+     * The weapon an armed person carries, in their right hand while they aim
+     * (holstered or slung otherwise). Built once per person, shared geometry.
+     */
+    _holdGun(a, dist) {
+      const show = a.weapon && a.weapon !== 'fists' && !a.dead && !a.hidden && !a.inCar && a.state !== 'down' && a.anim.aim > 0.15 && dist < 70 && VH.WeaponModels;
+      if (!show) {
+        if (a.gun) a.gun.visible = false;
+        if (a.gun && a.dead) this._dropGun(a);
+        return;
+      }
+      if (!a.gun || a.gun.userData.id !== a.weapon) {
+        this._dropGun(a);
+        a.gun = VH.WeaponModels.build(a.weapon);
+        a.gun.matrixAutoUpdate = false;
+        a.gun.traverse((o) => {
+          if (o.isMesh) o.castShadow = dist < 30;
+        });
+        this.scene.add(a.gun);
+      }
+      a.gun.visible = true;
+      a.gun.matrix.multiplyMatrices(a.rig.joints.elbowR.matrixWorld, GRIP);
+      a.gun.matrixWorldNeedsUpdate = true;
+    }
+
+    _dropGun(a) {
+      if (!a.gun) return;
+      this.scene.remove(a.gun);
+      a.gun = null;
+    }
+
+    /** Where an NPC's shot leaves the barrel (null if no gun is showing). */
+    muzzleOf(a, out) {
+      if (!a.gun || !a.gun.visible) return null;
+      out.copy(a.gun.userData.muzzle).applyMatrix4(a.gun.matrix);
+      return out;
     }
 
     /** Ray against every person's body (bullets). Returns { agent, t, head } or null. */
@@ -993,7 +1069,8 @@
       for (const a of this.agents) {
         if (a === ignore || a.hidden) continue;
         if (a.dead && a.down && a.down.rest) continue;
-        const h = a.state === 'down' ? 0.5 : 1.75 * (a.look.height || 1);
+        // Lying down, crouched in cover or standing.
+        const h = a.state === 'down' ? 0.5 : 1.75 * (a.look.height || 1) * (1 - 0.38 * Math.min(1, a.anim.crouch || 0));
         // Closest approach of the ray to the body's vertical axis.
         const px = a.pos.x - ox;
         const pz = a.pos.z - oz;

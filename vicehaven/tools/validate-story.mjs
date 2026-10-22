@@ -45,7 +45,9 @@ const BUILTIN_PLACES = new Set(['civic_plaza', 'meridian_yard', 'founders_park',
 const KINDS = new Set(['garage', 'alley', 'rooftop', 'parking', 'storefront', 'bank', 'diner', 'bar', 'motel', 'corner', 'park', 'pier', 'boardwalk', 'warehouse', 'dock', 'mansion', 'construction', 'church', 'hospital_front', 'police_station_front', 'apartment_front', 'beach', 'overlook', 'street']);
 const DISTRICTS = new Set(['downtown', 'oldmarket', 'palmcrescent', 'harborpoint', 'saltmarsh_docks', 'crestline_estates']);
 const CARS = new Set(['vireo', 'halcyon', 'pipit', 'ironclad', 'porter', 'mesa', 'cab', 'interceptor', 'zephyr', 'tern', 'sovereign', 'bulwark', 'hauler', 'medic', 'drifter', 'lowrider', 'beater', 'unmarked']);
-const WEAPONS = new Set(['fists', 'bat', 'knife', 'pistol', 'revolver', 'smg', 'shotgun', 'rifle', 'sniper', 'grenade', 'molotov']);
+// Every weapon the game knows, from its own data file (weapons-data.js).
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'weapons-data.js'), 'utf8'), ctx, { filename: 'weapons-data.js' });
+const WEAPONS = new Set(['fists'].concat((ctx.window.VH.Data.weapons || []).map((w) => w.id)));
 const FACTIONS = new Set(['halberd', 'kings', 'salts', 'vpd', 'police', 'civilian', 'crew', 'friendly', 'gang']);
 const BEHAVIORS = new Set(['idle', 'guard', 'patrol', 'attack', 'flee', 'cower', 'follow', 'drive', 'wander']);
 const MUSIC = new Set(['tension', 'action', 'sad', 'hope', 'triumph', 'off']);

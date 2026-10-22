@@ -858,6 +858,10 @@
     return new FireVoice(this);
   };
 
+  // The voice machinery, for other sound files that need a voice of their own
+  // (audio-weapons.js: the minigun, a rocket in flight).
+  VH.AudioEngine.voiceKit = { Voice, assets, curve, num };
+
   // ============================================================= one-shots
   function shotOut(e, pan, bus) {
     return e._pan(bus || e.sfx, clamp(num(pan, 0), -1, 1));
@@ -1020,14 +1024,37 @@
     this._tone({ t, freq: rand(2900, 3500), wave: 'triangle', peak: 0.02 * lv, attack: 0.03, decay: dur, bus: out });
   };
 
-  /** A big boom, a long rumbling tail and falling debris. */
-  AE.explosion = function (intensity, pan) {
-    if (!this.ready || !this._drvLimit('boom', 0.08)) return;
+  /**
+   * A big boom, a long rumbling tail and falling debris. `intensity` is the
+   * size of the blast; `gain` (0..1, optional) is how near it is: a distant
+   * blast is quieter and loses its top end, so it reaches you as a rumble.
+   */
+  AE.explosion = function (intensity, pan, gain) {
+    if (!this.ready) return;
+    const near = clamp(num(gain, 1), 0, 1);
+    if (near < 0.002 || !this._drvLimit('boom', 0.08)) return;
     const k = clamp(num(intensity, 1), 0, 1);
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.01;
-    const out = shotOut(this, pan);
-    const lv = 0.45 + 0.55 * k;
+    let out = shotOut(this, pan);
+    if (near < 0.95) {
+      // Air soaks up the highs over distance.
+      const far = ctx.createBiquadFilter();
+      far.type = 'lowpass';
+      far.frequency.value = 650 + 11000 * Math.pow(near, 1.3);
+      far.Q.value = 0.5;
+      far.connect(out);
+      out = far;
+      setTimeout(() => {
+        try {
+          far.disconnect();
+        } catch (_) {
+          /* gone */
+        }
+      }, 7000);
+    }
+    // Explosions carry: the level falls off more gently than the gain would say.
+    const lv = (0.45 + 0.55 * k) * Math.pow(near, 0.6);
     const len = 0.6 + 0.4 * k;
     // The body goes through a soft clipper so the boom has harmonics small speakers can play.
     const body = ctx.createGain();
@@ -1059,8 +1086,9 @@
     for (const [d, p] of [[0.28, 0.55], [0.7, 0.35], [1.25, 0.22]]) {
       nz(this, { t: t + d * len, dest: out, brown: true, type: 'lowpass', freq: 420, q: 0.5, peak: p * 1.3 * lv, attack: 0.12, decay: 1.6 * len, tail: true });
     }
-    // Debris: crackle and clinks falling for a couple of seconds.
-    const bits = 14 + Math.round(22 * k);
+    // Debris: crackle and clinks falling for a couple of seconds (lost in the distance).
+    if (near < 0.12) return;
+    const bits = Math.round((14 + 22 * k) * Math.min(1, near * 2));
     for (let i = 0; i < bits; i++) {
       const tt = t + 0.12 + Math.pow(Math.random(), 1.7) * 2.4 * len;
       if (Math.random() < 0.25) {

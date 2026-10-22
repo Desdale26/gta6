@@ -86,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, property: 0, owned: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, gunshop: 0, property: 0, owned: 1, pickup: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -105,6 +105,7 @@
     ['landmark', 'Landmark'],
     ['store', 'Corner shop'],
     ['spray', 'Fresh Coat body shop'],
+    ['gunshop', 'Bayline Arms (guns, ammo)'],
     ['property', 'Business for sale'],
     ['owned', 'Your business'],
     ['plane', 'Aircraft'],
@@ -395,6 +396,32 @@
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText('$', 0, 1.8);
+    },
+    // A crosshair on a dark disc: Bayline Arms, the gun shop.
+    gunshop(g) {
+      g.beginPath();
+      g.arc(0, 0, 6.6, 0, TAU);
+      inkThenFill(g, '#3a4636', 3);
+      g.strokeStyle = '#ffd27a';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.arc(0, 0, 3.6, 0, TAU);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(0, -6);
+      g.lineTo(0, -1.6);
+      g.moveTo(0, 6);
+      g.lineTo(0, 1.6);
+      g.moveTo(-6, 0);
+      g.lineTo(-1.6, 0);
+      g.moveTo(6, 0);
+      g.lineTo(1.6, 0);
+      g.stroke();
+    },
+    // A small gold diamond: something to pick up (weapons, ammo, armour).
+    pickup(g) {
+      diamond(g, 4.2);
+      inkThenFill(g, '#ffd447', 2.4);
     },
     // A spray can: a Fresh Coat body shop (respray, repair, lose the heat).
     spray(g) {

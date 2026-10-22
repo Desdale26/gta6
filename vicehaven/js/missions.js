@@ -2213,8 +2213,16 @@
       if (!r) return;
       if (r.money) game.giveMoney(r.money, 'job');
       if (r.armor) game.player.armor = Math.min(game.player.maxArmor, game.player.armor + r.armor);
-      for (const w of r.weapons || []) game.combat.giveWeapon(w, undefined, !mid);
+      // A weapon Jay hasn't got is new; one he has restocks its ammo.
+      const fresh = [];
+      const restocked = [];
+      for (const w of r.weapons || []) {
+        const had = game.combat.has(w);
+        game.combat.giveWeapon(w, undefined, !mid);
+        (had ? restocked : fresh).push((VH.Combat.def(w) || { name: w }).name);
+      }
       for (const u of r.unlock || []) this.flags['unlocked:' + u] = true;
+      return [fresh.length ? 'New: ' + fresh.join(', ') : '', restocked.length ? 'Restocked: ' + restocked.join(', ') : ''].filter(Boolean).join('  ·  ');
     }
 
     // --------------------------------------------------- pass and fail
@@ -2229,9 +2237,9 @@
       this.completed[m.id] = true;
       if (m._main) this.stats.missions++;
       else this.stats.side++;
-      this._reward(m.reward, false);
+      const gear = this._reward(m.reward, false) || '';
       const money = (m.reward && m.reward.money) || 0;
-      game.hud.missionResult(true, m.title, [run.raceResult, money ? '+' + VH.util.formatMoney(money) : ''].filter(Boolean).join('  ·  '), m.reward && m.reward.weapons ? 'New: ' + m.reward.weapons.map((w) => (VH.Combat.def(w) || { name: w }).name).join(', ') : '');
+      game.hud.missionResult(true, m.title, [run.raceResult, money ? '+' + VH.util.formatMoney(money) : ''].filter(Boolean).join('  ·  '), gear);
       if (game.audio.missionPassed) game.audio.missionPassed();
       VH.events.emit('mission:pass', { m });
       this._music('off');
@@ -2377,6 +2385,8 @@
       }
       this.game.hud.missionResult(null);
       const game = this.game;
+      // A failed job doesn't cost the ammo it burned: at least what Jay walked in with.
+      if (this._preRun && this._preRunFor === r.m.id && this._preRun.weapons && game.combat.topUp) game.combat.topUp(this._preRun.weapons);
       // Knocked out when it failed: on his feet again for the retry (not left
       // lying there, or in the ragdoll's pose, with no health).
       if (game.player.isDead) {
@@ -2677,6 +2687,7 @@
           // The kerbside space it stands in is taken (no parked twin on top of it).
           for (const s of g.vehicles.spots || []) if (Math.hypot(s.x - v.pos.x, s.z - v.pos.z) < 6) s.used = true;
           const stolen = g.player.stats.carsStolen;
+          v._looted = true; // back in his own car after a load: nothing new in the back
           g.vehicles.beginEnter({ v, side: 1, x: g.player.pos.x, z: g.player.pos.z });
           g.vehicles._finishEnter();
           g.player.stats.carsStolen = stolen; // getting back in isn't a theft

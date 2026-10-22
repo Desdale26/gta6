@@ -255,34 +255,196 @@ body.reduced-flashing .bar-health.low .fill {
 }
 
 /* ------------------------------------------------------------------ centre */
+/* The crosshair is a point at the centre; the ticks sit --gap out from it
+   (the weapon's cone, set from combat each frame). */
 .hud-crosshair {
+  --gap: 4px;
+  --xh: #fff;
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 26px;
-  height: 26px;
-  margin: -13px 0 0 -13px;
+  width: 0;
+  height: 0;
   opacity: 0;
-  transform: scale(1.4);
-  transition: opacity 0.15s, transform 0.15s;
+  transition: opacity 0.12s;
+  pointer-events: none;
 }
 
-.hud-crosshair.visible {
+.hud-crosshair.visible,
+.hud-crosshair.hip {
   opacity: 1;
-  transform: none;
+}
+
+.hud-crosshair.hostile {
+  --xh: #ff4a4a;
 }
 
 .hud-crosshair i {
   position: absolute;
-  background: #fff;
+  background: var(--xh);
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
   border-radius: 1px;
+  transition: transform 0.06s linear;
 }
 
-.hud-crosshair i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
-.hud-crosshair i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
-.hud-crosshair i:nth-child(3) { top: 12px; left: 0; width: 8px; height: 2px; }
-.hud-crosshair i:nth-child(4) { top: 12px; right: 0; width: 8px; height: 2px; }
+.hud-crosshair i:nth-child(1) { left: -1px; top: -8px; width: 2px; height: 7px; transform: translateY(calc(-1 * var(--gap))); }
+.hud-crosshair i:nth-child(2) { left: -1px; top: 1px; width: 2px; height: 7px; transform: translateY(var(--gap)); }
+.hud-crosshair i:nth-child(3) { top: -1px; left: -8px; width: 7px; height: 2px; transform: translateX(calc(-1 * var(--gap))); }
+.hud-crosshair i:nth-child(4) { top: -1px; left: 1px; width: 7px; height: 2px; transform: translateX(var(--gap)); }
+
+.hud-crosshair .xh-dot {
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--xh);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+/* From the hip: just the dot, a little fainter. */
+.hud-crosshair.hip:not(.visible) i,
+.hud-crosshair.hip:not(.visible) .xh-ring {
+  display: none;
+}
+
+.hud-crosshair.hip:not(.visible) .xh-dot {
+  opacity: 0.65;
+}
+
+.hud-crosshair .xh-ring {
+  display: none;
+  position: absolute;
+  left: calc(-1 * var(--gap) - 6px);
+  top: calc(-1 * var(--gap) - 6px);
+  width: calc(2 * var(--gap) + 12px);
+  height: calc(2 * var(--gap) + 12px);
+  border: 1.5px solid var(--xh);
+  border-radius: 50%;
+  opacity: 0.55;
+  box-sizing: border-box;
+}
+
+.hud-crosshair.pellets .xh-ring {
+  display: block;
+}
+
+.hud-crosshair.pellets i {
+  display: none;
+}
+
+.xh-reload {
+  position: absolute;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
+  opacity: 0;
+  transform: rotate(-90deg);
+  transition: opacity 0.15s;
+}
+
+.hud-crosshair.reloading .xh-reload {
+  opacity: 1;
+}
+
+.xh-reload circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.xh-reload .bg {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.xh-reload .fg {
+  stroke: var(--vh-accent-2);
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+
+/* Limpet charges out: how to set them off. */
+.hud-charges {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 2.6rem);
+  transform: translateX(-50%);
+  padding: 0.25rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(8, 11, 22, 0.7);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ffd27a;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.hud-charges.visible {
+  opacity: 1;
+}
+
+/* Sniper and marksman scope. */
+.hud-scope {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+.hud-scope.visible {
+  opacity: 1;
+}
+
+.scope-glass {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) min(38vh, 38vw), rgba(0, 0, 0, 0.55) calc(min(38vh, 38vw) + 2px), #000 calc(min(38vh, 38vw) + 14px));
+}
+
+.scope-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(76vh, 76vw);
+  height: min(76vh, 76vw);
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(#111, #111) center / 100% 1px no-repeat,
+    linear-gradient(#111, #111) center / 1px 100% no-repeat,
+    linear-gradient(#111, #111) center / 34% 3px no-repeat,
+    linear-gradient(#111, #111) center / 3px 34% no-repeat;
+  -webkit-mask: radial-gradient(circle, transparent 0 9px, #000 10px);
+  mask: radial-gradient(circle, transparent 0 9px, #000 10px);
+}
+
+.hud-scope::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  box-shadow: 0 0 6px rgba(255, 60, 60, 0.9);
+}
+
+.hud-scope.hostile .scope-reticle {
+  background:
+    linear-gradient(#a01818, #a01818) center / 100% 1px no-repeat,
+    linear-gradient(#a01818, #a01818) center / 1px 100% no-repeat,
+    linear-gradient(#a01818, #a01818) center / 34% 3px no-repeat,
+    linear-gradient(#a01818, #a01818) center / 3px 34% no-repeat;
+}
+
+body.photo-mode .hud-scope {
+  display: none;
+}
 
 .hud-prompt {
   position: absolute;
@@ -1427,8 +1589,46 @@ body.driving .hud .hud-hints {
   font-variant-numeric: tabular-nums;
 }
 
-.hw-ammo.empty {
+.hw-ammo b {
+  font-size: 1.45rem;
+}
+
+.hw-ammo span {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(241, 244, 255, 0.62);
+}
+
+.hw-ammo.low b {
+  color: #ffb347;
+}
+
+.hw-ammo.empty,
+.hud-weapon.out .hw-ammo {
   color: #ff5a5a;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
+.hw-reload {
+  grid-column: 2;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  opacity: 0;
+}
+
+.hw-reload.on {
+  opacity: 1;
+}
+
+.hw-reload i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--vh-accent-2);
 }
 
 .hud-hitmarker {
@@ -1455,6 +1655,30 @@ body.driving .hud .hud-hints {
 
 .hud-hitmarker.show {
   animation: hitmarker 0.22s ease-out;
+}
+
+.hud-hitmarker.head i {
+  background: #ffd447;
+  box-shadow: 0 0 8px rgba(255, 200, 60, 0.95);
+}
+
+.hud-hitmarker.kill i {
+  background: #ff4040;
+  box-shadow: 0 0 10px rgba(255, 50, 50, 0.95);
+}
+
+.hud-hitmarker.head.show {
+  animation: hitmarker-big 0.3s ease-out;
+}
+
+.hud-hitmarker.kill.show {
+  animation: hitmarker-big 0.42s ease-out;
+}
+
+@keyframes hitmarker-big {
+  0% { opacity: 1; transform: translate(-50%, -50%) rotate(45deg) scale(1.9); }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(45deg) scale(1.2); }
 }
 
 @keyframes hitmarker {
@@ -1521,6 +1745,12 @@ body.has-objtext .hud-toast {
 body.radio-on .hud-hints {
   opacity: 0;
   transition: opacity 0.3s ease;
+}
+/* A shop card (Bayline Arms, the spray shop) covers the right-hand side. */
+body.shop-open .hud-hints,
+body.shop-open .hud-weapon {
+  opacity: 0;
+  pointer-events: none;
 }
 /* The weapon panel sits where the checklist starts: the checklist moves down. */
 body.armed .hud-hints {
@@ -1882,5 +2112,212 @@ body.map-open .ach-banner {
 
 body.cutscene .spray-card,
 body.map-open .spray-card {
+  visibility: hidden;
+}
+
+/* Bayline Arms' shop card (gunshops.js): up while Jay stands at the counter. */
+.gun-card {
+  position: absolute;
+  top: 50%;
+  right: 1.6rem;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  width: min(27rem, 92vw);
+  max-height: min(42rem, 86vh);
+  padding: 0.9rem 1rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(217, 168, 78, 0.5);
+  background: linear-gradient(160deg, rgba(26, 31, 24, 0.95), rgba(10, 12, 20, 0.95));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translate(1.5rem, -50%);
+  transition: opacity 0.2s, transform 0.25s;
+  pointer-events: none;
+}
+
+.gun-card.visible {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.gun-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.gun-head b {
+  font-family: var(--vh-font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.14em;
+  color: #ffd27a;
+}
+
+.gun-cash {
+  font-family: var(--vh-font-display);
+  font-weight: 700;
+  color: #7dff9a;
+}
+
+.gun-list {
+  flex: 1 1 auto;
+  min-height: 8rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.gun-group {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vh-muted);
+}
+
+.gun-row {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr auto 4.6rem;
+  grid-template-rows: auto auto;
+  column-gap: 0.55rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+}
+
+.gun-row.on {
+  border-color: rgba(255, 210, 122, 0.6);
+  background: rgba(255, 210, 122, 0.1);
+}
+
+.gun-row.dim {
+  opacity: 0.55;
+}
+
+.gun-row.on.dim {
+  opacity: 0.85;
+}
+
+.gun-icon {
+  grid-row: 1 / 3;
+  width: 2.4rem;
+  height: 1.3rem;
+  font-style: normal;
+  text-align: center;
+  color: #fff;
+}
+
+.gun-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.gun-name {
+  font-weight: 600;
+}
+
+.gun-note {
+  grid-column: 2;
+  font-size: 0.72rem;
+  font-style: normal;
+  color: var(--vh-muted);
+}
+
+.gun-act {
+  grid-row: 1 / 3;
+  grid-column: 3;
+  font-size: 0.72rem;
+  text-decoration: none;
+  color: rgba(241, 244, 255, 0.7);
+}
+
+.gun-price {
+  grid-row: 1 / 3;
+  grid-column: 4;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #ffd27a;
+}
+
+.gun-info {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+  color: rgba(241, 244, 255, 0.82);
+}
+
+.gun-info p {
+  margin: 0 0 0.35rem;
+}
+
+.gun-stats {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.gun-stat {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gun-stat em {
+  font-style: normal;
+  font-size: 0.72rem;
+  color: var(--vh-muted);
+}
+
+.gun-bar {
+  height: 0.4rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.gun-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #d9a84e, #ffd27a);
+}
+
+.gun-ammo {
+  margin-top: 0.35rem !important;
+  font-size: 0.74rem;
+  color: var(--vh-muted);
+}
+
+.gun-warn:empty {
+  display: none;
+}
+
+.gun-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: var(--vh-muted);
+}
+
+.gun-keys kbd {
+  display: inline-block;
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #fff;
+  text-align: center;
+}
+
+body.cutscene .gun-card,
+body.map-open .gun-card {
   visibility: hidden;
 }

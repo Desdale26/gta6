@@ -89,8 +89,20 @@
       bl.append(loc, bars);
 
       // Centre.
+      // Crosshair: four ticks that spread with the weapon's cone, a centre dot
+      // (all that shows when firing from the hip), a ring for a shotgun's
+      // pattern, a reload ring, red over someone hostile.
       this.crosshair = el('div', 'hud-crosshair');
-      this.crosshair.append(el('i'), el('i'), el('i'), el('i'));
+      this.crosshair.append(el('i'), el('i'), el('i'), el('i'), el('b', 'xh-dot'), el('u', 'xh-ring'));
+      this.reloadRing = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      this.reloadRing.setAttribute('viewBox', '0 0 44 44');
+      this.reloadRing.setAttribute('class', 'xh-reload');
+      this.reloadRing.innerHTML = '<circle cx="22" cy="22" r="19" class="bg"/><circle cx="22" cy="22" r="19" class="fg" pathLength="100"/>';
+      this.crosshair.append(this.reloadRing);
+      this.reloadArc = this.reloadRing.querySelector('.fg');
+      this.chargesHint = el('div', 'hud-charges');
+      this.scope = el('div', 'hud-scope');
+      this.scope.append(el('div', 'scope-glass'), el('div', 'scope-reticle'));
       this.prompt = el('div', 'hud-prompt');
       this.promptKey = el('kbd', '', 'E');
       this.promptLabel = el('span', 'prompt-label');
@@ -182,13 +194,16 @@
       this.weaponIcon = el('div', 'hw-icon');
       this.weaponName = el('div', 'hw-name');
       this.weaponAmmo = el('div', 'hw-ammo');
-      this.weaponBox.append(this.weaponIcon, this.weaponName, this.weaponAmmo);
+      this.weaponReload = el('div', 'hw-reload');
+      this.weaponReloadFill = el('i');
+      this.weaponReload.append(this.weaponReloadFill);
+      this.weaponBox.append(this.weaponIcon, this.weaponName, this.weaponAmmo, this.weaponReload);
       this.hitMarker = el('div', 'hud-hitmarker');
       this.hitMarker.append(el('i'), el('i'), el('i'), el('i'));
       this.damageArc = el('div', 'hud-damage-arc');
       this.lowHealth = el('div', 'hud-lowhealth');
 
-      r.append(tr, bl, this.crosshair, this.prompt, this.carPrompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
+      r.append(this.scope, tr, bl, this.crosshair, this.chargesHint, this.prompt, this.carPrompt, this.lockHint, this.fpsEl, this.notifyStack, this.banner, this.toast, this.hints,
         this.objective, this.chal, this.big, this.cbanner, this.resultsEl, this.speedo, this.vehicleName, this.scorePop,
         this.objText, this.mTimer, this.suspicion, this.mTitle, this.mResult, this.weaponBox, this.hitMarker, this.damageArc, this.lowHealth, this.knockout, this.fade);
     }
@@ -396,27 +411,85 @@
     }
 
     // ------------------------------------------------------------- combat
-    setWeapon(w, inv, reloading) {
-      const key = w ? w.id + ':' + (inv ? inv.mag + '/' + inv.ammo : '') + (reloading ? 'r' : '') : '';
+    /**
+     * The weapon box: icon, name, the magazine in bold and the spare rounds
+     * beside it, amber when running low, red with a hint when empty, and a
+     * bar while reloading. inv = { mag, ammo } (combat.ammoView).
+     */
+    setWeapon(w, inv, reloading, progress) {
+      const key = w ? w.id + ':' + (inv ? inv.mag + '/' + inv.ammo : '') + (reloading ? 'r' + Math.round((progress || 0) * 20) : '') : '';
       this._set('weapon', key, () => {
         const armed = w && w.slot !== 'unarmed';
         this.weaponBox.classList.toggle('visible', !!armed);
         document.body.classList.toggle('armed', !!armed); // the checklist moves down out of its way
         if (!armed) return;
-        if (this._weaponIconFor !== w.slot && VH.WeaponWheel && VH.WeaponWheel.icon) {
-          this.weaponIcon.innerHTML = VH.WeaponWheel.icon(w.slot);
-          this._weaponIconFor = w.slot;
+        if (this._weaponIconFor !== w.id && VH.WeaponWheel && VH.WeaponWheel.icon) {
+          const ic = VH.WeaponWheel.icon(w.id);
+          if (typeof ic === 'string') this.weaponIcon.innerHTML = ic;
+          else if (ic && ic.nodeType) this.weaponIcon.replaceChildren(ic);
+          this._weaponIconFor = w.id;
         }
         this.weaponName.textContent = w.name;
-        this.weaponAmmo.textContent = w.kind === 'melee' ? '' : reloading ? 'RELOADING' : inv ? (w.kind === 'thrown' ? String(inv.mag + inv.ammo) : inv.mag + ' / ' + inv.ammo) : '';
-        this.weaponAmmo.classList.toggle('empty', !!inv && inv.mag === 0 && w.kind !== 'melee');
+        const melee = w.kind === 'melee';
+        const total = inv ? inv.mag + inv.ammo : 0;
+        const low = !!inv && !melee && w.magSize > 1 && inv.mag > 0 && inv.mag <= Math.ceil(w.magSize * 0.25);
+        const out = !!inv && !melee && total === 0;
+        this.weaponAmmo.replaceChildren();
+        if (!melee && inv) {
+          if (reloading) this.weaponAmmo.textContent = 'RELOADING';
+          else if (out) this.weaponAmmo.textContent = 'NO AMMO';
+          else if (w.kind === 'thrown') this.weaponAmmo.textContent = String(total);
+          else {
+            const b = el('b', '', String(inv.mag));
+            const sp = el('span', '', ' / ' + inv.ammo);
+            this.weaponAmmo.append(b, sp);
+          }
+        }
+        this.weaponAmmo.classList.toggle('empty', !!inv && inv.mag === 0 && !melee);
+        this.weaponAmmo.classList.toggle('low', low);
+        this.weaponBox.classList.toggle('out', out);
+        this.weaponReload.classList.toggle('on', !!reloading);
+        this.weaponReloadFill.style.width = Math.round((progress || 0) * 100) + '%';
       });
     }
 
-    flashHit() {
-      this.hitMarker.classList.remove('show');
-      void this.hitMarker.offsetWidth;
-      this.hitMarker.classList.add('show');
+    /**
+     * Each frame from main.js: c = combat.crosshair { armed, spread (rad),
+     * hostile, pellets, scoped, reload, charges, spin }.
+     */
+    setCrosshairState(c, p, cam) {
+      const aimed = (p.aimAmount > 0.6 || !!(p.vehicle && p.vehicle.crosshair)) && !p.isDead;
+      const hip = !aimed && c.armed && !p.inVehicle && !p.isDead;
+      const h = this.root.clientHeight || window.innerHeight;
+      const px = c.spread > 0 ? Math.tan(c.spread) * (h / 2) / Math.tan(((cam.fov || 60) * Math.PI) / 360) : 0;
+      const gap = Math.round(Math.min(60, 3 + px));
+      const key = (aimed ? 'a' : '') + (hip ? 'h' : '') + (c.hostile ? 'x' : '') + (c.pellets ? 'p' : '') + (c.scoped ? 's' : '') + gap + ':' + Math.round(c.reload * 30);
+      this._set('xh', key, () => {
+        const x = this.crosshair;
+        x.classList.toggle('visible', aimed && !c.scoped);
+        x.classList.toggle('hip', hip);
+        x.classList.toggle('hostile', !!c.hostile);
+        x.classList.toggle('pellets', !!c.pellets);
+        x.style.setProperty('--gap', gap + 'px');
+        x.classList.toggle('reloading', c.reload > 0);
+        this.reloadArc.style.strokeDashoffset = String(100 - Math.round(c.reload * 100));
+        this.scope.classList.toggle('visible', !!c.scoped);
+        this.scope.classList.toggle('hostile', !!c.hostile);
+      });
+      const ch = c.charges > 0 ? 'Press ' + this.input.labelFor('reload') + ' to set off ' + (c.charges === 1 ? 'the charge' : 'all ' + c.charges + ' charges') : '';
+      this._set('charges', ch, (v) => {
+        this.chargesHint.textContent = v;
+        this.chargesHint.classList.toggle('visible', !!v);
+      });
+    }
+
+    /** kind: 'hit' (white), 'head' (gold, bigger) or 'kill' (red, bigger, longer). */
+    flashHit(kind) {
+      const m = this.hitMarker;
+      m.classList.remove('show', 'head', 'kill');
+      void m.offsetWidth;
+      if (kind === 'head' || kind === 'kill') m.classList.add(kind);
+      m.classList.add('show');
     }
 
     /** Red arc toward whoever just hurt Jay (angle in screen space, 0 = ahead). */
@@ -547,7 +620,7 @@
         this.armorFill.style.width = Math.max(0, (v / p.maxArmor) * 100) + '%';
         this.armorBar.classList.toggle('empty', v <= 0);
       });
-      this._set('crosshair', (p.aimAmount > 0.6 || !!(p.vehicle && p.vehicle.crosshair)) && !p.isDead, (v) => this.crosshair.classList.toggle('visible', v));
+      // (The crosshair is set each frame by setCrosshairState.)
       this._set('lockHint', s.playing && !s.locked && VH.features.pointerLock, (v) => this.lockHint.classList.toggle('visible', v));
       this._set('knockout', p.isDead, (v) => this.knockout.classList.toggle('visible', v));
       this._set('lowHealth', p.health < 30 && !p.isDead, (v) => this.lowHealth.classList.toggle('visible', v));

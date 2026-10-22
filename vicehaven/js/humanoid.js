@@ -464,14 +464,39 @@
         T.lean = 0;
         T.headYaw = 0.6;
       }
-      // Weapon stances (combat): a pistol held out, or a long gun at the shoulder.
+      // Weapon stances (combat): a pistol held out, a long gun level at the
+      // shoulder (the barrel follows the look up and down), something heavy
+      // at the hip, a melee weapon or a grenade drawn back ready.
+      T.splayL = T.splayR = T.splay;
+      const lp = s.lookPitch || 0;
       if (s.weaponPose && aim > 0) {
         if (s.weaponPose === 'rifle') {
-          T.shoulderR = VH.math.lerp(T.shoulderR, 1.25, aim);
-          T.elbowR = VH.math.lerp(T.elbowR, 1.35, aim);
-          T.shoulderL = VH.math.lerp(T.shoulderL, 1.45, aim);
-          T.elbowL = VH.math.lerp(T.elbowL, 0.55, aim);
-          T.splay = VH.math.lerp(T.splay, 0.12, aim);
+          T.shoulderR = VH.math.lerp(T.shoulderR, 0.85 + lp * 0.8, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 0.72, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 1.3 + lp * 0.8, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 0.3, aim);
+          T.splayL = VH.math.lerp(T.splay, -0.35, aim);
+          T.splayR = VH.math.lerp(T.splay, -0.12, aim);
+          T.twist += 0.12 * aim;
+        } else if (s.weaponPose === 'hip') {
+          T.shoulderR = VH.math.lerp(T.shoulderR, 0.45 + lp * 0.6, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 1.25, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 0.95 + lp * 0.6, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 1.0, aim);
+          T.splayL = VH.math.lerp(T.splay, -0.2, aim);
+          T.splayR = VH.math.lerp(T.splay, 0.05, aim);
+          T.lean -= 0.06 * aim;
+        } else if (s.weaponPose === 'melee') {
+          T.shoulderR = VH.math.lerp(T.shoulderR, 1.9, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 1.5, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 0.9, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 1.6, aim);
+        } else if (s.weaponPose === 'thrown') {
+          T.shoulderR = VH.math.lerp(T.shoulderR, 2.5 + lp * 0.4, aim);
+          T.elbowR = VH.math.lerp(T.elbowR, 1.5, aim);
+          T.shoulderL = VH.math.lerp(T.shoulderL, 1.2, aim);
+          T.elbowL = VH.math.lerp(T.elbowL, 0.4, aim);
+          T.twist -= 0.25 * aim;
         } else if (s.weaponPose === 'pistol') {
           T.shoulderR = VH.math.lerp(T.shoulderR, 1.55 + (s.lookPitch || 0) * 0.8, aim);
           T.elbowR = VH.math.lerp(T.elbowR, 0.08, aim);
@@ -489,8 +514,30 @@
         T.lean += 0.12 * k;
       }
       if (s.recoil) {
-        T.shoulderR -= s.recoil * 0.25;
-        T.elbowR += s.recoil * 0.2;
+        T.shoulderR -= s.recoil * 0.45;
+        T.elbowR += s.recoil * 0.25;
+        if (s.weaponPose === 'rifle' || s.weaponPose === 'hip') {
+          T.shoulderL -= s.recoil * 0.3;
+          T.lean -= s.recoil * 0.05;
+        }
+      }
+      // Reloading: the support hand goes to the gun, the gun dips.
+      if (s.reload > 0) {
+        const r = Math.sin(Math.min(1, s.reload) * Math.PI);
+        T.shoulderR -= 0.3 * r;
+        T.shoulderL = VH.math.lerp(T.shoulderL, 0.9, r);
+        T.elbowL = VH.math.lerp(T.elbowL, 1.7, r);
+        T.splayL = VH.math.lerp(T.splayL, -0.45, r);
+        T.headPitch += 0.25 * r;
+      }
+      // Hit: a flinch away from the side the shot came from.
+      if (s.flinch) {
+        const f = s.flinch;
+        T.twist += f * 0.5;
+        T.lean -= Math.abs(f) * 0.25;
+        T.headPitch -= Math.abs(f) * 0.3;
+        T.shoulderL -= Math.abs(f) * 0.3;
+        T.shoulderR -= Math.abs(f) * 0.3;
       }
 
       // Smoothly move every joint toward its target.
@@ -509,9 +556,9 @@
       J.ankleR.rotation.x = -ease('ankleR', T.ankleR);
       J.shoulderL.rotation.x = -ease('shoulderL', T.shoulderL);
       J.shoulderR.rotation.x = -ease('shoulderR', T.shoulderR);
-      const splay = ease('splay', T.splay);
-      J.shoulderL.rotation.z = splay;
-      J.shoulderR.rotation.z = -splay;
+      ease('splay', T.splay);
+      J.shoulderL.rotation.z = ease('splayL', T.splayL === undefined ? T.splay : T.splayL);
+      J.shoulderR.rotation.z = -ease('splayR', T.splayR === undefined ? T.splay : T.splayR);
       J.elbowL.rotation.x = -ease('elbowL', T.elbowL);
       J.elbowR.rotation.x = -ease('elbowR', T.elbowR);
       J.spine.rotation.x = ease('lean', T.lean, 8);

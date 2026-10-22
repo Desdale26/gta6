@@ -90,21 +90,27 @@
       });
     }
 
-    /** A blast: effects, sound, and damage to everything nearby. */
-    explosion(x, y, z, scale, source) {
+    /**
+     * A blast: effects, sound, and damage to everything nearby. `source` is
+     * 'player', a vehicle or an agent; `damage` (optional) is the blast damage
+     * at the centre for people, passed on in the 'explosion' event.
+     */
+    explosion(x, y, z, scale, source, damage) {
       const s = scale || 1;
       this.fx.explosion(x, y, z, s);
       const d = Math.hypot(x - this.game.renderer.camera.position.x, z - this.game.renderer.camera.position.z);
-      if (this.audio.explosion) this.audio.explosion(clamp(1.2 - d / 180, 0.15, 1) * s, this._pan(x, z));
+      // The size of the blast, and (separately) how near it is.
+      if (this.audio.explosion) this.audio.explosion(clamp(s, 0.15, 1), this._pan(x, z), this._gain(x, z, 45));
       this.game.cameraRig.addShake(clamp(1.3 - d / 60, 0, 1));
       const radius = 8 * s;
+      const byPlayer = source === 'player' || !!(source && source.driver === 'player');
       for (const v of this.sys.list) {
         if (v === source) continue;
         const dd = Math.hypot(v.pos.x - x, v.pos.z - z);
         if (dd > radius) continue;
         const k = 1 - dd / radius;
         v.wake();
-        v.damage(420 * k * s, source && source.driver === 'player' ? 'player' : null, 'blast');
+        v.damage(420 * k * s, byPlayer ? 'player' : null, 'blast');
         const nx = (v.pos.x - x) / (dd || 1);
         const nz = (v.pos.z - z) / (dd || 1);
         v.vel.x += nx * 9 * k;
@@ -113,7 +119,7 @@
         v.grounded = false;
         v.omega += (Math.random() - 0.5) * 3 * k;
       }
-      VH.events.emit('explosion', { x, y, z, radius: radius * 1.2, power: s, source });
+      VH.events.emit('explosion', { x, y, z, radius: radius * 1.2, power: s, source, damage });
     }
 
     _pan(x, z) {
