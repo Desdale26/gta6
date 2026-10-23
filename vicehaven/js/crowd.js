@@ -396,9 +396,12 @@
         // The driver Jay pulls out lands by the door: a job's driver is the
         // job's to place (missions.ejectDriver); a cop gets out to fight; an
         // ordinary driver runs for it.
+        // e.agents: who came out (vehicles/entry.js drags them out by hand).
         const g = this.game;
         const v = e.v;
-        if (!(g.missions && g.missions.ejectDriver && g.missions.ejectDriver(v, e.side))) {
+        const n = this.agents.length;
+        const job = g.missions && g.missions.ejectDriver && g.missions.ejectDriver(v, e.side);
+        if (!job) {
           if (v.isPolice && g.police) g.police.deployOfficers(v, 1);
           else {
             const w = v.localToWorld((e.side || 1) * (v.hx + 1.1), v.hz * 0.1, {});
@@ -406,6 +409,7 @@
             this._flee(a, v.pos.x, v.pos.z, 6 + Math.random() * 3);
           }
         }
+        e.agents = job && job.pos ? [job] : this.agents.slice(n);
         this.threat(e.x, e.z, 14, 'jack');
       });
     }
@@ -770,13 +774,19 @@
         a.camDist = dist;
         // A flinch wears off on or off screen (it holds their fire meanwhile).
         if (a.flinchT > 0) a.flinchT = Math.max(0, a.flinchT - dt);
+        // Held by a script (a driver being dragged out of a car: vehicles/entry.js).
+        if (a.held) {
+          a.pos.set(a.held.x, a.held.y, a.held.z);
+          a.heading = a.held.heading;
+          a.speed = 0;
+        }
         // Think.
-        if (a.state === 'down') this._downStep(a, dt);
+        else if (a.state === 'down') this._downStep(a, dt);
         else if (a.brain && a.brain.update) a.brain.update(a, dt);
         else if (a.state === 'flee') this._fleeStep(a, dt);
         else if (a.walk) this._walkerStep(a, dt);
         else this._rejoinWalk(a);
-        if (a.state !== 'down') {
+        if (a.state !== 'down' && !a.held) {
           this._move(a, dt);
           this._carCheck(a);
         }

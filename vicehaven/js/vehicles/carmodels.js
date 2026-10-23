@@ -2447,6 +2447,7 @@
   // ----------------------------------------------------------------- API
   VH.CarModels = {
     TYPES,
+    DEFS, // shapes (vehicles/entry.js fits the opening doors to the windows)
     GROUPS: G,
     list() {
       return Object.keys(TYPES);

@@ -796,15 +796,19 @@
       const facingX = Math.sin(this.heading);
       const facingZ = Math.cos(this.heading);
       const backwards = this.aiming && (this.vel.x * facingX + this.vel.z * facingZ) < -0.3;
+      // Getting into a vehicle (vehicles/entry.js): a scripted pose, lifted onto the step or the hull.
+      const ep = this.enterPose;
+      if (ep && this.enterLift) root.position.y += this.enterLift;
       this.model.animate(dt, {
-        speed: this.state === 'climb' ? 0 : hSpeed,
-        grounded: this.grounded || this.state === 'climb',
+        speed: ep && ep.speed !== undefined ? ep.speed : this.state === 'climb' ? 0 : hSpeed,
+        grounded: ep ? true : this.grounded || this.state === 'climb',
         vy: this.vel.y,
-        crouch: this.crouchAmount,
+        crouch: ep && ep.crouch !== undefined ? ep.crouch : this.crouchAmount,
         // Hip fire raises the gun for a moment without the aiming camera.
-        aim: Math.max(this.aimAmount, this._fireFaceT > 0 && this.weaponPose ? 0.9 : 0),
+        aim: Math.max(this.aimAmount, this._fireFaceT > 0 && this.weaponPose ? 0.9 : 0, ep && ep.aim ? ep.aim : 0),
         reload: this.reloadPhase || 0,
-        climb: this.climb ? this.climb.t : -1,
+        climb: ep && ep.climb !== undefined ? ep.climb : this.climb ? this.climb.t : -1,
+        pose: ep && ep.w > 0 ? ep : null,
         sprint: this.sprinting,
         backwards,
         land: this._land,

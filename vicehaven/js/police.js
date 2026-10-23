@@ -646,11 +646,12 @@
             if (u.removed || u.wrecked || Math.abs(u.pos.y - v.pos.y) > 3) continue;
             if (Math.hypot(u.pos.x - v.pos.x, u.pos.z - v.pos.z) < v.hz + u.hz + 2.5) close = true;
           }
-          for (const a of this.officers) if (!a.dead && Math.abs(a.pos.y - v.pos.y) < 3 && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
+          for (const a of this.officers) if (!a.dead && !a.held && a.state !== 'down' && Math.abs(a.pos.y - v.pos.y) < 3 && Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z) < v.hx + 1.6) close = true;
         }
       } else if (p.state !== 'dead') {
         for (const a of this.officers) {
-          if (a.dead || a.removed) continue;
+          // On the ground (or being hauled out of their car) they can't cuff anyone.
+          if (a.dead || a.removed || a.held || a.state === 'down') continue;
           if (Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) < 1.7) close = true;
         }
       }

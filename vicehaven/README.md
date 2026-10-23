@@ -25,6 +25,8 @@ buying the city block by block with money Jay once helped steal.
 - **New in v1.3 (Arsenal update):** 12 new weapons including a rocket
   launcher, a minigun and a stun gun, Bayline Arms gun shops, ammo and
   armour round the city, and guns that kick, flinch people and leave holes.
+  Doors now open as Jay gets in, and every kind of vehicle has its own way
+  in (and its own carjack: drag-outs, punches, gunpoint).
 - **v1.2 (City life update):** rain and thunderstorms, Fresh Coat
   body shops, eight businesses to buy, 42 achievements with a Progress
   screen counting to 100%, and photo mode.
@@ -557,6 +559,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] `dist/vicehaven.html` opens by double-click with no other files beside it
 - [ ] New Game: the cold open plays, then Jay is in Civic Plaza and Dex is on the phone
 - [ ] Steal a car (F next to it; F again by an occupied car drags the driver out)
+- [ ] Getting in: the door opens and shuts behind Jay; the Zephyr's doors go up, vans have a step, the jet's canopy and the tank's hatch open; an occupied car's driver is dragged out (or gets out hands up if Jay has a gun out)
 - [ ] Drive: accelerate, brake, reverse, handbrake drift, nitro (Shift), crash, smoke, fire
 - [ ] The radio plays in a car; R changes station; a host talks between songs
 - [ ] Traffic stops at red lights; pedestrians wait at crossings and run from gunfire

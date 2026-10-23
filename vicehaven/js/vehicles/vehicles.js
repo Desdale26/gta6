@@ -66,6 +66,7 @@
       this.nitro = 0.6;
       this.player = game.player;
       this.entering = null;
+      this.entry = VH.VehicleEntry ? new VH.VehicleEntry(game, this) : null; // doors, climbing in, carjacks
       this._hits = [];
       this._nearMiss = new Map();
       this._streamTimer = 0;
@@ -594,6 +595,7 @@
         v.input.handbrake = 1;
       }
       v.wake();
+      if (this.entry) this.entry.begin(this.entering);
       VH.events.emit('vehicle:enterStart', { v, jacked: occupied });
     }
 
@@ -601,10 +603,18 @@
       const e = this.entering;
       const p = this.player;
       const v = e.v;
-      if (v.removed || v.wrecked) {
+      // Cut short: the car is gone, or Jay is down or being arrested.
+      if (v.removed || v.wrecked || p.state === 'dead' || p.state === 'knocked' || this.game._arresting) {
         this.entering = null;
         p.frozen = false;
         p.enteringVehicle = false;
+        if (this.entry) this.entry.abort(e);
+        return;
+      }
+      if (this.entry) {
+        const done = this.entry.step(e, dt);
+        this.entry.apply(e);
+        if (done) this._finishEnter();
         return;
       }
       e.t += dt;
@@ -636,6 +646,7 @@
       const p = this.player;
       const v = e.v;
       this.entering = null;
+      if (this.entry) this.entry.end(e);
       p.frozen = false;
       p.enteringVehicle = false;
       p.vehicle = v;
@@ -653,7 +664,7 @@
         v.spot.used = true;
         v.spot = null;
       }
-      VH.events.emit('vehicle:door', { v, open: false });
+      if (!this.entry) VH.events.emit('vehicle:door', { v, open: false }); // else the door thunks shut as it closes
       VH.events.emit('vehicle:enter', { v, jacked: e.jacked });
     }
 
@@ -674,7 +685,7 @@
         const g = ph.groundHeight(w.x, w.z, v.pos.y + 1.2);
         if (Math.abs(g - v.pos.y) > 1.2) continue;
         if (ph.overlaps(w.x, w.z, 0.3, g + 0.3, g + 1.7)) continue;
-        spot = { x: w.x, z: w.z, y: g };
+        spot = { x: w.x, z: w.z, y: g, side: lz > 0.1 ? Math.sign(lx) : 0 };
         break;
       }
       if (!spot) spot = { x: v.pos.x, z: v.pos.z, y: v.pos.y + v.height + 0.05 };
@@ -703,6 +714,7 @@
         p.knock(Math.min(35, v.speed * 1.2), 'bail');
       }
       VH.events.emit('vehicle:door', { v, open: true });
+      if (this.entry && !fast) this.entry.exitDoor(v, spot.side || 1);
       VH.events.emit('vehicle:exit', { v, bail: fast });
       return true;
     }
@@ -837,6 +849,7 @@
 
     // ------------------------------------------------------------- frame
     update(dt, alpha, focus) {
+      if (this.entry) this.entry.update(dt);
       this._streamTimer -= dt;
       if (this._streamTimer <= 0) {
         this._streamTimer = 0.5;
@@ -865,6 +878,7 @@
 
     /** Remove every non-persistent car (new game, quit to title). */
     clear(all) {
+      if (this.entering && this.entry) this.entry.abort(this.entering);
       for (let i = this.list.length - 1; i >= 0; i--) {
         const v = this.list[i];
         if (all || !v.persistent) this.remove(v);

@@ -1106,7 +1106,7 @@
         a.pos.set(w.x, this.game.physics.groundHeight(w.x, w.z, v.pos.y + 1.5), w.z);
         a.heading = v.yaw + (side || 1) * Math.PI / 2;
         if (!(a.brain instanceof VH.CombatBrain)) a.brain = new FleeBrain(this, { x: v.pos.x, z: v.pos.z }, 8);
-        return true;
+        return a; // the driver (truthy): vehicles/entry.js hauls them out
       }
       return false;
     }

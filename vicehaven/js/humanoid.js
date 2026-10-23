@@ -540,6 +540,16 @@
         T.shoulderR -= Math.abs(f) * 0.3;
       }
 
+      // A scripted pose (getting into a car, hauling a driver out): joint
+      // targets blended in by s.pose.w.
+      const scr = s.pose;
+      if (scr && scr.w > 0) {
+        for (const name in scr) {
+          if (name === 'w' || T[name] === undefined) continue;
+          T[name] = VH.math.lerp(T[name], scr[name], scr.w);
+        }
+      }
+
       // Smoothly move every joint toward its target.
       const P = this.pose;
       const k = 16;
