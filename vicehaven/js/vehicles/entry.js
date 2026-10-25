@@ -207,7 +207,12 @@
       let d = this.doors.get(key);
       if (d && d.v !== v) d = null;
       if (!d) {
-        d = buildDoor(v, side, profileFor(v));
+        const pr = profileFor(v);
+        const m = v.model;
+        // A car's own door (cut from its body, vehicles/carmodels.js), else a panel.
+        if (m && m.doorPivot && (pr.door === 'swing' || pr.door === 'scissor')) {
+          d = { v, side, pr, pivot: m.doorPivot(side), real: true, painted: [], angle: 0, target: 0, closeIn: 0 };
+        } else d = buildDoor(v, side, pr);
         if (!d) return null;
         this.doors.set(key, d);
       }
@@ -220,8 +225,11 @@
       const p = d.pivot;
       // Opening: in the car's paint as it is now (a respray, damage).
       const m = d.v.model;
-      if (!p.visible && a > 0.004 && m && m.paintMesh && !m.livery) for (const mesh of d.painted) mesh.material = m.paintMesh.material;
-      p.visible = a > 0.004;
+      if (d.real) m.setDoorOpen(d.side, a > 0.004); // the car shows its openings and the door piece
+      else {
+        if (!p.visible && a > 0.004 && m && m.paintMesh && !m.livery) for (const mesh of d.painted) mesh.material = m.paintMesh.material;
+        p.visible = a > 0.004;
+      }
       const pr = d.pr;
       const s = d.side;
       const k = smoothstep(0, 1, a);
@@ -240,7 +248,7 @@
     update(dt) {
       for (const [key, d] of this.doors) {
         if (d.v.removed || !d.v.model) {
-          if (d.pivot.parent) d.pivot.parent.remove(d.pivot);
+          if (d.pivot.parent && !d.real) d.pivot.parent.remove(d.pivot);
           this.doors.delete(key);
           continue;
         }
@@ -674,7 +682,12 @@
     }
 
     reset() {
-      for (const d of this.doors.values()) if (d.pivot.parent) d.pivot.parent.remove(d.pivot);
+      for (const d of this.doors.values()) {
+        if (d.real) {
+          d.angle = 0;
+          if (!d.v.removed) this._poseDoor(d);
+        } else if (d.pivot.parent) d.pivot.parent.remove(d.pivot);
+      }
       this.doors.clear();
     }
   }

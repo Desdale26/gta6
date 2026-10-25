@@ -2240,6 +2240,259 @@
     };
   }
 
+  // --------------------------------------------------------- real doors
+  // Each front door is cut out of the body itself (paint, trim and lights:
+  // its window, handle, badges and all), along the window line and the
+  // pillars, so it can swing open on a hinge and leave a real opening with
+  // the cabin behind it. Built the first time a door opens; the car draws
+  // its usual one-piece body whenever the doors are shut.
+
+  /** The door outline in (z, y), the depth it reaches in, and the hinge. */
+  function doorShape(d) {
+    const g = d.glass;
+    const w = g && g.side && g.side[0];
+    const seatZ = d.seatZ === undefined ? 0 : d.seatZ;
+    const zF = d.L / 2 - d.fo;
+    const raF = d.R + (d.archGap === undefined ? 0.06 : d.archGap);
+    const y0 = d.sill + 0.05;
+    let poly, xIn, belt;
+    if (w && g.ws && typeof w.r === 'number') {
+      const b = w.b, t = w.t + 0.03;
+      const frontB = zAt(g.ws, b) - 0.03; // the windscreen pillar at the window line
+      const frontT = zAt(g.ws, t) - (g.aw || 0.1) * 0.6;
+      const rear = w.r - 0.04; // half way across the pillar behind the window
+      // Over the front wheel (cab-forward vans) the door starts above the arch.
+      const yF = frontB > zF - raF - 0.05 ? Math.max(y0, d.R + raF + 0.04) : y0;
+      poly = [[frontB, yF], [rear, y0], [rear, t], [Math.min(frontT, frontB), t], [frontB, b]];
+      belt = b;
+      xIn = d.cabin ? (d.cabin.width / 2) * 0.72 : d.W / 2 - 0.16;
+    } else {
+      // An open car (the Duchess): just the panel below the top of the body.
+      const len = 1.3;
+      const front = seatZ + 0.25 + len / 2;
+      const top = d.H - 0.06;
+      poly = [[front, y0], [front - len, y0], [front - len, top], [front, top]];
+      belt = top;
+      xIn = d.W / 2 - 0.16;
+    }
+    return { poly, xIn, belt, hingeZ: poly[0][0] };
+  }
+
+  /** Planes (a·p + c >= 0 inside) bounding one side's door. */
+  function doorPlanes(shape, side) {
+    const P = shape.poly;
+    let cz = 0, cy = 0;
+    for (const q of P) {
+      cz += q[0] / P.length;
+      cy += q[1] / P.length;
+    }
+    const planes = [[side, 0, 0, -shape.xIn]]; // [ax, ay, az, c]
+    for (let i = 0; i < P.length; i++) {
+      const [z0, y0] = P[i];
+      const [z1, y1] = P[(i + 1) % P.length];
+      // Edge normal in (z, y), pointed at the middle.
+      let nz = -(y1 - y0), ny = z1 - z0;
+      if (nz * (cz - z0) + ny * (cy - y0) < 0) {
+        nz = -nz;
+        ny = -ny;
+      }
+      if (Math.hypot(nz, ny) < 1e-6) continue;
+      planes.push([0, ny, nz, -(ny * y0 + nz * z0)]);
+    }
+    return planes;
+  }
+
+  /**
+   * Split a geometry: the triangles (clipped to the planes) inside each
+   * door → doors[side], the rest → body. Every attribute is interpolated.
+   */
+  function splitGeometry(geo, sides) {
+    const src = geo.index ? geo.toNonIndexed() : geo;
+    const names = Object.keys(src.attributes);
+    const sizes = names.map((n) => src.attributes[n].itemSize);
+    const S = sizes.reduce((a, b) => a + b, 0);
+    const nIdx = names.indexOf('normal');
+    const nOff = sizes.slice(0, nIdx).reduce((a, b) => a + b, 0);
+    const count = src.attributes.position.count;
+    const all = new Float32Array(count * S);
+    for (let v = 0; v < count; v++) {
+      let o = v * S;
+      for (let a = 0; a < names.length; a++) {
+        const at = src.attributes[names[a]];
+        for (let c = 0; c < sizes[a]; c++) all[o++] = at.array[v * sizes[a] + c];
+      }
+    }
+    const body = [];
+    const doors = sides.map(() => []);
+    const vert = (i) => all.subarray(i * S, i * S + S);
+    const dist = (pl, p) => pl[0] * p[0] + pl[1] * p[1] + pl[2] * p[2] + pl[3];
+    const mix = (a, b, t) => {
+      const o = new Float32Array(S);
+      for (let k = 0; k < S; k++) o[k] = a[k] + (b[k] - a[k]) * t;
+      if (nIdx >= 0) {
+        const l = Math.hypot(o[nOff], o[nOff + 1], o[nOff + 2]) || 1;
+        o[nOff] /= l;
+        o[nOff + 1] /= l;
+        o[nOff + 2] /= l;
+      }
+      return o;
+    };
+    const emit = (out, poly) => {
+      for (let k = 1; k + 1 < poly.length; k++) out.push(poly[0], poly[k], poly[k + 1]);
+    };
+    const clip = (poly, pl) => {
+      const inn = [], out = [];
+      for (let k = 0; k < poly.length; k++) {
+        const a = poly[k], b = poly[(k + 1) % poly.length];
+        const da = dist(pl, a), db = dist(pl, b);
+        if (da >= 0) inn.push(a);
+        else out.push(a);
+        if ((da >= 0) !== (db >= 0)) {
+          const m = mix(a, b, da / (da - db));
+          inn.push(m);
+          out.push(m);
+        }
+      }
+      return [inn, out];
+    };
+    for (let i = 0; i < count; i += 3) {
+      let poly = [vert(i), vert(i + 1), vert(i + 2)];
+      let placed = false;
+      for (let s = 0; s < sides.length && !placed; s++) {
+        const planes = sides[s];
+        // Wholly outside one plane: not this door.
+        if (planes.some((pl) => dist(pl, poly[0]) < 0 && dist(pl, poly[1]) < 0 && dist(pl, poly[2]) < 0)) continue;
+        // Flat faces (the top of the body under the window, arch liners, the
+        // underside) stay with the body: the door is its upright skin.
+        const ax = poly[1][0] - poly[0][0], ay = poly[1][1] - poly[0][1], az = poly[1][2] - poly[0][2];
+        const bx = poly[2][0] - poly[0][0], by = poly[2][1] - poly[0][1], bz = poly[2][2] - poly[0][2];
+        const fy = az * bx - ax * bz;
+        const fl = Math.hypot(ay * bz - az * by, fy, ax * by - ay * bx) || 1;
+        if (Math.abs(fy / fl) > 0.72) continue;
+        let inside = poly;
+        for (const pl of planes) {
+          const [inn, out] = clip(inside, pl);
+          if (out.length >= 3) emit(body, out);
+          inside = inn;
+          if (inside.length < 3) break;
+        }
+        if (inside.length >= 3) emit(doors[s], inside);
+        placed = true;
+      }
+      if (!placed) emit(body, poly);
+    }
+    const make = (list) => {
+      const g = new THREE.BufferGeometry();
+      let off = 0;
+      for (let a = 0; a < names.length; a++) {
+        const n = sizes[a];
+        const arr = new Float32Array(list.length * n);
+        for (let v = 0; v < list.length; v++) for (let c = 0; c < n; c++) arr[v * n + c] = list[v][off + c];
+        g.setAttribute(names[a], new THREE.BufferAttribute(arr, n));
+        off += n;
+      }
+      g.computeBoundingSphere();
+      return g;
+    };
+    if (src !== geo) src.dispose();
+    return { body: make(body), doors: doors.map(make) };
+  }
+
+  /** The cut-up body for a car (cached with its body): the shell with the openings, and each door. */
+  function doorParts(id, B) {
+    if (B.doorParts !== undefined) return B.doorParts;
+    const d = DEFS[id];
+    const shape = doorShape(d);
+    const sides = [doorPlanes(shape, 1), doorPlanes(shape, -1)];
+    const out = { shape, body: {}, doors: [{}, {}] };
+    for (const part of ['paint', 'trim', 'lights']) {
+      const r = splitGeometry(B[part], sides);
+      out.body[part] = r.body;
+      out.doors[0][part] = r.doors[0];
+      out.doors[1][part] = r.doors[1];
+    }
+    // Hinge on the front edge, at the door's outermost point.
+    out.hinge = [1, -1].map((side, k) => {
+      const pos = out.doors[k].paint.attributes.position;
+      let mx = d.W / 2 - 0.05;
+      for (let i = 0; i < pos.count; i++) mx = Math.max(mx, pos.getX(i) * side);
+      return new THREE.Vector3(side * mx, shape.belt, shape.hingeZ);
+    });
+    out.interior = interiorGeometry(d, shape);
+    B.doorParts = out;
+    return out;
+  }
+
+  /** What shows through an open door: a dark tub (inward faces only), seats, a dash and a wheel. */
+  function interiorGeometry(d, shape) {
+    const P = shape.poly;
+    let z0 = Infinity, z1 = -Infinity;
+    for (const q of P) {
+      z0 = Math.min(z0, q[0]);
+      z1 = Math.max(z1, q[0]);
+    }
+    // The tub stays below the window line and behind the windscreen pillar so
+    // it never shows outside the body (above it, the far window is the view).
+    const y0 = d.sill + 0.04;
+    const tubTop = shape.belt + 0.03;
+    const tubZ0 = z0 - 0.9, tubZ1 = z1 - 0.02;
+    const hx = d.W / 2 - 0.1;
+    const tub = new THREE.BoxGeometry(hx * 2, tubTop - y0, tubZ1 - tubZ0);
+    tub.translate(0, (tubTop + y0) / 2, (tubZ0 + tubZ1) / 2);
+    const seatZ = d.seatZ === undefined ? 0 : d.seatZ;
+    const parts = [];
+    const box = (w, h, l, x, y, z, rx) => {
+      const b = new THREE.BoxGeometry(w, h, l);
+      if (rx) b.rotateX(rx);
+      b.translate(x, y, z);
+      parts.push(b);
+    };
+    const sy = d.sill + 0.22;
+    for (const x of [0.37, -0.37]) {
+      box(0.5, 0.14, 0.5, x, sy, seatZ); // cushion
+      box(0.5, 0.62, 0.12, x, sy + 0.36, seatZ - 0.28, -0.18); // back
+      box(0.26, 0.14, 0.1, x, sy + 0.72, seatZ - 0.33, -0.18); // headrest
+    }
+    // The dash sits under the window line and inside the cabin's width (it mustn't poke through the bonnet).
+    const dashZ = Math.min(z1 - 0.12, seatZ + 0.9);
+    const dashW = d.cabin ? d.cabin.width * 0.8 : d.W - 0.45;
+    box(dashW, 0.16, 0.26, 0, shape.belt - 0.16, dashZ);
+    const wheel = new THREE.TorusGeometry(0.17, 0.022, 6, 18);
+    wheel.rotateX(-0.45);
+    wheel.translate(0.37, shape.belt - 0.04, dashZ - 0.22);
+    parts.push(wheel);
+    // One geometry for the furniture (the tub draws back faces on its own).
+    const flat = parts.map((g) => g.toNonIndexed());
+    let n = 0;
+    for (const g of flat) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    let o = 0;
+    for (const g of flat) {
+      pos.set(g.attributes.position.array, o * 3);
+      nor.set(g.attributes.normal.array, o * 3);
+      o += g.attributes.position.count;
+      g.dispose();
+    }
+    for (const g of parts) g.dispose();
+    const furniture = new THREE.BufferGeometry();
+    furniture.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    furniture.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    furniture.computeBoundingSphere();
+    return { tub, furniture };
+  }
+
+  let INTERIOR_MATS = null;
+  function interiorMats() {
+    if (!INTERIOR_MATS) {
+      INTERIOR_MATS = {
+        tub: new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.9, metalness: 0, side: THREE.BackSide }),
+        seat: new THREE.MeshStandardMaterial({ color: 0x24262c, roughness: 0.75, metalness: 0 }),
+        card: new THREE.MeshStandardMaterial({ color: 0x1c1d22, roughness: 0.8, metalness: 0, side: THREE.BackSide }),
+      };
+    }
+    return INTERIOR_MATS;
+  }
+
   // ------------------------------------------------------------ CarModel
   const E = {
     headOn: [4, 3.8, 3.3], headOff: [0.15, 0.15, 0.15],
@@ -2291,6 +2544,9 @@
         this.meshes.push(m);
         return m;
       };
+      this._B = B;
+      this._doors = null; // built the first time a door opens (doorPivot)
+      this._doorOpen = [false, false];
       this.paintMesh = mk(B.paint, this._paintShared, this.body, 'paint');
       this.trimMesh = mk(B.trim, trimMaterial(), this.body, 'trim');
       this.lightsMesh = mk(B.lights, this.lightMat, this.body, 'lights');
@@ -2396,6 +2652,79 @@
       return r;
     }
 
+    // ------------------------------------------------------------ doors
+    /**
+     * The front door on one side (1 = driver's, -1 = passenger's) as a
+     * hinged part of the car: a Group at the hinge, the door cut from the
+     * body inside it. Turn it (rotation.y to swing it open) and call
+     * setDoorOpen while it isn't shut.
+     */
+    doorPivot(side) {
+      if (!this._doors) this._buildDoors();
+      return this._doors.pivots[side > 0 ? 0 : 1];
+    }
+
+    _buildDoors() {
+      const parts = doorParts(this.id, this._B);
+      const IM = interiorMats();
+      const pivots = [];
+      this._doorPaint = [];
+      for (let k = 0; k < 2; k++) {
+        const h = parts.hinge[k];
+        const pivot = new THREE.Group();
+        pivot.name = 'door-' + (k ? 'right' : 'left');
+        pivot.position.copy(h);
+        const add = (geo, mat, name) => {
+          const m = new THREE.Mesh(geo, mat);
+          m.name = name;
+          m.position.set(-h.x, -h.y, -h.z); // the geometry stays in car space (dents line up)
+          m.castShadow = true;
+          m.receiveShadow = true;
+          pivot.add(m);
+          return m;
+        };
+        const D = parts.doors[k];
+        this._doorPaint.push(add(D.paint, this.paintMesh.material, 'door-paint'));
+        add(D.trim, trimMaterial(), 'door-trim');
+        add(D.lights, this.lightMat, 'door-lights');
+        // The inside of the door: the same shell, seen from behind, in dark trim.
+        add(D.paint, IM.card, 'door-card').castShadow = false;
+        add(D.trim, IM.card, 'door-card-glass').castShadow = false;
+        pivot.visible = false;
+        this.body.add(pivot);
+        pivots.push(pivot);
+      }
+      const cabin = new THREE.Group();
+      cabin.name = 'cabin';
+      cabin.add(new THREE.Mesh(parts.interior.tub, IM.tub), new THREE.Mesh(parts.interior.furniture, IM.seat));
+      cabin.visible = false;
+      this.body.add(cabin);
+      this._doors = { parts, pivots, cabin };
+    }
+
+    /** Open (any amount) or shut: while either door is open the body has its openings and the cabin shows. */
+    setDoorOpen(side, open) {
+      if (!this._doors) this._buildDoors();
+      this._doorOpen[side > 0 ? 0 : 1] = !!open;
+      const any = this._doorOpen[0] || this._doorOpen[1];
+      const D = this._doors;
+      if (any === !!D.cut) return;
+      D.cut = any;
+      const B = this._B, P = D.parts.body;
+      this.paintMesh.geometry = any ? P.paint : B.paint;
+      this.trimMesh.geometry = any ? P.trim : B.trim;
+      this.lightsMesh.geometry = any ? P.lights : B.lights;
+      for (const pv of D.pivots) {
+        pv.visible = any;
+        if (!any) pv.rotation.set(0, 0, 0);
+      }
+      D.cabin.visible = any;
+    }
+
+    _syncDoorPaint() {
+      if (this._doorPaint) for (const m of this._doorPaint) m.material = this.paintMesh.material;
+    }
+
     /** A new coat of paint (the body shop). Liveries can't be resprayed: false. */
     setColor(hex) {
       if (this.livery) return false;
@@ -2408,6 +2737,7 @@
       this._dmgMat = null;
       this.paintMesh.material = this._paintShared;
       this.setDamage(this.state.damage);
+      this._syncDoorPaint();
       return true;
     }
 
@@ -2426,6 +2756,7 @@
         this._dmgMat.dispose();
         this._dmgMat = null;
       }
+      this._syncDoorPaint();
     }
 
     setVisible(v) {
