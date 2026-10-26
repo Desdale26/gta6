@@ -404,11 +404,32 @@ from the air.
 **Corner shops and petrol stations.** Fourteen across Old Market, Harbor
 Point, Palm Crescent and downtown (Sunrise 24/7, Gull Mart, Hi-Lo Market,
 Kwik Pik and three Tidal Fuel stations), each one a real room you can walk
-into with shelves, fridges and a clerk behind the counter. Buy snacks to
-heal, or aim a gun at the clerk: the till pays out while you keep him
-covered, someone hits the silent alarm (two stars), and one clerk in five
-has a shotgun under the counter. A robbed till takes eight minutes to
-fill up again. The map marks them with a yellow shopping bag.
+into with shelves, fridges, shoppers and a clerk behind the counter. Buy
+snacks to heal, or hold the place up:
+
+- **Aim a gun at the clerk.** His hands go up, he opens the till and fills
+  a bank bag while you keep him covered, then throws it on the counter.
+  The cash is yours when you pick the bag up (hold E to grab it early, with
+  whatever is in it so far).
+- **Every clerk is different.** A nervous one is quick and babbles, a
+  steady one quietly hits the silent alarm if you look away, a stubborn one
+  stalls ("The drawer sticks, alright?"), and a have-a-go hero reaches under
+  the counter for a shotgun. The panel warns you; tap E to shout at him
+  (or fire a warning shot) and he thinks better of it.
+- **The safe.** In the bigger shops, make the clerk open the floor safe in
+  the back for a much bigger payout, if you dare wait for it.
+- **The alarm, the camera and the witnesses.** If the alarm goes, the bell
+  rings and two stars arrive about eight seconds later. Shoppers cower,
+  but one might bolt out of the door and phone the police; aim at them and
+  they'll even hand over their wallets. Every shop has a CCTV camera above
+  the door: shoot it out, keep the alarm quiet and nobody escaping, and it's
+  a clean job (no stars at all, and a bonus). Leave the camera recording and
+  the footage brings one star.
+- **Come back too often** and the clerk knows your face; after two hold-ups
+  a shop hires an armed security guard. A robbed till takes eight minutes
+  of play to fill up again, a safe twenty.
+
+The map marks the shops with a yellow shopping bag.
 
 **A city that carries on without you.** Every few quiet minutes a getaway
 car comes tearing past with a police cruiser on its tail, siren going
@@ -510,6 +531,8 @@ vicehaven/
 │   ├── skyline.js · airfield.js · fort.js   Northgate Heights; the airport and its air traffic;
 │   │                       Fort Breakwater, its soldiers and the alarm
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
+│   ├── holdup.js · holdup-models.js · audio-holdup.js · data/holdup-lines.js
+│   │                            hold-ups: clerks, the bag, the safe, alarm, CCTV, shoppers, guard
 │   ├── suburbs.js · roadsigns.js   the roadside strips on the roads out of town; direction signs
 │   ├── world.js            turns the layout into chunked meshes, colliders and props
 │   ├── humanoid.js · player.js · camera.js · crowd.js    people, Jay, the camera, the crowds
@@ -589,7 +612,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Airport: take a Skylark from the general aviation apron, take off down the runway, turn, land again; an airliner takes off or lands within a few minutes
 - [ ] Fly the Sparrow from the helipad: climb, fly, land without damage; jump out high up and the parachute opens
 - [ ] Fort Breakwater: walk in, get the warning, stay and the alarm goes; steal the tank (five stars), drive it, fire the main gun
-- [ ] Walk into a corner shop, buy snacks at the counter (+health), then aim a gun at the clerk: the meter fills and pays out, two stars follow
+- [ ] Walk into a corner shop (the door chimes), buy snacks at the counter (+health), then aim a gun at the clerk: hands up, the till slides open, the bag fills while covered, lands on the counter and pays when picked up
+- [ ] Hold-up extras: tap E to shout (a hero reaching under the counter backs down), hold E to grab early, shoot out the CCTV camera for a clean job, open the safe in a petrol station, a shopper bolting brings two stars
 - [ ] Wait a few minutes away from jobs and heat: a car chased by a police cruiser comes past
 - [ ] Press M: the map fills the screen and opens on Jay; the game pauses
 - [ ] On the map: click a shop (info card, GPS bar, route), search "air" and press Enter, right-click to drop a pin, Tab hides the panel, Z shows the whole map

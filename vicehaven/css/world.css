@@ -1,7 +1,7 @@
 /*
- * world.css — HUD pieces of the open-world systems: the hold-up meter in a
- * corner shop (stores.js), the restricted-area warning at Fort Breakwater
- * (fort.js), the flight instruments (aircraft.js).
+ * world.css — HUD pieces of the open-world systems: the restricted-area
+ * warning at Fort Breakwater (fort.js), the flight instruments (aircraft.js).
+ * The shop hold-up panel has its own sheet (holdup.css).
  */
 
 /* Fort Breakwater: the restricted-area warning (fort.js). */
@@ -46,61 +46,5 @@
 }
 body.in-menu .vh-restricted,
 body.cutscene .vh-restricted {
-  display: none;
-}
-
-/* Hold-up meter (stores.js): fills while Jay keeps the clerk covered. */
-.vh-holdup {
-  position: absolute;
-  left: 50%;
-  top: 5.2rem;
-  width: 16rem;
-  height: 0.55rem;
-  transform: translateX(-50%);
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-}
-
-.vh-holdup.visible {
-  opacity: 1;
-}
-
-.vh-holdup span {
-  position: absolute;
-  left: 0;
-  top: -1.25rem;
-  font-family: var(--vh-font-display);
-  font-size: 0.7rem;
-  letter-spacing: 0.3em;
-  color: #ffd166;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-
-.vh-holdup em {
-  position: absolute;
-  right: 0;
-  top: -1.3rem;
-  font-family: var(--vh-font-display);
-  font-style: normal;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #7dffa8;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-
-.vh-holdup-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 99px;
-  background: linear-gradient(90deg, #7dffa8, #2fd47a);
-  transition: width 0.15s linear;
-}
-
-body.in-menu .vh-holdup,
-body.cutscene .vh-holdup {
   display: none;
 }

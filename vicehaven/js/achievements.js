@@ -48,6 +48,10 @@
     ['evade', 'Crime', '💨', 'Getaway', 'Lose the police.'],
     ['evade_3', 'Crime', '👻', 'Ghost', 'Lose a wanted level of three stars or more.'],
     ['holdup', 'Crime', '💰', 'Hands Up', 'Hold up a corner shop.'],
+    ['holdup_clean', 'Crime', '🤫', 'Inside Job', 'Pull off a clean hold-up: no alarm, nobody gets away, the camera shot out.'],
+    ['holdup_safe', 'Crime', '🔐', 'Safecracker', 'Make a clerk open the safe, and take what is inside.'],
+    ['holdup_hero', 'Crime', '😤', 'Not Today, Hero', 'Catch a clerk reaching under the counter and make him think again.'],
+    ['holdup_all', 'Crime', '🏪', 'Every Till in Town', 'Hold up every shop in Vicehaven.'],
     ['tank', 'Crime', '🪖', 'Heavy Metal', 'Take the tank for a drive.'],
     ['busted', 'Crime', '🚓', 'Bad Day', 'Get arrested.'],
     ['gunshop', 'Combat', '🛒', 'Shopping Spree', 'Buy something at Bayline Arms.'],
@@ -231,6 +235,18 @@
       VH.events.on('property:bought', () => this.unlock('landlord'));
       VH.events.on('photo:taken', () => this.unlock('photo'));
       VH.events.on('gunshop:buy', () => this.unlock('gunshop'));
+      // Hold-ups (holdup.js).
+      VH.events.on('holdup:bag', (e) => {
+        if (e.clean) this.unlock('holdup_clean');
+        if (!e.s) return;
+        this._bump('shop:' + e.s.id, 1);
+        const shops = (this.game.stores && this.game.stores.list) || [];
+        if (shops.length && shops.every((s) => this.profile.n['shop:' + s.id] > 0)) this.unlock('holdup_all');
+      });
+      VH.events.on('holdup:safe', () => this.unlock('holdup_safe'));
+      VH.events.on('holdup:hero', (e) => {
+        if (e.backedDown) this.unlock('holdup_hero');
+      });
       VH.events.on('agent:stunned', (e) => {
         if (e.source === 'player') this.unlock('stun');
       });

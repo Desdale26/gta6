@@ -9,13 +9,14 @@
  *                                       interior (counter, shelves, fridges),
  *                                       a forecourt in front, and for the
  *                                       petrol stations a canopy and pumps
- *   new VH.Stores(game)                 the clerks and the hold-ups
+ *   new VH.Stores(game)                 the clerks, the snacks, the blips and
+ *                                       the save; the hold-ups themselves run
+ *                                       in holdup.js (this.holdup)
  *
- * A hold-up: aim a gun at the clerk from inside the shop. His hands go up
- * and the meter fills while you keep him covered, paying out as it goes.
- * Someone always hits the silent alarm (two stars a few seconds later),
- * and one clerk in five keeps a shotgun under the counter. An emptied till
- * takes eight minutes of play to fill up again.
+ * A hold-up: aim a gun at the clerk from inside the shop (holdup.js has the
+ * whole story: the clerk's personality, the cash bag, the safe, the silent
+ * alarm, the CCTV camera, the shoppers and the guard). An emptied till takes
+ * eight minutes of play to fill up again.
  *
  * Every shop is laid out in its own frame: u runs along the street front
  * (left to right seen from the street) and v runs inwards from the front
@@ -471,47 +472,110 @@
   }
 
   // ------------------------------------------------------------ the clerk
+  // How he holds himself in each mode: hands up, cowering, crouched, arms out
+  // in front (working the till or the dial) and how far he looks down.
+  const POSES = {
+    idle: { hands: 0, cower: 0, crouch: 0, aim: 0, look: 0 },
+    nervous: { hands: 0.3, cower: 0, crouch: 0, aim: 0, look: 0 },
+    hands: { hands: 1, cower: 0, crouch: 0, aim: 0, look: 0 },
+    till: { hands: 0, cower: 0, crouch: 0, aim: 0.72, look: -0.9 },
+    hold: { hands: 0.55, cower: 0, crouch: 0, aim: 0, look: 0 },
+    throw: { hands: 0.15, cower: 0, crouch: 0, aim: 0.95, look: 0 },
+    walk: { hands: 0.5, cower: 0, crouch: 0, aim: 0, look: 0 },
+    kneel: { hands: 0, cower: 0, crouch: 1, aim: 0.6, look: -0.6 },
+    kneelHands: { hands: 0.8, cower: 0, crouch: 1, aim: 0, look: 0 },
+    tell: { hands: 0.06, cower: 0, crouch: 0.25, aim: 0.3, look: -2.2 },
+    panic: { hands: 1, cower: 0, crouch: 0.15, aim: 0, look: 0 },
+    cower: { hands: 0, cower: 1, crouch: 0, aim: 0, look: 0 },
+  };
+  const FACE_JAY = { nervous: true, hands: true, hold: true, throw: true, tell: true, panic: true, kneelHands: false };
+
+  /**
+   * The clerk's body: where he stands, which way he faces and how he holds
+   * himself. A hold-up (holdup.js) directs him through `mode` and `goal`:
+   *   idle        serves at his post (watching Jay while he's in the shop)
+   *   nervous     watches Jay, hands half raised
+   *   hands       hands up, facing Jay
+   *   till        at the till, working the drawer
+   *   hold        holding the bag, hands half up
+   *   throw       tossing the bag onto the counter
+   *   walk        walking to `goal` with his hands half up
+   *   kneel       kneeling at `goal` working the safe's dial (kneelHands: done)
+   *   tell        hands dropping, eyes down: reaching under the counter
+   *   panic       frozen with his hands high
+   *   cower       arms over his head
+   * `tremble` (0..1, more when panicking) shakes his heading a little.
+   */
   class ClerkBrain {
     constructor(stores, s) {
       this.stores = stores;
       this.s = s;
-      this.mode = 'idle'; // idle | hands | cower
-      this.watch = false;
+      this.mode = 'idle';
+      this.goal = null; //    { x, z, heading } instead of his post
+      this.watch = false; //  Jay's in the shop: keep an eye on him
+      this.busy = false; //   held up: gunfire and hits leave the mode to holdup.js
+      this.tremble = 0;
+      this.voice = 'clerk_m'; // dialogue cast id (holdup.js)
       this.hostile = false;
       this._scared = 0;
+      this._t = Math.random() * 10;
+      this._jit = 0;
+      this._look = 0;
     }
 
     update(a, dt) {
       if (a.dead) return;
-      const post = this.s.clerk;
+      const g = this.stores.game;
+      const p = g.player;
+      const an = a.anim;
+      this._t += dt;
       a.moveSpeed = 0;
-      if (this._scared > 0) {
+      if (this._scared > 0 && !this.busy) {
         this._scared -= dt;
-        if (this._scared <= 0 && this.mode === 'cower') this.mode = 'idle';
+        if (this._scared <= 0 && (this.mode === 'cower' || this.mode === 'hands' || this.mode === 'panic')) this.mode = 'idle';
       }
-      const dx = post.x - a.pos.x;
-      const dz = post.z - a.pos.z;
-      if (this.mode === 'idle' && Math.hypot(dx, dz) > 0.45) {
+      const m = this.mode;
+      const to = this.goal || this.s.clerk;
+      const dx = to.x - a.pos.x;
+      const dz = to.z - a.pos.z;
+      const walks = m === 'idle' || m === 'walk' || m === 'till' || m === 'kneel' || m === 'kneelHands';
+      // Remove last frame's tremble before steering, add this frame's after.
+      a.heading -= this._jit;
+      if (walks && Math.hypot(dx, dz) > (m === 'idle' ? 0.45 : 0.25)) {
         a.heading = dampAngle(a.heading, Math.atan2(dx, dz), 8, dt);
-        a.moveSpeed = 1.1;
+        a.moveSpeed = m === 'walk' ? 1.0 : 1.15;
       } else {
-        let want = post.heading;
-        const p = this.stores.game.player;
-        if (this.watch && this.mode !== 'cower') want = Math.atan2(p.pos.x - a.pos.x, p.pos.z - a.pos.z);
-        a.heading = dampAngle(a.heading, want, 5, dt);
+        let want = to.heading === undefined ? a.heading : to.heading;
+        if (FACE_JAY[m] || (m === 'idle' && this.watch)) want = Math.atan2(p.pos.x - a.pos.x, p.pos.z - a.pos.z);
+        if (m !== 'cower') a.heading = dampAngle(a.heading, want, m === 'till' ? 7 : 5, dt);
       }
-      const hands = this.mode === 'hands' ? 1 : 0;
-      const cower = this.mode === 'cower' ? 1 : 0;
-      a.anim.handsUp += (hands - a.anim.handsUp) * Math.min(1, dt * 8);
-      a.anim.cower += (cower - a.anim.cower) * Math.min(1, dt * 6);
-      a.anim.talk = 0;
+      const shake = m === 'panic' ? Math.max(1.5, this.tremble) : this.tremble;
+      this._jit = shake > 0 ? (Math.sin(this._t * 31) * 0.6 + Math.sin(this._t * 17.3 + 1) * 0.4) * 0.05 * shake : 0;
+      a.heading += this._jit;
+      // The pose.
+      const P = POSES[m] || POSES.idle;
+      const k = Math.min(1, dt * 8);
+      let aim = P.aim;
+      if (m === 'till') aim += 0.12 * Math.sin(this._t * 9); // stuffing notes into the bag
+      if (m === 'kneel') aim += 0.08 * Math.sin(this._t * 5); // turning the dial
+      an.handsUp += (P.hands - an.handsUp) * k;
+      an.cower += (P.cower - an.cower) * Math.min(1, dt * 6);
+      an.crouch += (P.crouch - an.crouch) * Math.min(1, dt * 5);
+      an.aim += (aim - an.aim) * k;
+      this._look += (P.look - this._look) * k;
+      an.lookPitch = this._look;
+      an.talk = m === 'cower' || !g.dialogue ? 0 : g.dialogue.talkLevel(this.voice) * 0.8;
+      an.talkEnergy = an.talk > 0 ? g.dialogue.talkEnergy(this.voice) : 0;
     }
 
     scare(seconds) {
+      if (this.busy) return;
       if (this.mode !== 'hands') this.mode = 'cower';
+      this.goal = null;
       this._scared = Math.max(this._scared, seconds);
     }
 
+    /** Shot at or hit (combat.js). A hold-up deals with it itself. */
     setAlert() {
       this.scare(8);
     }
@@ -582,6 +646,7 @@
       const front = at((d0 + d1) / 2, -3);
       const road = VH.CityGen.roadNameAt(layout, front.x, front.z);
       const brand = BRANDS[c.brand];
+      const hold = Stores._holdPoints(f, gas, a, SW, vb0, vb1, d0, d1);
       return {
         id: 'store_' + (i + 1),
         brand: c.brand,
@@ -595,7 +660,98 @@
         centre: at(a + SW / 2, (vb0 + vb1) / 2),
         yawIn: Math.atan2(f.vx, f.vz),
         seed: hashString(lot.id + SALT),
+        hold,
       };
+    }
+
+    /**
+     * Where things are inside the shop for a hold-up (holdup.js), worked out
+     * from the same measurements buildShop draws with. Points are world
+     * { x, z } (some with a y or a heading); the frame is mirrored, so a
+     * heading is always turned from a local direction (du, dv).
+     */
+    static _holdPoints(f, gas, a, SW, vb0, vb1, d0, d1) {
+      const at = (u, v, du, dv) => {
+        const [x, z] = P(f, u, v);
+        const o = { x, z };
+        if (du !== undefined) o.heading = Math.atan2(du * f.ux + dv * f.vx, du * f.uz + dv * f.vz);
+        return o;
+      };
+      const c0 = a + 1.8; // the counter, along the left wall (buildShop)
+      const c1 = a + 2.6;
+      const i1 = a + SW - T;
+      const q0 = vb0 + T;
+      const q1 = vb1 - T;
+      const fv = q1 - 0.8; // front of the fridges along the back wall
+      const yTop = KERB + 1.06; // counter top
+      const hold = {
+        hasSafe: gas || SW >= 14,
+        // The till's cash drawer: its back edge, sliding out towards the clerk.
+        till: Object.assign(at(c0 + 0.5, vb0 + 2.4, -1, 0), { y: yTop + 0.005 }),
+        tillStand: at(a + 1.2, vb0 + 2.4, 1, 0), // where the clerk works the till
+        bag: Object.assign(at(c1 - 0.2, vb0 + 3.0), { y: yTop }), // tossed onto the counter, Jay's side
+        corner: at(a + 1.25, vb0 + 5.6), // past the end of the counter, on the way to the safe
+        // The safe: back face against the back wall in the open back-left
+        // corner, door facing into the room (the clerk's kneel is below).
+        safe: at(a + 1.05, q1, 0, -1),
+        guard: at(d0 - 0.75, vb0 + 1.0, 0, 1), // inside, beside the door
+        doorIn: at((d0 + d1) / 2, vb0 + 1.0),
+        out: at((d0 + d1) / 2 + 3, vb0 - 6),
+        shoppers: [],
+      };
+      // The clerk kneels in front of the safe a little to the latch side, so
+      // the door (hinged on the left as you face it, holdup-models.js) swings
+      // open clear of him, and faces the dial. Worked out from the safe's
+      // heading: its +x is (cos h, -sin h), whichever way the frame is mirrored.
+      const S = hold.safe;
+      const sx = Math.sin(S.heading);
+      const sz = Math.cos(S.heading);
+      const kx = S.x + sx * 1.05 + sz * 0.25;
+      const kz = S.z + sz * 1.05 - sx * 0.25;
+      hold.kneel = { x: kx, z: kz, heading: Math.atan2(S.x + sx * 0.58 - kx, S.z + sz * 0.58 - kz) };
+      // The CCTV camera: up in the corner above the door, its plate on the
+      // inside of the front wall, looking at the till.
+      const cu = d0 + 0.3;
+      const cv = q0 + 0.005;
+      const cy = KERB + CEIL - 0.22;
+      const tu = c0 + 0.35 - cu;
+      const tv = vb0 + 2.6 - cv;
+      const cam = at(cu, cv, tu, tv);
+      cam.y = cy;
+      cam.pitch = Math.atan2(cy - (KERB + 1.2), Math.hypot(tu, tv));
+      hold.cam = cam;
+      // Shoppers browse the aisles (same gondola layout as buildShop) and
+      // the fridges. Each spot knows its way out to the cross aisle in front
+      // of the gondolas, so they walk round the shelves, not into them.
+      const gu0 = a + 4.4;
+      const gu1 = i1 - 0.6 - 1.3;
+      const gv0 = q0 + 2.2;
+      const gv1 = fv - 1.4;
+      const n = gv1 - gv0 > 1.5 ? Math.floor((gu1 - gu0 + 1.4) / 2.3) : 0;
+      const aisleV = n ? gv0 - 0.75 : (q0 + fv) / 2;
+      const wall = fv - 1.2 - (q0 + 2.0) > 1.5; // the wall shelf down the right
+      const aisles = []; // [centre u, shelf on the left?, shelf on the right?]
+      if (n) {
+        aisles.push([(c1 + gu0) / 2, false, true]);
+        for (let k = 0; k < n - 1; k++) aisles.push([gu0 + k * 2.3 + 1.6, true, true]);
+        const end = gu0 + (n - 1) * 2.3 + 0.9;
+        const right = wall ? i1 - 0.6 : i1;
+        if (right - end > 1.0) aisles.push([(end + right) / 2, true, wall]);
+      } else {
+        for (let u = a + 3.8; u < i1 - 0.6; u += 1.6) aisles.push([u, false, false]);
+      }
+      const spots = hold.shoppers;
+      for (const [uc, left, right] of aisles) {
+        const lane = at(uc, aisleV);
+        if (n) {
+          for (let v = gv0 + 0.55; v < gv1 - 0.3; v += 1.3) {
+            if (left) spots.push(Object.assign(at(uc - 0.2, v, -1, 0), { lane }));
+            if (right) spots.push(Object.assign(at(uc + 0.2, v, 1, 0), { lane }));
+          }
+        }
+        if (uc > a + 3.5) spots.push(Object.assign(at(uc, fv - 0.55, 0, 1), { lane }));
+      }
+      return hold;
     }
 
     /** World build: the shop on a planned lot. Returns the roof height. */
@@ -621,12 +777,11 @@
       this.cash = 0;
       this.clerks = new Map(); // store id -> agent
       this.killed = new Set(); // shops whose clerk was killed: shut until the till refills
-      this.active = null;
       this._tipShown = false;
-      this._emptyTold = null;
+      this._lastInside = null;
       this._v = new THREE.Vector3();
       if (!this.ok) return;
-      this._buildHud();
+      this.holdup = VH.HoldUp ? new VH.HoldUp(this) : null;
       this._bind();
     }
 
@@ -638,12 +793,7 @@
         if (!s) return;
         this.until[s.id] = Math.max(this.until[s.id] || 0, g.playTime + REFILL);
         this.killed.add(s.id);
-        if (this.active && this.active.s === s) this._end(false);
-      });
-      VH.events.on('agent:hurt', (e) => {
-        const s = this._storeOfClerk(e.agent);
-        if (!s) return;
-        if (this.active && this.active.s === s) this.active.meter = Math.min(0.99, this.active.meter + 0.15);
+        if (this.holdup) this.holdup.clerkDied(s);
       });
       VH.events.on('gunshot', (e) => {
         if (!e.byPlayer) return;
@@ -681,6 +831,7 @@
       const look = Object.assign({}, VH.Crowd.randomLook(), { top: BRANDS[s.brand].shirt, shirt: BRANDS[s.brand].shirt });
       const a = g.crowd.spawn(s.clerk.x, s.clerk.z, { look, faction: 'civilian', role: 'clerk', persistent: true, heading: s.clerk.heading, name: 'Clerk', health: 60 });
       a.brain = new ClerkBrain(this, s);
+      if (this.holdup) a.brain.voice = this.holdup.voiceFor(s);
       this.clerks.set(s.id, a);
       return a;
     }
@@ -702,6 +853,7 @@
       const p = g.player;
       const px = p.pos.x;
       const pz = p.pos.z;
+      const ho = this.holdup;
       for (const s of this.list) {
         const d = Math.hypot(px - s.centre.x, pz - s.centre.z);
         let a = this.clerks.get(s.id);
@@ -711,7 +863,7 @@
         }
         if (this.killed.has(s.id) && this.isOpen(s) && !a) this.killed.delete(s.id);
         if (!a && d < 75 && !this.killed.has(s.id)) a = this._spawnClerk(s);
-        else if (a && d > 110 && !(this.active && this.active.s === s)) this._removeClerk(s);
+        else if (a && d > 110 && !(ho && ho.busy(s))) this._removeClerk(s);
       }
       const inside = p.inVehicle || p.isDead ? null : this.storeAt(px, pz);
       for (const s of this.list) {
@@ -720,29 +872,28 @@
       }
       if (inside !== this._lastInside) {
         this._lastInside = inside;
-        this._emptyTold = null;
-        if (inside && !this._tipShown && g.combat.playerArmed && this.robbed === 0 && this.isOpen(inside)) {
+        if (inside && !this._tipShown && g.combat.playerArmed && this.robbed === 0 && this.isOpen(inside) && !(g.missions && g.missions.run)) {
           this._tipShown = true;
           g.hud.showToast('Aim a gun at the clerk to hold the shop up');
         }
       }
-      if (this.active) this._holdUp(dt, inside);
-      else if (inside) this._maybeStart(inside);
-      this._hudUpdate();
+      if (ho) ho.update(dt, inside);
     }
 
-    /** Is Jay covering this clerk with a gun? */
+    /**
+     * Is Jay covering this person with a gun? Any real gun (a launcher too),
+     * not the stun gun, aimed at their chest from within 22 m.
+     */
     _covering(a) {
       const g = this.game;
       const p = g.player;
       const w = g.combat.weapon;
-      // Any real gun (a launcher too); not the stun gun.
       if (!w || (w.kind !== 'hitscan' && w.kind !== 'pellets' && w.kind !== 'projectile') || w.stun) return false;
       if (!p.aiming || p.aimAmount < 0.5 || a.dead) return false;
       const cam = g.renderer.camera;
       const dir = this._v.set(0, 0, -1).applyQuaternion(cam.quaternion);
       const tx = a.pos.x - cam.position.x;
-      const ty = a.pos.y + 1.2 - cam.position.y;
+      const ty = a.pos.y + 1.2 * (1 - 0.4 * Math.min(1, a.anim.crouch || 0)) - cam.position.y;
       const tz = a.pos.z - cam.position.z;
       const dist = Math.hypot(tx, ty, tz);
       if (dist > 22 || dist < 0.01) return false;
@@ -750,113 +901,12 @@
       return cos > Math.cos(clamp(1.1 / dist, 0.13, 0.4));
     }
 
-    _maybeStart(s) {
-      const g = this.game;
-      const a = this.clerks.get(s.id);
-      if (!a || a.dead || !(a.brain instanceof ClerkBrain)) return;
-      if (!this._covering(a)) return;
-      if (g.missions && g.missions.run) {
-        a.brain.scare(4);
-        return;
-      }
-      if (!this.isOpen(s)) {
-        a.brain.mode = 'hands';
-        a.brain._scared = 2;
-        if (this._emptyTold !== s) {
-          this._emptyTold = s;
-          g.hud.showToast("The till's empty. Come back later.");
-        }
-        return;
-      }
-      const total = Math.round((s.gas ? 420 : 260) + new VH.RNG(s.seed + g.playTime).range(0, s.gas ? 380 : 300));
-      this.active = { s, a, meter: 0, paid: 0, total, chunks: 0, idle: 0, fight: Math.random() < 0.2 };
-      a.brain.mode = 'hands';
-      a.brain._scared = 999;
-      // Somebody hits the silent alarm.
-      const pol = g.police;
-      if (pol && !(g.missions && g.missions.suppressHeat)) pol._reports.push({ t: 7, heat: 2, x: s.centre.x, z: s.centre.z, kind: 'robbery' });
-    }
-
-    _holdUp(dt, inside) {
-      const g = this.game;
-      const h = this.active;
-      const p = g.player;
-      if (inside !== h.s || p.isDead || h.a.dead || h.a.removed || g.state !== 'playing' && g.state !== 'dialog') {
-        this._end(h.chunks > 0);
-        return;
-      }
-      if (this._covering(h.a)) {
-        h.meter = Math.min(1, h.meter + dt / 5.5);
-        h.idle = 0;
-      } else {
-        h.meter = Math.max(0, h.meter - dt * 0.05);
-        h.idle += dt;
-        if (h.idle > 6) {
-          this._end(h.chunks > 0);
-          return;
-        }
-      }
-      // The odd clerk fights back.
-      if (h.fight && h.meter > 0.3) {
-        this._fight(h);
-        return;
-      }
-      // Pay out in five handfuls.
-      const due = Math.floor(h.meter * 5 + 1e-6);
-      while (h.chunks < due) {
-        h.chunks++;
-        const amount = h.chunks === 5 ? h.total - h.paid : Math.round(h.total / 5);
-        h.paid += amount;
-        g.giveMoney(amount, 'hold-up');
-        if (g.audio && g.audio.cash) g.audio.cash();
-        g.hud.popScore('HOLD-UP', amount);
-      }
-      if (h.chunks >= 5) this._end(true);
-    }
-
-    _fight(h) {
-      const g = this.game;
-      const s = h.s;
-      const a = h.a;
-      this.active = null;
-      a.anim.handsUp = 0;
-      a.weapon = 'shotgun';
-      const brain = new VH.CombatBrain(g.combat, { weapon: 'shotgun', alert: true, hostile: true, accuracy: 0.4, aggression: 0.25, guard: { x: s.clerk.x, z: s.clerk.z, r: 2.5 } });
-      brain.expired = () => false;
-      a.brain = brain;
-      this.until[s.id] = g.playTime + REFILL;
-      if (h.chunks > 0) this._count(h);
-      g.hud.notify({ title: BRANDS[s.brand].name, text: 'The clerk had a shotgun under the counter!', icon: '⚠', tone: 'bad' });
-    }
-
-    _count(h) {
-      this.robbed++;
-      this.cash += h.paid;
-    }
-
-    /** Finish (or abandon) the hold-up in progress. */
-    _end(robbed) {
-      const g = this.game;
-      const h = this.active;
-      if (!h) return;
-      this.active = null;
-      if (h.a && h.a.brain instanceof ClerkBrain) {
-        h.a.brain.mode = 'cower';
-        h.a.brain._scared = 12;
-      }
-      if (robbed) {
-        this.until[h.s.id] = g.playTime + REFILL;
-        this._count(h);
-        g.hud.notify({ title: BRANDS[h.s.brand].name, text: (h.chunks >= 5 ? 'Till emptied: ' : 'You got away with ') + VH.util.formatMoney(h.paid) + '. The cops are on the way.', icon: '$', tone: 'good' });
-      }
-    }
-
     // ---------------------------------------------------------- snacks
     _buy(item, player) {
       const g = this.game;
       const s = this.byId.get(item.store);
       const a = s && this.clerks.get(s.id);
-      if (!a || a.dead || !(a.brain instanceof ClerkBrain) || a.brain.mode !== 'idle' || this.active) {
+      if (!a || a.dead || !(a.brain instanceof ClerkBrain) || (a.brain.mode !== 'idle' && a.brain.mode !== 'nervous') || (this.holdup && this.holdup.busy(s))) {
         g.hud.showToast("Nobody's serving.");
         return 1;
       }
@@ -874,36 +924,9 @@
       return 1.5;
     }
 
-    // ---------------------------------------------------------- HUD
-    _buildHud() {
-      const el = document.createElement('div');
-      el.className = 'vh-holdup';
-      el.innerHTML = '<span>HOLD-UP</span><div class="vh-holdup-fill"></div><em></em>';
-      this.game.hud.root.appendChild(el);
-      this.hudEl = el;
-      this.fillEl = el.querySelector('.vh-holdup-fill');
-      this.cashEl = el.querySelector('em');
-    }
-
-    _hudUpdate() {
-      if (!this.hudEl) return;
-      const h = this.active;
-      const on = !!h;
-      if (on !== this._hudOn) {
-        this._hudOn = on;
-        this.hudEl.classList.toggle('visible', on);
-      }
-      if (!on) return;
-      const pct = Math.round(h.meter * 100);
-      if (pct !== this._hudPct) {
-        this._hudPct = pct;
-        this.fillEl.style.width = pct + '%';
-      }
-      const txt = VH.util.formatMoney(h.paid);
-      if (txt !== this._hudCash) {
-        this._hudCash = txt;
-        this.cashEl.textContent = txt;
-      }
+    /** The shop's brand name ("Gull Mart"). */
+    brandName(s) {
+      return BRANDS[s.brand].name;
     }
 
     // ---------------------------------------------------------- contract
@@ -923,26 +946,28 @@
     serialize() {
       const until = {};
       for (const k of Object.keys(this.until)) if (this.until[k] > this.game.playTime) until[k] = Math.round(this.until[k]);
-      return { until, robbed: this.robbed, cash: this.cash };
+      const out = { until, robbed: this.robbed, cash: this.cash };
+      if (this.holdup) Object.assign(out, this.holdup.serialize());
+      return out;
     }
 
     load(data) {
       data = data || {};
+      if (this.holdup) this.holdup.stop();
       this.until = Object.assign({}, data.until || {});
       this.robbed = data.robbed || 0;
       this.cash = data.cash || 0;
-      this.active = null;
+      if (this.holdup) this.holdup.load(data);
     }
 
     stop() {
       if (!this.ok) return;
-      this.active = null;
-      this._hudUpdate();
+      if (this.holdup) this.holdup.stop();
     }
 
     reset() {
       if (!this.ok) return;
-      this.stop();
+      if (this.holdup) this.holdup.reset();
       this._clearClerks();
       this.until = {};
       this.killed.clear();
@@ -973,5 +998,7 @@
 
   // The lot frames and the frame drawer, for the other buildings on car parks (sprayshops.js).
   Stores.kit = { KERB, T, frameFor, P, local, rect, drawer, hashString, AVOID_BLOCKS };
+  Stores.REFILL = REFILL;
+  Stores.ClerkBrain = ClerkBrain;
   VH.Stores = Stores;
 })();

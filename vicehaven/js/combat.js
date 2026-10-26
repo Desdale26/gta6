@@ -1487,6 +1487,7 @@
         const oz = cam.z + ray.d.z * tStart;
         const range = w.range || 60;
         const hit = this.trace(ox, oy, oz, ray.d.x, ray.d.y, ray.d.z, range, null, p.vehicle);
+        VH.events.emit('combat:ray', { ox, oy, oz, dx: ray.d.x, dy: ray.d.y, dz: ray.d.z, dist: hit.t }); // what the bullet passed (holdup.js: the shop camera)
         const hx = ox + ray.d.x * hit.t;
         const hy = oy + ray.d.y * hit.t;
         const hz = oz + ray.d.z * hit.t;
