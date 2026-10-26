@@ -82156,6 +82156,7 @@ void main() {
         this._button('Settings', () => this.show('settings', true)),
         this._button('Progress', () => this.show('progress', true)),
         this._button('Statistics', () => this.show('stats', true)),
+        this._button('Stuck? Back to the street', () => this.actions.unstick && this.actions.unstick()),
         this._button('Save game', () => this.actions.save()),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
       );
@@ -83348,6 +83349,10 @@ void main() {
           },
           photoMode: () => this.openPhoto(),
           toggleDaytime: () => this.toggleDaytime(),
+          unstick: () => {
+            this.resume();
+            this.returnToCity('menu');
+          },
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
           daytimeKey: () => this._dayKey(),
           jobLog: () => this.jobLog(),
@@ -84321,6 +84326,7 @@ void main() {
     _tickExtras(dt) {
       if (this.minimap && this.minimap.isFullOpen && (document.body.classList.contains('cutscene') || this.player.frozen)) this.closeMap();
       this._updateWaypoint(dt);
+      this._waterRescue(dt);
       // The first time it gets properly dark, say how to bring the sun back.
       if (!this._nightTipShown && this.environment.nightFactor > 0.6 && !this.settings.get('gameplay.alwaysDay') && this.state === 'playing' && !document.body.classList.contains('cutscene')) {
         let seen = false;
@@ -84511,6 +84517,81 @@ void main() {
       const at = this.player.pos;
       if (this.traffic && this.traffic.repopulate) this.traffic.repopulate(at.x, at.z);
       VH.events.emit('cars:reset', {});
+    },
+
+    /**
+     * Somewhere safe to stand near (x, z): the pavement beside the nearest
+     * road (Jay's side first, then the other), else the road itself, else
+     * the plaza where the game starts.
+     */
+    safeSpotNear(x, z) {
+      const ph = this.physics;
+      const wf = this.layout.waterfront;
+      const lane = this.roadnet && this.roadnet.nearestLane(x, z, undefined, 5000);
+      if (lane) {
+        const r = lane.road;
+        const across = r.axis === 'z' ? x - r.coord : z - r.coord;
+        const side = Math.sign(across) || 1;
+        const off = r.width / 2 + 2.2;
+        const at = (k) => (r.axis === 'z' ? { x: r.coord + k * off, z: lane.along } : { x: lane.along, z: r.coord + k * off });
+        for (const t of [at(side), at(-side), { x: lane.x, z: lane.z }]) {
+          if (wf && t.x > wf.seawallX - 0.5) continue;
+          const y = ph.groundHeight(t.x, t.z, 3);
+          if (y < -0.5) continue; // not the sea floor
+          if (ph.overlaps(t.x, t.z, 0.45, y + 0.3, y + 1.7)) continue;
+          return { x: t.x, y, z: t.z, yaw: lane.heading };
+        }
+      }
+      const sp = this.layout.spawn;
+      return { x: sp.x, y: undefined, z: sp.z, yaw: sp.yaw || 0 };
+    },
+
+    /**
+     * Get Jay out of somewhere he can't leave (the bay, a gap in the world):
+     * out of any car, onto the nearest street. The police keep whatever they
+     * knew. why: 'water' (he swims back) or 'menu' (the pause menu).
+     */
+    returnToCity(why) {
+      const p = this.player;
+      if (p.state === 'dead' || this._arresting) return false;
+      if (this.challenges && this.challenges.run) this.challenges.abandon(true);
+      const v = this.vehicles;
+      if (v.entering) {
+        if (v.entry) v.entry.abort(v.entering);
+        v.entering = null;
+        p.enteringVehicle = false;
+      }
+      if (p.inVehicle) v.exitVehicle();
+      p.frozen = false;
+      p.parachute = null;
+      const s = this.safeSpotNear(p.pos.x, p.pos.z);
+      p.teleport(s.x, s.z, s.yaw, s.y);
+      p.model.setVisible(true);
+      this.cameraRig.snapBehind(p);
+      this.hud.setFade(1, 0);
+      requestAnimationFrame(() => this.hud.setFade(0, 900));
+      this.hud.showToast(why === 'water' ? 'Jay swam back to shore.' : 'Back on the street.');
+      VH.events.emit('player:unstuck', { why });
+      return true;
+    },
+
+    /** In the bay on foot, or sunk in a car or the tank: he swims back to shore. */
+    _waterRescue(dt) {
+      const p = this.player;
+      const wf = this.layout.waterfront;
+      if (!wf || this.state !== 'playing' || p.state === 'dead' || this._arresting) {
+        this._wetT = 0;
+        return;
+      }
+      const v = p.inVehicle ? p.vehicle : null;
+      const pos = v ? v.pos : p.pos;
+      // Planes and helicopters deal with the water themselves.
+      const sunk = pos.x > wf.seawallX && pos.y < wf.waterLevel - 0.3 && !(v && (v.kind === 'plane' || v.kind === 'heli'));
+      this._wetT = sunk ? (this._wetT || 0) + dt : 0;
+      if (this._wetT > (v ? 2.5 : 1.2)) {
+        this._wetT = 0;
+        this.returnToCity('water');
+      }
     },
 
     giveMoney(amount, reason, quiet) {

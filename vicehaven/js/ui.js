@@ -251,6 +251,7 @@
         this._button('Settings', () => this.show('settings', true)),
         this._button('Progress', () => this.show('progress', true)),
         this._button('Statistics', () => this.show('stats', true)),
+        this._button('Stuck? Back to the street', () => this.actions.unstick && this.actions.unstick()),
         this._button('Save game', () => this.actions.save()),
         this._button('Quit to Menu', () => this.actions.quitToTitle())
       );

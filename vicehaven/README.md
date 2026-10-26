@@ -159,6 +159,8 @@ look up) once you're fast enough. Land gently on something flat.
 
 **At Fresh Coat (the body shop):** drive in and stop; **A / D** pick a colour, **E** sprays, drive off to leave.
 
+**Stuck?** If Jay ends up in the bay he swims back to shore by himself. Anywhere else, pause (Esc) and choose **Stuck? Back to the street**: he is put on the pavement beside the nearest road (out of any car, wanted level unchanged).
+
 **Photo mode** (pause menu → Photo mode)
 
 | Key | Action |
@@ -622,6 +624,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] In a cab out by the airport, press P: a fare is waiting nearby and may want the terminal, the fort gate or Northgate
 - [ ] Settings → Gameplay → Always daytime: night turns to midday at once and stays that way
 - [ ] At night press T: midday at once, with a notice; T again brings the cycle back; the pause menu button says On / Off to match
+- [ ] Walk or drive into the bay: after a second or two Jay swims back and stands on Seawall Drive; pause → "Stuck? Back to the street" puts him on the nearest pavement from anywhere
 - [ ] Settings → Graphics → Film grain: Off, Light (default) and Strong change the picture live
 - [ ] Settings → Gameplay → Weather → Stormy: rain streaks, wet shiny roads, lightning and thunder; under a bridge the rain stops in front of you
 - [ ] Drive into a Fresh Coat with a star or two and nobody watching: pick a colour, E, the door comes down, the car comes out repainted and repaired and the stars are gone
