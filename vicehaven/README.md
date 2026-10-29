@@ -264,8 +264,12 @@ Mae. They change scenes, who turns up when it counts, and which of the
 three endings you can reach.
 
 **Failing.** If a job fails (Jay is arrested or knocked out, someone who
-matters dies, the cops notice a quiet job), press **E** to retry, from the
-last checkpoint if there was one.
+matters dies, the cops notice a quiet job), press **E** to retry from the
+last checkpoint. **Every new objective is a checkpoint:** the retry puts
+everything back as it was when that objective began (the cars and people
+where they were, the ones already dealt with still gone, Jay back in the
+car he was driving with his crew, the police on him if the job had raised
+them, the gear the job handed out for the fight).
 
 ### Between jobs
 
