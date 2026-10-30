@@ -836,6 +836,7 @@
       if (g.missions && g.missions.run) return who + "Not while you're on a job, Jay.";
       if (v.kind !== 'car') return who + (v.kind === 'tank' ? 'A tank? Where would I even sell a tank?' : "That won't fit on the ramp. Cars only.");
       if (v.missionOwned || v.role === 'mission') return who + "That's a job car. Not touching it.";
+      if (v.encounter) return who + (v.encounter === 'cashvan' ? "An armoured van? It's got more trackers than bolts. Not a chance." : "Half the street saw that one. Too hot, even for me.");
       if (v.keep || v.storyName) return who + "That one's yours to keep, Jay. I'm not stripping it.";
       if (g.police && g.police.level > 0 && g.police.seen) return who + 'Lose the police first. Nobody opens up with them watching.';
       const oj = g.oddJobs;

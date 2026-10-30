@@ -376,8 +376,9 @@ find marks two more on the map; 20 found pays $10,000 and all 40 pays
 $50,000.
 
 **Business upgrades.** At the sign of a business you own, **E** buys the
-next upgrade: a new sign, a refit, an expansion (40%, 70% and 100% of the
-price). Each adds 30% of the base takings. The payday note breaks the pay
+next upgrade: a new sign, a refit, an expansion (30%, 50% and 75% of the
+price). Each adds half the base takings again, so a fully upgraded business
+pays 2.5 times as much. The payday note breaks the pay
 down by takings, upgrades and the Rep bonus.
 
 ## What's in the city
@@ -547,11 +548,12 @@ press **E**. Every eight minutes of play is payday, and the takings from
 everything Jay owns go straight into his pocket. Gold houses on the map are
 for sale, green ones are yours.
 
-**Achievements and 100%.** 42 achievements (story, driving, flying, crime,
-exploring and life) pop up as you earn them and stay earned across new
+**Achievements and 100%.** 68 achievements (story, driving, flying,
+combat, crime, the hustle, exploring and life) pop up as you earn them and stay earned across new
 games. **Pause → Progress** shows your completion: story jobs, side
-stories, races and jobs, stunt jumps, lanterns, districts, businesses and
-achievements, with every achievement and how to get it.
+stories, races and jobs, stunt jumps, lanterns, districts, businesses,
+cash stashes, odd job levels and achievements, with every achievement and
+how to get it.
 
 **Photo mode.** Pause and choose **Photo mode**: the world freezes and the
 camera comes loose (up to 60 m from Jay). Pick a filter (Vivid, Noir,

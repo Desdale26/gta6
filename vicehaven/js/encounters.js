@@ -1095,6 +1095,9 @@
       }
       for (const v of e.cars) {
         if (v.removed) continue;
+        // An ordinary car again (the chop shop turns encounter cars away while it runs).
+        v.encounter = null;
+        v.storyName = null;
         const mine = g.player.vehicle === v || (g.vehicles.entering && g.vehicles.entering.v === v);
         if (hard && !mine) {
           g.vehicles.remove(v);
@@ -2008,7 +2011,7 @@
       this._audio('click');
       e.tourist.brain.set('stand', { wave: false, phone: false });
       this._line(say('photoDone'));
-      this._finish(e, 'done', { pay: round(rand(150, 300), 10), good: true, pop: 'SAY CHEESE', text: 'A lovely holiday snap.' });
+      this._finish(e, 'done', { pay: round(rand(200, 350), 10), good: true, pop: 'SAY CHEESE', text: 'A lovely holiday snap.' });
     }
 
     // ------------------------------------------------------- jacking

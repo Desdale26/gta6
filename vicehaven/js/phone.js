@@ -135,7 +135,7 @@
     race: ['Pull up beside the racer to take the challenge, then beat them to the finish.', [500, 1500]],
     wallet: ['Somebody dropped a wallet. Give it back, or keep the cash.', [200, 550]],
     carthief: ['Stop the thief before he gets away in somebody\'s car.', [200, 900]],
-    tourist: ['A tourist wants a holiday photo. Walk up and press E.', [150, 300]],
+    tourist: ['A tourist wants a holiday photo. Walk up and press E.', [200, 350]],
   };
 
   // Daily Hustles (dailies.js ids) → the thing to do that gets them done: a kind
@@ -1303,7 +1303,7 @@
               // The sign's own prompt names the next upgrade ('Upgrade <name>: New sign').
               const what = q.item && typeof q.item.label === 'string' && q.item.label.indexOf(': ') > 0 ? q.item.label.split(': ').pop() : '';
               add({ id: 'up:' + q.id, kind: 'property', cat: 'buy', icon: 'owned', title: 'Upgrade ' + q.name, tag: 'UPGRADE ' + (tier + 1) + '/3', tone: cash >= cost ? 'good' : '',
-                how: (what ? what + ': ' : '') + 'press ' + key('interact') + ' at its sign. Each upgrade adds 30% to the takings.' + (typeof inc === 'number' ? ' It pays ' + money(inc) + ' a payday now.' : ''),
+                how: (what ? what + ': ' : '') + 'press ' + key('interact') + ' at its sign. Each upgrade adds half the base takings again.' + (typeof inc === 'number' ? ' It pays ' + money(inc) + ' a payday now.' : ''),
                 pay: money(cost), x: q.sign.x, z: q.sign.z, gps: q.name });
             }
           }

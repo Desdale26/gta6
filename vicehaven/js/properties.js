@@ -10,7 +10,7 @@
  *
  * Once a business is his, its sign sells him upgrades (E again): a new
  * sign out front, a refit, then an expansion, each costing a share of what
- * the place cost and each adding 30% to its takings. Street Rep's payday
+ * the place cost and each adding half the base takings again. Street Rep's payday
  * perk (rep.js) adds its share on top of the lot, and the payday note
  * shows where the money came from.
  *
@@ -44,11 +44,12 @@
   ];
   // Upgrades, in order: [name, share of the business's price it costs].
   const UPGRADES = [
-    ['New sign', 0.4],
-    ['Refit', 0.7],
-    ['Expansion', 1.0],
+    ['New sign', 0.3],
+    ['Refit', 0.5],
+    ['Expansion', 0.75],
   ];
-  const UPGRADE_BOOST = 0.3; // each upgrade adds this share of the base takings
+  const UPGRADE_BOOST = 0.5; // each upgrade adds this share of the base takings
+  const BOOST_TEXT = '+' + Math.round(UPGRADE_BOOST * 100) + '%';
 
   /** "7:42" */
   function clock(s) {
@@ -135,7 +136,7 @@
       if (owned.next) {
         g.fillStyle = '#ffb347';
         g.font = font('700', 24);
-        g.fillText('Next upgrade: ' + owned.next.name + '  ·  ' + money(owned.next.cost) + '  ·  +30% takings', W / 2, 236, W - 40);
+        g.fillText('Next upgrade: ' + owned.next.name + '  ·  ' + money(owned.next.cost) + '  ·  ' + BOOST_TEXT + ' takings', W / 2, 236, W - 40);
       }
       g.strokeStyle = full ? '#ffd84a' : '#ffb347';
       g.lineWidth = full ? 14 : 10;
@@ -263,7 +264,7 @@
       if (g.audio.purchase) g.audio.purchase();
       const n = Object.keys(this.owned).length;
       const up = UPGRADES[0];
-      g.hud.notify({ title: p.name + ' is yours', text: 'It pays ' + VH.util.formatMoney(p.income) + ' every payday (every ' + PAYDAY / 60 + ' minutes of play). ' + n + ' of ' + this.list.length + ' businesses owned. Its sign sells upgrades too: ' + up[0] + ' for ' + VH.util.formatMoney(this.upgradeCost(p)) + ', +30% takings.', icon: '🏢', duration: 8000 });
+      g.hud.notify({ title: p.name + ' is yours', text: 'It pays ' + VH.util.formatMoney(p.income) + ' every payday (every ' + PAYDAY / 60 + ' minutes of play). ' + n + ' of ' + this.list.length + ' businesses owned. Its sign sells upgrades too: ' + up[0] + ' for ' + VH.util.formatMoney(this.upgradeCost(p)) + ', ' + BOOST_TEXT + ' takings.', icon: '🏢', duration: 8000 });
       VH.events.emit('property:bought', { p });
       this._refocus(p);
     }
@@ -295,7 +296,7 @@
       const next = UPGRADES[t + 1];
       g.hud.notify({
         title: p.name + ': ' + name,
-        text: 'Takings up to ' + money(this._takings(p)) + ' a payday (+30%). ' + (next ? 'Next: ' + next[0].toLowerCase() + ' for ' + money(this.upgradeCost(p)) + '.' : 'Fully upgraded: ★★★'),
+        text: 'Takings up to ' + money(this._takings(p)) + ' a payday (' + BOOST_TEXT + '). ' + (next ? 'Next: ' + next[0].toLowerCase() + ' for ' + money(this.upgradeCost(p)) + '.' : 'Fully upgraded: ★★★'),
         icon: '🏢',
         duration: 7000,
       });
