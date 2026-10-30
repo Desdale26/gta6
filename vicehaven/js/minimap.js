@@ -86,7 +86,7 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, gunshop: 0, property: 0, owned: 1, pickup: 0, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, gunshop: 0, chopshop: 0, property: 0, owned: 1, pickup: 0, stash: 1, oddjob: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, encounter: 3, hustle: 3, police: 3, waypoint: 4, mission: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
@@ -108,6 +108,11 @@
     ['gunshop', 'Bayline Arms (guns, ammo)'],
     ['property', 'Business for sale'],
     ['owned', 'Your business'],
+    ['chopshop', 'Busted Spanner chop shop'],
+    ['oddjob', 'Odd job (work vehicle)'],
+    ['encounter', 'Something happening'],
+    ['hustle', 'Hustle target'],
+    ['stash', 'Cash stash'],
     ['plane', 'Aircraft'],
     ['tank', 'Military vehicle'],
     ['waypoint', 'Your waypoint'],
@@ -437,6 +442,96 @@
         g.arc(x, y, 0.9, 0, TAU);
         g.fill();
       }
+    },
+    // A spanner on an orange garage tile: a Busted Spanner chop shop (sell any car).
+    chopshop(g) {
+      roundRectPath(g, -6.8, -6.8, 13.6, 13.6, 3.4);
+      inkThenFill(g, '#ff8a3c', 3);
+      g.save();
+      g.rotate(-Math.PI / 4);
+      g.fillStyle = '#1a0f08';
+      g.fillRect(-1.15, -2.2, 2.3, 7.4);
+      g.beginPath();
+      g.arc(0, -3.4, 2.9, 0, TAU);
+      g.fill();
+      g.fillStyle = '#ff8a3c';
+      g.fillRect(-0.95, -6.8, 1.9, 3.6);
+      g.restore();
+    },
+    // A briefcase: an odd job's work vehicle waiting at its depot.
+    oddjob(g) {
+      g.beginPath();
+      g.moveTo(-2.4, -3.2);
+      g.lineTo(-2.4, -5.4);
+      g.lineTo(2.4, -5.4);
+      g.lineTo(2.4, -3.2);
+      g.lineWidth = 3.4;
+      g.strokeStyle = INK;
+      g.stroke();
+      g.lineWidth = 1.5;
+      g.strokeStyle = '#e8b06a';
+      g.stroke();
+      roundRectPath(g, -7, -3.4, 14, 10, 2);
+      inkThenFill(g, '#e8b06a', 3);
+      g.fillStyle = 'rgba(60, 34, 10, 0.85)';
+      g.fillRect(-7, 0.4, 14, 1.4);
+      g.fillStyle = '#fff3dc';
+      g.fillRect(-1.2, -0.2, 2.4, 2.6);
+    },
+    // An exclamation mark in a hot disc: a street encounter under way (it pulses).
+    encounter(g) {
+      glow(g, 14, '255,90,110', 0.5);
+      g.beginPath();
+      g.arc(0, 0, 7, 0, TAU);
+      inkThenFill(g, sunsetGradient(g, -7, -7, 7, 7), 3.2);
+      g.lineWidth = 1.4;
+      g.strokeStyle = '#ffffff';
+      g.stroke();
+      g.fillStyle = '#ffffff';
+      roundRectPath(g, -1.25, -4.6, 2.5, 6, 1.1);
+      g.fill();
+      g.beginPath();
+      g.arc(0, 3.5, 1.35, 0, TAU);
+      g.fill();
+    },
+    // A small gold money bag: a hidden cash stash.
+    stash(g) {
+      glow(g, 10, '255,200,60', 0.35);
+      g.beginPath();
+      g.moveTo(-1.8, -3.6);
+      g.bezierCurveTo(-6.4, -1.4, -6.6, 6.2, 0, 6.2);
+      g.bezierCurveTo(6.6, 6.2, 6.4, -1.4, 1.8, -3.6);
+      g.closePath();
+      inkThenFill(g, '#f5c542', 2.8);
+      g.beginPath();
+      g.moveTo(-2.6, -6.2);
+      g.lineTo(2.6, -6.2);
+      g.lineTo(1.6, -3.4);
+      g.lineTo(-1.6, -3.4);
+      g.closePath();
+      inkThenFill(g, '#ffe08a', 2.2);
+      g.fillStyle = INK;
+      g.font = '700 7px ' + FONT;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('$', 0, 1.9);
+    },
+    // A green target: somewhere a hustle wants Jay to go.
+    hustle(g) {
+      glow(g, 12, '125,255,168', 0.4);
+      g.beginPath();
+      g.arc(0, 0, 6.8, 0, TAU);
+      inkThenFill(g, '#0d2a1c', 3);
+      g.lineWidth = 1.6;
+      g.strokeStyle = '#7dffa8';
+      g.stroke();
+      g.beginPath();
+      g.arc(0, 0, 3.8, 0, TAU);
+      g.stroke();
+      g.beginPath();
+      g.arc(0, 0, 1.5, 0, TAU);
+      g.fillStyle = '#ffffff';
+      g.fill();
     },
     // A house with a dollar sign: a business for sale (gold), or one Jay owns (green).
     property(g) {
@@ -1865,6 +1960,17 @@
       let alpha = clamped && type !== 'objective' && type !== 'mission' ? 0.85 : 1;
       if (bl.flash && type !== 'police') alpha *= 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * TAU * (this._reduced ? 0.8 : 2.6)));
       if (type === 'objective' && !this._reduced) scale *= 1 + 0.08 * Math.sin(t * TAU * 1.2);
+      // A street encounter pulses, with a ring going out from it.
+      if (type === 'encounter' && !this._reduced) {
+        const k = (t * 0.9) % 1;
+        g.globalAlpha = 0.75 * (1 - k);
+        g.beginPath();
+        g.arc(X, Y, (7 + 13 * k) * scale, 0, TAU);
+        g.lineWidth = 2;
+        g.strokeStyle = 'rgb(255, 96, 120)';
+        g.stroke();
+        scale *= 1 + 0.12 * Math.sin(t * TAU * 1.6);
+      }
       g.globalAlpha = alpha;
       if (rotate) this._drawRot(g, d, sprite, X, Y, rot0 - bl.heading, scale);
       else {

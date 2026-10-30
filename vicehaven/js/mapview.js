@@ -19,7 +19,7 @@
  *     in), and labels only show where they fit and the zoom suits them
  *   - an overview of the whole map with the view marked; a GPS bar with
  *     the distance and drive time; arrows to an off-screen objective
- *   - keyboard (WASD, Q/E, C, G, Z, Tab, /, 1-7, O, P, Space) and gamepad
+ *   - keyboard (WASD, Q/E, C, G, Z, Tab, /, 1-8, O, P, Space) and gamepad
  *     (sticks, triggers, A/B/X/Y, LB/RB) control, with a centre reticle
  *
  * The game pauses while it is open (js/main.js). Everything is drawn on
@@ -54,6 +54,7 @@
   const CATS = [
     { id: 'story', label: 'Story', icon: 'mission' },
     { id: 'jobs', label: 'Side jobs', icon: 'race' },
+    { id: 'hustles', label: 'Hustles', icon: 'chopshop' },
     { id: 'shops', label: 'Shops', icon: 'store' },
     { id: 'vehicles', label: 'Vehicles', icon: 'plane' },
     { id: 'places', label: 'Places', icon: 'landmark' },
@@ -76,6 +77,12 @@
     mission: { name: 'Story job', cat: 'story', cluster: true, labelAt: 0.4, tip: 'Walk into the marker to start the job.' },
     race: { name: 'Street race', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Drive into the marker to start the race.' },
     challenge: { name: 'Side job', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Walk into the marker to start.' },
+    // The Hustle update's money makers.
+    encounter: { name: 'Something happening', cat: 'hustles', edge: true, labelAt: 0, tip: 'A street encounter, happening now. Get there before it’s over: the phone (P) says what it is.' },
+    hustle: { name: 'Hustle target', cat: 'always', edge: true, labelAt: 0 },
+    chopshop: { name: 'Chop shop', cat: 'hustles', cluster: true, labelAt: 1.15, tip: 'Busted Spanner: drive any car into the bay and stop for cash on the spot. Today’s hot list pays two and a half times.' },
+    oddjob: { name: 'Odd job', cat: 'hustles', cluster: true, labelAt: 1.0, tip: 'A work vehicle waits here: get in and press P to go on duty. Ten levels of calls, more pay at each.' },
+    stash: { name: 'Cash stash', cat: 'hustles', cluster: true, labelAt: 1.6, tip: 'A bag of cash hidden here. Walk over it to take it.' },
     store: { name: 'Corner shop', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Snacks inside. Point a gun at the clerk to hold it up, but the police will come.' },
     property: { name: 'Business for sale', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Walk up to the For Sale sign and press E to buy it. It pays out every payday (every eight minutes of play).' },
     owned: { name: 'Your business', cat: 'shops', cluster: true, labelAt: 1.15, tip: 'Yours. The takings arrive every payday.' },
@@ -196,7 +203,7 @@
       this._fw = this._fh = 0;
       this._fd = 1;
       const p = loadJSON(PREFS_KEY, {}) || {};
-      this.show = Object.assign({ story: true, jobs: true, shops: true, vehicles: true, places: true, police: true, pins: true }, p.show);
+      this.show = Object.assign({ story: true, jobs: true, hustles: true, shops: true, vehicles: true, places: true, police: true, pins: true }, p.show);
       this.overlay = Object.assign({ districts: false, streets: true, grid: false }, p.overlay);
       this.sideOpen = p.side !== false;
       this._zoomRel = typeof p.zoom === 'number' && isFinite(p.zoom) ? p.zoom : 0;
@@ -853,7 +860,7 @@
       this._keys.add(e.code);
       if (e.repeat) return;
       const code = e.code;
-      if (/^Digit[1-7]$/.test(code)) {
+      if (/^Digit[1-8]$/.test(code)) {
         this.toggleCat(CATS[+code.slice(5) - 1].id);
         return;
       }
@@ -1010,7 +1017,7 @@
     }
 
     _counts() {
-      const n = { story: 0, jobs: 0, shops: 0, vehicles: 0, places: 0, police: 0, pins: this.pins.length };
+      const n = { story: 0, jobs: 0, hustles: 0, shops: 0, vehicles: 0, places: 0, police: 0, pins: this.pins.length };
       for (const bl of (this.state && this.state.blips) || []) {
         const T = TYPES[bl.type];
         if (T && n[T.cat] !== undefined && bl.type !== 'pin') n[T.cat]++;
@@ -1134,7 +1141,7 @@
         if (bl.type === 'store') open.add(Math.round(bl.x) + ',' + Math.round(bl.z));
         if (!bl.label || bl.type === 'waypoint' || bl.type === 'pin' || bl.type === 'store' || bl.type === 'police' || bl.type === 'enemy' || bl.type === 'car') continue;
         const T = TYPES[bl.type] || TYPES.mission;
-        const sec = bl.type === 'objective' ? 'now' : T.cat === 'story' || T.cat === 'jobs' ? 'jobs' : T.cat === 'vehicles' ? 'vehicles' : T.cat === 'shops' ? 'shops' : 'places';
+        const sec = bl.type === 'objective' || bl.type === 'encounter' || bl.type === 'hustle' ? 'now' : T.cat === 'story' || T.cat === 'jobs' || T.cat === 'hustles' ? 'jobs' : T.cat === 'vehicles' ? 'vehicles' : T.cat === 'shops' ? 'shops' : 'places';
         add({ type: bl.type, name: bl.label, x: bl.x, z: bl.z }, sec, T.name + ' · ' + this._districtName(bl.x, bl.z));
       }
       this.pins.forEach((p) => add({ type: 'pin', name: p.n, x: p.x, z: p.z, pin: p }, 'pins', 'Your pin · ' + this._districtName(p.x, p.z)));

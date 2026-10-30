@@ -533,8 +533,8 @@
         if (dy) {
           // Rows: by their edges, so a tall open row doesn't hide the next one.
           along = dy > 0 ? b.top - a.top : a.bottom - b.bottom;
-          const ox = Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right));
-          across = ox + Math.abs(b.left + b.width / 2 - ax) * 0.15;
+          // Side by side: how far apart the edges are (0 if they overlap; ties go to the left-most).
+          across = Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right));
         } else {
           along = dx > 0 ? b.left - a.left : a.right - b.right;
           across = Math.abs(b.top + b.height / 2 - ay);
@@ -834,6 +834,29 @@
       }
       box.append(wid);
 
+      // Two small widgets: Street Rep and cash.
+      const minis = el('div', 'ph-minis');
+      const R = g.rep;
+      const rw = el('div', 'ph-mini-w is-rep');
+      this._nav(rw, 'widget:rep', () => this._go('rep'));
+      rw.append(el('span', 'ph-kicker', 'Street Rep'));
+      if (R && typeof R.level === 'number') {
+        const frac = R.next ? clamp((R.xp || 0) / R.next, 0, 1) : 1;
+        rw.append(el('b', 'ph-mini-big', 'Level ' + R.level));
+        const bar = el('span', 'ph-mini-bar');
+        const f = el('i');
+        f.style.width = Math.round(frac * 100) + '%';
+        bar.append(f);
+        rw.append(bar, el('small', '', R.next ? num(typeof R.toGo === 'number' ? R.toGo : R.next - R.xp) + ' XP to go' : 'Top level'));
+      } else rw.append(el('b', 'ph-mini-big', 'Soon'), el('small', '', 'Levels and perks'));
+      const bw = el('div', 'ph-mini-w is-cash');
+      this._nav(bw, 'widget:bank', () => this._go('bank'));
+      bw.append(el('span', 'ph-kicker', 'Cash'), el('b', 'ph-mini-big ph-money', money(g.player.money)));
+      const made = Object.keys(this.session).reduce((a, k) => a + this.session[k], 0);
+      bw.append(el('small', '', made > 0 ? '+' + money(made) + ' this session' : 'Nothing earned yet'));
+      minis.append(rw, bw);
+      box.append(minis);
+
       // The apps.
       const grid = el('div', 'ph-grid');
       for (const id of GRID) grid.append(this._appIcon(id));
@@ -1119,7 +1142,7 @@
           add({ id: 'chop:' + sh.id, kind: 'chop', cat: 'cash', icon: 'chopshop', title: sh.name, tag: sh.open === false ? 'SHUT' : hot.some((h) => !h.sold) ? 'HOT LIST' : '',
             tone: sh.open === false ? 'off' : 'hot',
             how: sh.open === false ? 'Shut for now: the police were round. Try another garage.' : 'Drive any car into the bay and stop: cash on the spot. Damage costs; a police car pays well but brings heat.',
-            pay: range(round10(400 * k * 0.3), round10(top)), x: sh.x, z: sh.z, hot });
+            pay: 'Up to ' + money(round10(top)), x: sh.x, z: sh.z, hot });
         }
       }
 
@@ -1154,7 +1177,7 @@
         const s0 = this._nearest(stores.list.filter((s) => safe(() => stores.isOpen(s), true)), (s) => s.door);
         if (s0) {
           add({ id: 'holdup', kind: 'holdup', cat: 'cash', icon: 'store', title: 'Hold up ' + safe(() => stores.brandName(s0), 'a corner shop'),
-            how: 'Point a gun at the clerk and keep him calm while he fills the bag. Brings the police.', pay: range(240, 760) + ' + safe', x: s0.door.x, z: s0.door.z });
+            how: 'Point a gun at the clerk and keep him calm while he fills the bag. The safe pays more. Brings the police.', pay: range(240, 760), x: s0.door.x, z: s0.door.z });
         }
       }
 
@@ -1329,16 +1352,16 @@
       if (url) ic.style.backgroundImage = 'url(' + url + ')';
       else ic.append(el('span', 'ph-item-emoji', it.emoji || '•'));
       const main = el('div', 'ph-item-main');
-      const t = el('div', 'ph-item-title', it.title);
-      main.append(t);
+      const top = el('div', 'ph-item-top');
+      top.append(el('span', 'ph-item-title', it.title));
+      if (has) top.append(el('span', 'ph-item-dist', distText(it.d) + ' ' + it.dir));
+      main.append(top);
       const sub = el('div', 'ph-item-sub');
       if (it.tag) sub.append(el('span', 'ph-tag', it.tag));
+      if (it.pay) sub.append(el('b', 'ph-item-pay', it.pay));
       sub.append(el('span', 'ph-item-how', it.how || ''));
       main.append(sub);
-      const side = el('div', 'ph-item-side');
-      if (it.pay) side.append(el('b', 'ph-item-pay', it.pay));
-      if (has) side.append(el('span', 'ph-item-dist', distText(it.d) + ' ' + it.dir));
-      row.append(ic, main, side);
+      row.append(ic, main);
 
       // Opens up when highlighted: the whole story, the hot list, and the GPS button.
       const more = el('div', 'ph-more');
@@ -1542,7 +1565,9 @@
       }
       if (spent > 0) {
         const sp = el('div', 'ph-spent');
-        sp.append(el('span', '', 'Money out (shops, guns, businesses, bills)'), el('b', '', '−' + money(spent)));
+        const what = el('span', '');
+        what.append(el('span', '', 'Money out'), el('small', '', 'shops, guns, businesses, bills'));
+        sp.append(what, el('b', '', '−' + money(spent)));
         s.append(sp);
       }
 
