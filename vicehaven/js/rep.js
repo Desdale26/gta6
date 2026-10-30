@@ -493,7 +493,7 @@
       this._banners.push(Object.assign({ lines: [] }, b));
     }
 
-    /** Show the next banner once the screen is free: no cutscene, no job result card. */
+    /** Show the next banner once the screen is free: no cutscene, no centre banner, no job result card. */
     _showBanners() {
       if (!this._banners.length || !this.bannerEl) return;
       const now = performance.now();
@@ -501,6 +501,8 @@
       const g = this.game;
       const body = document.body.classList;
       if (g.state !== 'playing' || body.contains('cutscene') || body.contains('in-menu')) return;
+      // Wait for a centre banner (STUNT JUMP, SOLD, MASTERED...) given in the same breath.
+      if (g.hud && now < (g.hud.cbannerUntil || 0)) return;
       const mr = g.hud && g.hud.mResult;
       if (mr && mr.classList.contains('show') && !(this._mrWait > 0 && now - this._mrWait > 9000)) {
         if (!this._mrWait) this._mrWait = now;

@@ -1171,7 +1171,7 @@
           const lv = clamp(j.level || 1, 1, j.maxLevel || 10);
           const pay = round10((150 + (350 * (lv - 1)) / 9) * perk('oddjob'));
           const dp = j.depot || {};
-          add({ id: 'odd:' + j.id, kind: 'oddjob', cat: 'cash', icon: 'oddjob', title: j.name + (dp.name ? ' · ' + dp.name : ''),
+          add({ id: 'odd:' + j.id, kind: 'oddjob', cat: 'jobs', icon: 'oddjob', title: j.name + (dp.name ? ' · ' + dp.name : ''),
             tag: j.active ? 'ON DUTY' : j.mastered ? 'MASTERED' : 'LEVEL ' + lv + '/' + (j.maxLevel || 10), tone: j.active ? 'live' : '',
             how: (j.how || 'Get in the work vehicle and press ' + key('phone')) + '. Ten levels: ' + money(5000) + ' and ' + (j.perk || 'a perk') + ' for clearing them all.',
             pay: '~' + money(pay) + ' a call', x: dp.x, z: dp.z, gps: dp.name || j.name });
@@ -1385,7 +1385,9 @@
       if (this._filter === 'all') list = list.filter((it) => !(it.id.indexOf('buy:') === 0 && !it.afford));
       list.sort((a, b) => (b.pin || 0) - (a.pin || 0) || (a.info ? a.hintD || Infinity : a.d) - (b.info ? b.hintD || Infinity : b.d));
       if (!list.length) {
-        s.append(this._soon('More to do', this._filter === 'all' ? 'Nothing to show yet.' : 'Nothing here right now. Try another tab.'));
+        const c = el('div', 'ph-card ph-soon');
+        c.append(el('b', '', 'Nothing here yet'), el('p', '', this._filter === 'all' ? 'Keep playing: new things turn up as the story goes on.' : 'Nothing here right now. Try another tab.'));
+        s.append(c);
         return;
       }
       for (const it of list) {

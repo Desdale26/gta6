@@ -140,7 +140,7 @@
 .rep-float {
   position: absolute;
   left: 2.65rem;
-  bottom: 62%;
+  bottom: 100%; /* above the pill, clear of the STREET REP caption */
   font-size: 0.78rem;
   font-weight: 800;
   font-style: italic;

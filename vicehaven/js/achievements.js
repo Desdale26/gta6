@@ -406,7 +406,7 @@
       out.stashes = st && st.total ? st.found || 0 : 0;
       out.stashesTotal = st && st.total ? st.total : 0;
       const oj = g.oddJobs && g.oddJobs.jobs ? g.oddJobs.jobs() : [];
-      out.oddLevels = oj.reduce((n, j) => n + Math.min(j.maxLevel || 10, j.best || j.level || 0), 0);
+      out.oddLevels = oj.reduce((n, j) => n + Math.min(j.maxLevel || 10, j.cleared || 0), 0);
       out.oddLevelsTotal = oj.reduce((n, j) => n + (j.maxLevel || 10), 0);
       return out;
     }

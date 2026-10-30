@@ -526,10 +526,17 @@ const course = await game(() => VH.game.world.courses && VH.game.world.courses.y
 check(course === 10, 'Meridian Yard builds the Yard Run course (' + course + ' checkpoints)');
 await game(() => { localStorage.removeItem('vicehaven.records.v1'); VH.game.challenges.records = {}; });
 const money2 = await game(() => VH.game.player.money);
+// Tally the money by reason: the gold's Street Rep can level Jay up, and that bonus is paid too.
+await game(() => {
+  const paid = (window.__smokePaid = {});
+  window.__smokePaidOff = VH.events.on('money:changed', (e) => { paid[e.reason] = (paid[e.reason] || 0) + e.delta; });
+});
 const yard = await botRun('yard_run', { 6: [[-153.5, 52, 0.5], [-151, 52, 0.5]] });
 check(yard.view && !yard.failed && yard.view.medal === 'gold', 'a clean Yard Run finishes with gold (' + (yard.view ? yard.view.main : yard.log.join(' ')) + ')');
 check(yard.record && yard.record.ghost && yard.record.ghost.length > 100, 'the best run is recorded for the ghost (' + (yard.record && yard.record.ghost ? yard.record.ghost.length : 0) + ' samples)');
-check((await game(() => VH.game.player.money)) === money2 + 500, 'gold pays the $500 reward once');
+const yardPaid = await game(() => { window.__smokePaidOff(); return { paid: window.__smokePaid, money: VH.game.player.money }; });
+const yardOther = Object.keys(yardPaid.paid).filter((r) => r !== 'Yard Run').reduce((n, r) => n + yardPaid.paid[r], 0);
+check(yardPaid.paid['Yard Run'] === 500 && yardPaid.money === money2 + 500 + yardOther, 'gold pays the $500 reward once (' + JSON.stringify(yardPaid.paid) + ')');
 // Second attempt: the ghost runs alongside.
 await game(() => { VH.game.challenges._closeResults(); VH.game.challenges.start('yard_run'); VH.game.advance(3.5); });
 await hold(['KeyW'], 1.5);

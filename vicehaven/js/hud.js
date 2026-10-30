@@ -254,6 +254,7 @@
       this.cbanner.classList.remove('show');
       void this.cbanner.offsetWidth;
       this.cbanner.classList.add('show');
+      this.cbannerUntil = performance.now() + 2300; // the hud-banner animation (2.2 s); rep.js queues its cards behind it
     }
 
     /** o = { x%, y%, onScreen, angle, dist, finish } or null to hide. */
