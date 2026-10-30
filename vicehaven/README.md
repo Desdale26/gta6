@@ -319,6 +319,67 @@ balcony. Tuli on the door won't let you in with the police after you.
 
 ---
 
+## Making money (the Hustle update, v2.0)
+
+There is always something to do between story jobs, and most of it pays.
+Press **P** for **Jay's phone**: it lists all of this, how far away it is,
+and sets the GPS for you. The game pauses while the phone is open.
+
+**Street Rep.** Everything earns Rep: story and side jobs, races, hold-ups,
+taxi fares, stunt jumps, lanterns, chop shops, odd jobs, street
+encounters, stashes, businesses and achievements (the small things, like
+near misses, are rate-limited). Levels run from 1 to 50, quick at first.
+Each level pays $200 times the new level, and 25 perks come along the way:
+bigger business paydays, chop shop, odd job, taxi and stash bonuses, money
+off at Bayline Arms, and up to +75 max health and +75 max armour. The
+badge next to your money shows the level and XP bar.
+
+**Daily Hustles.** Three tasks every in-game day (24 real minutes, rolling
+over at 06:00), drawn from more than 30 kinds, sized to your Rep level.
+Each pays $750 to $2,500 plus Rep. Finish all three for a streak bonus of
+$1,000 times the streak (up to 7 days running); miss a day and the streak
+starts again.
+
+**Busted Spanner chop shops.** Three garages in the rough ends of town:
+Old Market, the docks end of Harbor Point and the south side of Palm
+Crescent (the spanner icon). Drive any car into the bay and stop, and the
+crew strip it: about $400 for a hatchback, $600 for a saloon, $900 for a
+muscle car and up to $2,500 for a Zephyr, down to 30% if it is wrecked.
+The first of each model on the daily hot list (Gus texts it to you) pays
+2.5 times, and the sixth car of the same model in a day pays half. A
+police car sells, but its tracker brings two stars. Job cars, named cars,
+aircraft and the tank are turned away.
+
+**Odd jobs.** Press **P** in a work vehicle to go on duty, and again to go
+off: **Paramedic** (the Medic One ambulance: get the injured to Mercy
+General before the clock runs out, gently), **Vigilante** (any police car:
+stop a fleeing suspect by boxing them in, ramming, or tailing them till
+they pull over) and **Courier** (a Porter or Hauler van: parcels across the
+city, a tip for speed, fragile ones hate knocks). Each has ten levels,
+$150 to $500 a call plus tips; clearing level 10 pays $5,000 and a perk
+for good (+25 max health, +25 max armour or +15% courier pay). The work
+vehicles wait at depots (the briefcase icon) and taking one is no crime.
+
+**Street encounters.** Every couple of minutes of free roam something
+happens near Jay (the pulsing **!**): an armoured cash van doing its rounds
+(crack the back doors open for $1,500 to $3,000 in bags, and two stars),
+a mugging, someone who needs a lift against the clock, a street racer
+looking for a wager, a lost wallet, a car thief, a tourist who wants a
+photo. Help people and get thanked, or keep the money. Ignore one and it
+goes away. None happen during a story job or with more than one star.
+
+**Cash stashes.** 40 gold-glowing bags of cash hidden round the city, on
+rooftops (stairs at the doors), on the containers and the half-built frame
+at Meridian Yard, by the pier, behind the airport hangars, down alleys.
+$300 to $1,500 each; a chime gets louder as you get close. Every tenth
+find marks two more on the map; 20 found pays $10,000 and all 40 pays
+$50,000.
+
+**Business upgrades.** At the sign of a business you own, **E** buys the
+next upgrade: a new sign, a refit, an expansion (40%, 70% and 100% of the
+price). Each adds 30% of the base takings. The payday note breaks the pay
+down by takings, upgrades and the Rep bonus.
+
 ## What's in the city
 
 **Vehicles.** 19 cars, from the Pipit hatchback to the Bulwark armoured van
@@ -533,7 +594,8 @@ type a command:
 ```
 vicehaven/
 ├── index.html              page shell, loading and error screens, script order
-├── css/                    style, hud, menus, map, dialogue, weapon wheel, world (shop and base overlays)
+├── css/                    style, hud, menus, map, dialogue, weapon wheel, world (shop and base overlays),
+│                           hustle (Rep, dailies), phone, jobs (odd jobs), street (encounters)
 ├── js/
 │   ├── lib/three.min.js    three.js r186 as a classic script (MIT)
 │   ├── core.js · settings.js · input.js        namespace, events, maths; options; keyboard/mouse/pad
@@ -561,6 +623,9 @@ vicehaven/
 │   ├── data/               districts, challenges, weapons, the story (story.js = cast, places,
 │   │                       factions; story-act1…4*.js = the jobs, by act; story-extras.js = fares, races,
 │   │                       bounties, turf wars, texts, radio hosts)
+│   ├── rep.js · dailies.js · phone.js    Street Rep and perks; the Daily Hustles; Jay's phone (P)
+│   ├── chopshops.js · oddjobs.js · encounters.js · stashes.js   Busted Spanner garages; paramedic,
+│   │                       vigilante and courier duty; street encounters; the 40 cash stashes
 │   ├── minimap.js (radar) · mapview.js (full map) · hud.js · ui.js · debug.js · main.js
 │   ├── vehicles/models/    one file per aircraft model (albatross, skylark, talon, sparrow, warden), built with the kit in aircraft.js
 ├── docs/STORY_BIBLE.md     the whole story: characters, timeline, every job, choices, endings
@@ -652,7 +717,15 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] The Jolt stun gun drops someone for five seconds with no blood
 - [ ] Enemies hold visible guns, flinch when hit and drop their weapon or ammo; police cars have ammo in the back
 - [ ] Walk over an armour pickup at Meridian Yard: +50 armour, gone for three minutes
-- [ ] The title screen says v1.3 and What's new lists the update
+- [ ] Press P on foot: the phone rises from the bottom right and the game pauses; Hustles, Rep, Jobs and Bank open; Set GPS on a job draws the route; P or Esc closes it
+- [ ] Earn Rep (finish a taxi fare): the badge by the money fills, and a level-up banner pays $200 x the level
+- [ ] Finish all three Daily Hustles: the streak bonus pays $1,000 x the streak
+- [ ] Drive a car into a Busted Spanner bay (spanner icon) and stop: cash on the spot; a hot-list car pays 2.5x; a police car brings two stars
+- [ ] Get in the ambulance at Mercy General and press P: paramedic duty starts with a timer; P again goes off duty
+- [ ] Wait a couple of minutes in free roam: a street encounter (pulsing !) starts nearby; ignore it and it goes away
+- [ ] Find the cash stash on the Civic Plaza terrace near the start: a chime as you get close, then the CASH STASH pop
+- [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
+- [ ] The title screen says v2.0 and What's new lists the Hustle update
 
 For developers, the automated checks need Node.js and Playwright:
 

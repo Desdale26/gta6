@@ -375,11 +375,11 @@
       VH.events.on('map:close', () => this.closeMap());
       VH.events.on('input:lockchange', (e) => {
         // The map keeps the mouse free, even if a lock asked for earlier arrives after it opened.
-        if (e.locked && this.minimap && this.minimap.isFullOpen) {
+        if (e.locked && ((this.minimap && this.minimap.isFullOpen) || (this.phone && this.phone.isOpen))) {
           this.input.exitLock();
           return;
         }
-        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice) && !(this.minimap && this.minimap.isFullOpen)) this.pause(); // a choice and the map free the mouse on purpose
+        if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice) && !(this.minimap && this.minimap.isFullOpen) && !(this.phone && this.phone.isOpen)) this.pause(); // a choice, the map and the phone free the mouse on purpose
       });
       VH.events.on('input:lockerror', () => {
         if (this.state === 'playing') this.hud.showToast('Click the game to capture the mouse');
@@ -700,6 +700,7 @@
       if (this.state !== 'playing' && this.state !== 'dialog') return;
       if (this.ui.dialogOpen) this.ui.closeDialog();
       if (this.minimap) this.minimap.closeFull();
+      if (this.phone) this.phone.close(true);
       this.state = 'paused';
       this.audio.setPaused(true);
       this._statePausedAt = performance.now();
@@ -898,7 +899,8 @@
       // because browsers only grant pointer lock from a real user gesture.)
       if (input.consume('pause')) {
         const recent = performance.now() - this._statePausedAt < 400;
-        if (this.minimap && this.minimap.isFullOpen && (this.state === 'playing' || this.state === 'dialog')) this.closeMap();
+        if (this.phone && this.phone.isOpen) this.phone.close(); // the pad's Menu button (Esc is the phone's own key)
+        else if (this.minimap && this.minimap.isFullOpen && (this.state === 'playing' || this.state === 'dialog')) this.closeMap();
         else if ((this.state === 'playing' || this.state === 'dialog') && !recent) this.pause();
       }
 
@@ -928,6 +930,15 @@
         case 'dialog': {
           if (this.minimap && this.minimap.isFullOpen) {
             this._mapFrame(dt);
+            break;
+          }
+          // The phone (phone.js) holds the game still like the map; the picture only redraws if the window changes.
+          if (this.phone && this.phone.isOpen) {
+            this.phone.frame(dt);
+            if (this._needsRender) {
+              this.renderer.render(this.scene, dt);
+              this._needsRender = false;
+            }
             break;
           }
           this._tickPlayTime(dt);
@@ -985,6 +996,7 @@
         }
       }
       if (inp.consume('map') && this.minimap) this.toggleMap();
+      if (this.phone) this.phone.handleKey(); // P: the phone (not in a cab or a work vehicle: their own P comes later)
       if (!(this.combat && this.combat.wheelOpen) && inp.consume('daytime')) this.toggleDaytime();
     },
 
