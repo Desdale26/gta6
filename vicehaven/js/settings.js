@@ -114,7 +114,7 @@
     lights: { label: 'Headlights / siren', group: 'Vehicles' },
     map: { label: 'City map', group: 'Interface' },
     daytime: { label: 'Daytime on / off', group: 'Interface' },
-    phone: { label: 'Taxi duty on / off (in a cab)', group: 'Vehicles' },
+    phone: { label: 'Phone (in a cab or work vehicle: duty on / off)', group: 'Interface' },
     pause: { label: 'Pause', group: 'Interface', fixed: true },
     debug: { label: 'Developer overlay', group: 'Interface' },
   };

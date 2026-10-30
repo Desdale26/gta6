@@ -132,6 +132,7 @@
   border-radius: 2.58em;
   background: #0b0f1e;
   isolation: isolate;
+  container-type: size;
 }
 
 /* ------------------------------------------------------------ wallpaper */
@@ -197,10 +198,10 @@
 }
 
 .ph-wall.is-night .ph-wall-sun {
-  bottom: 79%;
-  left: 13%;
-  width: 3em;
-  height: 3em;
+  bottom: 29%;
+  left: 17%;
+  width: 2.5em;
+  height: 2.5em;
   background: radial-gradient(circle at 35% 35%, #fffaf0, #e8e2ff 60%, #bfb6f0);
   box-shadow: 0 0 2.4em rgba(220, 210, 255, 0.5);
   -webkit-mask-image: none;
@@ -374,6 +375,14 @@
 
 .ph-views.no-anim .ph-view {
   transition: none !important;
+}
+
+.ph-app.is-swap > * {
+  animation: ph-swap 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes ph-swap {
+  from { opacity: 0; transform: translateX(1.4em); }
 }
 
 .ph-svg {
@@ -756,6 +765,7 @@
 }
 
 .ph-scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
@@ -894,6 +904,11 @@
 
 .vh-phone-layer.is-mouse .is-sel {
   box-shadow: none;
+}
+
+.vh-phone-layer.is-mouse .ph-app-icon.is-sel:not(:hover) .ph-tile {
+  transform: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -0.2em 0.5em rgba(0, 0, 0, 0.18), 0 0.35em 0.9em rgba(8, 4, 24, 0.4);
 }
 
 .ph-card[data-nav]:hover,
@@ -1271,6 +1286,7 @@
 
 /* --------------------------------------------------------------- Jobs */
 .ph-chips {
+  position: relative;
   flex: none;
   display: flex;
   gap: 0.28em;
@@ -1840,6 +1856,40 @@
   padding-top: 0.6em;
 }
 
+.ph-chat > .ph-avatar {
+  align-self: center;
+  width: 3em;
+  height: 3em;
+  margin-top: 0.4em;
+  font-size: 1.1em;
+}
+
+.ph-chat-who {
+  align-self: center;
+  margin: -0.2em 0 0.4em;
+  font-size: 0.7em;
+  color: var(--vh-muted);
+}
+
+.ph-compose {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0.85em 1.6em;
+  padding: 0.5em 0.6em 0.5em 0.95em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.2em;
+  font-size: 0.78em;
+  color: rgba(241, 244, 255, 0.4);
+}
+
+.ph-compose .ph-svg {
+  width: 1.3em;
+  height: 1.3em;
+  opacity: 0.5;
+}
+
 .ph-bubble {
   align-self: flex-start;
   max-width: 86%;
@@ -1949,10 +1999,43 @@
   }
 }
 
+/* A short phone (a small window, or big interface text): the home screen
+   drops the small widgets, then tightens up, so the apps stay on screen. */
+@container (max-height: 39em) {
+  .ph-minis {
+    display: none;
+  }
+}
+
+@container (max-height: 33em) {
+  .ph-lock {
+    margin-top: 0.3em;
+  }
+
+  .ph-lock-time {
+    font-size: 3.4em;
+  }
+
+  .ph-lock-where,
+  .ph-widget-foot {
+    display: none;
+  }
+
+  .ph-widget {
+    margin-top: 0.5em;
+  }
+
+  .ph-dock {
+    margin-bottom: 1em;
+    padding: 0.45em 0.4em;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vh-phone,
   .vh-phone-layer.is-open .vh-phone,
   .ph-view,
+  .ph-app.is-swap > *,
   .ph-more,
   .ph-task,
   .ph-flame.is-lit,

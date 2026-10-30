@@ -38,7 +38,7 @@
     9: 'pause', //       Menu / Options
     10: 'sprint', //     Left stick press
     11: 'lookBehind', // Right stick press
-    12: 'phone', //      D-pad up (taxi duty)
+    12: 'phone', //      D-pad up (the phone; duty in a cab or work vehicle)
     13: 'horn', //       D-pad down
     14: 'lights', //     D-pad left
     15: 'daytime', //    D-pad right

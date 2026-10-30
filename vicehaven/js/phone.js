@@ -138,10 +138,13 @@
     tourist: ['A tourist wants a holiday photo. Walk up and press E.', [150, 300]],
   };
 
-  // Daily Hustle groups (dailies.js) → which thing to do points at them.
-  const HUSTLE_KIND = {
-    chop: 'chop', taxi: 'taxi', oddjob: 'oddjob', stash: 'stash', lantern: 'lantern', holdup: 'holdup',
-    race: 'race', stunt: 'stunt', jobs: 'side', street: 'street', shop: 'gunshop', business: 'property',
+  // Daily Hustles (dailies.js ids) → the thing to do that gets them done: a kind
+  // of row in Jobs, one row's id, or the start of some rows' ids ('up:').
+  const HUSTLE_AT = {
+    chop_sell: 'chop', chop_hot: 'chop', chop_cash: 'chop', taxi: 'taxi', oddjob_cash: 'oddjob',
+    paramedic: 'odd:paramedic', vigilante: 'odd:vigilante', courier: 'odd:courier',
+    stash: 'stash', lantern: 'lantern', holdup: 'holdup', holdup_safe: 'holdup', race: 'race', stunt: 'stunt',
+    story: 'story', side_job: 'side', help: 'street', encounters: 'street', gunshop: 'gunshop', upgrade: 'up:',
   };
 
   // Where money comes from (the Bank), by money:changed reason.
@@ -425,7 +428,7 @@
       const btn = e.target.closest('[data-click]');
       const t = btn || e.target.closest('[data-nav]');
       if (!t || !this.screenEl.contains(t)) return;
-      if (t.dataset.nav !== undefined) this._select(t.closest('[data-nav]'), false);
+      if (t.dataset.nav !== undefined) this._select(t.closest('[data-nav]'));
       const fn = t._click || t._act;
       if (fn) fn();
     }
@@ -501,33 +504,73 @@
       }
     }
 
+    /** Bring a highlighted row into its list's view (layout offsets: the list itself may be mid-animation). */
     _scrollTo(node) {
-      const box = node.closest('.ph-scroll');
+      const box = node.closest('.ph-scroll, .ph-chips');
       if (!box) return;
-      const a = box.getBoundingClientRect();
-      const b = node.getBoundingClientRect();
+      let y = 0;
+      let x = 0;
+      let n = node;
+      while (n && n !== box) {
+        y += n.offsetTop;
+        x += n.offsetLeft;
+        n = n.offsetParent;
+      }
+      if (n !== box) return;
       const pad = 10;
-      if (b.top < a.top + pad) box.scrollTop -= a.top + pad - b.top;
-      else if (b.bottom > a.bottom - pad) box.scrollTop += Math.min(b.bottom - (a.bottom - pad), b.top - (a.top + pad));
+      if (box.classList.contains('ph-chips')) {
+        if (x < box.scrollLeft + pad) box.scrollLeft = x - pad;
+        else if (x + node.offsetWidth > box.scrollLeft + box.clientWidth - pad) box.scrollLeft = x + node.offsetWidth - box.clientWidth + pad;
+        return;
+      }
+      const bottom = y + node.offsetHeight;
+      if (y < box.scrollTop + pad) box.scrollTop = y - pad;
+      else if (bottom > box.scrollTop + box.clientHeight - pad) box.scrollTop = Math.min(y - pad, bottom - box.clientHeight + pad);
+    }
+
+    /**
+     * Where a node sits on the screen, from the layout rather than the
+     * screen (the phone may still be tilting in, and a highlighted icon is
+     * scaled up): { left, top, right, bottom } in CSS pixels.
+     */
+    _pos(node) {
+      let x = 0;
+      let y = 0;
+      let n = node;
+      while (n && n !== this.screenEl) {
+        x += n.offsetLeft;
+        y += n.offsetTop;
+        const up = n.offsetParent;
+        if (up && up !== this.screenEl) {
+          x -= up.scrollLeft;
+          y -= up.scrollTop;
+        }
+        n = up;
+      }
+      return { left: x, top: y, right: x + node.offsetWidth, bottom: y + node.offsetHeight, width: node.offsetWidth, height: node.offsetHeight };
     }
 
     /** Spatial: the nearest thing in that direction (works for the grid, the tabs and the lists). */
     _move(dx, dy) {
       const items = this._navItems();
-      if (!items.length) return;
+      if (!items.length) {
+        // Nothing to pick (a message thread): the arrows scroll.
+        const box = this._current().querySelector('.ph-scroll');
+        if (box && dy) box.scrollBy({ top: dy * box.clientHeight * 0.4, behavior: 'smooth' });
+        return;
+      }
       const cur = this._sel && items.includes(this._sel) ? this._sel : null;
       if (!cur) {
         this._select(items[0]);
         return;
       }
-      const a = cur.getBoundingClientRect();
-      const ax = a.left + a.width / 2;
+      const a = this._pos(cur);
       const ay = a.top + a.height / 2;
       let best = null;
       let bs = Infinity;
       for (const it of items) {
         if (it === cur) continue;
-        const b = it.getBoundingClientRect();
+        const b = this._pos(it);
         let along;
         let across;
         if (dy) {
@@ -536,6 +579,8 @@
           // Side by side: how far apart the edges are (0 if they overlap; ties go to the left-most).
           across = Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right));
         } else {
+          // Left and right stay on the same line.
+          if (b.bottom <= a.top || b.top >= a.bottom) continue;
           along = dx > 0 ? b.left - a.left : a.right - b.right;
           across = Math.abs(b.top + b.height / 2 - ay);
         }
@@ -617,8 +662,11 @@
       }
       this.close(true);
       g.openMap();
-      // The map pauses the sound itself; it never does if it couldn't open.
-      if (!g.minimap.isFullOpen && g.audio) g.audio.setPaused(false);
+      // The map pauses the sound and frees the mouse itself; if it couldn't open, back to the game.
+      if (!g.minimap.isFullOpen) {
+        if (g.audio) g.audio.setPaused(false);
+        g.input.requestLock();
+      }
     }
 
     /** Open an app. */
@@ -681,17 +729,20 @@
       };
       const phoneKey = g.input.labelFor('phone');
       const list = [];
-      const inJobs = this.view === 'jobs';
+      const v = this.view;
+      const tabs = v === 'jobs' || v === 'bank';
+      // What choosing does here (nothing to choose in Rep or a message thread).
+      const choose = { home: 'Open', jobs: 'Set GPS', hustles: 'Show me', messages: 'Open', bank: 'Choose' }[v] || '';
       if (pad) {
-        list.push(key('A', inJobs ? 'Set GPS' : this.view === 'home' ? 'Open' : 'Choose'));
-        if (inJobs) list.push(key('LB/RB', 'Tabs'));
-        list.push(key('B', this.view === 'home' ? 'Put away' : 'Back'));
+        if (choose) list.push(key('A', choose));
+        if (tabs) list.push(key('LB/RB', 'Tabs'));
+        list.push(key('B', v === 'home' ? 'Put away' : 'Back'));
       } else {
-        list.push(key('↑↓', 'Move'));
-        if (inJobs || this.view === 'bank') list.push(key('←→', 'Tabs'));
-        list.push(key('Enter', inJobs ? 'Set GPS' : this.view === 'home' ? 'Open' : 'Choose'));
-        list.push(key('Esc', this.view === 'home' ? 'Put away' : 'Back'));
-        if (this.view !== 'home') list.push(key(phoneKey && phoneKey !== '—' ? phoneKey : 'P', 'Put away'));
+        list.push(key('↑↓', v === 'thread' ? 'Scroll' : 'Move'));
+        if (tabs) list.push(key('←→', 'Tabs'));
+        if (choose) list.push(key('Enter', choose));
+        list.push(key('Esc', v === 'home' ? 'Put away' : 'Back'));
+        if (v !== 'home') list.push(key(phoneKey && phoneKey !== '—' ? phoneKey : 'P', 'Put away'));
       }
       this.hintsEl.textContent = '';
       this.hintsEl.append(...list);
@@ -748,6 +799,12 @@
       box.textContent = '';
       box.dataset.app = view === 'thread' ? 'messages' : view;
       this._sel = null;
+      // From one app straight to another (a hustle's "show me where", a message thread): a quick slide.
+      box.classList.remove('is-swap');
+      if (!keep && this.viewsEl.classList.contains('in-app')) {
+        void box.offsetWidth;
+        box.classList.add('is-swap');
+      }
       const app = APPS[view === 'thread' ? 'messages' : view];
       const fill = {
         hustles: () => this._appHustles(box),
@@ -935,7 +992,8 @@
       // The three tasks.
       list.forEach((t, i) => {
         const c = el('div', 'ph-card ph-task' + (t.done ? ' is-done' : ''));
-        this._nav(c, 'task:' + t.id, () => this._pointAt(t));
+        const at = t.done ? null : HUSTLE_AT[t.id] || null;
+        this._nav(c, 'task:' + t.id, at ? () => this._pointAt(at) : null, () => {});
         const head = el('div', 'ph-task-head');
         const ic = el('span', 'ph-task-icon', t.icon || '★');
         const lab = el('div', 'ph-task-label', t.label);
@@ -958,7 +1016,7 @@
         const inner = el('div', 'ph-more-in');
         if (t.hint) inner.append(el('p', 'ph-hint-text', t.hint));
         if (t.reveal) inner.append(el('p', 'ph-hint-text ph-gold', 'Also marks a hidden cash stash on your map.'));
-        if (!t.done) inner.append(el('span', 'ph-link', 'Show me where ›'));
+        if (at) inner.append(el('span', 'ph-link', 'Show me where ›'));
         more.append(inner);
         c.append(more);
         c.style.setProperty('--i', i);
@@ -979,22 +1037,10 @@
       return fmt(p) + ' / ' + fmt(t.goal);
     }
 
-    /** A hustle's "show me": the Jobs app, on the thing it needs. */
-    _pointAt(t) {
-      const id = String(t.id || '');
-      let kind = null;
-      for (const k of Object.keys(HUSTLE_KIND)) {
-        if (id === k || id.indexOf(k + '_') === 0) kind = HUSTLE_KIND[k];
-      }
-      if (!kind) {
-        if (/help|encounter|street/.test(id)) kind = 'street';
-        else if (/story/.test(id)) kind = 'story';
-        else if (/side|job/.test(id)) kind = 'side';
-        else if (/gun/.test(id)) kind = 'gunshop';
-        else if (/upgrade|business/.test(id)) kind = 'property';
-      }
-      this._filter = 'all';
-      this._want = kind;
+    /** A hustle's "show me where": the Jobs app, on the nearest thing that gets it done. */
+    _pointAt(at) {
+      this._filter = at === 'up:' ? 'buy' : 'all';
+      this._want = at;
       this._go('jobs');
     }
 
@@ -1113,7 +1159,7 @@
         const left = daily.filter((t) => !t.done);
         if (left.length) {
           const cash = left.reduce((a, t) => a + ((t.reward && t.reward.money) || 0), 0);
-          add({ id: 'daily', kind: 'daily', cat: 'cash', emoji: '🔥', title: 'Daily Hustles: ' + (daily.length - left.length) + ' of ' + daily.length + ' done', pin: 0,
+          add({ id: 'daily', kind: 'daily', cat: 'cash', emoji: '🔥', title: 'Daily Hustles: ' + (daily.length - left.length) + ' of ' + daily.length + ' done', pin: 0.5,
             how: left.map((t) => t.label).join(' · '), pay: cash ? money(cash) : '', open: 'hustles', go: 'Open Hustles' });
         }
       }
@@ -1165,10 +1211,11 @@
           how: hint + ' Walk over a bag to take it.', pay: range(round10(300 * perk('stash')), round10(1500 * perk('stash'))), info: true, hintD: n0 ? n0.d : Infinity });
       }
       // Stashes marked on the map (a Daily Hustle reward) can be found by GPS.
-      for (const b of safe(() => g.blips(), []) || []) {
+      const blips = safe(() => g.blips().slice(), []) || [];
+      for (const b of blips) {
         if (b.type !== 'stash') continue;
-        add({ id: 'stashmark:' + Math.round(b.x) + ',' + Math.round(b.z), kind: 'stash', cat: 'cash', icon: 'stash', title: b.label || 'Cash stash', tag: 'ON YOUR MAP',
-          how: 'A stash on your map. Walk over the bag to take it.', pay: range(300, 1500), x: b.x, z: b.z });
+        add({ id: 'stashmark:' + Math.round(b.x) + ',' + Math.round(b.z), kind: 'stash', cat: 'cash', icon: 'stash', title: b.label || 'Cash stash', tag: 'MARKED',
+          how: 'Marked on your map. Walk over the bag to take it.', pay: range(300, 1500), x: b.x, z: b.z });
       }
 
       // Hold-ups: the nearest corner shop that's open.
@@ -1239,12 +1286,13 @@
       const P = g.properties;
       if (P && P.list && P.list.length) {
         const owned = P.list.filter((q) => P.owned && P.owned[q.id]);
+        const cash = g.player.money;
         if (owned.length) {
           const pay = safe(() => P.income(), 0) || 0;
           const k = perk('payday');
-          const t = typeof P.paydayT === 'number' ? P.paydayT : null;
-          add({ id: 'payday', kind: 'property', cat: 'buy', icon: 'owned', title: 'Next payday' + (t !== null ? ' in ' + this._dur(t) : ''), info: true,
-            how: owned.length + (owned.length === 1 ? ' business pays' : ' businesses pay') + ' out every payday, wherever you are.' + (k > 1 ? ' Your Rep adds ' + Math.round((k - 1) * 100) + '%.' : ''),
+          const t = this._payday();
+          add({ id: 'payday', kind: 'payday', cat: 'buy', icon: 'owned', title: 'Next payday' + (t !== null ? ' in ' + this._dur(t) : ''), info: true,
+            how: owned.length + (owned.length === 1 ? ' business pays' : ' businesses pay') + ' out every payday, wherever you are.' + (k > 1 ? ' That includes +' + Math.round((k - 1) * 100) + '% from your Rep.' : ''),
             pay: money(pay) });
           if (P.upgradeCost && P.tier) {
             for (const q of owned) {
@@ -1252,28 +1300,37 @@
               if (!cost) continue;
               const tier = safe(() => P.tier(q), 0) || 0;
               const inc = safe(() => P.income(q), q.income);
-              add({ id: 'up:' + q.id, kind: 'property', cat: 'buy', icon: 'owned', title: 'Upgrade ' + q.name, tag: 'TIER ' + (tier + 1),
-                how: 'Go to the business and press ' + key('interact') + ' at its sign. Bigger takings every payday.' + (typeof inc === 'number' ? ' Now ' + money(inc) + ' a payday.' : ''),
+              // The sign's own prompt names the next upgrade ('Upgrade <name>: New sign').
+              const what = q.item && typeof q.item.label === 'string' && q.item.label.indexOf(': ') > 0 ? q.item.label.split(': ').pop() : '';
+              add({ id: 'up:' + q.id, kind: 'property', cat: 'buy', icon: 'owned', title: 'Upgrade ' + q.name, tag: 'UPGRADE ' + (tier + 1) + '/3', tone: cash >= cost ? 'good' : '',
+                how: (what ? what + ': ' : '') + 'press ' + key('interact') + ' at its sign. Each upgrade adds 30% to the takings.' + (typeof inc === 'number' ? ' It pays ' + money(inc) + ' a payday now.' : ''),
                 pay: money(cost), x: q.sign.x, z: q.sign.z, gps: q.name });
             }
           }
         }
-        const cash = g.player.money;
         const sale = P.list.filter((q) => !(P.owned && P.owned[q.id]));
         for (const q of sale) {
           add({ id: 'buy:' + q.id, kind: 'property', cat: 'buy', icon: 'property', title: q.name, tag: cash >= q.price ? 'YOU CAN AFFORD IT' : '', tone: cash >= q.price ? 'good' : '',
-            how: 'For sale: ' + money(q.price) + '. Walk up to the sign and press ' + key('interact') + '. Pays ' + money(q.income) + ' every payday.', pay: money(q.price),
+            how: 'Walk up to the For Sale sign and press ' + key('interact') + ' to buy it. Pays ' + money(q.income) + ' every payday, for good.', pay: money(q.price),
             x: q.sign.x, z: q.sign.z, gps: q.name, afford: cash >= q.price });
         }
       }
 
       // The club: dancing for tips at night.
-      for (const b of safe(() => g.blips(), []) || []) {
+      for (const b of blips) {
         if (b.type !== 'shop' || !/club/i.test(b.label || '')) continue;
         add({ id: 'club', kind: 'club', cat: 'cash', icon: 'shop', title: (b.label || 'The club').replace(/\s*\(club\)/i, ''), how: 'Open every night: dance to the beat for tips.', pay: 'Tips', x: b.x, z: b.z });
         break;
       }
       return out;
+    }
+
+    /** Seconds to the next business payday, or null. */
+    _payday() {
+      const P = this.game.properties;
+      if (!P) return null;
+      const t = safe(() => (P.nextPayday ? P.nextPayday() : P.paydayT), null);
+      return typeof t === 'number' ? t : null;
     }
 
     _nearest(list, posOf, maxD) {
@@ -1334,8 +1391,12 @@
       for (const it of list) {
         const row = this._jobRow(it, wp);
         // A Daily Hustle's "show me": the first thing of its kind.
-        if (!this._focusNode && this._want && it.kind === this._want) this._focusNode = row;
+        const w = this._want;
+        if (!this._focusNode && w && (it.kind === w || it.id === w || (w.slice(-1) === ':' && it.id.indexOf(w) === 0))) this._focusNode = row;
         s.append(row);
+      }
+      if (this._want && !this._focusNode) {
+        this._toast(this._want === 'street' ? 'Nothing happening yet: keep moving, they find you' : 'Nothing for that near you right now');
       }
       this._want = null;
     }
@@ -1584,9 +1645,10 @@
           const r = el('div', 'ph-biz-row');
           r.append(el('span', '', 'Each payday'), el('b', 'ph-money', money(pay)));
           c.append(r);
-          if (typeof P.paydayT === 'number') {
+          const t = this._payday();
+          if (t !== null) {
             const r2 = el('div', 'ph-biz-row');
-            r2.append(el('span', '', 'Next payday in'), el('b', '', this._dur(P.paydayT)));
+            r2.append(el('span', '', 'Next payday in'), el('b', '', this._dur(t)));
             c.append(r2);
           }
           if (typeof P.earned === 'number') {
@@ -1671,20 +1733,19 @@
       box.append(this._head(name));
       const s = el('div', 'ph-scroll ph-chat');
       box.append(s);
+      if (msgs.length) s.append(this._avatar(msgs[0].from, name), el('div', 'ph-chat-who', 'Text message'));
       for (const t of msgs) {
         const b = el('div', 'ph-bubble');
-        this._nav(b, 'msg:' + t.at + ':' + t.text.length);
         b.append(el('p', '', this._clean(t.text)), el('span', 'ph-bubble-time', t.clock || ''));
         s.append(b);
       }
+      // Jay doesn't text back (he's driving).
+      const bar = el('div', 'ph-compose');
+      bar.append(el('span', '', 'Jay never texts back'), svg('chat'));
+      box.append(bar);
       // The newest at the bottom, in view.
       setTimeout(() => {
         s.scrollTop = s.scrollHeight;
-        const last = s.lastElementChild;
-        if (last && this.view === 'thread') {
-          this._select(null);
-          this._select(last, false);
-        }
       }, 0);
     }
 
