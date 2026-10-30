@@ -56,6 +56,7 @@
   const PERK_HEALTH = 25; //    paramedic: extra max health
   const PERK_ARMOR = 25; //     vigilante: extra max armour
   const PERK_COURIER = 0.15; // courier: extra courier pay
+  const NO_ROUTE = Object.freeze([]); // the GPS line while on top of the target
 
   // out: seconds Jay may be out of the vehicle before the shift ends; tip: said on the first shift.
   const JOBS = {
@@ -650,7 +651,8 @@
       if (this._routeT <= 0 && VH.Minimap && VH.Minimap.route) {
         this._routeT = 1;
         const p = g.player.pos;
-        g.route = Math.hypot(t.x - p.x, t.z - p.z) > 30 ? VH.Minimap.route(g.layout, p.x, p.z, t.x, t.z) : null;
+        // Close in, an empty route: nothing to draw, and Jay's own GPS waypoint doesn't cut in either.
+        g.route = Math.hypot(t.x - p.x, t.z - p.z) > 30 ? VH.Minimap.route(g.layout, p.x, p.z, t.x, t.z) : NO_ROUTE;
       }
     }
 
