@@ -301,6 +301,7 @@
       const money = first ? 500 : 50;
       this.game.hud.centerBanner(first ? 'STUNT JUMP' : 'NICE JUMP', J.r.j.name + ' · ' + Math.round(dist) + ' m · ' + e.airTime.toFixed(1) + ' s');
       this.game.giveMoney(money, 'stunt');
+      VH.events.emit('stunt:jump', { name: J.r.j.name, first, dist });
       if (first) this.game.hud.notify({ title: 'Stunt jumps', text: Object.keys(this.jumpsDone).length + ' of ' + this.ramps.length + ' cleared.', icon: '★' });
     }
 
@@ -383,8 +384,9 @@
       const T = this.taxi;
       const inCab = v && (v.type === 'cab');
       const taxiOpen = !this.data.taxiRequires || g.missions.completed[this.data.taxiRequires];
-      // Read the key every frame, so a press outside a cab isn't saved up for the next one.
-      const pressed = g.input.consume('phone');
+      // P is taxi duty only in a cab: anywhere else it's the phone (phone.js),
+      // or duty in a work vehicle (oddjobs.js), and they read it after this.
+      const pressed = inCab && g.input.consume('phone');
       if (inCab && pressed && !g.missions.run) {
         if (!taxiOpen) {
           g.hud.showToast('The dispatcher doesn\'t know you yet. (Taxi jobs open later in the story.)');
@@ -434,10 +436,12 @@
         if (Math.hypot(v.pos.x - f.to.x, v.pos.z - f.to.z) < 8 && v.speed < 2) {
           const base = 18 + Math.round(f.dist * 0.07);
           const tip = f.t > 0 ? Math.round(f.t * 1.2) : 0;
-          g.giveMoney(base + tip, 'fare');
+          const pay = Math.round((base + tip) * (g.rep && g.rep.perk ? g.rep.perk('taxi') : 1)); // Street Rep perk (rep.js)
+          g.giveMoney(pay, 'fare');
           T.done++;
-          T.earned += base + tip;
-          g.hud.popScore('FARE ' + T.done, base + tip);
+          T.earned += pay;
+          g.hud.popScore('FARE ' + T.done, pay);
+          VH.events.emit('taxi:fare', { pay });
           if (g.audio.cash) g.audio.cash();
           this._endFare(true);
         } else if (f.t <= 0 && !f.late) {
@@ -615,6 +619,7 @@
           L.m.visible = false;
           const n = Object.keys(this.lanternsFound).length;
           g.giveMoney(n === 30 ? 5000 : 100, 'lantern');
+          VH.events.emit('lantern:found', { id: L.id, n });
           g.hud.notify({ title: 'Lost lantern ' + n + ' / 30', text: n === 30 ? 'Every lantern in Vicehaven is lit again.' : 'Somebody hung this for somebody.', icon: '🏮' });
           if (g.audio.pickup) g.audio.pickup();
         }

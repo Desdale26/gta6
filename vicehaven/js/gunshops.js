@@ -618,8 +618,17 @@
       this.sel = clamp(this.sel, 0, rows.length - 1);
     }
 
-    /** What a row costs and gives right now, and why not if it can't be bought. */
+    /** What a row costs and gives right now, less Jay's Street Rep discount (rep.js 'guns' perk). */
     quote(row) {
+      const q = this._quote(row);
+      const rep = this.game.rep;
+      const k = rep && rep.perk ? rep.perk('guns') : 1;
+      if (q.price && k > 0 && k < 1) q.price = Math.max(5, Math.round((q.price * k) / 5) * 5);
+      return q;
+    }
+
+    /** What a row costs and gives right now, and why not if it can't be bought. */
+    _quote(row) {
       const g = this.game;
       const c = g.combat;
       const p = g.player;

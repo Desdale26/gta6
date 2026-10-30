@@ -1,0 +1,265 @@
+/*
+ * street.css — the street encounter card (encounters.js): right-hand side,
+ * under the money and the wanted stars (under the weapon panel when Jay is
+ * armed, where the getting-started checklist would be: it steps aside).
+ * What's going on, the one thing to do and the clock; a bar for progress
+ * (the van's back doors, a lock being picked, the cash bags picked up) and
+ * a key hint when there's something to press. The "!" pulses like its blip.
+ * Sized in rem so the "Interface text size" setting scales it.
+ */
+
+.vh-street {
+  position: absolute;
+  top: 6.6rem;
+  right: 1.8rem;
+  z-index: 11;
+  width: 17.5rem;
+  padding: 0.55rem 0.8rem 0.62rem;
+  border: 1px solid rgba(255, 179, 71, 0.38);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(36, 24, 9, 0.84), rgba(8, 11, 22, 0.86));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  font-family: var(--vh-font-display);
+  color: var(--vh-text);
+  opacity: 0;
+  transform: translateX(1.2rem);
+  transition: opacity 0.3s ease, transform 0.3s ease, border-color 0.3s, top 0.3s;
+  pointer-events: none;
+}
+
+.vh-street.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* The weapon panel takes the top of that corner while Jay is armed. */
+body.armed .vh-street {
+  top: 11.6rem;
+}
+
+body.street-on .hud .hud-hints {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Out of the way of menus, the map, the phone, a shop, photo mode and an
+   odd-job shift's own card (which sits in the same spot). */
+body.in-menu .vh-street,
+body.cutscene .vh-street,
+body.photo-mode .vh-street,
+body.map-open .vh-street,
+body.phone-open .vh-street,
+body.shop-open .vh-street,
+body.oj-on .vh-street {
+  visibility: hidden;
+}
+
+/* ---------------------------------------------------------------- head */
+.vh-street .st-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.vh-street .st-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--vh-accent-2);
+  color: #1a1206;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  animation: vh-st-pulse 1.4s ease-out infinite;
+}
+
+@keyframes vh-st-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 179, 71, 0.7); }
+  70% { box-shadow: 0 0 0 0.6rem rgba(255, 179, 71, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 179, 71, 0); }
+}
+
+.vh-street .st-names {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.vh-street .st-kicker {
+  font-size: 0.6rem;
+  letter-spacing: 0.28em;
+  color: var(--vh-accent-2);
+}
+
+.vh-street .st-title {
+  overflow: hidden;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.vh-street .st-timer {
+  flex: none;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.vh-street .st-timer.low {
+  color: var(--vh-danger);
+  animation: vh-st-blink 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes vh-st-blink {
+  to { opacity: 0.45; }
+}
+
+/* ---------------------------------------------------------------- body */
+.vh-street .st-line {
+  margin-top: 0.38rem;
+  font-family: var(--vh-font);
+  font-size: 0.84rem;
+  line-height: 1.38;
+  color: rgba(241, 244, 255, 0.88);
+}
+
+.vh-street .st-bar {
+  display: none;
+  position: relative;
+  height: 0.42rem;
+  margin-top: 0.48rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.vh-street .st-bar.on {
+  display: block;
+}
+
+.vh-street .st-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #ffb347, #ff7a59);
+  transition: width 0.15s linear;
+}
+
+.vh-street .st-hint {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+  font-family: var(--vh-font);
+  font-size: 0.8rem;
+  color: var(--vh-muted);
+}
+
+.vh-street .st-hint.on {
+  display: flex;
+}
+
+.vh-street .st-hint kbd {
+  border-color: transparent;
+  background: var(--vh-accent-3);
+  color: #031412;
+}
+
+/* --------------------------------------------------------------- tones */
+/* Hot: something's running (a chase, the van under attack, a clock nearly out). */
+.vh-street.hot {
+  border-color: rgba(255, 90, 90, 0.75);
+}
+
+.vh-street.hot .st-icon {
+  background: var(--vh-danger);
+  color: #fff;
+  animation-name: vh-st-pulse-hot;
+  animation-duration: 0.8s;
+}
+
+@keyframes vh-st-pulse-hot {
+  0% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0.75); }
+  70% { box-shadow: 0 0 0 0.6rem rgba(255, 90, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0); }
+}
+
+.vh-street.hot .st-bar i {
+  background: linear-gradient(90deg, #ff7a59, #ff4f8b);
+}
+
+/* The result, for a moment after it's over. */
+.vh-street.done,
+.vh-street.failed,
+.vh-street.gone {
+  animation: vh-st-pop 0.45s ease;
+}
+
+.vh-street.done {
+  border-color: rgba(125, 255, 168, 0.7);
+}
+
+.vh-street.done .st-line {
+  color: var(--vh-money);
+}
+
+.vh-street.failed {
+  border-color: rgba(255, 90, 90, 0.55);
+}
+
+.vh-street.done .st-icon,
+.vh-street.failed .st-icon,
+.vh-street.gone .st-icon {
+  font-size: 0;
+  animation: none;
+}
+
+.vh-street.done .st-icon {
+  background: var(--vh-money);
+}
+
+.vh-street.failed .st-icon,
+.vh-street.gone .st-icon {
+  background: #6b7286;
+}
+
+.vh-street.done .st-icon::after,
+.vh-street.failed .st-icon::after,
+.vh-street.gone .st-icon::after {
+  font-size: 0.95rem;
+  color: #08130c;
+}
+
+.vh-street.done .st-icon::after {
+  content: '✓';
+}
+
+.vh-street.failed .st-icon::after,
+.vh-street.gone .st-icon::after {
+  content: '✕';
+  color: #fff;
+}
+
+@keyframes vh-st-pop {
+  0% { transform: scale(1.05); }
+  100% { transform: none; }
+}
+
+/* Small screens: a narrower card. */
+@media (max-width: 900px) {
+  .vh-street {
+    width: 14.5rem;
+    right: 1rem;
+  }
+}

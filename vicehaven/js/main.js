@@ -23,7 +23,8 @@
   const FIXED_DT = 1 / 60;
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
-  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Achievements'];
+  // The Hustle update (v2.0): Rep and Dailies first (others report to them), the Phone last.
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'Phone'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const NEWS_KEY = 'vicehaven.seen.news-v1.3'; // set once the v1.3 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
@@ -179,6 +180,7 @@
       if (VH.SprayShops && VH.SprayShops.plan) VH.SprayShops.plan(this.layout);
       // And Bayline Arms, the gun shops (gunshops.js).
       if (VH.GunShops && VH.GunShops.plan) VH.GunShops.plan(this.layout);
+      if (VH.ChopShops && VH.ChopShops.plan) VH.ChopShops.plan(this.layout);
       this.physics = new VH.CollisionWorld(16);
       this.world = new VH.World(scene, materials, this.physics, settings);
       await this.world.build(this.layout, (p, label) => Loading.set(0.16 + p * 0.72, label));
@@ -1503,6 +1505,7 @@
     _laterFeatureHints() {
       const v = this.player.vehicle;
       if (v && v.type === 'cab') return; // P is taxi duty there (activities.js)
+      if (this.phone || (this.oddJobs && this.oddJobs.dutyFor(v))) return; // P is the phone (phone.js), or duty in a work vehicle (oddjobs.js)
       const LATER = {
         phone: 'P puts you on taxi duty — get in a cab first',
       };

@@ -22,7 +22,14 @@ buying the city block by block with money Jay once helped steal.
   and the walled mansions of Crestline Estates, with a running day and night.
 - **18 cars, 23 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
-- **New in v1.3 (Arsenal update):** 12 new weapons including a rocket
+- **New in v2.0 (Hustle update):** Street Rep levels (1 to 50) with perks
+  for everything you do, three Daily Hustles every in-game day with a
+  streak bonus, Busted Spanner chop shops that buy any car (a daily hot list
+  pays extra), paramedic, vigilante and courier odd jobs, street encounters
+  every couple of minutes (a cash van, a mugging, a lift, a race challenge),
+  40 hidden cash stashes, business upgrades, and Jay's phone (**P**) to see
+  it all and set the GPS.
+- **v1.3 (Arsenal update):** 12 new weapons including a rocket
   launcher, a minigun and a stun gun, Bayline Arms gun shops, ammo and
   armour round the city, and guns that kick, flinch people and leave holes.
   Doors now open as Jay gets in, and every kind of vehicle has its own way
@@ -104,6 +111,7 @@ Off or Strong in the same place.
 | **Ctrl** or **C** | Crouch (toggle) |
 | **Caps Lock** | Walk (toggle) |
 | **E** | Talk, start a job (walk into the glowing marker), use things. On a failed job, **E** retries |
+| **P** | Jay's phone: Daily Hustles, Street Rep, things to do nearby (with GPS), money |
 | **F** | Get in a car (or drag the driver out) / get out |
 | **V** · **mouse wheel** · **B** | Camera mode · distance · look behind |
 
@@ -129,7 +137,7 @@ Off or Strong in the same place.
 | **H** · **G** | Horn · headlights (siren in a police car) |
 | **R** | Next radio station |
 | **Right mouse + left mouse** | Shoot out of the window |
-| **P** | In a cab: taxi duty on or off |
+| **P** | Jay's phone. In a cab: taxi duty on or off. In an ambulance, a police car or a delivery van: odd-job duty on or off |
 | **V** | Chase camera · far chase · bonnet |
 
 **Flying** (planes and helicopters: get in with **F** like a car)

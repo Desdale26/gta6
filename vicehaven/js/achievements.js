@@ -60,6 +60,22 @@
     ['rocket_car', 'Combat', '🚀', 'Special Delivery', 'Blow up a car with a rocket.'],
     ['scavenger', 'Combat', '📦', 'Scavenger', 'Pick up 25 weapons, ammo, armour or first-aid kits.'],
     ['arsenal', 'Combat', '🧰', 'Arsenal', 'Carry every weapon at once.'],
+    ['rep_10', 'Hustle', '⭐', 'Somebody', 'Reach Street Rep level 10.'],
+    ['rep_25', 'Hustle', '🌟', 'Big Name', 'Reach Street Rep level 25.'],
+    ['rep_50', 'Hustle', '👑', 'Legend of Vicehaven', 'Reach Street Rep level 50.'],
+    ['daily_all', 'Hustle', '📅', 'Clocked In', 'Finish all three Daily Hustles in one day.'],
+    ['daily_7', 'Hustle', '🔥', 'Seven Days a Week', 'Keep a Daily Hustle streak going for 7 days.'],
+    ['chop_first', 'Hustle', '🔧', 'Strip It', 'Sell a car at a chop shop.'],
+    ['chop_hot', 'Hustle', '🌶', 'Hot Property', 'Sell a car from the chop shop hot list.'],
+    ['chop_25', 'Hustle', '🏭', 'Parts Department', 'Sell 25 cars at chop shops.'],
+    ['paramedic_10', 'Hustle', '🚑', 'Lifesaver', 'Finish level 10 of the paramedic job.'],
+    ['vigilante_10', 'Hustle', '🚓', 'Night Shift', 'Finish level 10 of the vigilante job.'],
+    ['courier_10', 'Hustle', '📦', 'Signed For', 'Finish level 10 of the courier job.'],
+    ['street_10', 'Hustle', '🤝', 'Good Samaritan', 'Help 10 people out on the street.'],
+    ['cash_van', 'Hustle', '💰', 'Armoured Car', 'Crack open a cash van.'],
+    ['stash_20', 'Hustle', '🎒', 'Treasure Hunter', 'Find 20 hidden cash stashes.'],
+    ['stash_all', 'Hustle', '💎', 'Every Last Note', 'Find every hidden cash stash.'],
+    ['empire', 'Hustle', '🏢', 'Empire', 'Fully upgrade a business.'],
     ['tourist', 'Explorer', '🗺', 'Tourist', 'Visit 6 districts.'],
     ['explorer', 'Explorer', '🧭', 'Explorer', 'Visit every district.'],
     ['pier_end', 'Explorer', '🌊', 'End of the Line', 'Walk to the end of Oceanview Pier.'],
@@ -244,6 +260,37 @@
         if (shops.length && shops.every((s) => this.profile.n['shop:' + s.id] > 0)) this.unlock('holdup_all');
       });
       VH.events.on('holdup:safe', () => this.unlock('holdup_safe'));
+      // The Hustle update (rep.js, dailies.js, chopshops.js, oddjobs.js, encounters.js, stashes.js).
+      VH.events.on('rep:levelup', (e) => {
+        if (e.level >= 10) this.unlock('rep_10');
+        if (e.level >= 25) this.unlock('rep_25');
+        if (e.level >= 50) this.unlock('rep_50');
+      });
+      VH.events.on('daily:all', (e) => {
+        this.unlock('daily_all');
+        if ((e.streak || 0) >= 7) this.unlock('daily_7');
+      });
+      VH.events.on('chop:sold', (e) => {
+        this.unlock('chop_first');
+        if (e.hot) this.unlock('chop_hot');
+        if (this._bump('chopped', 1) >= 25) this.unlock('chop_25');
+      });
+      VH.events.on('oddjob:level', (e) => {
+        if (e.level >= 10 && BY_ID.has(e.job + '_10')) this.unlock(e.job + '_10');
+      });
+      VH.events.on('encounter:done', (e) => {
+        if (e.good && this._bump('helped', 1) >= 10) this.unlock('street_10');
+        if (/van/.test(e.kind || '')) this.unlock('cash_van');
+      });
+      VH.events.on('stash:found', () => {
+        const st = this.game.stashes;
+        if (!st) return;
+        if (st.found >= 20) this.unlock('stash_20');
+        if (st.total && st.found >= st.total) this.unlock('stash_all');
+      });
+      VH.events.on('property:upgraded', (e) => {
+        if (e.tier >= 3) this.unlock('empire');
+      });
       VH.events.on('holdup:hero', (e) => {
         if (e.backedDown) this.unlock('holdup_hero');
       });
@@ -354,6 +401,13 @@
         out.propsTotal = pr.list.length;
         out.props = pr.list.filter((x) => pr.owned[x.id]).length;
       }
+      // The Hustle update: stashes found, odd-job levels cleared.
+      const st = g.stashes;
+      out.stashes = st && st.total ? st.found || 0 : 0;
+      out.stashesTotal = st && st.total ? st.total : 0;
+      const oj = g.oddJobs && g.oddJobs.jobs ? g.oddJobs.jobs() : [];
+      out.oddLevels = oj.reduce((n, j) => n + Math.min(j.maxLevel || 10, j.best || j.level || 0), 0);
+      out.oddLevelsTotal = oj.reduce((n, j) => n + (j.maxLevel || 10), 0);
       return out;
     }
 
@@ -370,6 +424,8 @@
         { label: 'Lost lanterns', done: c.lanterns, total: c.lanternsTotal, weight: 7 },
         { label: 'Districts visited', done: this.visited.size, total: districts, weight: 5 },
         { label: 'Properties owned', done: c.props, total: c.propsTotal, weight: 8 },
+        { label: 'Cash stashes', done: c.stashes, total: c.stashesTotal, weight: 5 },
+        { label: 'Odd job levels', done: c.oddLevels, total: c.oddLevelsTotal, weight: 5 },
         { label: 'Achievements', done: ach.filter((a) => this.has(a.id)).length, total: ach.length, weight: 18 },
       ];
       let sum = 0;

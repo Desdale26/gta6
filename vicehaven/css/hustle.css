@@ -1,0 +1,390 @@
+/*
+ * hustle.css — Street Rep and the Daily Hustles (rep.js, dailies.js).
+ *
+ *   .vh-rep        the Rep badge: level disc and XP bar, to the left of the
+ *                  money (it lives inside .hud-money, which is position:
+ *                  relative), with a "+40 REP" float
+ *   .vh-hb         the big centre banner: level-ups, a Daily Hustle done,
+ *                  the all-three streak bonus
+ *   .notify.hustle a compact notification card for Daily Hustle progress
+ *
+ * Sized in rem like the rest of the HUD (the "Interface text size" setting
+ * scales it).
+ */
+
+/* ------------------------------------------------------------ rep badge */
+.vh-rep {
+  position: absolute;
+  right: calc(100% + 0.85rem);
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.22rem 0.65rem 0.22rem 0.22rem;
+  border-radius: 999px;
+  background: rgba(6, 9, 20, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--vh-font-display);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--vh-text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.3s ease;
+}
+
+.rep-disc {
+  position: relative;
+  flex: none;
+  width: 1.95rem;
+  height: 1.95rem;
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--vh-sunset);
+  box-shadow: 0 0 10px rgba(255, 122, 89, 0.35);
+}
+
+.rep-disc b {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(8, 11, 22, 0.9);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.rep-body {
+  width: 7.8rem;
+}
+
+.rep-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  line-height: 1;
+}
+
+.rep-name {
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.rep-num {
+  font-size: 0.56rem;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(241, 244, 255, 0.62);
+}
+
+.rep-track {
+  position: relative;
+  height: 0.34rem;
+  margin-top: 0.24rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.rep-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: var(--vh-sunset);
+  background-size: 7.8rem 100%; /* the gradient runs the whole track, not just the filled part */
+  transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.rep-fill.snap {
+  transition: none;
+}
+
+/* XP coming in: the bar glows for a moment. */
+.vh-rep.gain .rep-track {
+  animation: rep-gain 0.9s ease;
+}
+
+@keyframes rep-gain {
+  0% { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+  25% { box-shadow: 0 0 8px rgba(255, 179, 71, 0.9), inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+  100% { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+}
+
+/* Level up: the disc pops. */
+.vh-rep.up .rep-disc {
+  animation: rep-up 1.1s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes rep-up {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.35); box-shadow: 0 0 22px rgba(255, 179, 71, 1); }
+  100% { transform: scale(1); }
+}
+
+.vh-rep.max .rep-num {
+  color: var(--vh-accent-2);
+}
+
+.rep-float {
+  position: absolute;
+  left: 2.65rem;
+  bottom: 62%;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.08em;
+  color: var(--vh-accent-2);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+}
+
+.rep-float.show {
+  animation: rep-float 1.5s ease-out forwards;
+}
+
+@keyframes rep-float {
+  0% { opacity: 0; transform: translateY(0.4rem); }
+  15% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; transform: translateY(-0.35rem); }
+  100% { opacity: 0; transform: translateY(-0.7rem); }
+}
+
+/* Out of the way in menus, scenes, photo mode, the map and the phone. */
+body.in-menu .vh-rep,
+body.cutscene .vh-rep,
+body.photo-mode .vh-rep,
+body.map-open .vh-rep,
+body.phone-open .vh-rep {
+  opacity: 0;
+}
+
+/* On a narrower screen, just the disc while something else needs the top
+   of the screen: an achievement card, or a long objective line. */
+@media (max-width: 1150px) {
+  .hud:has(> .ach-banner.is-on) .vh-rep .rep-body {
+    display: none;
+  }
+
+  .hud:has(> .ach-banner.is-on) .vh-rep {
+    padding-right: 0.22rem;
+  }
+}
+
+@media (max-width: 1279px) {
+  body.has-objtext .vh-rep .rep-body {
+    display: none;
+  }
+
+  body.has-objtext .vh-rep {
+    padding-right: 0.22rem;
+  }
+
+  body.has-objtext .vh-rep .rep-float {
+    left: auto;
+    right: 0;
+  }
+}
+
+/* ----------------------------------------------------------- the banner */
+.vh-hb {
+  position: absolute;
+  left: 50%;
+  top: max(15%, 6.4rem); /* below the achievement banner and the job timer */
+  z-index: 12;
+  min-width: 19rem;
+  max-width: min(34rem, 90vw);
+  padding: 0.85rem 2.2rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 179, 71, 0.5);
+  background: radial-gradient(120% 140% at 50% 0%, rgba(58, 28, 52, 0.94), rgba(10, 12, 26, 0.94) 70%);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), 0 0 34px rgba(255, 122, 89, 0.25);
+  font-family: var(--vh-font-display);
+  text-align: center;
+  color: var(--vh-text);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -0.6rem) scale(0.96);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.vh-hb.show {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  animation: hb-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+@keyframes hb-in {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.82); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.hb-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.hb-title {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.1rem;
+  line-height: 1.05;
+}
+
+.hb-word {
+  font-size: 1.45rem;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.7);
+}
+
+.vh-hb.has-big .hb-word {
+  font-size: 1.7rem;
+}
+
+.hb-big {
+  font-size: 3.4rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  background: var(--vh-sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.6));
+}
+
+.hb-big:empty {
+  display: none;
+}
+
+.hb-sub {
+  margin-top: 0.3rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--vh-money);
+}
+
+.hb-sub:empty {
+  display: none;
+}
+
+.hb-lines {
+  margin: 0.55rem 0 0;
+  padding: 0.5rem 0 0;
+  list-style: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hb-lines:empty {
+  display: none;
+}
+
+.hb-lines li {
+  font-family: var(--vh-font);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgba(241, 244, 255, 0.9);
+}
+
+.vh-hb.level .hb-lines li::before {
+  content: 'NEW PERK';
+  margin-right: 0.55rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 179, 71, 0.18);
+  font-family: var(--vh-font-display);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  vertical-align: 0.1em;
+  color: var(--vh-accent-2);
+}
+
+/* A Daily Hustle done: teal. */
+.vh-hb.daily {
+  border-color: rgba(53, 224, 208, 0.5);
+  background: radial-gradient(120% 140% at 50% 0%, rgba(16, 52, 60, 0.94), rgba(10, 12, 26, 0.94) 70%);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), 0 0 30px rgba(53, 224, 208, 0.2);
+}
+
+.vh-hb.daily .hb-kicker {
+  color: var(--vh-accent-3);
+}
+
+/* All three done: gold. */
+.vh-hb.streak {
+  border-color: rgba(255, 210, 122, 0.7);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 196, 80, 0.35);
+}
+
+.vh-hb.streak .hb-kicker {
+  color: #ffd27a;
+}
+
+body.cutscene .vh-hb,
+body.in-menu .vh-hb,
+body.photo-mode .vh-hb {
+  opacity: 0;
+}
+
+/* ------------------------------------------- Daily Hustle progress cards */
+.notify.hustle {
+  padding: 0.45rem 0.75rem;
+  gap: 0.55rem;
+  align-items: center;
+  border-left-color: var(--vh-accent-2);
+}
+
+.notify.hustle .notify-icon {
+  font-size: 1rem;
+}
+
+.notify.hustle .notify-title {
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vh-accent-2);
+}
+
+.notify.hustle .notify-text {
+  margin-top: 0;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.notify.hustle-new {
+  border-left-color: var(--vh-accent-3);
+}
+
+.notify.hustle-new .notify-text {
+  white-space: pre-line;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vh-rep.up .rep-disc,
+  .vh-rep.gain .rep-track,
+  .vh-hb.show {
+    animation: none;
+  }
+}

@@ -1,0 +1,263 @@
+/*
+ * jobs.css — the odd-jobs panel (oddjobs.js): on the right-hand side, under
+ * the money and the weapon box. The job and its level (ten pips, the one
+ * being played pulsing), the call timer, the pay this shift, a meter (the
+ * patients' condition, a fragile parcel, parcels or suspects) and what to
+ * do now. Each job has its own colour (--oj).
+ */
+
+.vh-jobs {
+  --oj: var(--vh-accent-3);
+  position: absolute;
+  right: 1.8rem;
+  top: 6.6rem;
+  width: 15.5rem;
+  padding: 0.6rem 0.8rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid var(--oj);
+  background: linear-gradient(160deg, rgba(14, 18, 34, 0.86), rgba(6, 9, 20, 0.76));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  font-family: var(--vh-font-display);
+  color: var(--vh-text);
+  opacity: 0;
+  transform: translateX(1rem);
+  transition: opacity 0.3s ease, transform 0.3s ease, top 0.3s ease;
+  pointer-events: none;
+}
+
+.vh-jobs.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.vh-jobs.oj-paramedic {
+  --oj: #ff5a6e;
+}
+
+.vh-jobs.oj-vigilante {
+  --oj: #56b4ff;
+}
+
+.vh-jobs.oj-courier {
+  --oj: #ffb347;
+}
+
+/* Out of the way in menus and cutscenes; the getting-started checklist
+ * (same corner) steps aside while a shift is on. */
+body.in-menu .vh-jobs,
+body.cutscene .vh-jobs,
+body.photo-mode .vh-jobs,
+body.map-open .vh-jobs,
+body.phone-open .vh-jobs,
+body.shop-open .vh-jobs {
+  opacity: 0;
+}
+
+body.oj-on .hud-hints {
+  opacity: 0;
+}
+
+/* The weapon panel sits where the card starts: the card moves down. */
+body.armed .vh-jobs {
+  top: 11.6rem;
+}
+
+/* ------------------------------------------------------------ the head */
+.oj-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.oj-icon {
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 6px;
+  background: var(--oj);
+  color: #0a0d18;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.oj-name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.oj-level {
+  margin-left: auto;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  color: var(--vh-muted);
+  white-space: nowrap;
+}
+
+.oj-level b {
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.oj-level em {
+  font-style: normal;
+}
+
+.vh-jobs.oj-mastered .oj-level::after {
+  content: ' ★';
+  color: var(--vh-accent-2);
+}
+
+/* Ten levels: cleared ones lit, the one being played pulsing. */
+.oj-pips {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+  margin: 0.45rem 0 0.5rem;
+}
+
+.oj-pips i {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.oj-pips i.on {
+  background: var(--oj);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--oj) 55%, transparent);
+}
+
+.oj-pips i.now {
+  box-shadow: inset 0 0 0 1px var(--oj);
+  animation: oj-now 1.1s ease-in-out infinite alternate;
+}
+
+/* ---------------------------------------------------- the timer and pay */
+.oj-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.oj-main small {
+  display: block;
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  color: var(--vh-muted);
+}
+
+.oj-timer {
+  display: inline-block;
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  transform-origin: left center;
+}
+
+.vh-jobs.oj-wait .oj-timer {
+  color: var(--vh-muted);
+}
+
+.vh-jobs.oj-urgent .oj-timer {
+  color: var(--vh-danger);
+  animation: oj-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.oj-earn {
+  text-align: right;
+}
+
+.oj-pay {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--vh-money);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ the meter */
+.oj-meter {
+  display: none;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  color: var(--vh-muted);
+}
+
+.oj-meter.visible {
+  display: grid;
+}
+
+.oj-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.oj-bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--oj);
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.oj-meter.low .oj-bar i {
+  background: var(--vh-danger);
+}
+
+.oj-meter.ouch .oj-bar {
+  animation: oj-knock 0.15s linear 4;
+}
+
+.oj-mval {
+  min-width: 2.4rem;
+  text-align: right;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------- what to do */
+.oj-status {
+  margin-top: 0.45rem;
+  font-family: var(--vh-font);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(241, 244, 255, 0.82);
+}
+
+.oj-status.warn {
+  font-weight: 600;
+  color: var(--vh-warn);
+}
+
+@keyframes oj-now {
+  to { background: color-mix(in srgb, var(--oj) 45%, transparent); }
+}
+
+@keyframes oj-pulse {
+  to { transform: scale(1.07); }
+}
+
+@keyframes oj-knock {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+body.reduced-flashing .vh-jobs .oj-pips i.now,
+body.reduced-flashing .vh-jobs .oj-timer,
+body.reduced-flashing .vh-jobs .oj-bar {
+  animation: none;
+}

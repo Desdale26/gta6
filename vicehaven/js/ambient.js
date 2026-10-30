@@ -207,7 +207,7 @@
       const types = V.spots.map((s) => s.type);
       for (const S of this.game.layout.strips || []) {
         for (const lot of S.lots) {
-          if (lot.kind !== 'parking' || lot.store || lot.spray || lot.gun) continue;
+          if (lot.kind !== 'parking' || lot.store || lot.spray || lot.gun || lot.chop) continue;
           const alongX = lot.maxX - lot.minX >= lot.maxZ - lot.minZ;
           // The bays buildings.js paints: two rows, 2.7 m apart, 5.2 m deep, 1 m in from the edges.
           const rows = alongX ? [[lot.minZ + 3.6, 0], [lot.maxZ - 3.6, Math.PI]] : [[lot.minX + 3.6, Math.PI / 2], [lot.maxX - 3.6, -Math.PI / 2]];
