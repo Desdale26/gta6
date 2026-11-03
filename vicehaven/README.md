@@ -250,6 +250,14 @@ After that, jobs appear as glowing markers and icons on the map. Walk into
 one and press **E**. **Esc → Job log** lists what's open, what's done, and
 what each job is about.
 
+**Story so far.** Skipped the cutscenes? **Esc → Story so far** (or the
+**Story** app on Jay's phone, **P**) tells the story up to where you are:
+where things stand and what's next (with Set GPS), a recap of every job
+you've finished, written to match the choices you made, the side stories,
+who's who, and the choices themselves. Nothing past where you've got to is
+shown. When you continue a save, a *Previously in Vicehaven…* card reminds
+you where you left off.
+
 | Act | Jobs | What it's about |
 |-----|-----:|-----------------|
 | **1 · Homecoming** | 8 | The funeral, the padlocked house, a new crew, the toolbox with the old cut in it |
@@ -728,6 +736,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Find the cash stash on the Civic Plaza terrace near the start: a chime as you get close, then the CASH STASH pop
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
 - [ ] The title screen says v2.0 and What's new lists the Hustle update
+- [ ] Esc → Story so far on a new game: the prologue and Up next: Homecoming, Set GPS draws the route; after a few jobs every finished one has a recap that matches your choices; Who's who only lists people you've met
+- [ ] Continue a save: a Previously in Vicehaven… card with the last job and what's next
 
 For developers, the automated checks need Node.js and Playwright:
 
