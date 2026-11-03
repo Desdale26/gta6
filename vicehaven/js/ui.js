@@ -1128,6 +1128,10 @@
         row.append(el('h3', '', title), el('p', '', text));
         body.append(row);
       };
+      body.append(el('p', 'whatsnew-lead', 'Skipped the cutscenes? No problem. Pause and pick Story so far (or open the Story app on Jay\'s phone, P) to see exactly where you are in the story.'));
+      item('📖  Story so far', 'Where things stand right now and what\'s next (with Set GPS), then the story act by act: a short recap of every job you\'ve finished, written to match the choices you made. Side stories, Who\'s who (only the people you\'ve met) and the big decisions you\'ve taken have their own tabs. Nothing past where you\'ve got to is shown.');
+      item('⏪  Previously in Vicehaven…', 'Continue a saved game and a card reminds you what happened last and where to go next. Skip a scene and the game tells you where to catch up, and adds the job to Story so far when you finish it.');
+      body.append(el('h3', 'whatsnew-sub', 'Also new in v2.0: the Hustle update'));
       body.append(el('p', 'whatsnew-lead', 'The Hustle update: there is always something to do now, and a lot more ways to make money. Press P for Jay\'s phone: today\'s Daily Hustles, your Street Rep, and everything worth doing near you, with the GPS one tap away.'));
       item('📱  Jay\'s phone (P)', 'The hub for everything new. Hustles shows today\'s three tasks and your streak, Rep shows your level and the perks still to come, Jobs lists what is worth doing near you right now (odd jobs, the chop shop hot list, races, bounties, taxi fares, paydays, story jobs) with Set GPS on each, and Bank shows where your money came from. The game pauses while it is open.');
       item('⭐  Street Rep', 'Everything you do earns Rep: story jobs, races, hold-ups, taxi fares, stunt jumps, odd jobs, chop shops, street encounters, stashes. 50 levels, quick at first. Every level pays $200 times the new level, and 25 perks come along the way: bigger paydays, better prices at the chop shop, more max health and armour, money off at Bayline Arms.');

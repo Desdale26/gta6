@@ -22,7 +22,11 @@ buying the city block by block with money Jay once helped steal.
   and the walled mansions of Crestline Estates, with a running day and night.
 - **18 cars, 23 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
-- **New in v2.0 (Hustle update):** Street Rep levels (1 to 50) with perks
+- **New in v2.1:** **Story so far** (Esc, or the Story app on the phone):
+  where you are in the story, a recap of every job you've finished written
+  to match your choices, who's who, and a *Previously in Vicehaven…* card
+  when you continue. Made for anyone who skips the cutscenes.
+- **v2.0 (Hustle update):** Street Rep levels (1 to 50) with perks
   for everything you do, three Daily Hustles every in-game day with a
   streak bonus, Busted Spanner chop shops that buy any car (a daily hot list
   pays extra), paramedic, vigilante and courier odd jobs, street encounters
@@ -735,7 +739,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Wait a couple of minutes in free roam: a street encounter (pulsing !) starts nearby; ignore it and it goes away
 - [ ] Find the cash stash on the Civic Plaza terrace near the start: a chime as you get close, then the CASH STASH pop
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
-- [ ] The title screen says v2.0 and What's new lists the Hustle update
+- [ ] The title screen says v2.1 and What's new lists Story so far and the Hustle update
 - [ ] Esc → Story so far on a new game: the prologue and Up next: Homecoming, Set GPS draws the route; after a few jobs every finished one has a recap that matches your choices; Who's who only lists people you've met
 - [ ] Continue a save: a Previously in Vicehaven… card with the last job and what's next
 
