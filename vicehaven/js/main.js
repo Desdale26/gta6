@@ -258,6 +258,11 @@
           isDaytime: () => !!this.settings.get('gameplay.alwaysDay'),
           daytimeKey: () => this._dayKey(),
           jobLog: () => this.jobLog(),
+          storyLog: () => this.storyLog || null, // pause menu → Story so far (storylog.js)
+          storyGps: (wp) => {
+            this.setWaypoint(wp);
+            this.resume();
+          },
           toggleFullscreen: () => this.toggleFullscreen(),
           notify: (text) => this.hud.notify({ title: 'Vicehaven', text }),
         },

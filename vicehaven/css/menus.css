@@ -125,6 +125,43 @@
   width: min(420px, 92vw);
 }
 
+/* Every button fits (Abandon too, during a job); past that (big interface text) the list scrolls. */
+.pause-menu {
+  min-height: 0;
+  overflow-y: auto;
+  margin: -3px;
+  padding: 3px;
+  scrollbar-width: thin;
+}
+
+.pause-menu > * {
+  flex: none;
+}
+
+@media (max-height: 820px) {
+  .pause-panel {
+    padding-top: 1.1rem;
+    padding-bottom: 1rem;
+  }
+
+  .pause-panel .panel-head {
+    margin-bottom: 0.7rem;
+  }
+
+  .pause-menu {
+    gap: 0.32rem;
+  }
+
+  .pause-menu .menu-btn {
+    padding-top: 0.48rem;
+    padding-bottom: 0.48rem;
+  }
+
+  .pause-hint {
+    margin-top: 0.7rem;
+  }
+}
+
 .pause-meta {
   font-size: 0.82rem;
   color: var(--vh-muted);

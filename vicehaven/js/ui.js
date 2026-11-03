@@ -1,6 +1,7 @@
 /*
  * ui.js — title screen, pause menu, settings, controls, statistics,
- * credits, dialogs and the intro title card.
+ * Story so far (the model is storylog.js), credits, dialogs and the intro
+ * title card.
  *
  * The UI never reaches into game systems directly. main.js hands it a
  * small set of callbacks (newGame, resume, quitToTitle, ...) and it reads
@@ -14,6 +15,10 @@
   const el = (tag, cls, text) => VH.util.el(tag, cls, text);
 
   const pct = (v) => Math.round(v * 100) + '%';
+
+  // Pause menu → Story so far: its tabs.
+  const STORY_TABS = [['story', 'Story'], ['side', 'Side stories'], ['who', 'Who\'s who'], ['choices', 'Choices']];
+  const PAD_STICK = 0.55; // a stick pushed past this is a press (menus on a controller)
 
   /** Everything on the settings screen, as data. */
   const SETTINGS_SCHEMA = {
@@ -113,6 +118,7 @@
       this._buildCredits();
       this._buildWhatsNew();
       this._buildProgress();
+      this._buildStory();
       this._buildQuit();
       this._buildDialog();
       this._buildIntro();
@@ -144,7 +150,9 @@
       if (id === 'settings') this._refreshSettingsValues();
       if (id === 'stats') this._refreshStats();
       if (id === 'progress') this._refreshProgress();
+      if (id === 'story') this._openStory();
       if (id === 'pause') this._refreshDaytime();
+      if (id === 'pause' || id === 'story') this._padMenus();
     }
 
     back() {
@@ -183,7 +191,7 @@
         return;
       }
       if (this.input._capture) return;
-      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew' || this.current === 'progress')) {
+      if (e.code === 'Escape' && (this.current === 'settings' || this.current === 'stats' || this.current === 'credits' || this.current === 'whatsnew' || this.current === 'progress' || this.current === 'story')) {
         this.back();
         return;
       }
@@ -245,6 +253,7 @@
       menu.append(
         this._button('Resume', () => this.actions.resume(), { primary: true }),
         this._button('City map', () => this.actions.openMap()),
+        this._button('Story so far', () => this.show('story', true)),
         this._button('Photo mode', () => this.actions.photoMode && this.actions.photoMode()),
         (this.dayBtn = this._button('Daytime: Off', () => this.actions.toggleDaytime && this.actions.toggleDaytime())),
         this._button('Job log', () => this.openDialog('jobLog')),
@@ -522,6 +531,542 @@
         text.append(el('div', 'ach-card-title', a.title), el('div', 'ach-card-how', a.how));
         card.append(el('div', 'ach-card-icon', a.unlocked ? a.icon : '🔒'), text, el('div', 'ach-card-date', a.unlocked ? a.unlocked : ''));
         this.progAch.append(card);
+      }
+    }
+
+    // ----------------------------------------------------- story so far
+    /**
+     * Pause menu → Story so far (the model comes from storylog.js): where
+     * things stand, the story act by act with a recap of every job done, the
+     * side stories, who's who and the choices made. Keys: ↑↓ (or W/S) move
+     * through it, ←→ (or A/D, Q/E) change the tab, Enter opens or closes a
+     * chapter, G sets the GPS, Esc or Backspace go back. A controller: stick
+     * or D-pad, A, B, LB/RB for the tabs, X for the GPS, the right stick
+     * scrolls. The mouse: click and scroll.
+     */
+    _buildStory() {
+      const s = this._screen('story', 'screen-story');
+      const panel = el('div', 'panel story-panel');
+      const head = el('div', 'panel-head');
+      head.append(el('h2', '', 'Story so far'));
+      this.storyMeta = el('div', 'story-meta');
+      head.append(this.storyMeta);
+      const tabs = el('div', 'tabs story-tabs');
+      this.storyTabs = {};
+      for (const [id, label] of STORY_TABS) {
+        const t = el('button', 'tab');
+        t.type = 'button';
+        t.append(el('span', '', label), el('small', 'story-tab-n'));
+        t.addEventListener('click', () => {
+          VH.events.emit('ui:click', {});
+          this._storyTab(id);
+        });
+        this.storyTabs[id] = t;
+        tabs.append(t);
+      }
+      this.storyBody = el('div', 'story-body');
+      // Tab (the browser's own focus keys) and clicks move the highlight too.
+      this.storyBody.addEventListener('focusin', (e) => {
+        const n = e.target.closest && e.target.closest('[data-snav]');
+        if (n && n !== this._storySel) this._storySelect(n, true);
+      });
+      const foot = el('div', 'panel-foot story-foot');
+      this.storyKeys = el('div', 'story-keys');
+      foot.append(this.storyKeys, this._button('Back', () => this.back(), { primary: true }));
+      panel.append(head, tabs, this.storyBody, foot);
+      s.append(panel);
+      this._storyTabId = 'story';
+      this._storyOpen = {}; // chapters opened or closed by the player (the rest follow the story)
+      this._storySel = null;
+      window.addEventListener('keydown', (e) => this._storyKey(e));
+    }
+
+    _openStory() {
+      this._refreshStory(false);
+      const t = this.storyTabs[this._storyTabId];
+      if (t) t.focus({ preventScroll: true });
+    }
+
+    _storyModel() {
+      const log = this.actions.storyLog && this.actions.storyLog();
+      if (!log) return null;
+      try {
+        return log.model();
+      } catch (err) {
+        console.warn('[ui] story so far', err);
+        return null;
+      }
+    }
+
+    /** Rebuild the open tab (`keep`: stay where the scroll was). */
+    _refreshStory(keep) {
+      const m = this._storyModel();
+      const body = this.storyBody;
+      const top = keep ? body.scrollTop : 0;
+      const key = keep && this._storySel ? this._storySel.dataset.skey : null;
+      body.textContent = '';
+      this._storySel = null;
+      for (const [id, t] of Object.entries(this.storyTabs)) t.classList.toggle('active', id === this._storyTabId);
+      if (!m) {
+        this.storyMeta.textContent = '';
+        body.append(this._storyEmpty('Nothing here yet', 'The story log is not available right now.'));
+        this._storyHints();
+        return;
+      }
+      const done = m.acts.reduce((a, x) => a + x.done, 0);
+      const total = m.acts.reduce((a, x) => a + x.total, 0);
+      const act = m.acts.find((a) => a.state === 'current');
+      this.storyMeta.textContent = (act ? 'Act ' + act.n + (act.title ? ' · ' + act.title : '') + ' · ' : m.ending !== null ? 'The end · ' : '') + done + ' of ' + total + ' story jobs';
+      const started = m.side.filter((c) => c.state !== 'locked').length;
+      const n = { story: '', side: started ? String(started) : '', who: m.who.length ? String(m.who.length) : '', choices: m.choices.length ? String(m.choices.length) : '' };
+      for (const [id, t] of Object.entries(this.storyTabs)) t.querySelector('.story-tab-n').textContent = n[id] || '';
+      const pane = el('div', 'story-pane story-pane-' + this._storyTabId);
+      try {
+        ({ story: () => this._storyPaneStory(m, pane), side: () => this._storyPaneSide(m, pane), who: () => this._storyPaneWho(m, pane), choices: () => this._storyPaneChoices(m, pane) })[this._storyTabId]();
+      } catch (err) {
+        console.warn('[ui] story so far: ' + this._storyTabId, err);
+        pane.textContent = '';
+        pane.append(this._storyEmpty('Nothing here yet', 'This page is not available right now.'));
+      }
+      body.append(pane);
+      body.scrollTop = top;
+      const again = key ? body.querySelector('[data-skey="' + CSS.escape(key) + '"]') : null;
+      if (again && again.offsetParent !== null) this._storySelect(again, true);
+      this._storyHints();
+    }
+
+    _storyTab(id) {
+      if (!this.storyTabs[id]) return;
+      const onTab = document.activeElement && document.activeElement.closest && document.activeElement.closest('.story-tabs');
+      this._storyTabId = id;
+      this._refreshStory(false);
+      if (onTab || !this._storySel) this.storyTabs[id].focus({ preventScroll: true });
+    }
+
+    _storyTabStep(dir) {
+      const ids = STORY_TABS.map((t) => t[0]);
+      const i = ids.indexOf(this._storyTabId);
+      this._storyTab(ids[(i + dir + ids.length) % ids.length]);
+      VH.events.emit('ui:click', {});
+    }
+
+    /** Something the arrows (and the pad) stop on: `key` finds it again after a rebuild. */
+    _storyNav(node, key) {
+      node.dataset.snav = '';
+      if (key) node.dataset.skey = key;
+      if (node.tagName !== 'BUTTON') node.tabIndex = -1;
+      node.addEventListener('mousedown', () => this._storySelect(node, true));
+      return node;
+    }
+
+    _storyEmpty(title, text) {
+      const c = el('div', 'story-empty');
+      c.append(el('div', 'story-empty-icon', '📖'), el('b', '', title), el('p', '', text));
+      return c;
+    }
+
+    _storyGpsButton(place) {
+      const b = this._button('Set GPS', () => this.actions.storyGps && this.actions.storyGps(place), { primary: true });
+      b.classList.add('story-gps');
+      b.title = 'GPS to ' + place.name + ' (G)';
+      return this._storyNav(b, 'gps:' + place.name);
+    }
+
+    _storyFact(label, value) {
+      const f = el('span', 'story-fact');
+      f.append(el('span', 'story-fact-label', label), el('span', 'story-fact-value', value));
+      return f;
+    }
+
+    // The Story tab.
+    _storyPaneStory(m, box) {
+      box.append(this._storyNow(m));
+      const anyDone = m.acts.some((a) => a.done > 0);
+      if (m.prologue) box.append(this._storyChapter('prologue', 'Before it all', 'Prologue', '', [el('p', 'story-prose', m.prologue)], !anyDone));
+      for (const a of m.acts) {
+        if (a.state === 'locked') {
+          const c = el('section', 'story-chapter is-locked');
+          const h = el('div', 'story-chapter-head');
+          const t = el('span', 'story-chapter-titles');
+          t.append(el('span', 'story-chapter-kicker', 'Act ' + a.n), el('span', 'story-chapter-title', '???'));
+          h.append(t, el('span', 'story-chapter-count', a.total + ' jobs'));
+          c.append(h);
+          box.append(c);
+          continue;
+        }
+        const kids = [];
+        if (a.intro) kids.push(el('p', 'story-act-intro', a.intro));
+        for (const j of a.jobs) {
+          if (j.state === 'done') kids.push(this._storyJob(j));
+          else if (j.state === 'current' || j.state === 'next') kids.push(this._storyUpcoming(j));
+          // Locked jobs are never listed: nothing past the next one.
+        }
+        if (a.outro && a.outro !== m.ending) {
+          const o = el('div', 'story-act-outro');
+          o.append(el('div', 'story-act-outro-label', 'End of Act ' + a.n), el('p', '', a.outro));
+          kids.push(o);
+        }
+        box.append(this._storyChapter('act' + a.n, a.title || 'Act ' + a.n, a.title ? 'Act ' + a.n : '', a.state === 'done' ? '✓ ' + a.total + ' jobs' : a.done + ' of ' + a.total, kids, a.state === 'current'));
+      }
+    }
+
+    /** Where things stand: the job under way, the next one (with Set GPS), or the ending. */
+    _storyNow(m) {
+      const n = m.now || { kind: 'done', title: 'The end', text: '' };
+      const c = el('section', 'story-now is-' + n.kind);
+      const head = el('div', 'story-now-head');
+      head.append(el('span', 'story-now-label', 'Where things stand'));
+      const kick = n.kind === 'mission'
+        ? (n.side ? 'On a side job · ' + n.side : 'On the job now' + (n.act ? ' · Act ' + n.act : ''))
+        : n.kind === 'next' ? 'Up next' + (n.act ? ' · Act ' + n.act + (n.n ? ', job ' + n.n : '') : '') : 'The end of the story';
+      head.append(el('span', 'story-now-kicker', kick));
+      c.append(head, el('h3', 'story-now-title', n.title || ''));
+      if (n.text) c.append(el('p', 'story-now-text', n.text));
+      if (n.kind === 'mission' && n.objective) {
+        const o = el('div', 'story-now-obj');
+        o.append(el('span', 'story-now-obj-label', 'Objective'), el('span', '', n.objective));
+        c.append(o);
+      }
+      let gps = null;
+      if (n.kind === 'next') {
+        const row = el('div', 'story-now-row');
+        const facts = el('div', 'story-facts');
+        if (n.giver) facts.append(this._storyFact('From', n.giver));
+        if (n.place) facts.append(this._storyFact('Where', n.place.name));
+        else if (n.auto) facts.append(this._storyFact('Starts', 'by itself'));
+        row.append(facts);
+        if (n.place) row.append((gps = this._storyGpsButton(n.place)));
+        c.append(row);
+      }
+      if (n.kind === 'done') c.append(el('p', 'story-now-foot', 'The races, fares, bounties and side stories are still out there.'));
+      // With a GPS button, that's what the arrows stop on; otherwise the card itself (to read it).
+      if (!gps) this._storyNav(c, 'now');
+      return c;
+    }
+
+    _storyChapter(key, title, kicker, count, kids, openDefault) {
+      const open = Object.prototype.hasOwnProperty.call(this._storyOpen, key) ? this._storyOpen[key] : openDefault;
+      const ch = el('section', 'story-chapter' + (open ? ' is-open' : ''));
+      const h = el('button', 'story-chapter-head');
+      h.type = 'button';
+      h.setAttribute('aria-expanded', String(open));
+      const t = el('span', 'story-chapter-titles');
+      if (kicker) t.append(el('span', 'story-chapter-kicker', kicker));
+      t.append(el('span', 'story-chapter-title', title));
+      h.append(t);
+      if (count) h.append(el('span', 'story-chapter-count', count));
+      h.append(el('span', 'story-chevron'));
+      h.addEventListener('click', () => {
+        VH.events.emit('ui:click', {});
+        const on = !ch.classList.contains('is-open');
+        ch.classList.toggle('is-open', on);
+        h.setAttribute('aria-expanded', String(on));
+        this._storyOpen[key] = on;
+        this._storySelect(h, false);
+      });
+      this._storyNav(h, 'ch:' + key);
+      const body = el('div', 'story-chapter-body');
+      body.append(...kids);
+      ch.append(h, body);
+      return ch;
+    }
+
+    _storyJob(j) {
+      const a = el('article', 'story-job is-done');
+      this._storyNav(a, 'job:' + j.id);
+      a.append(el('div', 'story-job-num', String(j.n)));
+      const main = el('div', 'story-job-main');
+      main.append(el('h4', 'story-job-title', j.title));
+      if (j.line) main.append(el('div', 'story-job-line', j.line));
+      if (j.recap && j.recap !== j.line) main.append(el('p', 'story-job-recap', j.recap));
+      a.append(main);
+      return a;
+    }
+
+    /** The job under way or the next one, at the end of its act (or its side story), with its setup. */
+    _storyUpcoming(j, withGps) {
+      const a = el('article', 'story-job is-' + j.state);
+      this._storyNav(a, 'job:' + j.id);
+      a.append(el('div', 'story-job-num', String(j.n)));
+      const main = el('div', 'story-job-main');
+      main.append(el('div', 'story-job-kicker', j.state === 'current' ? 'On the job now' : 'Up next'));
+      main.append(el('h4', 'story-job-title', j.title));
+      if (j.setup) main.append(el('p', 'story-job-recap', j.setup));
+      if (withGps && (j.place || j.giver)) {
+        const row = el('div', 'story-now-row');
+        const facts = el('div', 'story-facts');
+        if (j.giver) facts.append(this._storyFact('From', j.giver));
+        if (j.place) facts.append(this._storyFact('Where', j.place.name));
+        row.append(facts);
+        if (j.place && j.state === 'next') row.append(this._storyGpsButton(j.place));
+        main.append(row);
+      }
+      a.append(main);
+      return a;
+    }
+
+    // Side stories: the ones started or open, done jobs with recaps, the next with where to go.
+    _storyPaneSide(m, box) {
+      const open = m.side.filter((c) => c.state !== 'locked');
+      const later = m.side.length - open.length;
+      if (!open.length) box.append(this._storyEmpty('No side stories yet', 'As the story goes on, people round Vicehaven will need a hand. Their jobs show up on the map as blue markers.'));
+      for (const c of open) {
+        const card = el('section', 'story-side is-' + c.state);
+        const head = el('div', 'story-side-head');
+        const t = el('div', 'story-side-titles');
+        t.append(el('h3', 'story-side-title', c.title));
+        if (c.giver) t.append(el('div', 'story-side-giver', 'A side story with ' + c.giver));
+        const right = el('div', 'story-side-right');
+        right.append(el('span', 'story-tag is-' + c.state, { done: 'Done', current: 'Under way', available: 'New' }[c.state] || ''));
+        const pips = el('span', 'story-pips');
+        for (const j of c.jobs) pips.append(el('i', j.state === 'done' ? 'is-done' : j.state === 'next' || j.state === 'current' ? 'is-next' : ''));
+        right.append(pips, el('span', 'story-side-count', c.done + ' / ' + c.total));
+        head.append(t, right);
+        card.append(head);
+        for (const j of c.jobs) {
+          if (j.state === 'done') card.append(this._storyJob(j));
+          else if (j.state === 'current' || j.state === 'next') card.append(this._storyUpcoming(j, true));
+        }
+        if (c.state !== 'done' && !c.jobs.some((j) => j.state === 'current' || j.state === 'next')) card.append(el('p', 'story-side-later', 'More of this story later on.'));
+        box.append(card);
+      }
+      if (later && open.length) box.append(el('p', 'story-note', later === 1 ? 'One more side story opens up as the story goes on.' : later + ' more side stories open up as the story goes on.'));
+    }
+
+    // Who's who: the people Jay has met.
+    _storyPaneWho(m, box) {
+      if (!m.who.length) {
+        box.append(this._storyEmpty('Nobody yet', 'The people Jay meets are written down here as the story goes on.'));
+        return;
+      }
+      const grid = el('div', 'story-who');
+      for (const w of m.who) {
+        const card = el('article', 'story-person');
+        this._storyNav(card, 'who:' + w.id);
+        const av = el('div', 'story-avatar', w.initial);
+        av.style.setProperty('--av', w.colour);
+        if (w.light) av.classList.add('is-light');
+        const main = el('div', 'story-person-main');
+        main.append(el('h4', 'story-person-name', w.name));
+        if (w.role) main.append(el('div', 'story-person-role', w.role));
+        if (w.bio) main.append(el('p', 'story-person-bio', w.bio));
+        if (w.news.length) {
+          main.append(el('div', 'story-news-head', 'Since then'));
+          const ul = el('ul', 'story-news');
+          for (const t of w.news) ul.append(el('li', '', t));
+          main.append(ul);
+        }
+        card.append(av, main);
+        grid.append(card);
+      }
+      box.append(grid);
+    }
+
+    // Choices: each decision Jay made, and what it meant.
+    _storyPaneChoices(m, box) {
+      if (!m.choices.length) {
+        box.append(this._storyEmpty('No big decisions yet', 'When Jay has to make a choice that matters, it is written down here, with what it meant.'));
+        return;
+      }
+      for (const c of m.choices) {
+        const card = el('article', 'story-choice');
+        this._storyNav(card, 'choice:' + c.mission + ':' + c.title);
+        card.append(el('div', 'story-choice-kicker', (c.side || 'Act ' + c.act) + ' · ' + c.missionTitle));
+        card.append(el('h4', 'story-choice-title', c.title));
+        const pick = el('div', 'story-choice-pick');
+        const said = String(c.picked || '').replace(/^[“"]+|[”"]+$/g, '');
+        pick.append(el('span', 'story-choice-mark', '✓'), el('span', '', /^\(/.test(said) ? said : '“' + said + '”'));
+        card.append(pick);
+        if (c.text) card.append(el('p', 'story-choice-text', c.text));
+        box.append(card);
+      }
+    }
+
+    // --------------------------------------------- story so far: keys and pad
+    _storyItems() {
+      return Array.from(this.storyBody.querySelectorAll('[data-snav]')).filter((n) => n.offsetParent !== null);
+    }
+
+    _storySelect(node, noScroll) {
+      if (this._storySel && this._storySel !== node) this._storySel.classList.remove('is-sel');
+      this._storySel = node || null;
+      if (!node) return;
+      node.classList.add('is-sel');
+      if (document.activeElement !== node) node.focus({ preventScroll: true });
+      if (noScroll) return;
+      const body = this.storyBody;
+      const b = body.getBoundingClientRect();
+      const r = node.getBoundingClientRect();
+      const pad = 14;
+      let dy = 0;
+      if (r.top < b.top + pad) dy = r.top - b.top - pad;
+      else if (r.bottom > b.bottom - pad) dy = Math.min(r.top - b.top - pad, r.bottom - b.bottom + pad);
+      if (dy) this._storyScroll(dy);
+    }
+
+    _storyScroll(dy) {
+      const smooth = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      this.storyBody.scrollBy({ top: dy, behavior: smooth ? 'smooth' : 'auto' });
+    }
+
+    /** Up and down: the next thing to stop on, reading on through a long entry first. */
+    _storyMove(dir) {
+      const body = this.storyBody;
+      const items = this._storyItems();
+      const b = body.getBoundingClientRect();
+      const cur = this._storySel && items.includes(this._storySel) ? this._storySel : null;
+      if (cur) {
+        const r = cur.getBoundingClientRect();
+        if (dir > 0 && r.bottom > b.bottom + 4) return this._storyScroll(Math.min(b.height * 0.6, r.bottom - b.bottom + 16));
+        if (dir < 0 && r.top < b.top - 4) return this._storyScroll(-Math.min(b.height * 0.6, b.top - r.top + 16));
+      }
+      let next = null;
+      if (!cur) next = items.find((n) => n.getBoundingClientRect().bottom > b.top + 6) || items[0];
+      else next = items[items.indexOf(cur) + dir];
+      if (!next) {
+        if (dir < 0 && cur && body.scrollTop <= 1) {
+          // Off the top: back up to the tabs.
+          cur.classList.remove('is-sel');
+          this._storySel = null;
+          this.storyTabs[this._storyTabId].focus({ preventScroll: true });
+          return;
+        }
+        this._storyScroll(dir * b.height * 0.6);
+        return;
+      }
+      this._storySelect(next);
+      VH.events.emit('ui:click', {});
+    }
+
+    _storyActivate() {
+      const s = this._storySel;
+      if (s && s.tagName === 'BUTTON') s.click();
+      else if (!s && document.activeElement && document.activeElement.closest && document.activeElement.closest('.story-panel') && document.activeElement.tagName === 'BUTTON') document.activeElement.click();
+    }
+
+    /** G (X on a pad): the GPS for the highlighted job, or the next story job. */
+    _storyGpsKey() {
+      const s = this._storySel;
+      const own = s && (s.classList.contains('story-gps') ? s : s.querySelector('.story-gps'));
+      const btn = own || (this._storyTabId === 'story' ? this.storyBody.querySelector('.story-now .story-gps') : null);
+      if (btn) btn.click();
+    }
+
+    _storyKey(e) {
+      if (this.current !== 'story' || this.dialogOpen || this.input._capture) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const c = e.code;
+      const was = this._storyPad;
+      this._storyPad = false;
+      if (was) this._storyHints();
+      let done = true;
+      if (c === 'ArrowDown' || c === 'KeyS') this._storyMove(1);
+      else if (c === 'ArrowUp' || c === 'KeyW') this._storyMove(-1);
+      else if (c === 'ArrowRight' || c === 'KeyD' || c === 'KeyE') {
+        if (!e.repeat) this._storyTabStep(1);
+      } else if (c === 'ArrowLeft' || c === 'KeyA' || c === 'KeyQ') {
+        if (!e.repeat) this._storyTabStep(-1);
+      } else if (c === 'PageDown') this._storyScroll(this.storyBody.clientHeight * 0.85);
+      else if (c === 'PageUp') this._storyScroll(-this.storyBody.clientHeight * 0.85);
+      else if (c === 'Home') this.storyBody.scrollTop = 0;
+      else if (c === 'End') this.storyBody.scrollTop = this.storyBody.scrollHeight;
+      else if (c === 'KeyG' || c === 'KeyX') {
+        if (!e.repeat) this._storyGpsKey();
+      } else if (c === 'Backspace') {
+        if (!e.repeat) this.back();
+      } else done = false;
+      if (done) e.preventDefault();
+    }
+
+    _storyHints() {
+      const pad = !!this._storyPad;
+      const k = (key, label) => {
+        const s = el('span', 'story-key');
+        s.append(el('kbd', '', key), document.createTextNode(' ' + label));
+        return s;
+      };
+      this.storyKeys.textContent = '';
+      if (pad) this.storyKeys.append(k('LB RB', 'Tabs'), k('A', 'Open'), k('X', 'Set GPS'), k('B', 'Back'));
+      else this.storyKeys.append(k('↑↓', 'Move'), k('←→', 'Tabs'), k('Enter', 'Open'), k('G', 'Set GPS'), k('Esc', 'Back'));
+    }
+
+    /** The pause menu and Story so far on a controller (the game's own presses are off while paused). */
+    _padMenus() {
+      const pad = this.input.pad;
+      this._padPrev = new Set(pad && pad.down ? pad.down : []);
+      this._padHold = { dir: null, t: 0 };
+      if (this._padRaf) return;
+      let last = performance.now();
+      const tick = (now) => {
+        this._padRaf = 0;
+        if (this.current !== 'pause' && this.current !== 'story') return;
+        const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+        last = now;
+        try {
+          this._menuPad(dt);
+        } catch (err) {
+          console.warn('[ui] pad', err);
+        }
+        this._padRaf = requestAnimationFrame(tick);
+      };
+      this._padRaf = requestAnimationFrame(tick);
+    }
+
+    _menuPad(dt) {
+      const pad = this.input.pad;
+      if (!pad || !pad.connected) {
+        this._padPrev = new Set();
+        return;
+      }
+      const now = pad.down;
+      const prev = this._padPrev || new Set();
+      const hit = (a) => now.has(a) && !prev.has(a);
+      this._padPrev = new Set(now);
+      let dir = null;
+      if (now.has('phone') || pad.move.y > PAD_STICK) dir = 'u';
+      else if (now.has('horn') || pad.move.y < -PAD_STICK) dir = 'd';
+      else if (now.has('lights') || pad.move.x < -PAD_STICK) dir = 'l';
+      else if (now.has('daytime') || pad.move.x > PAD_STICK) dir = 'r';
+      const h = this._padHold || (this._padHold = { dir: null, t: 0 });
+      let fire = null;
+      if (dir && dir !== h.dir) {
+        h.t = 0.38;
+        fire = dir;
+      } else if (dir) {
+        h.t -= dt;
+        if (h.t <= 0) {
+          h.t = 0.11;
+          fire = dir;
+        }
+      }
+      h.dir = dir;
+      const any = now.size || pad.move.x || pad.move.y || pad.look.y;
+      if (this.current === 'story') {
+        if (any && !this._storyPad) {
+          this._storyPad = true;
+          this._storyHints();
+        }
+        if (hit('jump')) this._storyActivate();
+        else if (hit('crouch') || hit('pause')) return this.back();
+        else if (hit('weaponWheel')) this._storyTabStep(-1);
+        else if (hit('camera')) this._storyTabStep(1);
+        else if (hit('reload')) this._storyGpsKey();
+        if (fire === 'u') this._storyMove(-1);
+        else if (fire === 'd') this._storyMove(1);
+        else if (fire === 'l') this._storyTabStep(-1);
+        else if (fire === 'r') this._storyTabStep(1);
+        if (Math.abs(pad.look.y) > 0.15) this.storyBody.scrollTop += pad.look.y * 900 * dt;
+      } else if (this.current === 'pause') {
+        const btns = Array.from(this.screens.pause.querySelectorAll('.pause-menu button')).filter((b) => !b.disabled && b.offsetParent !== null);
+        const i = btns.indexOf(document.activeElement);
+        if (hit('jump')) (i >= 0 ? btns[i] : btns[0]).click();
+        else if (hit('crouch')) this.actions.resume();
+        else if ((fire === 'u' || fire === 'd') && btns.length) {
+          const next = btns[((i < 0 ? 0 : i + (fire === 'd' ? 1 : -1)) + btns.length) % btns.length];
+          next.focus();
+          VH.events.emit('ui:click', {});
+        }
       }
     }
 

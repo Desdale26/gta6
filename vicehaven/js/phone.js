@@ -20,6 +20,9 @@
  *   Bank       cash, net worth, and where the money came from (this
  *              session and all time, from the money:changed reasons)
  *   Messages   the texts Jay has had
+ *   Story      the story so far (storylog.js): where things stand and Up
+ *              next with Set GPS, the last three jobs in a line each, the
+ *              acts with their jobs (choose one for its recap), who's who
  *   Map        the full map
  *
  * Keys: arrows or WASD move, Enter, E or Space choose, Esc or Backspace go
@@ -32,7 +35,7 @@
  * there (or not finished) shows "coming soon" instead of breaking the phone.
  *
  *   game.phone.isOpen            true while it's up
- *   game.phone.open(app)         'home' (default), 'hustles', 'rep', 'jobs', 'bank', 'messages'
+ *   game.phone.open(app)         'home' (default), 'hustles', 'rep', 'jobs', 'bank', 'messages', 'story'
  *   game.phone.close(quiet)      quiet: no pointer lock, no sound (pause() and the map use it)
  *   game.phone.handleKey()       main.js, every frame while playing: P takes it out
  *   game.phone.frame(dt)         main.js, every frame while it's up
@@ -82,6 +85,7 @@
     moon: '<path d="M14.6 2.6a9.6 9.6 0 1 0 6.8 14.2A8 8 0 0 1 14.6 2.6z"/>',
     cloud: '<path d="M7.2 19a4.7 4.7 0 0 1-.6-9.4 6 6 0 0 1 11.4 1.6A3.9 3.9 0 0 1 17.4 19z"/>',
     rain: '<path d="M7.2 14.6a4.4 4.4 0 0 1-.6-8.8 5.7 5.7 0 0 1 10.9 1.5 3.7 3.7 0 0 1-.2 7.3zM8 16.4l1.6.6-1.4 4-1.6-.6zm4.4 0l1.6.6-1.4 4-1.6-.6zm4.4 0l1.6.6-1.4 4-1.6-.6z"/>',
+    book: '<path d="M11.1 6.3C9.2 4.9 6.7 4.2 3.6 4.1c-.5 0-.9.4-.9.9v12.2c0 .5.4.9.9.9 3 .1 5.4.8 7.5 2.2zM12.9 6.3c1.9-1.4 4.4-2.1 7.5-2.2.5 0 .9.4.9.9v12.2c0 .5-.4.9-.9.9-3 .1-5.4.8-7.5 2.2z"/>',
     bolt: '<path d="M7.2 13.8a4.4 4.4 0 0 1-.6-8.8 5.7 5.7 0 0 1 10.9 1.5 3.7 3.7 0 0 1-.2 7.3h-3.7l1.2-3.2H11l-2 5.5h2.5L10 21.4l5.8-7.6z"/>',
   };
 
@@ -113,10 +117,13 @@
     jobs: { name: 'Jobs', title: 'Things to do', icon: 'case' },
     bank: { name: 'Bank', title: 'Bank', icon: 'bank' },
     messages: { name: 'Messages', title: 'Messages', icon: 'chat' },
+    story: { name: 'Story', title: 'Story so far', icon: 'book' },
     map: { name: 'Map', title: 'Map', icon: 'map' },
   };
   const GRID = ['hustles', 'rep', 'jobs', 'bank'];
-  const DOCK = ['messages', 'map'];
+  const DOCK = ['messages', 'story', 'map'];
+  // Views inside an app: the app they belong to.
+  const SUBVIEW = { thread: 'messages', storyjob: 'story' };
 
   // The Jobs app's tabs: each thing to do belongs to one.
   const FILTERS = [
@@ -296,7 +303,10 @@
       if (v && v.type === 'cab') return; // taxi duty (activities.js)
       if (v && g.oddJobs && g.oddJobs.dutyFor && safe(() => g.oddJobs.dutyFor(v), null)) return; // duty (oddjobs.js)
       if (!g.input.consume('phone')) return;
-      if (!this.open()) g.input.discard('phone');
+      // With the "Previously in Vicehaven…" card up, P goes straight to the story.
+      const story = !!(g.storyLog && g.storyLog.cardUp);
+      if (!this.open(story ? 'story' : undefined)) g.input.discard('phone');
+      else if (story) g.storyLog.hideCard();
     }
 
     _canOpen() {
@@ -416,7 +426,7 @@
       else if (code === 'Tab') this._tab(e.shiftKey ? -1 : 1);
       else if (code === 'KeyX' || code === 'KeyG') this._gpsKey();
       else if (is('map')) this._openMap();
-      else if (this.view === 'home' && /^Digit[1-6]$/.test(code)) this._go(GRID.concat(DOCK)[+code.slice(5) - 1]);
+      else if (this.view === 'home' && /^Digit[1-7]$/.test(code)) this._go(GRID.concat(DOCK)[+code.slice(5) - 1]);
     }
 
     _onClick(e) {
@@ -637,6 +647,7 @@
 
     _back() {
       if (this.view === 'thread') this._go('messages');
+      else if (this.view === 'storyjob') this._backToStory();
       else if (this.view !== 'home') this._home();
       else this.close();
     }
@@ -732,13 +743,13 @@
       const v = this.view;
       const tabs = v === 'jobs' || v === 'bank';
       // What choosing does here (nothing to choose in Rep or a message thread).
-      const choose = { home: 'Open', jobs: 'Set GPS', hustles: 'Show me', messages: 'Open', bank: 'Choose' }[v] || '';
+      const choose = { home: 'Open', jobs: 'Set GPS', hustles: 'Show me', messages: 'Open', bank: 'Choose', story: 'Open', storyjob: this._storyGpsOn ? 'Set GPS' : '' }[v] || '';
       if (pad) {
         if (choose) list.push(key('A', choose));
         if (tabs) list.push(key('LB/RB', 'Tabs'));
         list.push(key('B', v === 'home' ? 'Put away' : 'Back'));
       } else {
-        list.push(key('↑↓', v === 'thread' ? 'Scroll' : 'Move'));
+        list.push(key('↑↓', v === 'thread' || v === 'storyjob' ? 'Scroll' : 'Move'));
         if (tabs) list.push(key('←→', 'Tabs'));
         if (choose) list.push(key('Enter', choose));
         list.push(key('Esc', v === 'home' ? 'Put away' : 'Back'));
@@ -774,7 +785,7 @@
       back.tabIndex = -1;
       back.title = 'Back';
       back.append(svg('back'));
-      back.append(el('span', '', this.view === 'thread' ? 'Messages' : 'Home'));
+      back.append(el('span', '', SUBVIEW[this.view] ? APPS[SUBVIEW[this.view]].name : 'Home'));
       h.append(back);
       const t = el('div', 'ph-head-row');
       t.append(el('h2', 'ph-title', title));
@@ -797,7 +808,7 @@
       const top = keep && old ? old.scrollTop : 0;
       const key = keep ? this._selKey : null;
       box.textContent = '';
-      box.dataset.app = view === 'thread' ? 'messages' : view;
+      box.dataset.app = SUBVIEW[view] || view;
       this._sel = null;
       // From one app straight to another (a hustle's "show me where", a message thread): a quick slide.
       box.classList.remove('is-swap');
@@ -805,7 +816,7 @@
         void box.offsetWidth;
         box.classList.add('is-swap');
       }
-      const app = APPS[view === 'thread' ? 'messages' : view];
+      const app = APPS[SUBVIEW[view] || view];
       const fill = {
         hustles: () => this._appHustles(box),
         rep: () => this._appRep(box),
@@ -813,6 +824,8 @@
         bank: () => this._appBank(box),
         messages: () => this._appMessages(box),
         thread: () => this._appThread(box),
+        story: () => this._appStory(box),
+        storyjob: () => this._appStoryJob(box),
       }[view];
       try {
         if (fill) fill();
@@ -1749,6 +1762,185 @@
       setTimeout(() => {
         s.scrollTop = s.scrollHeight;
       }, 0);
+    }
+
+    // -------------------------------------------------------------- Story
+    _storyModel() {
+      const log = this.game.storyLog;
+      return safe(() => (log && log.model ? log.model() : null), null);
+    }
+
+    /** The story so far (storylog.js), compact: where things stand, Previously, the acts, who's who. */
+    _appStory(box) {
+      const m = this._storyModel();
+      const act = m ? m.acts.find((a) => a.state === 'current') : null;
+      box.append(this._head('Story so far', act ? 'Act ' + act.n : m && m.ending !== null ? 'The end' : ''));
+      const s = el('div', 'ph-scroll ph-story');
+      box.append(s);
+      if (!m) {
+        s.append(this._soon('The story log', 'Where Jay is in the story, and what has happened so far.'));
+        return;
+      }
+      s.append(this._storyCard(m.now, 'now'));
+      // On a side job: the main story's next job as well.
+      if (m.now && m.now.kind === 'mission' && m.now.side && m.next) s.append(this._storyCard({ kind: 'next', id: m.next.id, title: m.next.title, text: m.next.setup, place: m.next.place, giver: m.next.giver, act: m.next.act, n: m.next.n, auto: m.next.auto }, 'next'));
+
+      // Previously: the last three jobs, a line each (or where it all starts).
+      const done = [];
+      for (const a of m.acts) for (const j of a.jobs) if (j.state === 'done') done.push(j);
+      if (done.length) {
+        s.append(el('div', 'ph-section', 'Previously'));
+        const list = el('div', 'ph-list ph-sprev');
+        for (const j of done.slice(-3)) {
+          const r = el('div', 'ph-sprev-row');
+          this._nav(r, 'sprev:' + j.id, () => this._openStoryJob(j.id));
+          r.append(el('span', 'ph-kicker', 'Act ' + j.act + ' · ' + j.title), el('p', '', j.line));
+          list.append(r);
+        }
+        s.append(list);
+      } else if (m.prologue) {
+        s.append(el('div', 'ph-section', 'Before it all'));
+        const c = el('div', 'ph-card ph-sprologue');
+        this._nav(c, 'prologue');
+        c.append(el('p', '', m.prologue));
+        s.append(c);
+      }
+
+      // The acts and their jobs (choose one for its recap). Nothing past the next job.
+      for (const a of m.acts) {
+        if (a.state === 'locked') {
+          const l = el('div', 'ph-section ph-slocked');
+          l.append(svg('lock'), el('span', '', 'Act ' + a.n + ' · ???'));
+          s.append(l);
+          continue;
+        }
+        const sec = el('div', 'ph-section ph-sact');
+        sec.append(el('span', '', 'Act ' + a.n + (a.title ? ' · ' + a.title : '')), el('small', '', a.done + '/' + a.total));
+        s.append(sec);
+        const list = el('div', 'ph-list ph-sjobs');
+        for (const j of a.jobs) {
+          if (j.state === 'locked') continue;
+          const r = el('div', 'ph-sjob is-' + j.state);
+          this._nav(r, 'sjob:' + j.id, () => this._openStoryJob(j.id));
+          const n = el('span', 'ph-sjob-n');
+          if (j.state === 'done') n.append(svg('check'));
+          else n.textContent = String(j.n);
+          const main = el('div', 'ph-sjob-main');
+          main.append(el('b', '', j.title), el('span', '', j.state === 'done' ? j.line : j.state === 'current' ? 'On the job now' : 'Up next'));
+          r.append(n, main);
+          list.append(r);
+        }
+        s.append(list);
+      }
+
+      // Who's who: highlight someone for more.
+      if (m.who.length) {
+        s.append(el('div', 'ph-section', 'Who\'s who · ' + m.who.length));
+        const list = el('div', 'ph-list ph-swho');
+        for (const w of m.who) {
+          const r = el('div', 'ph-sperson');
+          this._nav(r, 'who:' + w.id, null, () => {});
+          const av = el('span', 'ph-avatar' + (w.light ? ' is-light' : ''), w.initial);
+          av.style.setProperty('--av', w.colour);
+          const top = el('div', 'ph-sperson-top');
+          const main = el('div', 'ph-sperson-main');
+          main.append(el('b', '', w.name), el('span', '', w.role));
+          top.append(av, main);
+          const more = el('div', 'ph-more');
+          const inner = el('div', 'ph-more-in');
+          if (w.bio) inner.append(el('p', '', w.bio));
+          if (w.news.length) inner.append(el('p', 'ph-sperson-news', w.news[0]));
+          more.append(inner);
+          r.append(top, more);
+          list.append(r);
+        }
+        s.append(list);
+      }
+      const f = el('div', 'ph-foot');
+      f.append(el('span', '', 'Side stories and choices: '), el('b', '', 'Pause → Story so far'));
+      s.append(f);
+    }
+
+    /** Where things stand (or the main story's Up next): Set GPS when there's somewhere to go. */
+    _storyCard(n, key) {
+      const g = this.game;
+      n = n || { kind: 'done', title: 'The end', text: '' };
+      const c = el('div', 'ph-card ph-snow is-' + n.kind);
+      const kick = n.kind === 'mission' ? (n.side ? 'Side job now · ' + n.side : 'On the job now') : n.kind === 'next' ? 'Up next' + (n.act ? ' · Act ' + n.act : '') : 'The end';
+      c.append(el('div', 'ph-kicker', kick), el('div', 'ph-snow-title', n.title || ''));
+      if (n.text) c.append(el('p', 'ph-snow-text', n.text));
+      if (n.kind === 'mission' && n.objective) c.append(el('div', 'ph-snow-obj', n.objective));
+      const p = n.kind === 'next' ? n.place : null;
+      if (n.kind === 'next' && (n.giver || p || n.auto)) {
+        const facts = el('div', 'ph-snow-facts');
+        if (n.giver) facts.append(el('span', '', 'From ' + n.giver));
+        if (p) facts.append(el('span', '', p.name));
+        else if (n.auto) facts.append(el('span', '', 'Starts by itself'));
+        c.append(facts);
+      }
+      if (p) {
+        const it = { x: p.x, z: p.z, gps: p.name, title: n.title };
+        const set = () => this._setGps(it, c);
+        this._nav(c, 'snow:' + key, set, () => {});
+        c._gps = set;
+        const wp = g.waypoint;
+        const isWp = wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 3;
+        const go = el('button', 'ph-go' + (isWp ? ' is-set' : ''));
+        go.type = 'button';
+        go.tabIndex = -1;
+        go.dataset.click = '';
+        go._click = set;
+        go.append(svg(isWp ? 'check' : 'pin'), el('span', '', isWp ? 'GPS set' : 'Set GPS'));
+        c.append(go);
+      } else this._nav(c, 'snow:' + key, null, () => {});
+      return c;
+    }
+
+    _openStoryJob(id) {
+      this._storyJobId = id;
+      this._storyBack = this._selKey; // the row it was opened from (Previously or the act list)
+      this.view = 'storyjob';
+      this._renderApp(false);
+      this._hints();
+      if (this.game.audio && this.game.audio.click) this.game.audio.click();
+    }
+
+    _backToStory() {
+      const key = this._storyBack || 'sjob:' + (this._storyJobId || '');
+      this._go('story');
+      const row = this.appEl.querySelector('[data-key="' + CSS.escape(key) + '"]');
+      if (row) {
+        this._select(null);
+        this._select(row);
+      }
+    }
+
+    /** One job's recap (or, for the next one, its setup and Set GPS). */
+    _appStoryJob(box) {
+      const m = this._storyModel();
+      const id = this._storyJobId;
+      let j = null;
+      for (const a of m ? m.acts : []) for (const x of a.jobs) if (x.id === id) j = x;
+      this._storyGpsOn = false;
+      box.append(this._head(j ? j.title : 'Story so far'));
+      const s = el('div', 'ph-scroll ph-sread');
+      box.append(s);
+      if (!j || j.state === 'locked') {
+        s.append(this._soon('This part of the story', 'It hasn\'t happened yet.'));
+        return;
+      }
+      s.append(el('div', 'ph-kicker', 'Act ' + j.act + ' · Job ' + j.n + (j.state === 'done' ? '' : j.state === 'current' ? ' · On it now' : ' · Up next')));
+      if (j.state === 'done') {
+        if (j.line) s.append(el('p', 'ph-sread-line', j.line));
+        if (j.recap && j.recap !== j.line) s.append(el('p', 'ph-sread-text', j.recap));
+      } else {
+        const next = m.next && m.next.id === j.id ? m.next : j;
+        if (next.setup) s.append(el('p', 'ph-sread-text', next.setup));
+        if (next.place && j.state === 'next') {
+          this._storyGpsOn = true;
+          s.append(this._storyCard({ kind: 'next', id: j.id, title: next.title, text: '', place: next.place, giver: next.giver, act: next.act }, 'read'));
+        }
+      }
     }
 
     // ------------------------------------------------------------ system
