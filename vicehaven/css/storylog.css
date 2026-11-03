@@ -817,7 +817,7 @@ button.story-chapter-head:hover {
   opacity: 0;
   visibility: hidden;
   transform: translate(-50%, 1rem);
-  transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s linear 0.35s;
+  transition: opacity 0.35s ease, transform 0.35s ease, bottom 0.3s ease, visibility 0s linear 0.35s;
   pointer-events: none;
   overflow: hidden;
 }
@@ -826,7 +826,7 @@ button.story-chapter-head:hover {
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
-  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.16, 1.1, 0.3, 1), visibility 0s;
+  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.16, 1.1, 0.3, 1), bottom 0.3s ease, visibility 0s;
   pointer-events: auto;
 }
 
@@ -838,6 +838,12 @@ body.cutscene .vh-prev,
 body.photo-mode .vh-prev {
   opacity: 0;
   visibility: hidden;
+}
+
+/* A "get in" prompt or a subtitle where it sits: it moves up above them for the while. */
+body:has(.hud-prompt.visible) .vh-prev,
+body:has(.dlg-sub.show) .vh-prev {
+  bottom: calc(22vh + 3.8rem);
 }
 
 .vh-prev-kicker {
