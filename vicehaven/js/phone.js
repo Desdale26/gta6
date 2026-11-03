@@ -504,6 +504,7 @@
       if (this._sel) this._sel.classList.remove('is-sel');
       this._sel = node || null;
       this._selKey = node ? node.dataset.key || null : null;
+      if (this.view === 'story') this._hints(); // what Enter does there depends on the row
       if (!node) return;
       node.classList.add('is-sel');
       if (scroll !== false) {
@@ -743,7 +744,10 @@
       const v = this.view;
       const tabs = v === 'jobs' || v === 'bank';
       // What choosing does here (nothing to choose in Rep or a message thread).
-      const choose = { home: 'Open', jobs: 'Set GPS', hustles: 'Show me', messages: 'Open', bank: 'Choose', story: 'Open', storyjob: this._storyGpsOn ? 'Set GPS' : '' }[v] || '';
+      // In the Story app it depends on the row: Up next sets the GPS, a job opens, a person or the prologue does nothing.
+      const s = this._sel;
+      const story = s && s._gps ? 'Set GPS' : s && s._act ? 'Open' : '';
+      const choose = { home: 'Open', jobs: 'Set GPS', hustles: 'Show me', messages: 'Open', bank: 'Choose', story, storyjob: this._storyGpsOn ? 'Set GPS' : '' }[v] || '';
       if (pad) {
         if (choose) list.push(key('A', choose));
         if (tabs) list.push(key('LB/RB', 'Tabs'));

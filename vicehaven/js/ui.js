@@ -575,10 +575,15 @@
       foot.append(this.storyKeys, this._button('Back', () => this.back(), { primary: true }));
       panel.append(head, tabs, this.storyBody, foot);
       s.append(panel);
+      this.resetStory();
+      window.addEventListener('keydown', (e) => this._storyKey(e));
+    }
+
+    /** A new game or a continued save (main.js _resetWorld): back to the Story tab, chapters as the story has them. */
+    resetStory() {
       this._storyTabId = 'story';
       this._storyOpen = {}; // chapters opened or closed by the player (the rest follow the story)
       this._storySel = null;
-      window.addEventListener('keydown', (e) => this._storyKey(e));
     }
 
     _openStory() {
@@ -877,7 +882,11 @@
         const said = String(c.picked || '').replace(/^[“"]+|[”"]+$/g, '');
         pick.append(el('span', 'story-choice-mark', '✓'), el('span', '', /^\(/.test(said) ? said : '“' + said + '”'));
         card.append(pick);
-        if (c.text) card.append(el('p', 'story-choice-text', c.text));
+        // A text that opens with the line Jay said: the pill above already shows it.
+        let text = c.text || '';
+        const lead = '“' + said + '”';
+        if (text.startsWith(lead)) text = text.slice(lead.length).trim();
+        if (text) card.append(el('p', 'story-choice-text', text));
         box.append(card);
       }
     }

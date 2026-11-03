@@ -162,6 +162,30 @@
   }
 }
 
+/* Laptop browser windows (1366x768 gives about 657 px, 1920x1080 at 150% about 600): tighter
+   again, so Quit to Menu isn't cut off. */
+@media (max-height: 740px) {
+  .pause-menu {
+    gap: 0.2rem;
+  }
+
+  .pause-menu .menu-btn {
+    padding-top: 0.36rem;
+    padding-bottom: 0.36rem;
+  }
+}
+
+@media (max-height: 650px) {
+  .pause-menu {
+    gap: 0.15rem;
+  }
+
+  .pause-menu .menu-btn {
+    padding-top: 0.24rem;
+    padding-bottom: 0.24rem;
+  }
+}
+
 .pause-meta {
   font-size: 0.82rem;
   color: var(--vh-muted);

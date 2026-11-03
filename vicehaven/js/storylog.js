@@ -580,9 +580,11 @@
       if (q.kind === 'hint') {
         if (this.hintShown) return;
         this.hintShown = true;
-        const k = g.input ? g.input.labelFor('phone') : 'P';
+        // A controller has no phone key of its own (labelFor gives the keyboard's): the D-pad opens the phone.
+        const pad = g.input && g.input.lastDevice === 'gamepad';
+        const k = pad ? 'D-pad ↑' : g.input ? g.input.labelFor('phone') : 'P';
         const where = g.phone ? ' (or the Story app, ' + (k && k !== '—' ? k : 'P') + ')' : '';
-        g.hud.notify({ title: 'Skipping the scenes?', text: 'No problem. Pause → Story so far' + where + ' keeps you up to date.', icon: '📖', duration: 10000 });
+        g.hud.notify({ title: 'Skipping the scenes?', text: 'No problem. ' + (pad ? 'Menu' : 'Pause') + ' → Story so far' + where + ' keeps you up to date.', icon: '📖', duration: 10000 });
         return;
       }
       const m = g.missions && g.missions.all && g.missions.all.get(q.id);

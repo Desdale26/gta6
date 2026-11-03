@@ -846,6 +846,14 @@ body:has(.dlg-sub.show) .vh-prev {
   bottom: calc(22vh + 3.8rem);
 }
 
+/* A narrow window (Edge snapped to half the screen): to the right, clear of the radar (15.6rem wide with its margin). */
+@media (max-width: 1080px) and (min-width: 640px) {
+  .vh-prev {
+    left: calc(50% + 7.25rem);
+    width: min(36rem, calc(100vw - 17rem));
+  }
+}
+
 .vh-prev-kicker {
   display: flex;
   align-items: center;

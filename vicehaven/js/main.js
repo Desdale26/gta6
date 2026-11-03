@@ -514,6 +514,7 @@
       this.hud.showVehicle(null);
       this.hud.missionResult(null);
       if (this.radio) this.radio.setActive(false);
+      if (this.ui.resetStory) this.ui.resetStory(); // Story so far opens on its first tab again
       document.body.classList.remove('cutscene');
     },
 
