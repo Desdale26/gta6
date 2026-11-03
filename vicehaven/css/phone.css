@@ -1968,6 +1968,10 @@
   color: rgba(241, 244, 255, 0.72);
 }
 
+.ph-snow > .ph-snow-facts:first-child {
+  margin-top: 0;
+}
+
 .ph-sprev {
   display: flex;
   flex-direction: column;

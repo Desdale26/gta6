@@ -1861,13 +1861,13 @@
       s.append(f);
     }
 
-    /** Where things stand (or the main story's Up next): Set GPS when there's somewhere to go. */
-    _storyCard(n, key) {
+    /** Where things stand (or the main story's Up next): Set GPS when there's somewhere to go (`bare`: no heading, under a job's own). */
+    _storyCard(n, key, bare) {
       const g = this.game;
       n = n || { kind: 'done', title: 'The end', text: '' };
       const c = el('div', 'ph-card ph-snow is-' + n.kind);
       const kick = n.kind === 'mission' ? (n.side ? 'Side job now · ' + n.side : 'On the job now') : n.kind === 'next' ? 'Up next' + (n.act ? ' · Act ' + n.act : '') : 'The end';
-      c.append(el('div', 'ph-kicker', kick), el('div', 'ph-snow-title', n.title || ''));
+      if (!bare) c.append(el('div', 'ph-kicker', kick), el('div', 'ph-snow-title', n.title || ''));
       if (n.text) c.append(el('p', 'ph-snow-text', n.text));
       if (n.kind === 'mission' && n.objective) c.append(el('div', 'ph-snow-obj', n.objective));
       const p = n.kind === 'next' ? n.place : null;
@@ -1938,7 +1938,7 @@
         if (next.setup) s.append(el('p', 'ph-sread-text', next.setup));
         if (next.place && j.state === 'next') {
           this._storyGpsOn = true;
-          s.append(this._storyCard({ kind: 'next', id: j.id, title: next.title, text: '', place: next.place, giver: next.giver, act: next.act }, 'read'));
+          s.append(this._storyCard({ kind: 'next', id: j.id, title: next.title, text: '', place: next.place, giver: next.giver, act: next.act }, 'read', true));
         }
       }
     }
