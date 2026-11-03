@@ -53,8 +53,8 @@
       recap: [
         'Augie set a canary trap, telling each person a different fake place where the money would move.',
         'Noor\'s spot on the Grand Parkade, Ansel\'s in Laurel Park and Dex\'s on Crane Row all stayed quiet. Teo\'s, Lantern Alley, didn\'t.',
-        'Halberd scouts came hunting “the old man” and cornered Wick, and Jay took them down from the rooftops with Celia\'s father\'s old rifle.',
-        'A phone in their car named the source as “T.V.”: Teo. He had been meeting Voss\'s lawyer to sell the alley\'s leases, and had told him Augie had “something of yours”. He never knew about the depot.',
+        'Halberd scouts came hunting “the old man” and cornered Wick, and Jay took them down from the rooftops with Celia\'s father\'s rifle.',
+        'A phone in their car named the source as “T.V.”: Teo. He had been meeting Voss\'s lawyer to sell the alley\'s leases, and had told him Augie had something of Voss\'s. He never knew about the depot.',
         'Augie forgave him. Dex waited up for them with two beers.',
       ],
       line: 'Augie\'s canary trap caught his own son: Teo had tipped off Voss\'s lawyer, but he never knew about the depot.',
@@ -141,9 +141,9 @@
       ],
       recap: [
         'The LUGNUT payments led to Calloway Auto.',
-        'Jay tailed Dex to the Grand Parkade roof, watched Horne pay him, and heard it all.',
-        'Four years ago Horne caught Dex with stolen parts and threatened him with prison and Birdie in foster care. Dex gave up Tidewater for a promise of no guns, then pointed the crew at Noor, and gave up Pier 9 when Horne showed him a photo of Birdie at her school gate.',
-        'Halberd came up the ramp to silence him, and Jay fought them off with Dex beside him.',
+        'Jay tailed Dex to the Grand Parkade roof and watched Horne pay him.',
+        'Four years ago Horne caught Dex with stolen parts and threatened him with prison and Birdie in foster care. Dex gave up Tidewater when Horne promised nobody would get hurt. He told Horne about the depot job, pointed the crew at Noor, and gave up Pier 9 when Horne showed him a photo of Birdie at her school gate.',
+        'Halberd came to silence him, and Jay fought them off with Dex beside him.',
         { if: 'dex_forgiven', text: 'Then Jay told Dex to get in the car, and hid him at Kostas Salvage.' },
         { if: 'dex_banished', text: 'Then Jay sent Dex north with Birdie that night.' },
         { if: ['!dex_forgiven', '!dex_banished'], text: 'Then Jay took Dex to Calder to tell everything on the record.' },
@@ -272,7 +272,7 @@
     // The Silver Foxes
     lefty: { intro: 'sf1_old_hands', bio: 'Loretta “Lefty” Marchetti, 71, the brains of the Silver Foxes, a robbery crew the papers named in 1979. She plays canasta with Grace Oyelaran, keeps the plan in a tiny notebook, and has one rule: nobody gets hurt, and everybody gets home.' },
     duke: { intro: 'sf1_old_hands', bio: 'Duke Fairweather, 75, the Silver Foxes\' charmer: a cream cardigan, a cravat and a very old kind of handsome. He once wore a stolen silver-fox coat to his mother\'s funeral, in August. He has a pacemaker.' },
-    walt: { intro: 'sf1_old_hands', bio: 'Walt Pomeroy, 78, tall in a good hat, was the best safecracker on the coast. His memory is going. Some mornings it is 1981 in his head: he calls Jay “Frankie”, the Foxes\' old driver, and asks him to tell Ruthie he\'ll be late.' },
+    walt: { intro: 'sf1_old_hands', bio: 'Walt Pomeroy, 78, tall in a good hat, was the best safecracker on the coast. His memory is going. Some mornings it is 1979 in his head: he calls Jay “Frankie”, the Foxes\' old driver, and asks him to tell Ruthie he\'ll be late.' },
     teague: { intro: 'sf1_old_hands', bio: 'Marvin Teague is a security guard at the Tannery Row market. In 1979, in his first week as a policeman, the Silver Foxes took his hat, and it was in the papers. He has never got over it.' },
     ruthie: { intro: 'sf3_walt', bio: 'Ruthie Pomeroy, Walt\'s wife, who laughed like a dropped tray. Every Friday in 1981 he took her out: a red carnation, lemon meringue in the Starlite\'s window booth, then the pier. She died a long time ago. Walt doesn\'t remember that.' },
   });
@@ -328,7 +328,7 @@
       { if: 'mae_stay', text: 'On the kerb she held his hand: “Don\'t go anywhere tonight.”' },
       { if: '!mae_stay', text: 'On the kerb she took back some of the space he gave her, and put her head on his shoulder.' },
     ] },
-    { who: 'horne', after: 'm21_two_ten', text: 'He came to bay 14 instead of Voss and stood on the new paint where Tommy died. “They repainted it. I asked them to.” Then he tapped his watch, and Augie was shot.' },
+    { who: 'horne', after: 'm21_two_ten', text: 'He came to bay 14 instead of Voss, looked down at the new paint where Tommy died and said, “They repainted it. I asked them to.” Then he tapped his watch, and Augie was shot.' },
     { who: 'rourke', after: 'm21_two_ten', text: 'At Pier 9 he brought $5 million and Voss\'s promise, then walked away with the Tally and the money after Augie was shot. “Mr. Voss keeps his word. That\'s why he isn\'t here.”' },
     { who: 'voss', after: 'm21_two_ten', text: 'He sent a card to the exchange: OLD MARKET STANDS. YOU HAVE MY WORD. H.V. Then he sent an ambush. He has his Tally back.' },
     { who: 'kostya', after: 'm21_two_ten', text: 'At Pier 9, Halberd took Kostya\'s crane and tied him to the seat. He was found alive and furious. He bit one of them.' },

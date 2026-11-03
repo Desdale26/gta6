@@ -29,10 +29,10 @@
       "Nana Lu's house is paid off, and with it Jay's last reason to stay. Then Dex calls: Augie Vance, the planner who taught Jay everything and took the whole fall for Tidewater, is getting out of prison. He asked for Jay. Specifically Jay.",
     ],
     outro: [
-      "Augie is home, and the secret of Tidewater is out: $2.4 million of Voss's bribe money and the Tally, Voss's own book of bribes, now hidden at Kostas Salvage.",
+      "Augie is home, and the secret of Tidewater is out: $2.4 million of Voss's bribe money, now hidden at Kostas Salvage, and the Tally, Voss's own book of bribes, which Augie keeps close.",
       'Jay knows Tommy was unarmed, and that Horne shot him.',
       { if: 'trusted_calder', text: 'Detective Calder has photos of three pages of the Tally, and has promised to bring Horne down.' },
-      'Somebody close to the crew is talking to Southside, and the crew has started looking at each other. And at dawn on Meridian Boulevard, Jay and Mae finally told each other the truth.',
+      "Somebody close to the crew is talking to Southside, and the crew has started looking at each other. And at the Starlite, Jay and Mae finally told each other the truth about Tommy's last night.",
     ],
   };
 
@@ -94,8 +94,10 @@
         'Detective Ines Calder, who worked the Tidewater case, wants Jay at the seawall tonight. Horne has ordered the Tidewater evidence box burned at the Halberd depot, and Calder can\'t touch it. Jay can.',
       ],
       recap: [
-        'At the seawall, Detective Ines Calder confessed that she signed the Tidewater report saying Tommy was armed, to save her pension, knowing it was a lie.',
-        "With her spare revolver, Jay tailed the evidence van to the Halberd depot, beat its escort and took the box. In it was the dashcam from Horne's car: Tommy saying “I'm not armed”, one shot, Horne shouting “Drop it!” at nobody, and the clink of a planted gun.",
+        'At the seawall, Detective Ines Calder confessed she knowingly signed the false Tidewater report saying Tommy was armed, to save her pension.',
+        'A paid informant had warned Horne that Tidewater was coming. Jay said “LUGNUT”, and she went quiet.',
+        'Jay tailed the evidence van to the Halberd depot, beat its escort and took the box.',
+        "It held the dashcam from Horne's car: Tommy saying “I'm not armed”, one shot, Horne shouting “Drop it!” at nobody, and the clink of a planted gun.",
         'Calder offered a deal: what Augie has on Voss, for Horne.',
         { if: 'trusted_calder', text: 'Jay said yes, for Tommy, and gave her photos of three pages of the Tally.' },
         { if: 'refused_calder', text: 'Jay said no cops, not even her, and she gave him the dashcam drive to keep.' },
@@ -108,7 +110,7 @@
         "Augie is babysitting Birdie at Calloway Auto, and losing to her at poker. He has a new job in mind, and he wants to teach Jay something Jay has never bothered with: how to plan one.",
       ],
       recap: [
-        'At Calloway Auto, Birdie showed Jay a junior-deputy sticker: “Daddy says the policeman with the gold watch is our friend.” Jay froze for half a second. Augie, busy losing at cards, didn\'t notice.',
+        'At Calloway Auto, Birdie showed Jay a junior-deputy sticker: “Daddy says the policeman with the gold watch is our friend.” Horne had given it to her when he came “about the parking”, and Jay froze.',
         "The new job was to steal a Halberd armoured van, a key on wheels for later. Augie taught Jay to learn the route, not the map, watching the van at three stops, and Jay beat Halberd's response time to Kostas Salvage by the back roads.",
         'At dusk Augie phoned Dex to cut the van key and told him the night: Tuesday. Alone in his garage, Dex looked up at his new lift.',
       ],
@@ -183,7 +185,7 @@
         "It's Tasha's wedding day, and Lourdes is pinning her hem in the Casa Palma courtyard. Iggy's hands aren't steady enough to drive any more, so Jay is wearing the chauffeur's cap. Iggy will supervise.",
       ],
       recap: [
-        'Jay drove Tasha in Constance through the Crown motorcade gridlock to Founders Park without a scratch. On the way, Iggy told him he drove Jay\'s mother, Rhonda, to her wedding, and Cal Mercer was forty minutes late. That time, he came.',
+        'Jay drove Tasha in Constance through the Crown motorcade gridlock to Founders Park without a scratch. On the way, Iggy told him he once drove Jay\'s mother, Rhonda, to her wedding, and the groom, Jay\'s father Cal Mercer, was forty minutes late. That time, he came.',
         "Tasha and Marcus were married, Pinch threw rice in a new dress, and Iggy danced with the bride. Then he gave Jay both of Constance's keys: “Drive the ones who can't.”",
       ],
       line: ["Jay drove the bride, Iggy danced at the wedding, and then he gave Jay Constance's keys: drive the ones who can't."],
@@ -281,7 +283,7 @@
   R.updates.push(
     { who: 'augie', after: 'm09_the_gate', text: ['Augie is out on parole after three years. He wrote Jay 37 letters, numbered like the steps of a job, and says the first one mattered: read it someday.'] },
     { who: 'teo', after: 'm10_sons', text: ["Teo has never forgiven his father for missing his mother's funeral. He still fought beside him in Lantern Alley, and called him Pop by accident. Twice."] },
-    { who: 'rourke', after: 'm10_sons', text: ['According to Lucky Garza, Rourke wants to know what Augie did with “the rest of Tidewater”, and has told Halberd to follow Augie wherever he goes.'] },
+    { who: 'rourke', after: 'm10_sons', text: ['Rourke has told Halberd to follow Augie wherever he goes and report back on who he sees.'] },
     { who: 'augie', after: 'm11_celias_garden', text: ["For three years Augie kept the real Tidewater haul, $2.4 million and Voss's Tally, hidden in his wife Celia's vault, and never spent a dollar. The bags are now at Kostas Salvage."] },
     { who: 'voss', after: 'm11_celias_garden', text: ['The Tidewater van was carrying his $2.4 million bribe for the Phase Two vote, and the Tally: fourteen years of his bribes, written in his own hand. He never admitted the money existed.'] },
     { who: 'horne', after: 'm11_celias_garden', text: ['Horne is in the Tally: “W.H. Southside. Monthly.” Voss has paid him every month for fourteen years.'] },
@@ -303,7 +305,7 @@
       "Her answer: ask me when it's over.",
     ] },
     { who: 'iggy', after: 'wc4_the_last_wedding', text: ["Iggy gave Jay both of Constance's keys and asked him to drive the ones who can't: hospital runs, funerals, and the old girls at Bayview who want to see the sea."] },
-    { who: 'tasha', after: 'wc4_the_last_wedding', text: ["Tasha married Marcus at the Founders Park gazebo in her grandmother's borrowed ring, and gave it back after the first dance."] },
+    { who: 'tasha', after: 'wc4_the_last_wedding', text: ["Tasha married Marcus at the Founders Park gazebo in her grandmother's borrowed ring, and gave it back to Iggy after their dance."] },
   );
 
   Object.assign(R.choices, {

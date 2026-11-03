@@ -13,16 +13,18 @@
  * refused_calder (m13), mae_stay / mae_space (m16), saved_teo /
  * chased_rourke (m18), dex_forgiven / dex_banished / dex_to_calder (m22),
  * ending_a / ending_b / ending_c and a_mae_rides (m31: Mae rides north only
- * with mae_stay and gave_cut or nightshift_done), da_spoke / da_silent
- * (da4), and the side-chain flags nightshift_done, foxes_done, solace_done
- * and iggy_done, which colour the endings.
+ * with mae_stay and gave_cut or nightshift_done), and da_spoke / da_silent
+ * (da4).
  *
- * Side-chain flags are read only in m31 and the act outro. Their small
- * beats in m27 and m30 (Walt's funeral shoes, Iggy's and Solace's messages,
- * Mae's notebook) are left out on purpose: those chains can be finished
- * after the job, and a recap that tested them would change after the fact.
- * For the same reason da3 and da4 leave out the beats that depend on m21,
- * m25 and m30 (Augie's name on the air, Lefty's balcony, Garza's new boss).
+ * The side-chain flags (nightshift_done, foxes_done, solace_done, iggy_done)
+ * are never read, though they colour m27, m30 and the endings: every side
+ * chain stays playable after the credits, and a recap that tested them would
+ * change after the fact. So the endings leave out Iggy and the Foxes at the
+ * gate and their texts, Mae's notebook, and Solace's broadcasts, and ending
+ * B's phone call is told the same way whether Jay rang Solace or the Ledger.
+ * a_mae_rides is safe because m31 sets it itself. For the same reason da3
+ * and da4 leave out the beats that depend on m21, m25 and m30 (Augie's name
+ * on the air, Lefty's balcony, Garza's new boss).
  */
 (function () {
   'use strict';
@@ -51,8 +53,7 @@
       // ---- Ending B: The Long Way Home
       { if: 'ending_b', text: 'Jay gave the Tally to the city.' },
       { if: ['ending_b', 'trusted_calder'], text: 'Calder arrested Voss at the end of the pier, and he went on trial.' },
-      { if: ['ending_b', 'refused_calder', 'solace_done'], text: 'Solace read it live on Harbor Heat, and the whole city heard it. Voss escaped by sea and was charged in his absence.' },
-      { if: ['ending_b', 'refused_calder', '!solace_done'], text: 'The Vicehaven Ledger printed it, and Sable read it on the radio. Voss escaped by sea and was charged in his absence.' },
+      { if: ['ending_b', 'refused_calder'], text: 'He read it down the phone, and the whole city heard it. Voss escaped by sea and was charged in his absence.' },
       { if: 'ending_b', text: 'The Phase Two vote was never held. Jay pleaded guilty to Tidewater and served' },
       { if: ['ending_b', 'trusted_calder'], text: 'fourteen months.' },
       { if: ['ending_b', '!trusted_calder'], text: 'twenty-two months.' },
@@ -62,8 +63,6 @@
       { if: ['ending_b', 'dex_forgiven'], text: 'Dex and Birdie came too: Calloway Auto was rebuilt, mostly by Ansel.' },
       { if: ['ending_b', 'dex_to_calder'], text: 'Dex, free a month already, brought Birdie.' },
       { if: ['ending_b', 'dex_banished'], text: 'Birdie came alone on the coach, with a note from Dex.' },
-      { if: ['ending_b', 'iggy_done'], text: 'Iggy brought Constance.' },
-      { if: ['ending_b', 'foxes_done'], text: 'Lefty and Duke came in the old getaway car.' },
       { if: 'ending_b', text: "They took the long way home to Heron Street, past Tommy's mural, repainted with Augie beside him. On the porch swing, Jay could almost hear Tommy: “Took you long enough.”" },
 
       // ---- Ending C: Wheelman
@@ -176,17 +175,16 @@
         'Dawn. Horne is under arrest, but Harlan Voss has the Tally, and a launch is coming for him at the end of Oceanview Pier. One last chase.',
       ],
       recap: [
-        'At dawn Jay chased Voss to the end of Oceanview Pier, where Augie read him the first letter. As his launch came in, Voss offered Jay the $30 million, every house on Heron Street, even the Tally, if he would just drive.',
+        'At dawn Jay chased Voss to the end of Oceanview Pier, where he had once opened Augie\'s first letter. As his launch came in, Voss offered Jay the $30 million, every house on Heron Street, even the Tally, if he would just drive.',
         // Ending A
         { if: 'ending_a', text: 'Jay drove. Voss sailed away on a launch called Hope, and Jay shared the money with the crew by phone.' },
-        { if: ['ending_a', 'a_mae_rides'], text: 'Mae got in beside him. “Ask me.” “Come with me.” “Then drive.”' },
+        { if: ['ending_a', 'a_mae_rides'], text: 'Mae got in beside him and told him to ask. He asked her to come with him. “Then drive,” she said.' },
         { if: ['ending_a', '!a_mae_rides'], text: 'Mae stayed, and texted: “Drive safe. I mean it this time.”' },
         { if: 'ending_a', text: "At the city limits he read Augie's last letter: what's at twelve isn't a place. It's people. Then he drove north." },
         // Ending B
         { if: 'ending_b', text: 'Jay took the Tally out of Voss\'s hands.' },
         { if: ['ending_b', 'trusted_calder'], text: 'Calder walked down the pier and arrested Voss, and Jay gave her the book and his own confession.' },
-        { if: ['ending_b', 'refused_calder', 'solace_done'], text: 'Voss sailed away, but Jay read the Tally down the phone to Solace, live on air, then handed himself in.' },
-        { if: ['ending_b', 'refused_calder', '!solace_done'], text: 'Voss sailed away, but Jay read the Tally down the phone to the Vicehaven Ledger, then handed himself in.' },
+        { if: ['ending_b', 'refused_calder'], text: 'Voss sailed away, but Jay read it down the phone for the whole city to hear, then handed himself in.' },
         { if: 'ending_b', text: 'He served' },
         { if: ['ending_b', 'trusted_calder'], text: 'fourteen months' },
         { if: ['ending_b', '!trusted_calder'], text: 'twenty-two months' },
@@ -283,7 +281,8 @@
     { who: 'dex', after: 'm26_gold_watch', text: [
       { if: 'dex_forgiven', text: 'Dex helped Jay rob Horne\'s cruiser, where he once took Horne\'s envelopes every month, and threw Horne\'s butterscotch out of the window.' },
       { if: 'dex_banished', text: 'From somewhere north with snow on the verges, Dex texted Jay where Horne keeps his phone: “I owe you more than that. Don\'t answer.”' },
-      { if: 'dex_to_calder', text: 'Dex is telling Calder everything. He cried for an hour, then drew her a map of the inside of Horne\'s car from memory.' },
+      { if: ['dex_to_calder', 'trusted_calder'], text: 'Dex is telling Calder everything. He cried for an hour, then drew her a map of the inside of Horne\'s car from memory.' },
+      { if: ['dex_to_calder', '!trusted_calder'], text: 'Dex is telling Calder everything, and his statement told Jay where Horne keeps his secret phone: the glovebox, not the console.' },
     ] },
     { who: 'horne', after: 'm26_gold_watch', text: ['The PIN on Horne\'s secret phone is 0211: two-eleven, the minute he shot Tommy in bay 14. Voss had promised to make him police commissioner. His cruiser was on the morning news, under the Beacon with its lights on.'] },
     { who: 'voss', after: 'm26_gold_watch', text: ['Horne\'s phone gave away Voss\'s plan: on the night of the Crown gala, the Tally and $30 million would leave his estate in three Halberd vans, for a freighter called Esperanza. Esperanza means hope. Voss would ride separately, in a white Sovereign.'] },
@@ -318,7 +317,7 @@
     ] },
     { who: 'garza', after: 'm29_tidewater_again', text: ['Garza drove the lead van with the Tally in it. When Jay boxed him in, he handed over the keys and ran, still asking for a desk.'] },
     { who: 'tommy', after: 'm30_salt_and_iron', text: ['Mae played the dashcam tape of Tommy saying “I\'m not armed” on every police radio in the city. The officers Horne sent after Jay listened, turned off their lights and went home.'] },
-    { who: 'mae', after: 'm30_salt_and_iron', text: ['Mae pressed play on the tape of her brother for every cop in Vicehaven. At the Tidewater gate she told Horne that Tommy had double-knotted his laces, the way he did when he was scared: “You saw a gun. I saw his laces.”'] },
+    { who: 'mae', after: 'm30_salt_and_iron', text: ['Mae pressed play on the tape of her brother for every cop in Vicehaven. Then, face to face with Horne, she told him that Tommy had double-knotted his laces, the way he did when he was scared: “You saw a gun. I saw his laces.”'] },
     { who: 'ansel', after: 'm30_salt_and_iron', text: ['When Halberd pointed a rifle at Noor, Ansel stood up and fought for the first time in twelve years. He was shot through the shoulder, Mae stitched him on Rhea\'s desk, and he lived. “I still can.”'] },
     { who: 'rourke', after: 'm30_salt_and_iron', text: ['Rourke died on the night of the job, when the rotten handrail on the orange crane gave way, the one Halberd billed the port for and never fixed. Before he fell, he gave Jay his wife\'s wedding ring for his daughter, Margaret.'] },
     { who: 'horne', after: 'm30_salt_and_iron', text: [
@@ -352,10 +351,10 @@
       { if: 'ending_c', text: 'Jay shot Harlan Voss at the end of Oceanview Pier, beside a bench Voss had paid for himself.' },
     ] },
     { who: 'augie', after: 'm31_last_light', text: [
-      'Augie\'s last letter, number 37, said what he would think if Jay was at the prison gate: “There he is. Late.” And what\'s at twelve isn\'t a place. It\'s people.',
+      { if: '!ending_c', text: 'Augie\'s last letter, number 37, said what he would think if Jay was at the prison gate: “There he is. Late.” And what\'s at twelve isn\'t a place. It\'s people.' },
       { if: 'ending_a', text: 'Jay read it at the city limits.' },
       { if: 'ending_b', text: 'Jay read it in prison, over Grace\'s plum cake.' },
-      { if: 'ending_c', text: 'Jay never opened it.' },
+      { if: 'ending_c', text: 'Augie\'s last letter, number 37, is still sealed, on the table by the sugar in Jay\'s Starlite booth. He has never opened it.' },
     ] },
     { who: 'mae', after: 'm31_last_light', text: [
       { if: ['ending_a', 'a_mae_rides'], text: 'Mae left Medic 12 at the pier and drove north with Jay, her feet on the dash.' },
@@ -363,7 +362,6 @@
       { if: ['ending_b', 'mae_stay'], text: 'Mae wore Jay\'s jacket on every shift while he was inside, and met him at the gate with it: “Where do you think we\'re all going?”' },
       { if: ['ending_b', '!mae_stay'], text: 'The day Jay came out, Mae texted “Home?” and arrived late in Medic 12, straight from a call: “Get in the car, Jay. Ask me on the way.”' },
       { if: 'ending_c', text: 'Mae rang Jay at the Starlite at three in the morning. He didn\'t answer.' },
-      { if: ['ending_c', 'nightshift_done'], text: 'Her text: “You made me start a new page.”' },
     ] },
     { who: 'dex', after: 'm31_last_light', text: [
       { if: ['ending_a', 'dex_forgiven'], text: 'Dex and Birdie waved Jay off from the ashes of the garage, under a sign: CALLOWAY AUTO (UNDER NEW INVESTMENT).' },
@@ -422,20 +420,6 @@
     { who: 'oyelaran', after: 'm31_last_light', text: [
       { if: 'ending_a', text: 'Grace put Nana Lu\'s porch light on, and is leaving it on. She waters the lemon tree.' },
       { if: 'ending_b', text: 'Grace visited Jay in prison on two buses with a plum cake, the way Nana Lu visited Augie, and kept the porch light on every night he was away.' },
-    ] },
-    { who: 'solace', after: 'm31_last_light', text: [
-      { if: ['ending_b', '!trusted_calder'], text: 'At six in the morning Solace read Voss\'s book to the whole city, page by page.' },
-      { if: 'ending_c', text: 'Solace said a new name on the air: the getaway driver\'s. “Ours just found out it can be bought twice.”' },
-    ] },
-    { who: 'iggy', after: 'm31_last_light', text: [
-      { if: ['ending_a', 'iggy_done'], text: 'Iggy texted about a bride who changed her mind at the city limits, and drove back. “Not advice. Just a story.”' },
-      { if: ['ending_b', 'iggy_done'], text: 'Iggy met Jay at the prison gate in Constance, ribbons and all: “Your carriage.”' },
-      { if: ['ending_c', 'iggy_done'], text: 'Iggy took Constance back. Jay has drivers now.' },
-    ] },
-    { who: 'lefty', after: 'm31_last_light', text: [
-      { if: ['ending_a', 'foxes_done'], text: 'Lefty texted: Frankie always went north too, and never sent a card. “Send a card.”' },
-      { if: ['ending_b', 'foxes_done'], text: 'Lefty and Duke picked Jay up at the prison gate in their old getaway car: nobody ever picked Frankie up.' },
-      { if: ['ending_c', 'foxes_done'], text: 'Lefty texted: Frankie went bad in \'83 and got everything he ever wanted. “Don\'t be Frankie.”' },
     ] },
   );
 

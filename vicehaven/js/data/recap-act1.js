@@ -46,7 +46,7 @@
     m01_homecoming: {
       setup: [
         'Jay is back in Vicehaven for the first time in three years, for Nana Lu\'s funeral at St. Brigid\'s church.',
-        'The coach was slow, the funeral started forty minutes ago, and he has no car.',
+        'The coach took nine hours, the funeral started forty minutes ago, and he has no car.',
       ],
       recap: [
         'Jay stole a car and reached St. Brigid\'s just in time to throw the first earth on Nana Lu\'s coffin.',
@@ -299,7 +299,7 @@
     { who: 'wick', after: 'ns1_medic_12', text: 'Wick was stabbed in Lantern Alley over a pair of sneakers. Jay drove him to hospital, and talked him into staying there.' },
     { who: 'tommy', after: 'ns3_the_list', text: 'Mae keeps a notebook of every patient she has lost. She started it the day after Pier 9, so that Tommy\'s name would be first.' },
     { who: 'gus', after: 'ns4_gus_last_shift', text: 'Gus has retired after thirty-four years. The last baby he helped deliver was named after him, and he gave Jay his Medic 12 patch.' },
-    { who: 'mae', after: 'ns4_gus_last_shift', text: 'After four nights driving Medic 12 together, Mae is laughing at Jay again. “You still sing to the car,” she told him. “You\'re still you.”' },
+    { who: 'mae', after: 'ns4_gus_last_shift', text: 'After four shifts on Medic 12 together, Mae is laughing at Jay again. “You still sing to the car,” she told him. “You\'re still you.”' },
   );
 
   // The decisions made in Act 1 and Night Shift. Keys are the flag an option
