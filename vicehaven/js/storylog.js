@@ -40,7 +40,7 @@
   const CARD_DELAY = 2.5; //   ...and comes this long after play starts (the intro card has gone)
   const SKIP_SHARE = 0.6; //   a scene counts as skipped with this share of its lines skipped
   const SKIP_MIN = 4; //       ...and at least this many
-  const RESULT_WAIT = 7; //    seconds after a job passes (the result card shows for 6.5)
+  const RESULT_WAIT = 1.5; //  quiet seconds after a job passes (the result card counts as busy)
   const MAX_ORDER = 120;
 
   /** Run a read; anything it throws gives the fallback. */

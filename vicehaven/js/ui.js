@@ -1023,6 +1023,11 @@
       const prev = this._padPrev || new Set();
       const hit = (a) => now.has(a) && !prev.has(a);
       this._padPrev = new Set(now);
+      // A dialog over the menu (the job log): A or B closes it, nothing behind it.
+      if (this.dialogOpen) {
+        if (hit('jump') || hit('crouch')) this.closeDialog();
+        return;
+      }
       let dir = null;
       if (now.has('phone') || pad.move.y > PAD_STICK) dir = 'u';
       else if (now.has('horn') || pad.move.y < -PAD_STICK) dir = 'd';
