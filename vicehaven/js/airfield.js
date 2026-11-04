@@ -78,6 +78,45 @@
     ctx.marks.topRect(Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1), y || 0.02, VH.col(color));
   }
 
+  /** A painted line along a polyline ([x, z] points), optionally dashed [on, off] (metres). */
+  function stripe(world, pts, w, color, dash, y) {
+    const col = VH.col(color);
+    const yy = y || 0.021;
+    let run = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1];
+      const [bx, bz] = pts[i];
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 1e-4) continue;
+      const nx = (-(bz - az) / len) * (w / 2);
+      const nz = ((bx - ax) / len) * (w / 2);
+      // Dashes: paint only the "on" parts of this piece.
+      let t0 = 0;
+      while (t0 < len) {
+        let t1 = len;
+        let on = true;
+        if (dash) {
+          const ph = (run + t0) % (dash[0] + dash[1]);
+          on = ph < dash[0];
+          t1 = Math.min(len, t0 + (on ? dash[0] - ph : dash[0] + dash[1] - ph));
+        }
+        if (on) {
+          const x0 = ax + ((bx - ax) * t0) / len;
+          const z0 = az + ((bz - az) * t0) / len;
+          const x1 = ax + ((bx - ax) * t1) / len;
+          const z1 = az + ((bz - az) * t1) / len;
+          const q = [[x0 - nx, yy, z0 - nz], [x1 - nx, yy, z1 - nz], [x1 + nx, yy, z1 + nz], [x0 + nx, yy, z0 + nz]];
+          // Wind it to face up.
+          const cy = (q[1][2] - q[0][2]) * (q[2][0] - q[0][0]) - (q[1][0] - q[0][0]) * (q[2][2] - q[0][2]);
+          if (cy < 0) q.reverse();
+          world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2).marks.quad(q[0], q[1], q[2], q[3], [0, 1, 0], col);
+        }
+        t0 = t1;
+      }
+      run += len;
+    }
+  }
+
   /** A little light on a stalk (runway and taxiway edges, approach lights). */
   function lamp(world, x, z, hex, mul, h) {
     const ctx = world.ctxAt(x, z);
@@ -230,7 +269,7 @@
       asphalt(world, t.x0, t.z - t.w / 2, t.x1, t.z + t.w / 2, 0x949494);
       for (let x = t.x0; x < t.x1; x += 10) mark(world, x, t.z - 0.3, Math.min(t.x1, x + 10), t.z + 0.3, 0xe0b12e);
       for (let x = t.x0; x <= t.x1 + 0.1; x += 40) for (const z of [t.z - t.w / 2 - 1, t.z + t.w / 2 + 1]) lamp(world, x, z, 0x3d7bff, 2.6, 0.3);
-      const rz1 = RWY.z - RWY.w / 2; // runway north edge (it's north of the taxiway)
+      const rz1 = RWY.z + RWY.w / 2; // the runway's south edge (the runway is north of the taxiway)
       const tz0 = t.z - t.w / 2;
       for (const x of LINKS) {
         asphalt(world, x - 12, rz1, x + 12, tz0, 0x949494);
@@ -242,14 +281,27 @@
       pave(world, APRON.x0, APRON.z0, APRON.x1, APRON.z1, 0xbcbab3);
       pave(world, GA.x0, GA.z0, GA.x1, GA.z1, 0xb6b4ad);
       pave(world, SERVICE.x0, SERVICE.z0, SERVICE.x1, SERVICE.z1, 0xb0aea7);
-      // Stand markings: a lead-in line and a stop bar for each airliner stand.
-      for (const s of STANDS) {
-        mark(world, s.x - 0.3, APRON.z0, s.x + 0.3, s.z + 22, 0xe0b12e);
-        mark(world, s.x - 5, s.z + 19.5, s.x + 5, s.z + 20.2, 0xe0b12e);
-        for (const k of [-1, 1]) mark(world, s.x + k * 20, s.z - 24, s.x + k * 20 + 0.4 * k, s.z + 24, 0xf4f4ef);
+      // Stand markings. airside.js lays out the taxilane, the stands' turn-ins and
+      // stop bars, the airside road and the equipment pads (VH.Airside.markings).
+      let AM = null;
+      try {
+        AM = VH.Airside && VH.Airside.markings ? VH.Airside.markings() : null;
+      } catch (err) {
+        console.warn('[airfield] airside markings', err);
       }
-      // Taxi lines from the taxiway onto the aprons.
-      mark(world, -380, APRON.z0 - 1, -170, APRON.z0 - 0.4, 0xe0b12e);
+      if (AM) {
+        for (const l of AM.lines) stripe(world, l.pts, l.w, l.color, l.dash);
+        for (const r of AM.rects) mark(world, r[0], r[1], r[2], r[3], r[4], 0.022);
+        for (const s of STANDS) for (const k of [-1, 1]) mark(world, s.x + k * 20, s.z - 18, s.x + k * 20 + 0.4 * k, s.z + 8, 0xf4f4ef);
+      } else {
+        for (const s of STANDS) {
+          mark(world, s.x - 0.3, APRON.z0, s.x + 0.3, s.z + 22, 0xe0b12e);
+          mark(world, s.x - 5, s.z + 19.5, s.x + 5, s.z + 20.2, 0xe0b12e);
+          for (const k of [-1, 1]) mark(world, s.x + k * 20, s.z - 24, s.x + k * 20 + 0.4 * k, s.z + 24, 0xf4f4ef);
+        }
+        mark(world, -380, APRON.z0 - 1, -170, APRON.z0 - 0.4, 0xe0b12e);
+      }
+      // Taxi line from the taxiway onto the GA apron.
       mark(world, 100, GA.z0 - 1, 300, GA.z0 - 0.4, 0xe0b12e);
       // Helipad: a circle of light posts, an H and a ring.
       const h = HELIPAD;
@@ -264,13 +316,15 @@
       mark(world, h.x - 3.4, h.z - 4.5, h.x - 2.2, h.z + 4.5, 0xf4f4ef, 0.022);
       mark(world, h.x + 2.2, h.z - 4.5, h.x + 3.4, h.z + 4.5, 0xf4f4ef, 0.022);
       mark(world, h.x - 2.2, h.z - 0.6, h.x + 2.2, h.z + 0.6, 0xf4f4ef, 0.022);
-      // Ground equipment: a fuel bowser, baggage carts, a stair truck.
-      const ctx = world.ctxAt(-230, -1275);
-      for (const [x, z, sx, sz, c] of [[-232, -1272, 2.4, 7, 0xd7dbe0], [-205, -1262, 1.6, 3, 0xe0b12e], [-200, -1262, 1.6, 3, 0xe0b12e], [-195, -1262, 1.6, 3, 0xe0b12e]]) {
-        solid(world, ctx.propMatte, x - sx / 2, 0, z - sz / 2, x + sx / 2, 2.2, z + sz / 2, c, null, 'vehicle');
+      // Spare ground equipment: a fuel bowser and baggage carts (with airside.js, parked
+      // off the stands and the vehicles' routes, between the hangars).
+      const spares = AM ? AM.spares : [[-232, -1272, 2.4, 7, 0xd7dbe0], [-205, -1262, 1.6, 3, 0xe0b12e], [-200, -1262, 1.6, 3, 0xe0b12e], [-195, -1262, 1.6, 3, 0xe0b12e]];
+      for (const [x, z, sx, sz, c] of spares) {
+        solid(world, world.ctxAt(x, z).propMatte, x - sx / 2, 0, z - sz / 2, x + sx / 2, 2.2, z + sz / 2, c, null, 'vehicle');
       }
       world.floodlights = world.floodlights || [];
-      for (const [x, z] of [[-470, -1300], [-90, -1340], [20, -1300], [180, -1330]]) Airfield._floodMast(world, x, z, 34);
+      const masts = AM ? AM.masts : [[-470, -1300], [-90, -1340], [20, -1300], [180, -1330]];
+      for (const [x, z] of masts) Airfield._floodMast(world, x, z, 34);
     }
 
     static _floodMast(world, x, z, radius) {
@@ -688,7 +742,8 @@
     };
     const T = a.terminal;
     bld(T.x0, T.z0, T.x1, T.z1, '#d9dfe4');
-    for (const s of a.stands) bld(s.x - 8.3, T.z0 - 19, s.x - 4.7, T.z0, '#c9ccd0');
+    // The jet bridges (terminal.js lays them out; the old ones otherwise).
+    for (const r of a.bridgeRects || a.stands.map((s) => [s.x - 8.3, T.z0 - 19, s.x - 4.7, T.z0])) bld(r[0], r[1], r[2], r[3], '#c9ccd0');
     for (const h of a.hangars) bld(h.x0, -1262, h.x1, -1205, '#9aa1a8');
     bld(a.tower.x - 6.5, a.tower.z - 6.5, a.tower.x + 6.5, a.tower.z + 6.5, '#e6e3dc');
     g.fillStyle = 'rgba(141, 255, 156, 0.6)';
