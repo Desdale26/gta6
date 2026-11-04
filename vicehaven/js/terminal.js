@@ -10,7 +10,7 @@
  *                                           chunk meshes, and world.terminal
  *                                           describes the place for the
  *                                           people (airportlife.js)
- *   VH.Terminal.registerPlaces(world, p)    airport_gates, airport_arrivals
+ *   VH.Terminal.registerPlaces(world, p)    airport_arrivals (at its doors)
  *   new VH.Terminal(game)                   what moves: the sliding doors, the
  *                                           flight boards, the carousels and
  *                                           their bags, the security arches
@@ -125,15 +125,16 @@
 
   function makeKit(world) {
     const ph = world.physics;
+    // One mesh per surface for the whole building (a draw call each): from inside or
+    // near it most of the hall is in view anyway, so splitting it by chunk saves nothing.
     const own = new Map();
-    const ownBuilder = (kind, x, z) => {
-      const ch = world.chunkAt(x, z);
-      const key = kind + '|' + ch.key;
-      let e = own.get(key);
-      if (!e) own.set(key, (e = { kind, chunk: ch, b: new VH.GeometryBuilder({}) }));
+    const home = world.chunkAt((X0 + X1) / 2, (Z0 + Z1) / 2);
+    const ownBuilder = (kind) => {
+      let e = own.get(kind);
+      if (!e) own.set(kind, (e = { kind, chunk: home, b: new VH.GeometryBuilder({}) }));
       return e.b;
     };
-    const S = (surf, x, z) => (OWN[surf] ? ownBuilder(surf, x, z) : world.ctxAt(x, z)[surf]);
+    const S = (surf, x, z) => (OWN[surf] ? ownBuilder(surf) : world.ctxAt(x, z)[surf]);
     const col = (c) => (typeof c === 'number' ? C(c) : c);
     const k = {
       world, ph, own, S,
@@ -240,7 +241,7 @@
     for (const e of k.own.values()) {
       if (e.b.isEmpty) continue;
       const mesh = new THREE.Mesh(e.b.build(), e.kind === 'hall' ? mats.hall : e.kind === 'glass' ? mats.glass : mats.roof);
-      mesh.name = 'terminal ' + e.kind + ' ' + e.chunk.key;
+      mesh.name = 'terminal ' + e.kind;
       mesh.castShadow = false;
       mesh.receiveShadow = e.kind === 'roof';
       if (e.kind === 'glass') mesh.renderOrder = 2;
@@ -397,7 +398,9 @@
       k.box('roof', p0, ROOF, SKY[1][1] + 0.6, p1, ROOF + 1.0, SKY[0][0] - 0.6, 0xf0eee8);
       k.box('roof', p0, ROOF + 1.0, -1231, p1, ROOF + 1.7, -1213, 0xe2e0d9);
     }
-    k.col(O.x0, CEIL, O.z0, O.x1, ROOF, O.z1, 'building');
+    // Solid over the hall only: the overhangs have nothing to stop, and a collider over
+    // the forecourt would have anyone dropped off there (a place, a spawn) land on the roof.
+    k.col(X0, CEIL, Z0, X1, ROOF, Z1, 'building');
     k.col(X0 + 2, ROOF, SKY[1][1] + 0.6, X1 - 2, ROOF + 1.0, SKY[0][0] - 0.6, 'building');
     k.col(X0 + 2, ROOF + 1.0, -1231, X1 - 2, ROOF + 1.7, -1213, 'building');
   }
@@ -485,6 +488,15 @@
       k.top('hall', d.x - 2.4, Z1 - 3.0, d.x + 2.4, Z1 - 0.3, FY + 0.016, 0x3a3e44);
       const ctx = world.ctxAt(d.x, Z1 + 1);
       ctx.decal.quad([d.x - 2.4, rampY(Z1 + 1.6) + 0.02, Z1 + 1.6], [d.x + 2.4, rampY(Z1 + 1.6) + 0.02, Z1 + 1.6], [d.x + 2.4, FY + 0.02, Z1 + 0.05], [d.x - 2.4, FY + 0.02, Z1 + 0.05], [0, 1, 0], C(0x41454b));
+      // Steel bollards across the way in: people walk between them, cars don't.
+      const bz = Z1 + 2.3;
+      const by = rampY(bz);
+      for (const o of [-3.3, -2.05, -0.85, 0.85, 2.05, 3.3]) {
+        const bx = d.x + o;
+        ctx.prop.cylinder(bx, by - 0.05, bz, 0.11, 0.11, 0.95, 10, C(COL.chrome), true, C(0xd8dde2));
+        ctx.prop.cylinder(bx, by + 0.62, bz, 0.115, 0.115, 0.1, 10, C(0xe0b12e), false);
+        world.physics.addBox(bx - 0.12, 0, bz - 0.12, bx + 0.12, by + 0.9, bz + 0.12, 'bollard', F().SOLID | F().SHOTS);
+      }
     }
 
     // The drop-off canopy over the forecourt, on a row of columns at the kerb.
@@ -809,7 +821,7 @@
     }
     k.col(-193.8, 0, -1219.9, -193.0, FY + 1.05, -1216.6, 'trolley', F().SOLID | F().SHOTS);
     // The reclaim board between the carousels (both faces), the exit sign.
-    for (const yaw of [0, Math.PI]) k.boards.push({ kind: 'reclaim', x: -136, y: FY + 4.6, z: -1222.5 + Math.cos(yaw) * 0.08, yaw, w: 4.2, h: 2.1 });
+    for (const yaw of [0, Math.PI]) k.boards.push({ kind: 'reclaim', x: -136, y: FY + 4.6, z: -1222.5 + Math.cos(yaw) * 0.13, yaw, w: 4.2, h: 2.1 });
     k.box('hall', -138.2, FY + 3.45, -1222.6, -133.8, FY + 5.75, -1222.4, 0x1b1d21);
     for (const x of [-137.6, -134.4]) k.box('hall', x - 0.03, FY + 5.75, -1222.53, x + 0.03, CEIL - 0.75, -1222.47, COL.steel);
     k.signs.push({ x: -136, y: FY + 3.6, z: PZ - 0.25, yaw: Math.PI, w: 5.4, h: 0.7, style: 'exit', rows: ['Way out · Nothing to declare'] });
@@ -1631,12 +1643,9 @@
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = k.world.materials._anisotropy || 4;
     const mat = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.92, 0.92, 0.92), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-    const builders = new Map();
+    const b = new VH.GeometryBuilder({ uv: true }); // all of them in one mesh
     for (const it of atlas.items) {
       const s = k.signs[it.i];
-      const ch = k.world.chunkAt(s.x, s.z);
-      let b = builders.get(ch);
-      if (!b) builders.set(ch, (b = new VH.GeometryBuilder({ uv: true })));
       const u0 = it.x / atlas.W;
       const u1 = (it.x + it.w) / atlas.W;
       const v0 = 1 - (it.y + it.h) / atlas.H;
@@ -1650,13 +1659,11 @@
         k.S('hall', s.x, s.z).orientedBox(s.x - fx * 0.03, s.z - fz * 0.03, s.w / 2 + 0.03, 0.028, s.yaw, s.y - s.h / 2 - 0.03, s.y + s.h / 2 + 0.03, C(0x15171a));
       }
     }
-    for (const [ch, b] of builders) {
-      const mesh = new THREE.Mesh(b.build(), mat);
-      mesh.name = 'terminal signs ' + ch.key;
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
-      ch.group.add(mesh);
-    }
+    const mesh = new THREE.Mesh(b.build(), mat);
+    mesh.name = 'terminal signs';
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    k.world.chunkAt((X0 + X1) / 2, (Z0 + Z1) / 2).group.add(mesh);
     return { texture: tex, material: mat, count: k.signs.length };
   }
 
@@ -1666,7 +1673,7 @@
       { x: -398, rows: ['Oceanview Pier'], sub: 'Rides, lights and the best sunsets on the bay', bg: ['#ff8a3d', '#d6336c'], fg: '#fff' },
       { x: -310, rows: ['The Velvet Tide'], sub: 'Dance on the Boardwalk · Open late', bg: ['#3a1c71', '#d76d77'], fg: '#fff' },
       { x: -228, rows: ['Northgate Heights'], sub: 'Live high above the bay', bg: ['#134e5e', '#71b280'], fg: '#fff' },
-      { x: -100, rows: ['Welcome to Vicehaven'], sub: 'Sun, sea and city lights', bg: ['#ffb347', '#ff4f8b'], fg: '#fff' },
+      { x: -151, rows: ['Welcome to Vicehaven'], sub: 'Sun, sea and city lights', bg: ['#ffb347', '#ff4f8b'], fg: '#fff' },
     ];
     for (const a of ads) {
       k.box('hall', a.x - 2.15, FY + 1.35, PZ + 0.15, a.x + 2.15, FY + 3.25, PZ + 0.24, 0x15171a);
@@ -1679,6 +1686,27 @@
     for (const a of air) {
       k.box('hall', a.x - 2.15, FY + 1.35, NZ - 0.24, a.x + 2.15, FY + 3.25, NZ - 0.15, 0x15171a);
       k.signs.push({ x: a.x, y: FY + 2.3, z: NZ - 0.25, yaw: Math.PI, w: 4.1, h: 1.8, style: 'brand', plain: true, colors: { bg: a.bg, fg: a.fg }, rows: a.rows, sub: a.sub });
+    }
+    // Baggage reclaim: what there is to do in town, on both long walls (z: the wall's face, yaw: facing).
+    const reclaimAds = [
+      { x: -182, z: PZ - 0.15, yaw: Math.PI, rows: ['Sunset Strip'], sub: 'Neon, music and the late-night crowd', bg: ['#ff3c8e', '#5b2a86'], fg: '#fff' },
+      { x: -122, z: PZ - 0.15, yaw: Math.PI, rows: ['Vicehaven Bay Cruises'], sub: 'Round the islands · Every hour from the quay', bg: ['#1aa6b7', '#0d4f8b'], fg: '#fff' },
+      { x: -96, z: PZ - 0.15, yaw: Math.PI, rows: ['Coastline Rentals'], sub: 'Your car is waiting in arrivals', bg: ['#14a37f', '#0b6e55'], fg: '#fff' },
+      { x: -172, z: NZ + 0.15, yaw: 0, rows: ['Welcome to Vicehaven'], sub: 'Sun, sea and city lights', bg: ['#ffb347', '#ff4f8b'], fg: '#fff' },
+      { x: -148, z: NZ + 0.15, yaw: 0, rows: ['Oceanview Pier'], sub: 'Rides, lights and the best sunsets on the bay', bg: ['#ff8a3d', '#d6336c'], fg: '#fff' },
+      { x: -100, z: NZ + 0.15, yaw: 0, rows: ['Tidewater Tech'], sub: 'Forgot your charger? Gate side and landside', bg: ['#1f2d3d', '#0f1722'], fg: '#4ff0e0' },
+    ];
+    for (const a of reclaimAds) {
+      const f = Math.cos(a.yaw); // +1 faces south
+      k.box('hall', a.x - 2.15, FY + 1.35, a.z, a.x + 2.15, FY + 3.25, a.z + f * 0.09, 0x15171a);
+      k.signs.push({ x: a.x, y: FY + 2.3, z: a.z + f * 0.1, yaw: a.yaw, w: 4.1, h: 1.8, style: 'brand', plain: true, colors: { bg: a.bg, fg: a.fg }, rows: a.rows, sub: a.sub });
+    }
+    // A banner hung across the reclaim hall, facing the way in from the gates (and back).
+    const bx = -177;
+    k.box('hall', bx - 0.1, FY + 4.85, -1226.7, bx + 0.1, FY + 6.35, -1217.3, 0x15171a);
+    for (const z of [-1225.5, -1218.5]) k.box('hall', bx - 0.03, FY + 6.35, z - 0.03, bx + 0.03, CEIL - 0.75, z + 0.03, COL.steel);
+    for (const s of [-1, 1]) {
+      k.signs.push({ x: bx + s * 0.11, y: FY + 5.6, z: -1222, yaw: (s * Math.PI) / 2, w: 9.2, h: 1.3, style: 'brand', plain: true, colors: { bg: ['#ff8a3d', '#ff4f8b'], fg: '#ffffff' }, rows: ['Welcome to Vicehaven!'], sub: 'Sun, sea and city lights · Enjoy your stay' });
     }
   }
 
@@ -1735,6 +1763,7 @@
     const wallBoard = (kind, x) => {
       k.box('hall', x - 3.9, FY + WALL_H + 0.08, PZ - 0.1, x + 3.9, FY + 8.3, PZ + 0.12, 0x1b1d21);
       k.boards.push({ kind, x, y: FY + 6.25, z: PZ + 0.13, yaw: 0, w: 7.4, h: 3.7 });
+      k.boards.push({ kind, x, y: FY + 6.25, z: PZ - 0.11, yaw: Math.PI, w: 7.4, h: 3.7 }); // and over the wall, airside
     };
     wallBoard('dep', -390);
     wallBoard('dep', -262);
@@ -2045,7 +2074,7 @@
           bus: { x: -212, z: -1187.2, yaw: -Math.PI / 2, kerb: { x: -215, z: -1192.4 } },
           walk: { z: -1192.6 },
         },
-        places: { checkin: { x: -377.5, z: -1199 }, gates: { x: -240, z: -1231.6 }, arrivals: { x: -136, z: -1205 } },
+        places: { checkin: { x: -377.5, z: -1199 }, gates: { x: -240, z: -1231.6 }, arrivals: { x: -136, z: -1205 }, arrivalsKerb: { x: -140, z: -1192.4 } },
         signs: signs.count,
       };
       Object.defineProperty(world.terminal, '_rt', { value: { mats, lift }, enumerable: false });
@@ -2057,11 +2086,16 @@
       return checkNav(physics, T.nav);
     }
 
+    /**
+     * Arrivals, on the forecourt by its doors (a taxi fare can end here). The
+     * gates get no place of their own: inside the airside fence the GPS
+     * would send Jay round by the service gate.
+     */
     static registerPlaces(world, places) {
       const T = world.terminal;
       if (!T) return;
-      places.add('airport_gates', { name: 'The gates, Vicehaven International', x: T.places.gates.x, z: T.places.gates.z, yaw: Math.PI, kind: 'airport', district: 'airport' });
-      places.add('airport_arrivals', { name: 'Arrivals, Vicehaven International', x: T.places.arrivals.x, z: T.places.arrivals.z, yaw: 0, kind: 'airport', district: 'airport' });
+      const a = T.places.arrivalsKerb;
+      places.add('airport_arrivals', { name: 'Vicehaven International, Arrivals', x: a.x, z: a.z, yaw: Math.PI, kind: 'airport', district: 'airport' });
     }
 
     // ------------------------------------------------------------ runtime
@@ -2235,10 +2269,15 @@
         if (d > 12) d -= 24;
         return d;
       };
-      const deps = flights.filter((f) => f.kind === 'dep' && rel(f) > -0.75).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
-      const arrs = flights.filter((f) => f.kind === 'arr' && rel(f) > -1.5).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
-      drawBoard(g, BOARD_REGIONS.dep, 'Departures', clock, ['Time', 'Flight', 'To', 'Gate', 'Remarks'], deps.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', f.status || '']), true);
-      drawBoard(g, BOARD_REGIONS.arr, 'Arrivals', clock, ['Time', 'Flight', 'From', 'Gate', 'Status'], arrs.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', this._arrStatus(f)]), false);
+      // A late flight stays up until it has gone (or come in); then it drops off after a while.
+      const eff = (f) => rel(f.est !== null && f.est !== undefined ? f.est : f.time);
+      const liveDep = (f) => /board|final|closed|delay|go to gate/i.test(f.status || '');
+      const liveArr = (f) => /land|at gate|approach|taxi|delay/i.test(f.status || '') || this.carouselOf(f.id) >= 0;
+      const deps = flights.filter((f) => f.kind === 'dep' && (eff(f) > -0.75 || liveDep(f)) && !/cancel/i.test(f.status || '')).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
+      const arrs = flights.filter((f) => f.kind === 'arr' && (eff(f) > -1.5 || liveArr(f))).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
+      const remark = (f, s) => (/delay/i.test(s) && f.est !== null && f.est !== undefined ? 'Expected ' + hhmm(f.est) : s);
+      drawBoard(g, BOARD_REGIONS.dep, 'Departures', clock, ['Time', 'Flight', 'To', 'Gate', 'Remarks'], deps.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, f.status || '')]), true);
+      drawBoard(g, BOARD_REGIONS.arr, 'Arrivals', clock, ['Time', 'Flight', 'From', 'Gate', 'Status'], arrs.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, this._arrStatus(f))]), false);
       drawReclaim(g, BOARD_REGIONS.reclaim, this.carousels.map((c) => c.flight), clock);
       const gates = this.T.gates || [];
       gates.forEach((gt, i) => {
@@ -2314,6 +2353,7 @@
       this.bagMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.05 }), this.maxBags);
       this.bagMesh.name = 'terminal bags';
       this.bagMesh.count = 0;
+      this.bagMesh.visible = false;
       this.bagMesh.frustumCulled = false;
       g.scene.add(this.bagMesh);
       this._col = new THREE.Color();
@@ -2351,7 +2391,7 @@
       q.toSpawn = 14 + Math.floor(Math.random() * 10);
       q.spawnT = 25; // the first bag a little after the passengers get there
       VH.events.emit('terminal:carousel', { carousel: q.c.id, n: best + 1, flight: f, x: q.c.x, z: q.c.z });
-      this._drawBoards(true);
+      this._boardT = 0; // redrawn when Jay is near enough to see them
     }
 
     _updateCarousels(dt, near) {
@@ -2378,11 +2418,12 @@
         if (q.run <= 0) {
           q.flight = null;
           this.bags = this.bags.filter((b) => b.ci !== i);
-          this._drawBoards(true);
+          this._boardT = 0;
         }
       });
       if (!running && !this.bags.length) {
         if (this.bagMesh.count) this.bagMesh.count = 0;
+        this.bagMesh.visible = false;
         return;
       }
       const speed = 0.45;
@@ -2409,6 +2450,7 @@
         this.bagMesh.setColorAt(j, this._col);
       });
       this.bagMesh.count = this.bags.length;
+      this.bagMesh.visible = this.bags.length > 0;
       this.bagMesh.instanceMatrix.needsUpdate = true;
       if (this.bagMesh.instanceColor) this.bagMesh.instanceColor.needsUpdate = true;
     }
@@ -2474,7 +2516,8 @@
       const prev = this._lastJay;
       if (onFoot && p.y < FY + 1.2) {
         lanes.forEach((ln, i) => {
-          const crossed = (prev.z - ln.arch.z) * (p.z - ln.arch.z) <= 0 && prev.z !== p.z;
+          // Walked through (a step, not a teleport across it).
+          const crossed = (prev.z - ln.arch.z) * (p.z - ln.arch.z) <= 0 && prev.z !== p.z && Math.abs(p.z - prev.z) < 0.6;
           if (crossed && Math.abs(p.x - ln.arch.x) < 0.6 && Math.abs(prev.x - ln.arch.x) < 0.9) {
             const gun = this._carrying();
             this.archBeep(i, gun);
@@ -2536,7 +2579,7 @@
       const gates = this.T.gates || [];
       const st = this.game.airside && typeof this.game.airside.stands === 'function' ? this._safe(() => this.game.airside.stands()) : null;
       const m = this._m || (this._m = new THREE.Matrix4());
-      const sc = new THREE.Vector3();
+      const sc = this._shSc || (this._shSc = new THREE.Vector3());
       let dirty = !!force;
       gates.forEach((gt, i) => {
         const s = st && st.find((q) => q.id === gt.stand);
@@ -2606,7 +2649,7 @@
         this._updateShutters(0.5);
       }
       this._boardT -= dt;
-      if (this._boardT <= 0) {
+      if (this._boardT <= 0 && dist < 250) {
         this._boardT = 4;
         this._drawBoards(false);
       }
@@ -2623,7 +2666,10 @@
         q.flight = null;
         q.run = 0;
       }
-      if (this.bagMesh) this.bagMesh.count = 0;
+      if (this.bagMesh) {
+        this.bagMesh.count = 0;
+        this.bagMesh.visible = false;
+      }
       for (const d of this.doors) d.open = d.want = 0;
       this._placeDoors();
       this._drawBoards(true);
@@ -2654,7 +2700,7 @@
   }
 
   const STATUS_COL = [
-    [/final|now boarding/i, '#ff5a4a'], [/boarding/i, '#5cff8a'], [/closed/i, '#ff9a3c'], [/delay/i, '#ffc23c'],
+    [/expected \d/i, '#ffc23c'], [/final|now boarding/i, '#ff5a4a'], [/boarding/i, '#5cff8a'], [/closed/i, '#ff9a3c'], [/delay/i, '#ffc23c'],
     [/cancel/i, '#ff5a4a'], [/depart|left/i, '#8a97a8'], [/landed|at gate|bags/i, '#5cff8a'], [/approach|expected|on time|go to gate/i, '#e8f0ff'],
   ];
   function statusColour(s) {
