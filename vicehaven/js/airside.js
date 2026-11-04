@@ -343,6 +343,11 @@
   /** A stand-local point (x east of the stand's centre, z south of it) in the world. */
   const W = (st, lx, lz) => [st.x + lx, st.z + lz];
 
+  /** How far (px, pz) is to one side of a plane's centre line. */
+  function across(px, pz, x, z, yaw) {
+    return Math.abs((px - x) * Math.cos(yaw) - (pz - z) * Math.sin(yaw));
+  }
+
   /**
    * Is (px, pz) under an Albatross with its main gear at (x, z), facing yaw, give or take
    * m metres? Its fuselage, wings and tailplane as three boxes.
@@ -1011,6 +1016,8 @@
           vt = Math.min(vt, Math.sqrt(Math.max(0, 2 * 2.2 * (blk - 0.4))));
           this.blockT += dt;
         } else this.blockT = 0;
+        this.gseBlockT = this._blkKind === 'gse' ? (this.gseBlockT || 0) + dt : 0;
+        if (this.rev && this.gseBlockT > 3 && this.onStuck) this.onStuck(this);
         if (this.rev) vt = Math.min(vt, 2.2);
         this.v = this.v < vt ? Math.min(vt, this.v + 1.4 * dt) : Math.max(vt, this.v - 3 * dt);
         this.s = Math.min(P.len, this.s + this.v * dt);
@@ -1866,6 +1873,56 @@
         }
       }
       pl.blocker = null;
+      if (!fast && pl.z > -1362) {
+        const gd = this._gseAhead(pl, P, pl.s, Math.min(60, reach), false);
+        if (gd < Infinity) return Math.max(0, gd - 7);
+      }
+      return Infinity;
+    }
+
+    /**
+     * A ground vehicle under where this plane is about to go (it gives way to them, as they
+     * do to it: one caught out in the open drives clear and then the plane carries on).
+     * How far along its path the plane may go, or Infinity.
+     */
+    _gseAhead(pl, P, s0, reach, push) {
+      const list = this._allGse;
+      if (!list || !list.length) return Infinity;
+      let any = false;
+      for (const w of list) {
+        if (w.root.visible && Math.abs(w.x - pl.x) < reach + 45 && Math.abs(w.z - pl.z) < reach + 45) {
+          any = true;
+          break;
+        }
+      }
+      if (!any) return Infinity;
+      for (let d = 4; d <= reach; d += 4) {
+        let mx;
+        let mz;
+        let yaw;
+        if (push) {
+          P.at(Math.min(P.len, s0 + d), _c);
+          mx = _c.x;
+          mz = _c.z;
+          yaw = _c.h + PI;
+        } else {
+          const sn = Math.min(P.len, s0 + d);
+          P.at(sn, _c);
+          const nx = _c.x;
+          const nz = _c.z;
+          P.at(Math.max(0, sn - NOSE), _c);
+          mx = _c.x;
+          mz = _c.z;
+          yaw = Math.atan2(nx - mx, nz - mz);
+        }
+        for (const w of list) {
+          if (!w.root.visible || w.attached || w.plane === pl || w.waitPl === pl || (w.role === 'tug' && w.st === pl.rot.st)) continue;
+          if (Math.abs(w.x - mx) > 30 || Math.abs(w.z - mz) > 30) continue;
+          // Under it here (one already under a wing, out on the road, is fine: the wing's above it).
+          const m = Math.min(2.5, w.k.len * 0.35);
+          if (underPlane(w.x, w.z, mx, mz, yaw, m) && !(underPlane(w.x, w.z, pl.x, pl.z, pl.yaw, m) && across(w.x, w.z, pl.x, pl.z, pl.yaw) > 7)) return d;
+        }
+      }
       return Infinity;
     }
 
@@ -1883,7 +1940,8 @@
           if ((Math.hypot(o.x - tx, o.z - tz) < r || Math.hypot(o.x - _b.x, o.z - _b.z) < r) && o.y < 12) return Math.max(0, d - 2);
         }
       }
-      return Infinity;
+      const gd = this._gseAhead(pl, P, pl.s, 24, true);
+      return gd < Infinity ? Math.max(0, gd - 3) : Infinity;
     }
 
     /** A plane on the ground: where its main gear is now and will be in 3 and 6 s, and which way it faces. */
@@ -1920,6 +1978,7 @@
     /** A ground vehicle: how far it may go before it has to stop. */
     _gseBlocked(v) {
       const P = v.path;
+      v._blkKind = null;
       // Two points ahead along the way it's going: just in front, and its stopping distance on.
       const half0 = v.k.len / 2;
       P.at(Math.min(P.len, v.s + half0 + 3 + (v.v * v.v) / 5), _c);
@@ -1934,19 +1993,23 @@
         if (v.role === 'tug' && q.rot.st === v.st) continue;
         if (Math.abs(q.x - v.x) > 90 || Math.abs(q.z - v.z) > 90) continue;
         const poses = this._poses(q);
+        // Under it now, or where it's about to be: drive clear (the plane waits for us).
         let inside = false;
-        let ahead = false;
+        for (let i = 0; i < poses.n && !inside; i++) inside = underPlane(v.x, v.z, poses[i].x, poses[i].z, poses[i].yaw, 2.5);
+        if (inside) continue;
         for (let i = 0; i < poses.n; i++) {
           const p = poses[i];
-          if (underPlane(v.x, v.z, p.x, p.z, p.yaw, 2.5)) inside = true;
-          else if (underPlane(_c.x, _c.z, p.x, p.z, p.yaw, 2.5) || underPlane(frontX, frontZ, p.x, p.z, p.yaw, 2.5)) ahead = true;
+          if (underPlane(_c.x, _c.z, p.x, p.z, p.yaw, 2.5) || underPlane(frontX, frontZ, p.x, p.z, p.yaw, 2.5)) {
+            v._blkKind = 'plane';
+            return 0;
+          }
         }
-        if (ahead && !inside) return 0;
       }
       const sk = this.sky;
       if (sk && sk.onGround && sk.v > 0.3 && Math.hypot(_c.x - sk.x, _c.z - sk.z) < 18) return 0;
       const fx = Math.sin(v.yaw) * (v.rev ? -1 : 1);
       const fz = Math.cos(v.yaw) * (v.rev ? -1 : 1);
+      const fz0 = fz;
       const half = v.k.len / 2;
       for (const o of this._obs) {
         const dx = o.x - v.x;
@@ -1955,7 +2018,19 @@
         const side = Math.abs(-dx * fz + dz * fx);
         if (along > 0 && along < half + 6 + o.r && side < 1.6 + o.r && o.y < 5) return Math.max(0, along - half - 1.5 - o.r);
       }
-      if (v.blockT > 15) return Infinity; // never wait for ever
+      // Pulling out onto (or across) the airside road: wait for anything coming along it.
+      if (Math.abs(fz0) > 0.6 && Math.abs(_c.z - ROAD_Z) < 4.5 && Math.abs(v.z - ROAD_Z) > 2.5) {
+        for (const w of this._allGse) {
+          if (w === v || !w.busy || Math.abs(w.z - ROAD_Z) > 3.5 || w._blk === v) continue;
+          const wdx = Math.sin(w.yaw) * (w.rev ? -1 : 1);
+          if (Math.abs(wdx) < 0.7) continue;
+          const gap = (v.x - w.x) * Math.sign(wdx); // how far it has to come to reach us
+          if (gap > -5 && gap < (v.rev ? 70 : 45)) return 0;
+        }
+      }
+      // Never wait on each other for ever: two stuck on each other (or behind one that's not
+      // going anywhere) for a quarter of a minute, or anything for three quarters of one.
+      if (v.gseBlockT > 45 || (v.gseBlockT > 15 && v._blk && (v._blk._blk === v || !v._blk.busy))) return Infinity;
       // Other vehicles (and the baggage carts): the middle or either end of one in the lane
       // just ahead. Two waiting on each other (at a crossing): the one already across the
       // other's way goes first, to clear it.
@@ -1979,7 +2054,8 @@
           const wfz = Math.cos(w.yaw);
           const inMine = Math.abs(-(w.x - v.x) * fz + (w.z - v.z) * fx); //   w off my line
           const inTheirs = Math.abs(-(v.x - w.x) * wfz + (v.z - w.z) * wfx); // me off w's line
-          if (inTheirs < inMine - 0.3 || (Math.abs(inTheirs - inMine) <= 0.3 && v.id > w.id)) continue;
+          const headOn = fx * wfx * (w.rev ? -1 : 1) + fz * wfz * (w.rev ? -1 : 1) < -0.5;
+          if (!(headOn && v.rev) && (inTheirs < inMine - 0.3 || (Math.abs(inTheirs - inMine) <= 0.3 && v.id > w.id))) continue;
         }
         const wh = w.k.len / 2;
         const sx = Math.sin(w.yaw) * wh;
@@ -1990,6 +2066,7 @@
         if (w.carts) for (const c of w.carts) look(w, c.x, c.z);
       }
       v._blk = by;
+      if (by) v._blkKind = 'gse';
       return best === Infinity ? Infinity : Math.max(0, best);
     }
 
@@ -2029,6 +2106,7 @@
             { path: route([L(-4.6, -9), L(-4.6, -22.5), L(-12, -22.5)], 6, 3), rev: true },
             { path: route([L(-12, -22.5)].concat(depotIn(caterSlot)), 5, 8) },
           ],
+          depotIn: depotIn(caterSlot),
         },
         fuel: {
           kind: 'fuel', home: [...fuelSlot, PI], spot: [...L(-13, 10), 0], tin: 38, tout: -108,
@@ -2153,10 +2231,21 @@
             } else {
               v.hose = false;
               v.post = 'leaving';
-              v.go(s.legOut(), () => {
+              const home = () => {
                 v.post = 'home';
+                v.onStuck = null;
                 v.place(s.home[0], s.home[1], s.home[2]);
-              });
+              };
+              v.go(s.legOut(), home);
+              // Backing out onto the road with someone coming up behind: once it's facing
+              // along the road, give up backing and drive off forwards instead.
+              v.onStuck = s.depotIn
+                ? () => {
+                  if (Math.abs(v.z - ROAD_E) > 2.5 || Math.sin(v.yaw) < 0.5) return;
+                  v.onStuck = null;
+                  v.go([{ path: route([[v.x, v.z], [v.x + 6, ROAD_E]].concat(s.depotIn), 5, 8) }], home);
+                }
+                : null;
             }
           }
           if (v.parts.hose) {
@@ -2474,7 +2563,7 @@
             v.wait = rand(25, 90);
             // A lap of the airside road (turning at the west end), or of the GA apron.
             const pts = v === ex.vanA
-              ? [VAN_SLOT, [VAN_SLOT[0], ROAD_W], [-430, ROAD_W], [-430, -1292], [-424, -1292], [-424, ROAD_E], [DEPOT_IN_X, ROAD_E], [DEPOT_IN_X, DEPOT_IN_Z], [VAN_SLOT[0], DEPOT_IN_Z], VAN_SLOT]
+              ? [VAN_SLOT, [VAN_SLOT[0], ROAD_W], [-446, ROAD_W], [-446, -1290], [-437, -1290], [-437, ROAD_E], [DEPOT_IN_X, ROAD_E], [DEPOT_IN_X, DEPOT_IN_Z], [VAN_SLOT[0], DEPOT_IN_Z], VAN_SLOT]
               : [[84, -1290], [84, -1314], [285, -1314], [285, -1272], [90, -1272], [84, -1278], [84, -1290]];
             v.go([{ path: route(pts, 4, 7.5) }], () => v.place(v.home[0], v.home[1], v.home[2]));
           }
@@ -2530,7 +2619,7 @@
     _fmPark(fm, dt) {
       fm.waitT += dt;
       const pl = fm.waitPl;
-      const done = !pl || pl.gone || pl.phase !== 'taxiin' || pl.z > ROAD_Z + 18;
+      const done = !pl || pl.gone || pl.phase !== 'taxiin' || pl.z > STAND_Z - 3;
       let crowded = false;
       for (const q of this.planes) {
         if (q !== pl && q.moving && Math.abs(q.z - LANE_Z) < 30 && q.x > fm.x - 20 && q.x < fm.x + 140) crowded = true;
@@ -2542,6 +2631,7 @@
       if (!done && !crowded && fm.waitT < 90) return;
       fm.state = 'back';
       fm.waitPl = null;
+      fm.plane = null;
       const x = fm.x;
       fm.go([{ path: route([[x, LANE_Z], [x - 6, LANE_Z], [x - 6, ROAD_E], [DEPOT_IN_X, ROAD_E], [DEPOT_IN_X, DEPOT_IN_Z], [FM_SLOT[0], DEPOT_IN_Z], FM_SLOT], 5, 9) }], () => {
         fm.state = 'home';
@@ -2681,11 +2771,15 @@
           k.pitch = k.s < 700 ? 0.12 : k.s > P.sFinal ? 0.05 : 0;
           k.y = y;
           if (!k.slot && k.s >= P.sDecide && k.s < P.sDecide + 40) {
-            // Ask for the runway: nothing landing within about a minute either side, nobody on it.
+            // Ask for the runway: no airliner landing in the minute before us (it needs half a
+            // minute to roll out and turn off), or soon after (we need to be off it, or climbing
+            // away from a touch-and-go); nobody on it. (Anything still on it when we're on short
+            // final sends us round again.)
             k.eta = (P.len - k.s) / 38;
             const tdAt = this.t + k.eta;
-            const busy = this._jayRwy || this.rwy.size > 0 || this.planes.some((q) => q.phase === 'approach' && Math.abs(q.eta() - k.eta) < 70) ||
-              this.planes.some((q) => q.phase === 'taxiout' && q.cleared) || this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 60 && r.landAt < tdAt + 95);
+            const after = k.circuits <= 1 ? 70 : 48;
+            const busy = this._jayRwy || this.planes.some((q) => q.phase === 'approach' && q.eta() > k.eta - 62 && q.eta() < k.eta + after) ||
+              this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 62 && r.landAt < tdAt + after);
             if (busy) {
               // Hold off: a full turn away from the field and ask again.
               k.main = P;

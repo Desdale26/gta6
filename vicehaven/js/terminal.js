@@ -15,7 +15,15 @@
  *                                           flight boards, the carousels and
  *                                           their bags, the security arches
  *                                           (a gun sets them off), the hall
- *                                           lights at night, isInside()
+ *                                           lights at night
+ *     .isInside(x, z, y)                    in the halls or a jet bridge?
+ *     .flights()                            what the boards show (airside.js's
+ *                                           schedule, or a list of our own)
+ *     .carouselOf(flightId), .carouselState()   which belt has whose bags
+ *     .takeBag(ci, x, z)                    someone lifts a bag off belt ci
+ *     .archBeep(lane, alarm)                an arch blinks (and beeps)
+ *   events: terminal:carousel { carousel, n, flight, x, z } (bags coming),
+ *           terminal:alarm { lane, x, z } (Jay set an arch off)
  *
  * The plan (x east, z south; metres). The hall stands on a low plinth with
  * its floor at FY; the forecourt ramps gently up to it from the kerb.
@@ -30,7 +38,9 @@
  *           | DEPARTURES: three check-in | info, café, | ARRIVALS: meeting   |
  *           | islands (A, B, C)          | Sunrise 24/7| rail, car hire, café|
  *   z -1196 +--doors -402.5, -377.5, -320 ---- -235 ------ -165 ---- -112 --+
- *             forecourt ramp, drop-off canopy, kerb (z -1191..-1189)
+ *             forecourt ramp (bollards at each door set keep cars out), drop-off
+ *             canopy, kerb (z -1191..-1189); the airside fence (z -1194) meets the
+ *             hall's two front corners
  *             Airport Road (the north lanes head west: cars stop at the kerb)
  *
  * Jet bridges: from each gate door (x = stand + 14) a tunnel runs north up
@@ -230,10 +240,12 @@
   }
 
   function glassMaterial() {
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       vertexColors: true, transparent: true, opacity: 0.26, roughness: 0.06, metalness: 0.55,
       side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.3,
     });
+    mat.forceSinglePass = true; // flat panes: one pass, not back faces then front
+    return mat;
   }
 
   /** Turn the terminal's own builders into meshes, one per surface per chunk. */
@@ -480,6 +492,15 @@
     }
     for (const [x, s] of [[X0, -1], [X1, 1]]) {
       k.face('concrete', [[x, 0, KERB_Z], [x, KERB, KERB_Z], [x, FY, Z1], [x, 0, Z1]], [s, 0, 0], C(0xcfcac0));
+      // The airside fence (z -1194, airfield.js) ends at the hall's corners: a last
+      // panel from its end to the glass, so there's no gap to slip airside through.
+      const ctx = world.ctxAt(x, -1195);
+      const fz0 = Z1 - 0.05;
+      const fz1 = -1194;
+      for (const z of [fz0, -1195, fz1]) ctx.prop.box(x - 0.05, 0, z - 0.05, x + 0.05, 2.6, z + 0.05, C(0x7d838a));
+      for (const y of [0.3, 1.3, 2.45]) ctx.prop.box(x - 0.03, y, fz0, x + 0.03, y + 0.05, fz1, C(0x7d838a));
+      ctx.propMatte.box(x - 0.01, 0.3, fz0, x + 0.01, 2.45, fz1, C(0x3a3f45));
+      world.physics.addBox(x - 0.1, 0, fz0, x + 0.1, 2.6, fz1 + 0.1, 'fence', F().SOLID | F().CAMERA);
     }
     world.physics.addBox(X0, -0.5, KERB_Z, X1, KERB, ROAD_Z, 'kerb', F().SOLID);
     world.physics.addRamp((X0 + X1) / 2, (KERB_Z + Z1) / 2, (X1 - X0) / 2, (KERB_Z - Z1) / 2, Math.PI, -0.5, KERB, FY, 'kerb', F().SOLID);
@@ -733,6 +754,7 @@
   // ------------------------------------------------------------ reclaim
   const CAROUSEL = { L: 8, R: 2.2, rc: 1.65, bw: 1.0 }; // straight half length, outer radius, belt centre line, belt width
   const CAROUSELS = [{ id: 'carousel1', x: -160, z: -1222.5 }, { id: 'carousel2', x: -112, z: -1222.5 }];
+  const BAG_COLOURS = [0x2b2f35, 0x1f3a5f, 0xc0392b, 0x16a085, 0x8e44ad, 0xd35400, 0x34495e, 0xe5c04a, 0x7f8c8d, 0xff6f91];
 
   /** A point on a carousel's belt `s` metres round from its south-west corner (east along the south side). */
   function beltAt(c, s, r, out) {
@@ -2128,6 +2150,7 @@
       const leafW = DOOR_W / 2 - 0.02;
       const leafH = DOOR_H - 0.04;
       const glass = new THREE.MeshStandardMaterial({ color: 0xbfd8e6, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.5, depthWrite: false, side: THREE.DoubleSide });
+      glass.forceSinglePass = true;
       const b = new VH.GeometryBuilder({});
       const frame = C(0x3a3f46);
       b.box(-leafW / 2, 0, -0.03, leafW / 2, 0.12, 0.03, frame);
@@ -2395,64 +2418,95 @@
     }
 
     _updateCarousels(dt, near) {
-      const BAGC = [0x2b2f35, 0x1f3a5f, 0xc0392b, 0x16a085, 0x8e44ad, 0xd35400, 0x34495e, 0xe5c04a, 0x7f8c8d, 0xff6f91];
       const { L, rc } = CAROUSEL;
       const P = 4 * L + 2 * Math.PI * rc;
+      const bags = this.bags;
       let running = false;
-      this.carousels.forEach((q, i) => {
+      for (let i = 0; i < this.carousels.length; i++) {
+        const q = this.carousels[i];
         q.since += dt;
-        if (q.run <= 0) return;
+        if (q.run <= 0) continue;
         q.run -= dt;
         running = true;
         q.spawnT -= dt;
-        if (q.toSpawn > 0 && q.spawnT <= 0 && this.bags.length < this.maxBags) {
+        if (q.toSpawn > 0 && q.spawnT <= 0 && bags.length < this.maxBags) {
           // Out of the hatch onto the belt, if there's room.
           const s0 = 2 * L - 1.2;
-          if (!this.bags.some((b) => b.ci === i && Math.abs(((b.s - s0) % P + P) % P) < 1.0)) {
+          let room = true;
+          for (const b of bags) if (b.ci === i && Math.abs((((b.s - s0) % P) + P) % P) < 1.0) room = false;
+          if (room) {
             const big = Math.random();
-            this.bags.push({ ci: i, s: s0, color: BAGC[Math.floor(Math.random() * BAGC.length)], w: big < 0.3 ? 0.42 : 0.5 + Math.random() * 0.1, h: big < 0.3 ? 0.3 : 0.24 + Math.random() * 0.06, l: big < 0.3 ? 0.55 : 0.7 + Math.random() * 0.15, yaw: (Math.random() - 0.5) * 0.6, age: 0 });
+            bags.push({ ci: i, s: s0, color: BAG_COLOURS[Math.floor(Math.random() * BAG_COLOURS.length)], w: big < 0.3 ? 0.42 : 0.5 + Math.random() * 0.1, h: big < 0.3 ? 0.3 : 0.24 + Math.random() * 0.06, l: big < 0.3 ? 0.55 : 0.7 + Math.random() * 0.15, yaw: (Math.random() - 0.5) * 0.6, age: 0 });
             q.toSpawn--;
           }
           q.spawnT = 0.9 + Math.random() * 1.4;
         }
         if (q.run <= 0) {
           q.flight = null;
-          this.bags = this.bags.filter((b) => b.ci !== i);
+          for (let j = bags.length - 1; j >= 0; j--) if (bags[j].ci === i) bags.splice(j, 1);
           this._boardT = 0;
         }
-      });
-      if (!running && !this.bags.length) {
+      }
+      if (!running && !bags.length) {
         if (this.bagMesh.count) this.bagMesh.count = 0;
         this.bagMesh.visible = false;
         return;
       }
       const speed = 0.45;
-      if (running) this.beltTex.offset.x -= (speed * dt) / 1.0 * 0.25;
-      // Bags ride round; after a while their owners start lifting them off.
-      for (const b of this.bags) {
+      if (running) this.beltTex.offset.x -= speed * dt * 0.25;
+      // Bags ride round; after a while their owners start lifting them off
+      // (airportlife.js's people take theirs with takeBag()).
+      for (let j = bags.length - 1; j >= 0; j--) {
+        const b = bags[j];
         b.s += speed * dt;
         b.age += dt;
+        if (b.age > 50 && Math.random() < dt * 0.02) bags.splice(j, 1);
       }
-      this.bags = this.bags.filter((b) => !(b.age > 50 && Math.random() < dt * 0.02));
       if (!near) return;
-      const p = {};
+      const p = this._bp || (this._bp = {});
       const m = this._m;
-      this.bags.forEach((b, j) => {
-        const q = this.carousels[b.ci];
-        beltAt(q.c, b.s, rc, p);
-        const yaw = Math.atan2(p.tx, p.tz) + b.yaw;
-        this._q.setFromAxisAngle(this._up, yaw);
+      for (let j = 0; j < bags.length; j++) {
+        const b = bags[j];
+        beltAt(this.carousels[b.ci].c, b.s, rc, p);
+        this._q.setFromAxisAngle(this._up, Math.atan2(p.tx, p.tz) + b.yaw);
         this._v.set(p.x, FY + 0.45, p.z);
         this._sc.set(b.w, b.h, b.l);
         m.compose(this._v, this._q, this._sc);
         this.bagMesh.setMatrixAt(j, m);
         this._col.setHex(b.color);
         this.bagMesh.setColorAt(j, this._col);
-      });
-      this.bagMesh.count = this.bags.length;
-      this.bagMesh.visible = this.bags.length > 0;
+      }
+      this.bagMesh.count = bags.length;
+      this.bagMesh.visible = bags.length > 0;
       this.bagMesh.instanceMatrix.needsUpdate = true;
       if (this.bagMesh.instanceColor) this.bagMesh.instanceColor.needsUpdate = true;
+    }
+
+    /**
+     * Someone lifts a bag off carousel `ci` (0 or 1) within reach of (x, z):
+     * it leaves the belt. Returns the bag ({ color, w, h, l }) or null.
+     */
+    takeBag(ci, x, z, reach) {
+      if (!this.ok || !this.bags) return null;
+      const q = this.carousels[ci];
+      if (!q) return null;
+      const r = reach || 2.6;
+      const p = this._bp || (this._bp = {});
+      let best = -1;
+      let bd = r;
+      for (let j = 0; j < this.bags.length; j++) {
+        const b = this.bags[j];
+        if (b.ci !== ci) continue;
+        beltAt(q.c, b.s, CAROUSEL.rc, p);
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d < bd) {
+          bd = d;
+          best = j;
+        }
+      }
+      if (best < 0) return null;
+      const b = this.bags.splice(best, 1)[0];
+      return { color: b.color, w: b.w, h: b.h, l: b.l };
     }
 
     // ---------------------------------------------------------- security
