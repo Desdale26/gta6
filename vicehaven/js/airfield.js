@@ -39,7 +39,13 @@
   const HELIPAD = { x: 302, z: -1300 };
   const CARPARK = { x0: -400, x1: -120, z0: -1171, z1: -1112 };
   const FENCE_Z = -1194; // the airside fence runs along here (landside is south of it)
-  const STANDS = [{ x: -300, z: -1300 }, { x: -160, z: -1300 }];
+  // The four contact stands behind the terminal, one per gate (A1..A4). An airliner
+  // parks nose-in (yaw 0, facing south towards the terminal) with its centre at
+  // (x, z); `door` is where its front left (port, +x) door sill is then (the
+  // Albatross: door 15 m ahead of its centre, 2.1 m out, sill 3 m up), which is
+  // where each jet bridge ends (terminal.js).
+  const STANDS = [-390, -300, -210, -120].map((x, i) => ({ id: i + 1, gate: 'A' + (i + 1), x, z: -1276, yaw: 0, door: { x: x + 2.1, y: 3.0, z: -1276 + 15.0 } }));
+  const REMOTE = { x: -470, z: -1300 }; // the remote stand (stairs, no bridge), nose out to the taxiway
   const KERB = 0.15;
 
   function pave(world, x0, z0, x1, z1, color, y) {
@@ -154,14 +160,15 @@
     static build(world, layout) {
       const data = {
         runway: RWY, taxiway: TWY, links: LINKS, apron: APRON, ga: GA, service: SERVICE, terminal: TERMINAL,
-        tower: TOWER, hangars: HANGARS, helipad: HELIPAD, carpark: CARPARK, fenceZ: FENCE_Z, stands: STANDS,
+        tower: TOWER, hangars: HANGARS, helipad: HELIPAD, carpark: CARPARK, fenceZ: FENCE_Z, stands: STANDS, remote: REMOTE,
         // The airside fence (see _fences): the GPS goes in by the service gate.
         fence: { minX: -1030, maxX: 345, minZ: -1510, maxZ: FENCE_Z }, gate: { x: 45, z: FENCE_Z + 8 },
       };
       layout.airport = data;
       Airfield._runway(world);
       Airfield._aprons(world);
-      Airfield._terminal(world);
+      if (VH.Terminal && VH.Terminal.build) VH.Terminal.build(world, layout, data); // the walk-in terminal
+      else Airfield._terminal(world);
       Airfield._tower(world);
       Airfield._hangars(world);
       Airfield._landside(world, layout);
@@ -452,12 +459,13 @@
         this.spots.push(V.addFixedSpot({ type, x, z, yaw, color, r: type === 'albatross' ? 24 : 9 }));
       };
       // Nose out toward the taxiway (it can't push back).
-      add('albatross', STANDS[0].x, STANDS[0].z, Math.PI);
+      add('albatross', REMOTE.x, REMOTE.z, Math.PI); // the one Jay can fly: on the remote stand, west of the gates
       add('skylark', 130, -1290, Math.PI);
       add('skylark', 240, -1290, Math.PI);
       add('sparrow', HELIPAD.x, HELIPAD.z, Math.PI);
       this._buildAnimated();
-      this.traffic = new AirTraffic(game);
+      // airside.js runs the whole airside (flights, stands, ground crew) when it's there.
+      this.traffic = VH.Airside ? null : new AirTraffic(game);
     }
 
     _buildAnimated() {
@@ -494,7 +502,7 @@
         const gust = Math.sin(this._t * 0.7) * 0.15 + Math.sin(this._t * 2.3) * 0.05;
         this.sock.rotation.set(0, Math.PI * 0.9 + gust, -0.18 + gust * 0.6);
       }
-      this.traffic.update(dt);
+      if (this.traffic) this.traffic.update(dt);
     }
 
     blips(out, missionRunning) {
