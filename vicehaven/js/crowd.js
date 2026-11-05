@@ -1023,6 +1023,7 @@
           cower: an.cower,
           dance: an.dance,
           danceStyle: an.danceStyle,
+          pose: an.pose, // a scripted pose (airportlife.js: sitting, pulling a case)
           beat: an.beat,
           beatN: an.beatN,
           dead: a.dead,

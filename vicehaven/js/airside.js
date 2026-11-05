@@ -391,6 +391,7 @@
       wand: hdr(5, 1.1, 0.25),
       logo: new THREE.MeshBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
       pool: new THREE.MeshBasicMaterial({ map: poolTexture(), color: 0xfff0d4, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
+      glow: new THREE.SpriteMaterial({ map: poolTexture(), color: 0xfff6e8, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
       beam: new THREE.MeshBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     };
     return MAT;
@@ -561,17 +562,27 @@
     return GEO[kind];
   }
 
-  // Each kind: its body length (for keeping apart) and where its beacon sits.
+  // Each kind: its body length (for keeping apart), its height and where its beacon sits.
   const KINDS = {
-    tug: { len: 5.6, beacon: [0.6, 2.05, -1.75] },
-    bagtug: { len: 2.6, beacon: [0, 2.03, -0.4] },
-    belt: { len: 5.0, beacon: [0.38, 2.0, -2.5] },
-    cater: { len: 7.4, beacon: [0, 2.55, 3.4] },
-    fuel: { len: 7.6, beacon: [0, 2.62, 3.4] },
-    stairs: { len: 7.0, beacon: [0, 2.68, 2.9] },
-    followme: { len: 5.2, beacon: null },
-    van: { len: 5.2, beacon: null },
+    tug: { len: 5.6, h: 2.1, beacon: [0.6, 2.05, -1.75] },
+    bagtug: { len: 2.6, h: 2.1, beacon: [0, 2.03, -0.4] },
+    belt: { len: 5.0, h: 2.6, beacon: [0.38, 2.0, -2.5] },
+    cater: { len: 7.4, h: 3.5, beacon: [0, 2.55, 3.4] },
+    fuel: { len: 7.6, h: 3.2, beacon: [0, 2.62, 3.4] },
+    stairs: { len: 7.0, h: 3.0, beacon: [0, 2.68, 2.9] },
+    followme: { len: 5.2, h: 1.7, beacon: null },
+    van: { len: 5.2, h: 2.1, beacon: null },
   };
+
+  /**
+   * How far from an Albatross's centre line a vehicle this tall has to be for a wing to
+   * pass over it: outboard of the engines for the low ones, out near the tip (which rises
+   * to 3.5 m) for a bowser, never for a catering truck.
+   */
+  function wingClear(h) {
+    if (h <= 2.25) return 9.2;
+    return 1.5 + (h + 0.15 - 2.25) / 0.084 + 1.2;
+  }
 
   function gseMesh(kind) {
     const m = new THREE.Mesh(gseGeometry(kind), mats().gse);
@@ -579,6 +590,8 @@
     m.receiveShadow = true;
     return m;
   }
+
+  const LOOK_AT = [1, 0.5, -0.5, -1];
 
   // ---------------------------------------------------------- airliners
   const _a = { x: 0, z: 0, h: 0 };
@@ -862,6 +875,13 @@
         const land = night > 0.12 && (air || (p === 'approach' && this.y < 400));
         for (const l of x.land) l.visible = land;
         x.beam.visible = land && this.y < 250;
+        // The landing lights as one bright point that keeps its size on screen however far off
+        // (an arrival reads as a star on the approach long before the plane does).
+        x.glow.visible = land && (p === 'approach' || p === 'goaround' || p === 'climb' || p === 'takeoff');
+        if (x.glow.visible) {
+          const cp = this.sys.game.renderer.camera.position;
+          x.glow.scale.setScalar(clamp(Math.hypot(this.x - cp.x, this.y - cp.y, this.z - cp.z) * 0.009, 2.2, 60));
+        }
         x.taxi.visible = night > 0.12 && (p === 'taxiin' || p === 'taxiout' || p === 'rollout' || p === 'lineup' || p === 'pushback') && this.eng > 0.3;
         x.pool.visible = night > 0.12 && this.y < 3 && (x.taxi.visible || p === 'takeoff') && p !== 'pushback';
       }
@@ -906,6 +926,10 @@
     beam.rotation.x = 0.06;
     beam.visible = false;
     m.body.add(beam);
+    const glow = new THREE.Sprite(M.glow);
+    glow.position.set(0, 2.3, 5.2);
+    glow.visible = false;
+    m.body.add(glow);
     // The pool of light the taxi and landing lights throw on the ground ahead.
     const pg = new THREE.PlaneGeometry(1, 1);
     pg.rotateX(-HALF);
@@ -915,7 +939,7 @@
     pool.visible = false;
     pool.renderOrder = 2;
     m.root.add(pool);
-    m._air = { logo, land, taxi, beam, pool };
+    m._air = { logo, land, taxi, beam, pool, glow };
   }
 
   // ------------------------------------------------------ ground vehicles
@@ -1496,11 +1520,12 @@
 
     /** Move a flight that couldn't land (a go-around) to the next free slot. */
     _resequence(rot) {
+      // (The first gap of at least a minute and a bit either side.)
       let t = this.t + 150;
-      for (let tries = 0; tries < 20; tries++) {
-        const clash = this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < 100);
+      for (let tries = 0; tries < 40; tries++) {
+        const clash = this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < 70);
         if (!clash) break;
-        t += 60;
+        t += 30;
       }
       rot.landAt = t;
       rot.state = 'planned';
@@ -1545,6 +1570,7 @@
       if (this.planes.some((p) => p.gone)) this.planes = this.planes.filter((p) => !p.gone);
       this._arrivalsIn();
       for (const st of this.standList) this._standTick(st, dt);
+      this._shutTick();
       this._gseTick(dt);
       this._crewTick(dt);
       this._skylark(dt);
@@ -1625,9 +1651,12 @@
       return false;
     }
 
-    /** May a departure line up and go? (It's past 32 m/s by the time the next arrival, 48 s out, needs clearing.) */
+    /**
+     * May a departure line up and go? (From the holding point it's lined up and rolling in under
+     * half a minute: before the next arrival, 56 s out, needs clearing to land.)
+     */
     _rwyFree() {
-      return this.rwy.size === 0 && !this._jayRwy && !this._arrivalWithin(48);
+      return this.rwy.size === 0 && !this._jayRwy && !this._arrivalWithin(56);
     }
 
     _rwyRelease(pl) {
@@ -1640,7 +1669,8 @@
           const eta = pl.eta();
           if (!pl.cleared && eta < 25) {
             let ok = !this._jayRwy && this._queueIn() < 2;
-            for (const u of this.rwy) if (u !== pl && !(u.phase === 'climb' || (u.phase === 'takeoff' && u.v > 32))) ok = false;
+            // (Cleared to land behind a departure that's already rolling: it's long gone by touchdown.)
+            for (const u of this.rwy) if (u !== pl && !(u.phase === 'climb' || (u.phase === 'takeoff' && !u.reject))) ok = false;
             if (ok) {
               pl.cleared = true;
               this.rwy.add(pl);
@@ -1816,7 +1846,9 @@
     _pushClear(st) {
       for (const q of this.planes) {
         if (q.rot === st.cur || !q.onGround || q.phase === 'parked') continue;
-        if (q.x > st.x - 45 && q.x < st.x + 130 && q.z > -1348 && q.z < -1283) return false;
+        // (One taxiing out from a stand further east will come past behind us.)
+        const east = q.phase === 'taxiout' || q.phase === 'tugoff' || q.phase === 'pushback' ? 330 : 130;
+        if (q.x > st.x - 45 && q.x < st.x + east && q.z > -1348 && q.z < -1283) return false;
         if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x + 20) return false;
       }
       for (const o of this._obs) if (o.x > st.x - 24 && o.x < st.x + 58 && o.z > -1342 && o.z < -1262 && o.y < 6) return false;
@@ -1865,6 +1897,7 @@
     /** How far ahead (along its path) an airliner must stop, or Infinity. */
     _lookAhead(pl) {
       const P = pl.path;
+      pl._gseBlk = null;
       const fast = pl.phase === 'takeoff' || pl.phase === 'rollout';
       const reach = Math.min(fast ? 420 : 140, (pl.v * pl.v) / (fast ? 5 : 2) + 34);
       for (let d = 6; d <= reach; d += fast ? 8 : 5) {
@@ -1900,7 +1933,7 @@
         }
       }
       pl.blocker = null;
-      if (!fast && pl.z > -1362) {
+      if (!fast && (pl.z > -1362 || (pl.x > -10 && pl.x < 130))) { // (the follow-me comes out onto the taxiway there)
         const gd = this._gseAhead(pl, P, pl.s, Math.min(60, reach), false);
         if (gd < Infinity) return Math.max(0, gd - 7);
       }
@@ -1914,6 +1947,7 @@
      */
     _gseAhead(pl, P, s0, reach, push) {
       const list = this._allGse;
+      pl._gseBlk = null;
       if (!list || !list.length) return Infinity;
       let any = false;
       for (const w of list) {
@@ -1943,11 +1977,20 @@
           yaw = Math.atan2(nx - mx, nz - mz);
         }
         for (const w of list) {
-          if (!w.root.visible || w.attached || w.plane === pl || w.waitPl === pl || (w.role === 'tug' && w.st === pl.rot.st)) continue;
+          if (!w.root.visible || w.attached || (w.plane === pl && w.state !== 'out') || w.waitPl === pl || (w.role === 'tug' && w.st === pl.rot.st)) continue;
           if (Math.abs(w.x - mx) > 30 || Math.abs(w.z - mz) > 30) continue;
-          // Under it here (one already under a wing, out on the road, is fine: the wing's above it).
+          // Under it here? (One already under a wing, out on the road, is fine while it is low
+          // enough for the wing to pass over it and isn't heading in under the body.)
           const m = Math.min(2.5, w.k.len * 0.35);
-          if (underPlane(w.x, w.z, mx, mz, yaw, m) && !(underPlane(w.x, w.z, pl.x, pl.z, pl.yaw, m) && across(w.x, w.z, pl.x, pl.z, pl.yaw) > 7)) return d;
+          if (!underPlane(w.x, w.z, mx, mz, yaw, m)) continue;
+          if (underPlane(w.x, w.z, pl.x, pl.z, pl.yaw, m)) {
+            const ac = across(w.x, w.z, pl.x, pl.z, pl.yaw);
+            const sg = w.rev ? -2 : 2;
+            const ac2 = across(w.x + Math.sin(w.yaw) * sg, w.z + Math.cos(w.yaw) * sg, pl.x, pl.z, pl.yaw);
+            if (ac > wingClear(w.k.h || 2.1) && (w.v < 0.3 || ac2 >= ac)) continue;
+          }
+          pl._gseBlk = w;
+          return d;
         }
       }
       return Infinity;
@@ -2002,6 +2045,18 @@
       return P;
     }
 
+    /**
+     * The airside road past a stand is shut, like a level crossing, while a plane turns in
+     * to it (from 70 m before the turn until it's on the stand) or is pushed back from it.
+     */
+    _shutTick() {
+      for (const st of this.standList) st.shut = false;
+      for (const pl of this.planes) {
+        const st = pl.rot.st;
+        if (pl.phase === 'pushback' || (pl.phase === 'taxiin' && pl.path && pl.path.sTurnIn && pl.s > pl.path.sTurnIn - 70)) st.shut = true;
+      }
+    }
+
     /** A ground vehicle: how far it may go before it has to stop. */
     _gseBlocked(v) {
       const P = v.path;
@@ -2012,12 +2067,26 @@
       P.at(Math.min(P.len, v.s + half0 + 1.5), _b);
       const frontX = _b.x;
       const frontZ = _b.z;
+      // Wait short of a shut stretch of the road (one already on it drives on, clear).
+      if (Math.abs(v.z - ROAD_Z) < 12 || Math.abs(_c.z - ROAD_Z) < 12) {
+        for (const st of this.standList) {
+          if (!st.shut || v.st === st) continue;
+          const x0 = st.x - 24;
+          const x1 = st.x + 54;
+          if (v.x > x0 && v.x < x1 && Math.abs(v.z - ROAD_Z) < 5) continue;
+          if ((_c.x > x0 && _c.x < x1 && Math.abs(_c.z - ROAD_Z) < 5) || (frontX > x0 && frontX < x1 && Math.abs(frontZ - ROAD_Z) < 5)) {
+            v._blkKind = 'plane';
+            return 0;
+          }
+        }
+      }
       // Planes on the ground (not parked): keep out from under each one, where it is now and
       // where it will be in three and six seconds. Already under one of those: carry on, out
       // of the way. (The follow-me never waits for the plane it's leading.)
       for (const q of this.planes) {
-        if (!q.onGround || q.phase === 'parked' || q.gone || q === v.plane || q === v.waitPl) continue;
+        if (!q.onGround || q.phase === 'parked' || q.gone || (q === v.plane && v.state !== 'out') || q === v.waitPl) continue;
         if (v.role === 'tug' && q.rot.st === v.st) continue;
+        if (q._gseBlk === v && q.v < 0.5) continue; // it's waiting for us: go
         if (Math.abs(q.x - v.x) > 90 || Math.abs(q.z - v.z) > 90) continue;
         const poses = this._poses(q);
         // Under it now, or where it's about to be: drive clear (the plane waits for us).
@@ -2036,7 +2105,9 @@
       if (sk && sk.onGround && sk.v > 0.3 && Math.hypot(_c.x - sk.x, _c.z - sk.z) < 18) return 0;
       const fx = Math.sin(v.yaw) * (v.rev ? -1 : 1);
       const fz = Math.cos(v.yaw) * (v.rev ? -1 : 1);
-      const fz0 = fz;
+      // (Turning across the road just ahead counts as crossing it.)
+      const fz0 = Math.abs(fz) > 0.3 ? fz : Math.cos(_c.h);
+      const sx0 = Math.sign(fx);
       const half = v.k.len / 2;
       for (const o of this._obs) {
         const dx = o.x - v.x;
@@ -2047,13 +2118,14 @@
       }
       // Pulling out onto (or across) the airside road: wait for anything coming along a lane
       // still to be crossed.
-      if (Math.abs(fz0) > 0.6 && Math.min(v.z, _c.z) < ROAD_Z + 4.5 && Math.max(v.z, _c.z) > ROAD_Z - 4.5) {
+      if (Math.abs(fz0) > 0.3 && Math.min(v.z, _c.z) < ROAD_Z + 9 && Math.max(v.z, _c.z) > ROAD_Z - 4.5) {
         for (const w of this._allGse) {
-          if (w === v || !w.busy || Math.abs(w.z - ROAD_Z) > 3.5 || w._blk === v) continue;
+          if (w === v || !w.busy || Math.abs(w.z - ROAD_Z) > 3.5 || (w._blk === v && w.v < 1.5)) continue;
           const wdx = Math.sin(w.yaw) * (w.rev ? -1 : 1);
+          if (Math.abs(w.z - v.z) < 1.2 && Math.sign(wdx) === sx0) continue; // behind us in our own lane
           if (Math.abs(wdx) < 0.7 || (w.z - v.z) * fz0 < -1.5) continue;
           const gap = (v.x - w.x) * Math.sign(wdx); // how far it has to come to reach us
-          if (gap > -5 && gap < (v.rev ? 70 : 45)) {
+          if (gap > -5 && gap < Math.max(v.rev ? 70 : 45, w.v * 7)) {
             v._blkKind = 'gse';
             v._blk = w;
             return 0;
@@ -2062,19 +2134,20 @@
       }
       // Never wait on each other for ever: two stuck on each other (or behind one that's not
       // going anywhere) for a quarter of a minute, or anything for three quarters of one.
-      if (v.gseBlockT > 45 || (v.gseBlockT > 15 && v._blk && (v._blk._blk === v || !v._blk.busy))) return Infinity;
+      // (Queued behind one that's waiting for a plane or Jay, it waits too.)
+      if (v._blk && ((v.gseBlockT > 45 && v._blk.gseBlockT > 30) || (v.gseBlockT > 15 && (v._blk._blk === v || !v._blk.busy)))) return Infinity;
       // Other vehicles (and the baggage carts): the middle or either end of one in the lane
       // just ahead. Two waiting on each other (at a crossing): the one already across the
       // other's way goes first, to clear it.
       let best = Infinity;
       let by = null;
-      const look = (w, x, z) => {
+      const look = (w, x, z, m) => {
         const dx = x - v.x;
         const dz = z - v.z;
         const along = dx * fx + dz * fz;
         const side = Math.abs(-dx * fz + dz * fx);
-        if (along > 0 && along < half + 6 + v.v * 1.6 && side < 2.1 && along - half - 1.2 < best) {
-          best = along - half - 1.2;
+        if (along > 0 && along < half + 6 + v.v * 1.6 && side < 2.3 && along - half - m < best) {
+          best = along - half - m;
           by = w;
         }
       };
@@ -2092,10 +2165,11 @@
         const wh = w.k.len / 2;
         const sx = Math.sin(w.yaw) * wh;
         const sz = Math.cos(w.yaw) * wh;
-        look(w, w.x, w.z);
-        look(w, w.x + sx, w.z + sz);
-        look(w, w.x - sx, w.z - sz);
-        if (w.carts) for (const c of w.carts) look(w, c.x, c.z);
+        // (Its middle: keep clear of however much of it sticks out towards us, crossing at a slant.)
+        const ca = Math.abs(fx * Math.sin(w.yaw) + fz * Math.cos(w.yaw));
+        look(w, w.x, w.z, Math.max(1.2, ca * wh + Math.sqrt(Math.max(0, 1 - ca * ca)) * 1.2 + 0.4));
+        for (const k of LOOK_AT) look(w, w.x + sx * k, w.z + sz * k, 1.2); // and along it
+        if (w.carts) for (const c of w.carts) look(w, c.x, c.z, 1.2);
       }
       v._blk = by;
       if (by) v._blkKind = 'gse';
@@ -2151,7 +2225,7 @@
     _makeStandGse(st) {
       if (!VH.AircraftKit) return;
       const spec = this._standGseSpec(st);
-      const set = { spec };
+      const set = { spec, keys: Object.keys(spec) };
       for (const key of Object.keys(spec)) {
         const s = spec[key];
         const v = new Gse(this, s.kind, s.home[0], s.home[1], s.home[2]);
@@ -2220,8 +2294,14 @@
     }
 
     _gseTick(dt) {
+      // Everyone first, so each vehicle can see all the others as it moves.
       const all = (this._allGse = this._allGse || []);
       all.length = 0;
+      for (const st of this.standList) {
+        if (!st.gse) continue;
+        for (const key of st.gse.keys) all.push(st.gse[key]);
+      }
+      if (this.extras) for (const v of this.extras.list) all.push(v);
       for (const st of this.standList) {
         const set = st.gse;
         if (!set) continue;
@@ -2229,10 +2309,9 @@
         const atStand = r && r.state === 'atStand';
         const tr = atStand ? this.t - r.onBlock : -1;
         const to = atStand ? this.t - r.off : -1e9;
-        for (const key of Object.keys(set.spec)) {
+        for (const key of set.keys) {
           const s = set.spec[key];
           const v = set[key];
-          all.push(v);
           if (key === 'tug') {
             if (atStand && to >= s.tin && v.post === 'home' && !v.busy) {
               const L = (lx, lz) => W(st, lx, lz);
@@ -2299,7 +2378,6 @@
           v.update(dt);
         }
       }
-      if (this.extras) for (const v of this.extras.list) all.push(v);
     }
 
     // ------------------------------------------------------------ crew
@@ -2520,7 +2598,7 @@
       ex.vanB = car('porter', 0xf1f1ee, 84, -1290, PI);
       for (const v of [ex.vanA, ex.vanB]) {
         if (!v) continue;
-        v.k = { len: 5.2, beacon: [0, VH.CarModels.TYPES.porter.height + 0.02, 0.2] };
+        v.k = { len: 5.2, h: VH.CarModels.TYPES.porter.height, beacon: [0, VH.CarModels.TYPES.porter.height + 0.02, 0.2] };
         v.wait = rand(5, 40);
         v.home = [v.x, v.z, v.yaw];
       }
@@ -2551,7 +2629,8 @@
       if (fm) {
         if (fm.carModel.setHeadlights) fm.carModel.setHeadlights(night);
         if (fm.state === 'home') {
-          const pl = this.planes.find((p) => p.phase === 'rollout' && !p.followed && p.v < 45);
+          // (Only one still well up the runway: it has to be there first.)
+          const pl = this.planes.find((p) => p.phase === 'rollout' && !p.followed && p.v < 45 && p.x < -200);
           if (pl) {
             pl.followed = true;
             fm.plane = pl;
@@ -2568,12 +2647,19 @@
             const s = pl.s + 34;
             if (fm.state === 'wait') {
               P.at(s, _c);
-              if (_c.x < 36 && _c.z > TWY_Z - 3 && pl.phase === 'taxiin') fm.state = 'lead';
+              if (_c.x < fm.x + 0.5 && _c.z > TWY_Z - 3 && pl.phase === 'taxiin') {
+                // Off ahead of it, from where it waits (it pulls away to its 34 m lead).
+                if (pl.nx > fm.x + 12) {
+                  fm.state = 'lead';
+                  fm.ls = s - Math.max(0, fm.x - _c.x);
+                } else this._fmBack(fm, null); // it's on top of us (held up on the way out)
+              }
             }
             if (fm.state === 'lead') {
-              if (s >= P.sTurnIn) this._fmBack(fm, pl);
+              fm.ls = Math.min(s, fm.ls + (pl.v + 3) * dt);
+              if (fm.ls >= P.sTurnIn) this._fmBack(fm, pl);
               else {
-                P.at(s, _c);
+                P.at(fm.ls, _c);
                 fm.v = Math.hypot(_c.x - fm.x, _c.z - fm.z) / Math.max(dt, 1e-3);
                 fm.x = _c.x;
                 fm.z = _c.z;
@@ -2626,6 +2712,7 @@
      */
     _fmBack(fm, pl) {
       fm.state = 'back';
+      if (!pl) fm.plane = null;
       const x = fm.x;
       const home = () => {
         fm.state = 'home';

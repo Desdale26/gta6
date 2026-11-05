@@ -2294,10 +2294,35 @@
       };
       // A late flight stays up until it has gone (or come in); then it drops off after a while.
       const eff = (f) => rel(f.est !== null && f.est !== undefined ? f.est : f.time);
-      const liveDep = (f) => /board|final|closed|delay|go to gate/i.test(f.status || '');
-      const liveArr = (f) => /land|at gate|approach|taxi|delay/i.test(f.status || '') || this.carouselOf(f.id) >= 0;
-      const deps = flights.filter((f) => f.kind === 'dep' && (eff(f) > -0.75 || liveDep(f)) && !/cancel/i.test(f.status || '')).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
-      const arrs = flights.filter((f) => f.kind === 'arr' && (eff(f) > -1.5 || liveArr(f))).sort((a, b) => rel(a) - rel(b)).slice(0, 9);
+      const gone = {
+        dep: (f) => /departed/i.test(f.status || ''),
+        arr: (f) => /at gate|arrived/i.test(f.status || '') && this.carouselOf(f.id) < 0,
+      };
+      const keep = { dep: (f) => eff(f) > -0.75, arr: (f) => eff(f) > -1.5 };
+      // The list comes in the order things happen, but its clock times wrap at midnight
+      // and the schedule runs on past tomorrow's same hour: count the hours on from the
+      // first flight still to go, and stop half a day ahead.
+      const upcoming = (kind, gate, max) => {
+        const past = [];
+        const next = [];
+        let prev = null;
+        for (const f of flights) {
+          if (f.kind !== kind || (gate && f.gate !== gate) || /cancel/i.test(f.status || '')) continue;
+          if (gone[kind](f)) {
+            if (!gate && keep[kind](f)) past.push(f);
+            continue;
+          }
+          let d = rel(f);
+          if (prev !== null) while (d < prev - 0.01) d += 24;
+          prev = d;
+          if (d > 12 || next.length >= max) break;
+          next.push(f);
+        }
+        // The last couple that have just gone (or come in) at the top, then what's to come.
+        return past.slice(-2).concat(next).slice(0, max);
+      };
+      const deps = upcoming('dep', null, 9);
+      const arrs = upcoming('arr', null, 9);
       const remark = (f, s) => (/delay/i.test(s) && f.est !== null && f.est !== undefined ? 'Expected ' + hhmm(f.est) : s);
       drawBoard(g, BOARD_REGIONS.dep, 'Departures', clock, ['Time', 'Flight', 'To', 'Gate', 'Remarks'], deps.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, f.status || '')]), true);
       drawBoard(g, BOARD_REGIONS.arr, 'Arrivals', clock, ['Time', 'Flight', 'From', 'Gate', 'Status'], arrs.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, this._arrStatus(f))]), false);
@@ -2306,7 +2331,7 @@
       gates.forEach((gt, i) => {
         const r = BOARD_REGIONS['gate' + i];
         if (!r) return;
-        const mine = flights.filter((f) => f.kind === 'dep' && f.gate === gt.gate && rel(f) > -0.3).sort((a, b) => rel(a) - rel(b))[0];
+        const mine = upcoming('dep', gt.gate, 1)[0];
         drawGate(g, r, gt.gate, mine);
       });
       this.boardTex.needsUpdate = true;

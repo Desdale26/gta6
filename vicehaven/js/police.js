@@ -379,7 +379,7 @@
     _civilianWitness(x, z) {
       let n = 0;
       this.game.crowd.near(x, z, 32, (a) => {
-        if (!a.dead && a.faction === 'civilian' && !a.brain) n++;
+        if (!a.dead && a.faction === 'civilian' && (!a.brain || a.brain.witness)) n++; // airportlife.js's travellers phone it in too
       });
       return n > 0;
     }

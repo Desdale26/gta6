@@ -137,7 +137,7 @@
       zones.push({ id: 'northgate', x: 96, z: -520, near: 230, far: 300, loops, look: 'business' });
     }
     const air = layout.airport;
-    if (air && air.terminal) {
+    if (air && air.terminal && !VH.AirportLife) { // airportlife.js has its own people at the terminal
       const T = air.terminal;
       const z = T.z1 + 2.6;
       const pts = [];
