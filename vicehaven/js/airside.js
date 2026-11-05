@@ -366,6 +366,21 @@
 
   // -------------------------------------------------------------- models
   let MAT = null;
+
+  /** A soft round spot of light, for the pool a taxi light throws on the ground. */
+  function poolTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
   function mats() {
     if (MAT) return MAT;
     const hdr = (r, g, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
@@ -374,7 +389,8 @@
       amber: hdr(6, 2.7, 0.35),
       white: hdr(6, 6, 5.4),
       wand: hdr(5, 1.1, 0.25),
-      logo: new THREE.MeshBasicMaterial({ color: 0xffe9c8, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      logo: new THREE.MeshBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      pool: new THREE.MeshBasicMaterial({ map: poolTexture(), color: 0xfff0d4, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
       beam: new THREE.MeshBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     };
     return MAT;
@@ -847,6 +863,7 @@
         for (const l of x.land) l.visible = land;
         x.beam.visible = land && this.y < 250;
         x.taxi.visible = night > 0.12 && (p === 'taxiin' || p === 'taxiout' || p === 'rollout' || p === 'lineup' || p === 'pushback') && this.eng > 0.3;
+        x.pool.visible = night > 0.12 && this.y < 3 && (x.taxi.visible || p === 'takeoff') && p !== 'pushback';
       }
     }
   }
@@ -889,7 +906,16 @@
     beam.rotation.x = 0.06;
     beam.visible = false;
     m.body.add(beam);
-    m._air = { logo, land, taxi, beam };
+    // The pool of light the taxi and landing lights throw on the ground ahead.
+    const pg = new THREE.PlaneGeometry(1, 1);
+    pg.rotateX(-HALF);
+    const pool = new THREE.Mesh(pg, M.pool);
+    pool.position.set(0, 0.07, 30);
+    pool.scale.set(11, 1, 30);
+    pool.visible = false;
+    pool.renderOrder = 2;
+    m.root.add(pool);
+    m._air = { logo, land, taxi, beam, pool };
   }
 
   // ------------------------------------------------------ ground vehicles
@@ -1599,8 +1625,9 @@
       return false;
     }
 
+    /** May a departure line up and go? (It's past 32 m/s by the time the next arrival, 48 s out, needs clearing.) */
     _rwyFree() {
-      return this.rwy.size === 0 && !this._jayRwy && !this._arrivalWithin(62);
+      return this.rwy.size === 0 && !this._jayRwy && !this._arrivalWithin(48);
     }
 
     _rwyRelease(pl) {
@@ -2018,14 +2045,19 @@
         const side = Math.abs(-dx * fz + dz * fx);
         if (along > 0 && along < half + 6 + o.r && side < 1.6 + o.r && o.y < 5) return Math.max(0, along - half - 1.5 - o.r);
       }
-      // Pulling out onto (or across) the airside road: wait for anything coming along it.
-      if (Math.abs(fz0) > 0.6 && Math.abs(_c.z - ROAD_Z) < 4.5 && Math.abs(v.z - ROAD_Z) > 2.5) {
+      // Pulling out onto (or across) the airside road: wait for anything coming along a lane
+      // still to be crossed.
+      if (Math.abs(fz0) > 0.6 && Math.min(v.z, _c.z) < ROAD_Z + 4.5 && Math.max(v.z, _c.z) > ROAD_Z - 4.5) {
         for (const w of this._allGse) {
           if (w === v || !w.busy || Math.abs(w.z - ROAD_Z) > 3.5 || w._blk === v) continue;
           const wdx = Math.sin(w.yaw) * (w.rev ? -1 : 1);
-          if (Math.abs(wdx) < 0.7) continue;
+          if (Math.abs(wdx) < 0.7 || (w.z - v.z) * fz0 < -1.5) continue;
           const gap = (v.x - w.x) * Math.sign(wdx); // how far it has to come to reach us
-          if (gap > -5 && gap < (v.rev ? 70 : 45)) return 0;
+          if (gap > -5 && gap < (v.rev ? 70 : 45)) {
+            v._blkKind = 'gse';
+            v._blk = w;
+            return 0;
+          }
         }
       }
       // Never wait on each other for ever: two stuck on each other (or behind one that's not
@@ -2650,7 +2682,7 @@
       // kind 'out': G1 → the taxiway → L3 hold. 'line': hold → lined up east → the take-off run.
       if (kind === 'out') return route([[G1.x, G1.z], [G1.x, TWY_Z], [L3, TWY_Z], [L3, -1404]], 14, 7);
       if (kind === 'line') return route([[L3, -1404], [L3, RWY.z], [RWY.x1 + 300, RWY.z]], 15, 99, 99);
-      if (kind === 'in') return route([[x, RWY.z], [L5, RWY.z], [L5, -1305], [G1.x, -1305], [G1.x, G1.z]], 14, 8);
+      if (kind === 'in') return route([[x, RWY.z], [L5, RWY.z], [L5, -1305], [G1.x, -1305], [G1.x, G1.z]], 14, 12);
       return null;
     }
 
@@ -2778,7 +2810,9 @@
             k.eta = (P.len - k.s) / 38;
             const tdAt = this.t + k.eta;
             const after = k.circuits <= 1 ? 70 : 48;
+            // Airliners waiting to go out come first.
             const busy = this._jayRwy || this.planes.some((q) => q.phase === 'approach' && q.eta() > k.eta - 62 && q.eta() < k.eta + after) ||
+              this.planes.some((q) => q.phase === 'taxiout' && q.path && q.s > q.path.sHold - 120) ||
               this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 62 && r.landAt < tdAt + after);
             if (busy) {
               // Hold off: a full turn away from the field and ask again.
