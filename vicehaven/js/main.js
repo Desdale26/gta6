@@ -26,7 +26,7 @@
   // The Hustle update (v2.0): Rep and Dailies first (others report to them), the Phone last.
   const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Phone'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
-  const NEWS_KEY = 'vicehaven.seen.news-v2.1'; // set once the v2.1 notice has been shown
+  const NEWS_KEY = 'vicehaven.seen.news-v2.2'; // set once the v2.2 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
@@ -1283,7 +1283,7 @@
       });
     },
 
-    /** Once, a few seconds into play: what v2.1 added. */
+    /** Once, a few seconds into play: what v2.2 added. */
     _newsTip(dt) {
       if (this._newsShown) return;
       if (document.body.classList.contains('cutscene') || this.state !== 'playing') return;
@@ -1300,7 +1300,7 @@
       if (seen) return;
       this.hud.notify({
         title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
-        text: 'Skipped a cutscene? Pause → Story so far (or the Story app on Jay\'s phone, ' + this.input.labelFor('phone') + ') tells the story up to where you are. The phone also has your Daily Hustles, Street Rep and everything worth doing near you.',
+        text: 'The airport is open: drive north up Grand Avenue and walk into Vicehaven International, through security to the gates and down a jet bridge, and watch the planes come and go. Skipped a cutscene? Pause → Story so far.',
         icon: '★',
         duration: 14000,
       });

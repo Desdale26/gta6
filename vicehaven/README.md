@@ -22,7 +22,11 @@ buying the city block by block with money Jay once helped steal.
   and the walled mansions of Crestline Estates, with a running day and night.
 - **18 cars, 23 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
-- **New in v2.1:** **Story so far** (Esc, or the Story app on the phone):
+- **New in v2.2 (Airport update):** walk into Vicehaven International:
+  check-in, security, shops, the gates and the jet bridges, and an airport
+  that works: planes land, taxi in, unload, board, push back and take off,
+  with ground crew, travellers and a PA.
+- **v2.1:** **Story so far** (Esc, or the Story app on the phone):
   where you are in the story, a recap of every job you've finished written
   to match your choices, who's who, and a *Previously in Vicehaven…* card
   when you continue. Made for anyone who skips the cutscenes.
@@ -471,10 +475,26 @@ with glass lobbies, plazas, palms, office workers on their lunch break,
 and crowns and aircraft beacons that light up at night.
 
 **Vicehaven International.** Up Grand Avenue past Northgate: a 1.3 km
-runway, taxiways, a terminal with jet bridges, a control tower, hangars
-and a helipad. Airliners take off and land every couple of minutes (they
-wait, or go round, if Jay is on the runway). Parked and ready to steal: an
-Albatross airliner, two Skylark light planes and a Sparrow helicopter.
+runway, taxiways, a control tower, hangars and a helipad, and a terminal
+you can walk through. In through the sliding doors from the kerb:
+Departures with check-in islands for six airlines, an info desk, a café and
+a 24/7 shop; four security lanes (carry a gun through an arch and it goes
+off); the airside concourse with duty free, a food court, shops and the
+gate lounges A1 to A4; jet bridges up to the planes' doors; and baggage
+reclaim and Arrivals on the way out. The airside wall is all glass.
+
+The airport runs on its own schedule, shown on the departures and arrivals
+boards: airliners land, turn off, taxi in and park at the gates, the tugs,
+fuel and catering trucks drive out, passengers come off and board, then
+the plane is pushed back, taxis out and takes off over the bay (planes and
+ground vehicles wait for Jay if he's in the way; an arrival goes round if
+he's on the runway). A Skylark flies circuits and a helicopter visits.
+Inside, travellers with suitcases queue, shop, eat, sit at the gates and
+board; arrivals collect bags and head for the greeters, the taxi rank and
+the shuttle; staff, cleaners and an airport police pair; cars and cabs at
+the kerb; the PA calls the flights. Parked and ready to steal: an Albatross
+airliner (on the remote stand west of the gates), two Skylark light planes
+and a Sparrow helicopter.
 
 **Fort Breakwater.** The army base at the west end of Meridian Boulevard:
 walls and razor wire, watchtowers, barracks, a motor pool, two helipads
@@ -609,7 +629,8 @@ type a command:
 vicehaven/
 ├── index.html              page shell, loading and error screens, script order
 ├── css/                    style, hud, menus, map, dialogue, weapon wheel, world (shop and base overlays),
-│                           hustle (Rep, dailies), phone, jobs (odd jobs), street (encounters)
+│                           hustle (Rep, dailies), phone, jobs (odd jobs), street (encounters),
+│                           storylog (Story so far), airport (the PA caption)
 ├── js/
 │   ├── lib/three.min.js    three.js r186 as a classic script (MIT)
 │   ├── core.js · settings.js · input.js        namespace, events, maths; options; keyboard/mouse/pad
@@ -620,6 +641,8 @@ vicehaven/
 │   ├── outskirts.js        Saltmarsh docks (Pier 9, the cranes, the freighter) and Crestline Estates
 │   ├── skyline.js · airfield.js · fort.js   Northgate Heights; the airport and its air traffic;
 │   │                       Fort Breakwater, its soldiers and the alarm
+│   ├── terminal.js · airside.js · airportlife.js   the walk-in terminal; flights, turnarounds
+│   │                       and ground crew; the travellers, staff, kerb and PA
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
 │   ├── holdup.js · holdup-models.js · audio-holdup.js · data/holdup-lines.js
 │   │                            hold-ups: clerks, the bag, the safe, alarm, CCTV, shoppers, guard
@@ -739,7 +762,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Wait a couple of minutes in free roam: a street encounter (pulsing !) starts nearby; ignore it and it goes away
 - [ ] Find the cash stash on the Civic Plaza terrace near the start: a chime as you get close, then the CASH STASH pop
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
-- [ ] The title screen says v2.1 and What's new lists Story so far and the Hustle update
+- [ ] The title screen says v2.2 and What's new lists the airport, Story so far and the Hustle update
+- [ ] Vicehaven International: walk in from the kerb through the sliding doors, check-in, security (a gun sets the arch off), the concourse, a gate and down a jet bridge to the plane's door, back out through baggage reclaim; watch a plane taxi in, unload, board, push back and take off; travellers queue, sit, board and collect bags
 - [ ] Esc → Story so far on a new game: the prologue and Up next: Homecoming, Set GPS draws the route; after a few jobs every finished one has a recap that matches your choices; Who's who only lists people you've met
 - [ ] Continue a save: a Previously in Vicehaven… card with the last job and what's next
 
