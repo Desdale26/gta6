@@ -580,8 +580,7 @@
    * to 3.5 m) for a bowser, never for a catering truck.
    */
   function wingClear(h) {
-    if (h <= 2.25) return 9.2;
-    return 1.5 + (h + 0.15 - 2.25) / 0.084 + 1.2;
+    return Math.max(9.2, 1.5 + (h + 0.15 - 2.25) / 0.084 + 1.2);
   }
 
   function gseMesh(kind) {
@@ -880,7 +879,7 @@
         x.glow.visible = land && (p === 'approach' || p === 'goaround' || p === 'climb' || p === 'takeoff');
         if (x.glow.visible) {
           const cp = this.sys.game.renderer.camera.position;
-          x.glow.scale.setScalar(clamp(Math.hypot(this.x - cp.x, this.y - cp.y, this.z - cp.z) * 0.009, 2.2, 60));
+          x.glow.scale.setScalar(clamp(Math.hypot(this.x - cp.x, this.y - cp.y, this.z - cp.z) * 0.009, 1.6, 60));
         }
         x.taxi.visible = night > 0.12 && (p === 'taxiin' || p === 'taxiout' || p === 'rollout' || p === 'lineup' || p === 'pushback') && this.eng > 0.3;
         x.pool.visible = night > 0.12 && this.y < 3 && (x.taxi.visible || p === 'takeoff') && p !== 'pushback';
@@ -926,8 +925,9 @@
     beam.rotation.x = 0.06;
     beam.visible = false;
     m.body.add(beam);
+    // (Out at the nose tip, so the nose itself doesn't blot out the middle of it head on.)
     const glow = new THREE.Sprite(M.glow);
-    glow.position.set(0, 2.3, 5.2);
+    glow.position.set(0, 2.8, 19.8);
     glow.visible = false;
     m.body.add(glow);
     // The pool of light the taxi and landing lights throw on the ground ahead.
@@ -2165,10 +2165,13 @@
         const wh = w.k.len / 2;
         const sx = Math.sin(w.yaw) * wh;
         const sz = Math.cos(w.yaw) * wh;
-        // (Its middle: keep clear of however much of it sticks out towards us, crossing at a slant.)
-        const ca = Math.abs(fx * Math.sin(w.yaw) + fz * Math.cos(w.yaw));
-        look(w, w.x, w.z, Math.max(1.2, ca * wh + Math.sqrt(Math.max(0, 1 - ca * ca)) * 1.2 + 0.4));
-        for (const k of LOOK_AT) look(w, w.x + sx * k, w.z + sz * k, 1.2); // and along it
+        // (Its middle: keep clear of however much of it sticks out towards us, crossing at a slant.
+        // One pulling out across us and turning our way swings its tail in: leave it room.)
+        const cd = fx * Math.sin(w.yaw) + fz * Math.cos(w.yaw);
+        const ca = Math.abs(cd);
+        const room = w.busy && (w.rev ? -cd : cd) < -0.2 && ca < 0.9 ? 2.5 : 0;
+        look(w, w.x, w.z, Math.max(1.2, ca * wh + Math.sqrt(Math.max(0, 1 - ca * ca)) * 1.2 + 0.4) + room);
+        for (const k of LOOK_AT) look(w, w.x + sx * k, w.z + sz * k, 1.2 + room); // and along it
         if (w.carts) for (const c of w.carts) look(w, c.x, c.z, 1.2);
       }
       v._blk = by;

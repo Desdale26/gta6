@@ -56,15 +56,16 @@
   const STAFF_R = 70; //     staff are at their posts within this of Jay
   const POP_R = 40; //       nobody pops into view closer than this
   // [inside, outside] people at most, by graphics quality.
-  const CAP = { low: [42, 10], medium: [50, 12], high: [50, 14], ultra: [50, 15] };
+  const CAP = { low: [42, 10], medium: [52, 12], high: [60, 14], ultra: [64, 15] };
   // How many travellers each part of the hall wants when Jay is close by.
-  const DEMAND = { checkin: 14, landside: 8, arrivals: 6, security: 10, shops: 6, food: 9, baggage: 0, concourse: 5 };
+  const DEMAND = { checkin: 16, landside: 8, arrivals: 6, security: 10, shops: 6, food: 11, baggage: 0, concourse: 5 };
   const GATE_DEMAND = [2, 12]; // a gate with no flight, with one
   // Which side of the partition each part of the hall is on (Jay can't see over it).
   const LANDSIDE = { checkin: 1, landside: 1, arrivals: 1 };
   // The shops, cafés and desks with someone behind them (the others are closed).
-  const OPEN = /^(info|pelican|dutyfree|news|grill|lighthouse|books|tern|hire1)$/;
+  const OPEN = /^(info|pelican|dutyfree|news|grill|noodles|bakery|lighthouse|books|tern|hire1)$/;
   const CHECKIN_OPEN = [0, 1, 2, 4]; // which airlines' desks are open (one each)
+  const CHECKIN_TWO = [0, 2]; //       ...and the busy ones with a second desk
   const WALK = [1.15, 1.45];
   const RUN = [4.4, 5.4];
   const PA_GAP = [45, 90];
@@ -758,12 +759,12 @@
       const face = (d) => (d.queue && d.queue.length ? Math.atan2(d.x - d.queue[0].x, d.z - d.queue[0].z) : d.yaw + PI);
       for (const d of this.desks) {
         if (!d.queue || !d.queue.length) continue;
-        const serve = d.kind === 'checkin' ? [7, 13] : d.kind === 'gate' ? [1.6, 2.8] : d.kind === 'cafe' ? [5, 9] : d.kind === 'hire' ? [10, 18] : [4, 8];
+        const serve = d.kind === 'checkin' ? [16, 32] : d.kind === 'gate' ? [1.6, 2.8] : d.kind === 'cafe' ? [8, 15] : d.kind === 'hire' ? [14, 26] : [5, 10];
         const ln = new Line(d.id, d.queue, face(d), serve, d.kind === 'gate' ? 4 : 2);
         ln.desk = d;
         this.lines[d.id] = ln;
       }
-      // Check-in: one desk open per airline, a second at the busiest.
+      // Check-in: one desk open per airline (most of them), a second at the busiest.
       const groups = new Map();
       for (const d of this.desks) {
         if (d.kind !== 'checkin') continue;
@@ -773,7 +774,7 @@
       }
       let gi = 0;
       for (const g of groups.values()) {
-        g.forEach((d, i) => (this.lines[d.id].open = i === 1 && CHECKIN_OPEN.includes(gi)));
+        g.forEach((d, i) => (this.lines[d.id].open = (i === 1 && CHECKIN_OPEN.includes(gi)) || (i === 2 && CHECKIN_TWO.includes(gi))));
         gi++;
       }
       for (const d of this.desks) if (this.lines[d.id] && d.kind !== 'checkin' && d.kind !== 'gate') this.lines[d.id].open = OPEN.test(d.id);
@@ -915,6 +916,7 @@
       on('airside:arrived', (e) => this._planeIn(e));
       on('terminal:carousel', (e) => this._bagsComing(e));
       on('crowd:threat', (e) => this._threat(e.x, e.z, e.radius || 30, e.kind));
+      on('gunshot', (e) => e.byPlayer && this._copsSaw(e.x, e.z));
       on('combat:melee', (e) => {
         const a = e.agent;
         if (a) this._threat(a.pos.x, a.pos.z, 14, 'fight');
@@ -1096,7 +1098,7 @@
     }
 
     /** Let go of whatever they held: a queue place, a seat, a spot, a post. */
-    _release(b) {
+    _release(b, keepPost) {
       if (b.line) {
         b.line.leave(b);
         b.line = null;
@@ -1115,7 +1117,7 @@
         if (c && c.by[b.wait.i] === b) c.by[b.wait.i] = null;
         b.wait = null;
       }
-      if (b.post && b.post.p === b) b.post.p = null;
+      if (b.post && b.post.p === b && !keepPost) b.post.p = null;
       if (b.pickup && b.pickup.busy === b) b.pickup.busy = null;
       b.pickup = null;
       if (this.taxiLine) this.taxiLine.leave(b);
@@ -1227,8 +1229,15 @@
     }
 
     // ------------------------------------------------------------ queues
-    _join(b, a, line, then) {
+    _join(b, a, line, then, late) {
       if (!line || line.full()) return false;
+      // A hall away from a desk or a security lane: walk over first and take a place on
+      // arrival (nobody holds a place in a queue for someone at the far end of the hall).
+      const e0 = line.spot(line.cap - 1);
+      if (!late && this.nav && (line.lane !== undefined || (line.desk && line.desk.kind !== 'gate')) && dist2(e0.x, e0.z, a.pos.x, a.pos.z) > 24 * 24) {
+        this.go(b, a, e0.x, e0.z, (bb, aa) => this._lateJoin(bb, aa, line, then, 0));
+        return true;
+      }
       line.coming++;
       b.line = line;
       b.joined = false;
@@ -1245,6 +1254,16 @@
       } else b.path = this._route(a.pos.x, a.pos.z, a.pos.y, e.x, e.z, this._navMode(b));
       b.pi = 0;
       return true;
+    }
+
+    /** At the end of a queue they walked over to: in, or wait a moment and try again. */
+    _lateJoin(b, a, line, then, n) {
+      if (this._join(b, a, line, then, true)) return;
+      if (n < 5) return this._wait(b, rnd(2.5, 4.5), null, 'phone', (bb, aa) => this._lateJoin(bb, aa, line, then, n + 1));
+      // Still full: another lane or desk, if there is one.
+      if (line.lane !== undefined) b.stage = 'security';
+      else if (line.desk && line.desk.kind === 'checkin') b.stage = 'checkin';
+      this.next(b, a);
     }
 
     /** Placed straight into a queue (spawned there). */
@@ -1747,7 +1766,10 @@
           this.next(b3, a3);
         });
       };
-      const pick = () => this.go(b, a, ax - 0.85, az - 2.6, lift, { mode: 'any' });
+      // Three places along the end of the belt, in turn, so nobody's shoved into it by the next one along.
+      line.liftN = ((line.liftN || 0) + 1) % 3;
+      const lz = az - [2.6, 3.5, 1.8][line.liftN];
+      const pick = () => this.go(b, a, ax - 0.7, lz, lift, { mode: 'any' });
       if (beep) {
         // Set it off: arms out for the officer's wand.
         this._wait(b, rnd(3.5, 5), PI / 2, 'arms', () => pick());
@@ -2193,14 +2215,15 @@
         if (kind === 'pavement' && b.mode !== 'wait' && b.mode !== 'walk' && b.mode !== 'queue') continue;
         this.scare(b, a, x, z, d, kind);
       }
-      if (inside || this._distT({ x, z }) < 15) this._calm = 0;
+      // The whole hall takes fright at shooting or a blast, not at a bump out on the road.
+      if (inside || (this._distT({ x, z }) < 15 && (kind === 'gun' || kind === 'blast'))) this._calm = 0;
     }
 
     /** Frightened: cower or run (for the exits, away from it). */
     scare(b, a, x, z, d, kind) {
       if (b.kind === 'cop') return;
       if (b.mode === 'flee' || b.mode === 'runout') return;
-      this._release(b);
+      this._release(b, b.kind === 'staff'); // staff keep their posts: they're back at them once it's over
       if (b.mode === 'sit' || b.mode === 'sitdown' || b.mode === 'standup') {
         if (this.seatBy[b.seat] === b) this.seatBy[b.seat] = null;
         b.seat = -1;
@@ -2290,7 +2313,8 @@
       b.wt -= dt;
       if (b.wt > 0 || this._calm < 3) return;
       b.fear = null;
-      if (b.kind === 'staff' && b.post) {
+      if (b.kind === 'staff' && b.post && (!b.post.p || b.post.p === b)) {
+        b.post.p = b;
         b.mode = 'post';
         b.scared = false;
         return;
@@ -2299,11 +2323,30 @@
       else this._flee(b, a);
     }
 
+    /** The airport police pair saw that (Jay shooting, or hitting someone): they're on to him. */
+    _copsSaw(x, z) {
+      const g = this.game;
+      const pol = g.police;
+      if (!pol || !pol.setLevel || !pol.canSee || pol.level > 0 || pol.enabled === false) return;
+      if (g.missions && g.missions.suppressHeat) return;
+      for (const b of this.list) {
+        const a = b.a;
+        if (b.kind !== 'cop' || a.dead || Math.hypot(a.pos.x - x, a.pos.z - z) > 45) continue;
+        if (!pol.canSee(a.pos.x, a.pos.y + 1.6, a.pos.z)) continue;
+        pol.setLevel(1, 'shots');
+        if (pol._sawPlayer) pol._sawPlayer();
+        return;
+      }
+    }
+
     /** Hit by Jay (or shot at): run, and that's a crime they'll report. */
     hurt(b, a) {
       const g = this.game;
       this._threat(a.pos.x, a.pos.z, 16, 'fight');
-      if (a.lastAttacker === 'player' && g.police && g.police.crime && a.faction === 'civilian') g.police.crime('hitPed', a.pos.x, a.pos.z);
+      if (a.lastAttacker === 'player' && g.police && g.police.crime && a.faction === 'civilian') {
+        g.police.crime('hitPed', a.pos.x, a.pos.z);
+        this._copsSaw(a.pos.x, a.pos.z);
+      }
       if (b.mode !== 'flee' && b.mode !== 'runout') {
         b.mode = 'idle';
         this.scare(b, a, g.player.pos.x, g.player.pos.z, 30, 'hit');
@@ -2380,21 +2423,22 @@
       return true;
     }
 
-    _car(kind, type, slot) {
+    _car(kind, type, slot, there) {
       const g = this.game;
       if (!VH.Vehicle || !VH.Vehicle.typeSpec(type)) return null;
-      const x0 = this._carStart(slot.x);
+      // there: already waiting at its place (a cab on the rank as Jay arrives).
+      const x0 = there ? slot.x : this._carStart(slot.x);
       if (x0 === null) return null;
       const spec = VH.Vehicle.typeSpec(type);
       const col = kind === 'bus' ? 0xf1f1ee : spec.palette ? pick(spec.palette) : 0xb8bcc0;
-      const v = g.vehicles.spawn(type, x0, this.innerZ, -PI / 2, { role: 'airport', persistent: true, color: col });
+      const v = g.vehicles.spawn(type, x0, there ? this.kerbZ : this.innerZ, -PI / 2, { role: 'airport', persistent: true, color: col });
       v.role = 'airport';
       v.persistent = true;
       v.driver = 'ai';
       const job = { kind, v, slot, t: 0, x: slot.x, people: [] };
       job.d = new KerbDriver(this, job);
       v.controller = job.d;
-      v.setSpeed(8);
+      if (!there) v.setSpeed(8);
       if (slot.busy !== undefined) slot.busy = job;
       if (kind === 'bus' && v.model && v.model.root) {
         // The shuttle: a white minibus with its name on a sign on the roof.
@@ -2557,12 +2601,12 @@
       cabs.forEach((c, i) => {
         const s = this._cabSlot(i);
         const d = c.d;
-        if (c.rank !== i && d.phase === 'stop' && Math.abs(c.v.pos.x - s.x) > 1) {
-          c.rank = i;
+        c.rank = i;
+        if (d.phase === 'stop' && !c.fare && Math.abs(c.v.pos.x - s.x) > 1) {
           d.phase = 'in';
           d.plan(s.x, true, this.kerbZ, this.kerbZ);
           c.v.wake();
-        } else c.rank = i;
+        } else if (d.phase === 'in' && d.tx !== s.x && c.v.pos.x > s.x + 2) d.tx = s.x; // a place further up came free
       });
       // The head cab takes the first person in the queue.
       const head = cabs[0];
@@ -2582,11 +2626,14 @@
       // Keep the rank stocked.
       this._cabT -= dt;
       if (this._cabT <= 0) {
-        this._cabT = rnd(14, 30);
         const n = cabs.length;
+        this._cabT = n < 2 ? rnd(6, 12) : rnd(14, 30);
         if (!mission && n < Math.min(4, this.K.taxiRank.length)) {
           const slot = this._cabSlot(n);
-          if (this._slotFree({ x: slot.x, z: slot.z, busy: null })) this._car('cab', 'cab', { x: slot.x, z: slot.z });
+          // Jay's only just got here (or can't see the rank): it's already there.
+          const there = this._fill > 0 || !this.game.isVisible(slot.x, 1, slot.z, 3);
+          if (this._slotFree({ x: slot.x, z: slot.z, busy: null })) this._car('cab', 'cab', { x: slot.x, z: slot.z }, there);
+          if (this._fill > 0 && n < 2) this._cabT = 0.2;
         }
       }
     }
@@ -2676,10 +2723,12 @@
       const night = (g.environment && g.environment.nightFactor) || 0;
       const nightK = 1 - 0.3 * night;
       const panic = this._calm < 45;
-      const w = (d) => clamp(1 - (d - 30) / 110, 0, 1);
+      const w = (d) => clamp(1 - (d - 25) / 80, 0, 1);
       // Which side of the partition Jay is on: the other side gets a few, for when he goes through.
       const T = this.T;
       const jayLand = !T || p.z > (T.partitionZ || -1216);
+      // Baggage reclaim is walled off from the concourse: from in there, only it and the arrivals hall count.
+      const jayRec = !!T && this._zoneAt(p.x, p.z) === 'baggage';
       // Census.
       let staff = 0;
       let inside = 0;
@@ -2687,8 +2736,8 @@
       const zones = this.zones || [];
       for (const z of zones) {
         z.d = Math.hypot(Math.max(0, z.x0 - p.x, p.x - z.x1), Math.max(0, z.z0 - p.z, p.z - z.z1));
-        z.side = z.id === 'security' || !!LANDSIDE[z.id] === jayLand;
-        z.w = w(z.d) * (z.side ? 1 : 0.3);
+        z.side = jayRec ? z.id === 'baggage' || z.id === 'arrivals' : z.id === 'security' || !!LANDSIDE[z.id] === jayLand;
+        z.w = w(z.d) * (z.side ? 1 : 0.2);
         z.n = 0;
       }
       const O = this.outside;
@@ -2743,7 +2792,7 @@
         for (const z of zones) {
           const base = z.gate ? (this._depAt(z.gate) ? GATE_DEMAND[1] : GATE_DEMAND[0]) : DEMAND[z.id] || 0;
           z.want = panic ? 0 : base * z.w * nightK;
-          if (z.id === 'baggage' && !panic) z.want = this._belts().length ? 7 * z.w * (z.side ? 1 : 0.3) : 0;
+          if (z.id === 'baggage' && !panic) z.want = this._belts().length ? 8 * z.w : 0;
           sum += z.want;
         }
         const room = Math.max(0, capIn - staff - 3);
@@ -2790,7 +2839,7 @@
     /** Someone the director may take away: not staff, not committed to something, out of sight. */
     _spare(b) {
       if (b.kind === 'staff' || b.kind === 'clean' || b.kind === 'cop') return false;
-      if (b.stage === 'bridge' || b.stage === 'boardcar' || b.boarding || b.mode === 'flee' || b.lead || b.friend) return false;
+      if (b.stage === 'bridge' || b.stage === 'boarding' || b.boardAt || b.stage === 'boardcar' || b.boarding || b.mode === 'flee' || b.lead || b.friend) return false;
       return this._droppable(b.a);
     }
 
@@ -3022,13 +3071,25 @@
      */
     _spawnFrom(z) {
       const N = this.nav;
-      if (!N || z.id === 'baggage') return null;
+      if (!N) return null;
       const aim = (b) => {
         b.aim = z.id;
         b.aimT = this._t;
         return b;
       };
       const p = this.game.player.pos;
+      if (z.id === 'baggage') {
+        // Off a flight whose bags are on a belt: in through the reclaim hall's door from the concourse.
+        const belts = this._belts();
+        const n = N.nodes[N.ix.rec_d];
+        if (!belts.length || !n || !this._hidden(n.x, n.y, n.z)) return null;
+        const b = this._spawn('arr', n.x + rnd(-0.6, 0.6), n.z, { heading: PI, case: false });
+        b.flight = pick(belts).flight;
+        b.hasBag = true;
+        b.stage = 'reclaim';
+        this._arrNext(b, b.a, 'reclaim');
+        return aim(b);
+      }
       const order = (list) => list.sort((q, r) => Math.abs(q.x - p.x) - Math.abs(r.x - p.x) + rnd(-15, 15));
       if (LANDSIDE[z.id] || z.id === 'security') {
         if (z.id === 'arrivals') {
@@ -3319,19 +3380,19 @@
       // One at a time, and not on top of each other.
       const last = this._paLast || -99;
       let item = null;
-      if (this._t - last > 22) {
+      if (this._t - last > 40) {
         const i = this._paQ.findIndex((q) => q.at <= this._t);
         if (i >= 0) item = this._paQ.splice(i, 1)[0];
       }
       if (!item && this._paT <= 0) {
         this._paT = rnd(PA_GAP[0], PA_GAP[1]);
-        if (this._paNear() && this._t - last > 30) {
+        if (this._paNear() && this._t - last > 45) {
           const deps = this._flights().filter((f) => f.kind === 'dep' && this.gateBy && this.gateBy[f.gate] && !/depart|closed|cancel/i.test(f.status || ''));
           item = chance(0.25) && deps.length ? { kind: 'pax', f: deps[0] } : { kind: 'general', f: null };
         }
       }
       // Stale ones are dropped (and old "already said" marks forgotten).
-      this._paQ = this._paQ.filter((q) => this._t - q.at < 40);
+      this._paQ = this._paQ.filter((q) => this._t - q.at < 75);
       if (this._said.size > 60) for (const [k, t] of this._said) if (this._t - t > 900) this._said.delete(k);
       if (!item || !this._paNear()) return;
       this._paLast = this._t;
