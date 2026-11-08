@@ -530,6 +530,12 @@
         const g = ph.groundHeight(bx, bz, top + 0.05);
         if (g > top - 0.35) continue;
         if (ph.overlaps(bx, bz, P.radius * 0.9, g + 0.1, g + P.height)) continue;
+        // Nothing over the top on the way there (a counter against a wall: not through the wall).
+        let through = false;
+        for (let t = 0.1; t < beyond && !through; t += 0.15) {
+          through = ph.overlaps(this.pos.x + dir.x * (dist + t), this.pos.z + dir.z * (dist + t), 0.12, top + 0.2, top + 1.2);
+        }
+        if (through) continue;
         return {
           type: 'vault',
           from: this.pos.clone(),

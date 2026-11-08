@@ -55,8 +55,9 @@
   const FAR = 350; //        ...and beyond this everyone goes
   const STAFF_R = 70; //     staff are at their posts within this of Jay
   const POP_R = 40; //       nobody pops into view closer than this
-  // [inside, outside] people at most, by graphics quality.
-  const CAP = { low: [42, 10], medium: [52, 12], high: [60, 14], ultra: [64, 15] };
+  // [inside, outside] people at most, by graphics quality. (Busier than the 35-50 first aimed
+  // for at high and ultra, so the place feels properly alive; low and medium stay lighter.)
+  const CAP = { low: [36, 10], medium: [46, 12], high: [60, 14], ultra: [64, 15] };
   // How many travellers each part of the hall wants when Jay is close by.
   const DEMAND = { checkin: 16, landside: 8, arrivals: 6, security: 10, shops: 6, food: 11, baggage: 0, concourse: 5 };
   const GATE_DEMAND = [2, 12]; // a gate with no flight, with one
@@ -64,7 +65,7 @@
   const LANDSIDE = { checkin: 1, landside: 1, arrivals: 1 };
   // The shops, cafés and desks with someone behind them (the others are closed).
   const OPEN = /^(info|pelican|dutyfree|news|grill|noodles|bakery|lighthouse|books|tern|hire1)$/;
-  const CHECKIN_OPEN = [0, 1, 2, 4]; // which airlines' desks are open (one each)
+  const CHECKIN_OPEN = [0, 1, 2, 3, 4, 5]; // which airlines' desks are open (one each: they all fly)
   const CHECKIN_TWO = [0, 2]; //       ...and the busy ones with a second desk
   const WALK = [1.15, 1.45];
   const RUN = [4.4, 5.4];
@@ -685,6 +686,8 @@
       this._fill = 0;
       this._arrivals = [];
       this._said = new Map();
+      this.boarding = new Map(); // gate → flight boarding now
+      this.closed = new Set(); //   flight ids whose doors have shut
       if (!this.ok) return;
       this.B = (this.T && this.T.bounds) || { x0: a.terminal.x0, z0: a.terminal.z0, x1: a.terminal.x1, z1: a.terminal.z1 };
       this.FY = this.T ? this.T.floorY : 0.45;
@@ -837,8 +840,6 @@
       for (const g of this.gates) this.gateBy[g.gate] = g;
       this.carousels = (T.carousels || []).map((c) => ({ c, by: new Array((c.wait || []).length).fill(null) }));
       this.meet = (T.meet || []).map((m) => ({ x: m.x, z: m.z, yaw: m.yaw, busy: null }));
-      this.boarding = new Map(); // gate → flight boarding now
-      this.closed = new Set(); //   flight ids whose doors have shut
       // Where window shoppers stand: either side of a shop's counter queue, facing in.
       this.window = [];
       for (const d of this.desks) {
@@ -1847,6 +1848,8 @@
 
     /** Boarding: up to the gate desk, a scan of the boarding pass, down the bridge. */
     _toBoard(b, a) {
+      // (No plane at the bridge to board after all: that call is stale.)
+      if (!this._canBoard(b.gate)) return this._noPlane(b, a);
       const g = this.gateBy[b.gate];
       const d = g && this.desks[g.desk];
       const ln = d && this.lines[d.id];
@@ -1862,6 +1865,7 @@
     _downBridge(b, a) {
       const g = this.gateBy[b.gate];
       if (!g) return this._leave(b, a);
+      if (!this._canBoard(b.gate)) return this._noPlane(b, a);
       const pts = [{ x: g.x + 1.0, z: -1239.6 }, { x: g.x, z: -1242.6 }];
       for (const p of g.bridge || []) pts.push(p);
       if (g.end) pts.push({ x: g.end.mouth !== undefined ? g.end.mouth + 0.3 : g.end.x, z: g.end.z });
@@ -1872,6 +1876,37 @@
       b.then = 'gone';
       b.dest = pts[pts.length - 1];
       b.speed = Math.max(b.speed, 1.3);
+    }
+
+    /** Is there a plane at this gate's bridge taking passengers (boarding, or just shut)? */
+    _canBoard(gate) {
+      this._flights();
+      const st = this._st && this._st.find((s) => s.gate === gate);
+      return !st || /^(boarding|closed)$/.test(st.state || ''); // (no airside: the calls are all we have)
+    }
+
+    /** Went to board a plane that isn't there (we slept through it leaving): they've missed it. */
+    _noPlane(b, a) {
+      this.boarding.delete(b.gate);
+      b.flight = null;
+      b.boardAt = 0;
+      if (b.line) this._release(b);
+      return this._leave(b, a);
+    }
+
+    /**
+     * Waking up: which gates are boarding now, and which flights have already shut their doors
+     * (the calls came while nobody was here to hear them).
+     */
+    _syncGates() {
+      this.boarding.clear();
+      this._flightsAt = -1;
+      this._flights();
+      for (const st of this._st || []) {
+        if (!st.departure) continue;
+        if (st.state === 'boarding') this.boarding.set(st.gate, st.departure);
+        else if (st.state === 'closed' || st.state === 'pushback') this.closed.add(st.departure.id);
+      }
     }
 
     _boardingCall(e) {
@@ -2496,7 +2531,18 @@
     }
 
     carBlocked(job) {
-      if (job.d.phase === 'out') return;
+      if (job.d.phase === 'out') {
+        // Pulling out and stuck (a car in the lane it wants, waiting on us in turn): out of
+        // sight it just goes; in sight it stands as parked, so the traffic goes round it, and
+        // goes as soon as Jay looks away (_kerbTick).
+        const v = job.v;
+        if (!this.game.isVisible(v.pos.x, 1, v.pos.z, 3)) job.vanish = true;
+        else {
+          job.d.atEnd = true;
+          job.stuck = true;
+        }
+        return;
+      }
       // Someone's in the way of the stop: carry on round and away.
       if (job.slot && job.slot.busy === job) job.slot.busy = null;
       job.d.go();
@@ -2526,6 +2572,13 @@
         }
         c.t += dt;
         const d = c.d;
+        if (c.stuck && v.speed > 2) c.stuck = d.atEnd = false; // (got going again after all)
+        if (c.vanish || (c.stuck && !g.isVisible(v.pos.x, 1, v.pos.z, 3))) {
+          // Stuck pulling out (carBlocked): gone, out of sight.
+          if (v !== g.player.vehicle) g.vehicles.remove(v);
+          this._dropJob(c, i);
+          continue;
+        }
         if (d.phase === 'in' && d.atEnd) d.phase = 'stop';
         if (d.phase === 'stop') {
           if (v.speed < 0.2 && !v.sleeping && c.kind === 'cab') v.sleeping = true;
@@ -3532,6 +3585,7 @@
       const d = this._distT(p);
       if (!this.on && d < NEAR) {
         this.on = true;
+        this._syncGates();
         this._fill = 2.5;
         this._carT = 1;
         this._cabT = 0.5;
@@ -3581,6 +3635,7 @@
     /** Jay's gone: everyone goes, the cars rejoin the traffic. */
     _sleep() {
       this.on = false;
+      this.boarding.clear(); // (filled again from the stands on waking: _syncGates)
       for (const b of this.list.slice()) this._remove(b);
       this.list.length = 0;
       for (let i = this.cars.length - 1; i >= 0; i--) {
@@ -3611,8 +3666,7 @@
       if (!this.ok) return;
       this._sleep();
       this.watched = 0;
-      this.boarding && this.boarding.clear();
-      this.closed && this.closed.clear();
+      this.closed.clear();
       this._said.clear();
       this._calm = 99;
       this._t = 0;

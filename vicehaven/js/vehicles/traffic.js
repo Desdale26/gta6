@@ -280,6 +280,7 @@
       const look = 3.2 + speed * 0.5;
       const target = this._ahead(look, this._tmp2 || (this._tmp2 = {}));
       const by = this._bypassStep(v, dt);
+      this._byOff = by;
       if (by) {
         // Round a stopped car: aim a lane-width to the side of the path.
         target.x += Math.cos(target.heading) * by;
@@ -429,8 +430,19 @@
         b.t += dt;
         const car = b.car;
         const l = car.removed ? { z: -99 } : v.worldToLocal(car.pos.x, car.pos.z, this._tmp7 || (this._tmp7 = {}));
+        const past = l.z < -(car.hz + v.hz + 2);
+        // Past it, with another standing just ahead in the lane (a row of them at the kerb, a
+        // taxi rank): on round that one too, rather than back in between them.
+        if (past && !b.leaving && !this.plow) {
+          const next = this._parkedAhead(v, car);
+          if (next) {
+            b.car = next;
+            b.t = 0.8;
+            return b.side * 3.3;
+          }
+        }
         // Done once past it, once it drives off again (a queue moving at green), or after 9 s.
-        if (l.z < -(car.hz + v.hz + 2) || car.speed > 3 || b.t > 9) b.leaving = (b.leaving || 0) + dt;
+        if (past || car.speed > 3 || b.t > 9) b.leaving = (b.leaving || 0) + dt;
         if (b.leaving > 1.2) {
           this._bypass = null;
           return 0;
@@ -455,8 +467,10 @@
       this._waitT = (this._waitT || 0) + dt;
       if (this._waitT < (plow ? 0.25 : o.driver === 'player' ? 4 : 1.5)) return 0;
       this._waitT = 0;
-      // Which side has room: no car in the way and no wall for the next 20 m.
+      // Which side has room: no car in the way, no wall and still the road (not the pavement:
+      // a kerb is too low to count as a wall) for the next 20 m.
       const ph = this.sys.game.physics;
+      const net = this.sys.net;
       const h = v.yaw;
       const fx = Math.sin(h), fz = Math.cos(h);
       const lx = Math.cos(h), lz = -Math.sin(h);
@@ -466,10 +480,18 @@
           const x = v.pos.x + fx * s + lx * side * 3.3;
           const z = v.pos.z + fz * s + lz * side * 3.3;
           if (ph.overlaps(x, z, 1.0, v.pos.y + 0.35, v.pos.y + 1.4)) clear = false;
+          if (!plow && net && net.onRoad && !net.onRoad(x, z)) clear = false;
           // (A plough only minds walls: cars on that side get shoved.)
+          // (A car alongside, clear of the line we'd take, isn't in the way: one stopped at the
+          // kerb beside the next lane, say.)
           if (!plow) {
             for (const c of this.sys.vehicles.list) {
-              if (c !== v && c !== o && Math.hypot(c.pos.x - x, c.pos.z - z) < 4) clear = false;
+              if (c === v || c === o) continue;
+              const dx = c.pos.x - x;
+              const dz = c.pos.z - z;
+              const sa = Math.abs(Math.sin(c.yaw - h)); // (its width across our way, or its length if it's crosswise)
+              const half = (c.hx || 1) * (1 - sa) + (c.hz || 2) * sa;
+              if (Math.abs(dx * fx + dz * fz) < 4 + (c.hz || 2) * (1 - sa) && Math.abs(dx * lx + dz * lz) < half + (v.hx || 1) + 0.4) clear = false;
             }
           }
         }
@@ -480,6 +502,27 @@
       }
       // Walls both sides: a plough just goes straight through the car.
       return 0;
+    }
+
+    /** Stopped and not about to go (parked, wrecked, abandoned, at the end of its run)? */
+    _parked(o) {
+      return o.speed < 0.3 && (o.wrecked || !o.controller || o.driver !== 'ai' || o.controller.finished || o.controller.atEnd);
+    }
+
+    /** A parked car standing in our lane within 16 m ahead (other than `except`), or null. */
+    _parkedAhead(v, except) {
+      const pt = this._tmp8 || (this._tmp8 = {});
+      const lo = this._tmp9 || (this._tmp9 = {});
+      for (let s = 2; s <= 16; s += 2.5) {
+        this._ahead(s, pt);
+        for (const o of this.sys.vehicles.list) {
+          if (o === v || o === except || o.removed || Math.abs(o.pos.y - v.pos.y) > 4) continue;
+          if (Math.abs(o.pos.x - pt.x) > 8 || Math.abs(o.pos.z - pt.z) > 8 || !this._parked(o)) continue;
+          o.worldToLocal(pt.x, pt.z, lo);
+          if (Math.abs(lo.x) <= o.hx + 1.0 && Math.abs(lo.z) <= o.hz + 0.6) return o;
+        }
+      }
+      return null;
     }
 
     /** Nearest obstacle along the path ahead: cars, Jay on foot, pedestrians on the road. */
@@ -493,16 +536,27 @@
       const list = this.sys.vehicles.list;
       const player = this.sys.game.player;
       const crowd = this.sys.game.crowd;
+      // (Going round a parked car: any others parked in that lane are judged from the line we're
+      // on now, to one side of it, not from the lane itself.)
+      const off = this._bypass ? this._byOff || 0 : 0;
       for (let s = 2; s <= reach; s += 2.6) {
         this._ahead(s, pt);
+        const ox = off ? pt.x + Math.cos(pt.heading) * off : pt.x;
+        const oz = off ? pt.z - Math.sin(pt.heading) * off : pt.z;
         for (const o of list) {
           if (o === v || (this._bypass && o === this._bypass.car)) continue;
           if (Math.abs(o.pos.y - v.pos.y) > 4) continue; // an aircraft overhead isn't in the lane
-          const dx = o.pos.x - pt.x;
-          const dz = o.pos.z - pt.z;
+          let px = pt.x;
+          let pz = pt.z;
+          if (off && Math.abs(o.pos.x - pt.x) < 12 && Math.abs(o.pos.z - pt.z) < 12 && this._parked(o)) {
+            px = ox;
+            pz = oz;
+          }
+          const dx = o.pos.x - px;
+          const dz = o.pos.z - pz;
           const r = o.hx + 1.1;
           if (dx * dx + dz * dz > (o.hz + r) * (o.hz + r)) continue;
-          const lo = o.worldToLocal(pt.x, pt.z, this._tmp5 || (this._tmp5 = {}));
+          const lo = o.worldToLocal(px, pz, this._tmp5 || (this._tmp5 = {}));
           if (Math.abs(lo.x) > o.hx + 1.0 || Math.abs(lo.z) > o.hz + 0.6) continue;
           const gap = s - v.hz - Math.max(0, o.hz - Math.abs(lo.z)) - 0.3;
           if (gap < best) {

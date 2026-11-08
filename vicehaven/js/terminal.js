@@ -1760,7 +1760,8 @@
     hang(-196, Y2, -1198.8, Math.PI / 2, 7.4, 'Departures · [cup] Café ↑', '[car] Car hire · [taxi] Taxis ↑');
     hang(-136, Y - 0.6, -1209.6, Math.PI, 6.4, '[taxi] Taxis · [bus] Buses ↑', null);
     // Airside: out of security, along the concourse.
-    hang(-318, Y, -1225.0, 0, 8.4, ['← [plane] Gate A1 · [shop] Duty free', '[plane] Gates A2–A4 · [food] Food court →'], null);
+    // (East of the departures board hanging over the way out, not in front of it.)
+    hang(-305, Y, -1225.0, 0, 8.4, ['← [plane] Gate A1 · [shop] Duty free', '[plane] Gates A2–A4 · [food] Food court →'], null);
     hang(-340, Y2, -1231.6, Math.PI / 2, 7.6, '[plane] Gate A1 · [shop] Shops ↑', '[plane] Gates A2–A4 ↑');
     hang(-240, Y2, -1231.6, Math.PI / 2, 7.6, '[plane] Gates A1–A2 ↑', '[plane] Gates A3–A4 · [bag] Baggage ↑');
     hang(-150, Y2, -1231.6, Math.PI / 2, 7.6, '[plane] Gates A1–A3 ↑', '[plane] Gate A4 ↑');
@@ -1787,8 +1788,9 @@
       k.boards.push({ kind, x, y: FY + 6.25, z: PZ + 0.13, yaw: 0, w: 7.4, h: 3.7 });
       k.boards.push({ kind, x, y: FY + 6.25, z: PZ - 0.11, yaw: Math.PI, w: 7.4, h: 3.7 }); // and over the wall, airside
     };
+    // (Each between two of the columns on the partition line.)
     wallBoard('dep', -390);
-    wallBoard('dep', -262);
+    wallBoard('dep', -245);
     wallBoard('arr', -160);
     // Airside: a double-sided board hanging over the way out of security.
     const x = -318;
