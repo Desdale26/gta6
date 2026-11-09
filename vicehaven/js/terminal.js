@@ -150,6 +150,10 @@
       world, ph, own, S,
       signs: [], // wayfinding and shop signs (one atlas, one mesh)
       boards: [], // flight boards and gate screens (redrawn at run time)
+      // What can be broken (havoc.js): glass panes, props (each a run of vertices in
+      // one of our own meshes, and its collider) and the forecourt bollards.
+      brk: { panes: [], props: [], bollards: [] },
+      meshes: {},
       nodes: [], links: [], nodeIx: {},
       box(surf, x0, y0, z0, x1, y1, z1, c, opts) {
         if (x0 > x1) [x0, x1] = [x1, x0];
@@ -206,6 +210,13 @@
         const z = m.elements[14];
         S(surf, x, z).merge(geo, m, col(c));
       },
+      /** The vertices fn draws into one of our own surfaces: { surf, v0, v1 } (to hide them later). */
+      span(surf, fn) {
+        const b = ownBuilder(surf);
+        const v0 = b.count;
+        fn();
+        return { surf, v0, v1: b.count };
+      },
       // ---- the people's map
       node(id, x, z, y) {
         k.nodeIx[id] = k.nodes.length;
@@ -226,16 +237,21 @@
   }
 
   // ----------------------------------------------------------- materials
-  /** The hall's material: vertex colours, no shadows, a glow of its own at night. */
-  function hallMaterial(lift) {
+  /**
+   * The hall's material: vertex colours, no shadows, a glow of its own at night,
+   * and an amber wash that pulses through the hall in a security alert (uHallAlert,
+   * havoc.js through Terminal.setAlert).
+   */
+  function hallMaterial(lift, alert) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.04 });
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uHallLift = lift;
+      shader.uniforms.uHallAlert = alert;
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uHallLift;')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uHallLift;');
+        .replace('#include <common>', '#include <common>\nuniform float uHallLift;\nuniform float uHallAlert;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uHallLift + vec3(1.0, 0.42, 0.04) * uHallAlert * (0.25 + 0.75 * diffuseColor.rgb);');
     };
-    mat.customProgramCacheKey = () => 'vh-terminal-hall-v1';
+    mat.customProgramCacheKey = () => 'vh-terminal-hall-v2';
     return mat;
   }
 
@@ -260,6 +276,7 @@
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       e.chunk.group.add(mesh);
+      k.meshes[e.kind] = mesh; // (the runtime hides broken glass and props in them)
     }
   }
 
@@ -277,10 +294,15 @@
     return out;
   }
 
+  // A bay of the glass walls is three panes, split at the transoms: [drawn y0, y1, solid y0, y1].
+  const PANE_ROWS = [[FY + 0.25, FY + 3.3, 0, FY + 3.36], [FY + 3.42, FY + 6.5, FY + 3.36, FY + 6.56], [FY + 6.62, CEIL - 0.6, FY + 6.56, CEIL]];
+
   /**
    * A glass wall along x (z = fixed) or along z (x = fixed), floor to
    * ceiling, with mullions every 3 m, two transoms and openings
    * ({ a0, a1, top }: doors, gate doors). `out` is the outward side (±1).
+   * Each pane between the mullions and transoms is drawn and made solid on
+   * its own, and listed in k.brk.panes, so it can shatter (havoc.js).
    */
   function glassWall(k, alongX, fixed, a0, a1, out, openings) {
     const nx = alongX ? 0 : out;
@@ -308,13 +330,27 @@
     };
     const collide = (s0, s1, y0, y1) => {
       const f0 = fixed - out * 0.3;
-      if (alongX) k.col(s0, y0, Math.min(f0, fixed), s1, y1, Math.max(f0, fixed), 'glass');
-      else k.col(Math.min(f0, fixed), y0, s0, Math.max(f0, fixed), y1, s1, 'glass');
+      if (alongX) return k.col(s0, y0, Math.min(f0, fixed), s1, y1, Math.max(f0, fixed), 'glass');
+      return k.col(Math.min(f0, fixed), y0, s0, Math.max(f0, fixed), y1, s1, 'glass');
     };
+    // The mullion lines: every 3 m, not across the openings.
+    const mull = [];
+    for (let a = a0 + 3; a < a1 - 0.5; a += 3) if (!ops.some((o) => a > o.a0 - 0.3 && a < o.a1 + 0.3)) mull.push(a);
     for (const [s0, s1] of spans) {
-      pane(s0, s1, FY + 0.25, CEIL - 0.6);
+      const cuts = [s0].concat(mull.filter((a) => a > s0 + 0.3 && a < s1 - 0.3), [s1]);
+      for (let i = 1; i < cuts.length; i++) {
+        const b0 = cuts[i - 1];
+        const b1 = cuts[i];
+        PANE_ROWS.forEach(([y0, y1, c0, c1], row) => {
+          const glass = k.span('glass', () => pane(b0, b1, y0, y1));
+          const col = collide(b0, b1, c0, c1);
+          k.brk.panes.push({
+            kind: 'wall', row, glass, col, y0, y1, nx, nz,
+            x0: alongX ? b0 : fixed, z0: alongX ? fixed : b0, x1: alongX ? b1 : fixed, z1: alongX ? fixed : b1,
+          });
+        });
+      }
       for (const [p0, p1] of pieces(s0, s1)) bar('prop', p0, p1, FY, FY + 0.25, -0.16, 0.16, COL.dark);
-      collide(s0, s1, 0, CEIL);
     }
     for (const o of ops) {
       pane(o.a0, o.a1, o.top + 0.1, CEIL - 0.6);
@@ -324,11 +360,8 @@
       bar('prop', o.a1, o.a1 + 0.12, FY, o.top + 0.1, -0.2, 0.2, COL.dark);
       bar('prop', o.a0 - 0.12, o.a1 + 0.12, o.top, o.top + 0.12, -0.2, 0.2, COL.dark);
     }
-    // Mullions (not across the openings), transoms, the header beam.
-    for (let a = a0 + 3; a < a1 - 0.5; a += 3) {
-      if (ops.some((o) => a > o.a0 - 0.3 && a < o.a1 + 0.3)) continue;
-      bar('prop', a - 0.05, a + 0.05, FY + 0.25, CEIL - 0.6, -0.14, 0.14, COL.mullion);
-    }
+    // Mullions, transoms, the header beam.
+    for (const a of mull) bar('prop', a - 0.05, a + 0.05, FY + 0.25, CEIL - 0.6, -0.14, 0.14, COL.mullion);
     for (const [p0, p1] of pieces(a0, a1)) {
       bar('prop', p0, p1, FY + 3.3, FY + 3.42, -0.12, 0.12, COL.mullion);
       bar('prop', p0, p1, FY + 6.5, FY + 6.62, -0.12, 0.12, COL.mullion);
@@ -512,11 +545,11 @@
       // Steel bollards across the way in: people walk between them, cars don't.
       const bz = Z1 + 2.3;
       const by = rampY(bz);
+      // (Drawn at run time, so a car going fast enough can knock them flat: new Terminal()._buildBollards.)
       for (const o of [-3.3, -2.05, -0.85, 0.85, 2.05, 3.3]) {
         const bx = d.x + o;
-        ctx.prop.cylinder(bx, by - 0.05, bz, 0.11, 0.11, 0.95, 10, C(COL.chrome), true, C(0xd8dde2));
-        ctx.prop.cylinder(bx, by + 0.62, bz, 0.115, 0.115, 0.1, 10, C(0xe0b12e), false);
-        world.physics.addBox(bx - 0.12, 0, bz - 0.12, bx + 0.12, by + 0.9, bz + 0.12, 'bollard', F().SOLID | F().SHOTS);
+        const col = world.physics.addBox(bx - 0.12, 0, bz - 0.12, bx + 0.12, by + 0.9, bz + 0.12, 'bollard', F().SOLID | F().SHOTS);
+        k.brk.bollards.push({ x: bx, y: by - 0.05, z: bz, col });
       }
     }
 
@@ -552,13 +585,7 @@
       for (const s of [-0.75, 0.75]) ctx.prop.box(x + s - 0.04, y - 0.1, z - 0.25, x + s + 0.04, y + 0.4, z + 0.25, C(COL.dark));
       world.physics.addBox(x - 0.9, 0, z - 0.3, x + 0.9, y + 0.85, z + 0.25, 'bench', F().SOLID | F().SHOTS);
     }
-    for (const x of [-396, -351, -268, -150]) {
-      const z = Z1 + 0.6;
-      const y = rampY(z);
-      const ctx = world.ctxAt(x, z);
-      ctx.prop.cylinder(x, y - 0.1, z, 0.26, 0.26, 1.0, 10, C(0x5a6068), true, C(COL.dark));
-      world.physics.addBox(x - 0.28, 0, z - 0.28, x + 0.28, y + 0.9, z + 0.28, 'bin', F().SOLID | F().SHOTS);
-    }
+    for (const x of [-396, -351, -268, -150]) bin(k, x, Z1 + 0.6, rampY(Z1 + 0.6));
     // The bus stop (a shelter at the east end of the canopy's middle) and the taxi rank.
     const bx = -215;
     {
@@ -566,9 +593,10 @@
       const y = rampY(-1191.6);
       ctx.prop.box(bx - 3.2, y + 2.55, -1193.6, bx + 3.2, y + 2.7, -1191.4, C(0x3b4a5a), { bottom: true });
       for (const s of [-3.1, 3.1]) ctx.prop.box(bx + s - 0.05, y - 0.2, -1193.5, bx + s + 0.05, y + 2.55, -1193.4, C(COL.dark));
-      k.vq('glass', bx - 3.1, -1193.45, bx + 3.1, -1193.45, y + 0.1, y + 2.5, 0, 1, COL.glass);
+      const glass = k.span('glass', () => k.vq('glass', bx - 3.1, -1193.45, bx + 3.1, -1193.45, y + 0.1, y + 2.5, 0, 1, COL.glass));
       ctx.prop.box(bx - 2, y + 0.42, -1193.3, bx + 2, y + 0.48, -1192.9, C(COL.wood));
-      world.physics.addBox(bx - 3.2, 0, -1193.6, bx + 3.2, y + 2.5, -1193.3, 'shelter', F().SOLID | F().SHOTS);
+      const col = world.physics.addBox(bx - 3.2, 0, -1193.6, bx + 3.2, y + 2.5, -1193.3, 'shelter', F().SOLID | F().SHOTS);
+      k.brk.panes.push({ kind: 'shelter', row: 0, glass, col, y0: y + 0.1, y1: y + 2.5, nx: 0, nz: 1, x0: bx - 3.1, z0: -1193.45, x1: bx + 3.1, z1: -1193.45 });
     }
     for (const x of [-222, -131]) {
       const ctx = world.ctxAt(x, -1189.6);
@@ -662,8 +690,21 @@
     desks.push({ id: 'info', kind: 'info', x: ix, z: iz + 0.6, yaw: 0, staff: { x: ix, z: iz - 1.3, yaw: 0 }, queue: [{ x: ix, z: iz + 1.7 }, { x: ix, z: iz + 2.9 }, { x: ix, z: iz + 4.1 }] });
   }
 
-  /** Queue tapes: posts every 2 m along a polyline, a blue tape between them (no collider). */
+  /** Queue tapes: posts every 2 m along a polyline, a blue tape between them (no collider; a car or a bullet knocks them over). */
   function tapes(k, pts, hex) {
+    const posts = [];
+    const r = k.span('hall', () => tapeLine(k, pts, hex, posts));
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of posts) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      z0 = Math.min(z0, z);
+      z1 = Math.max(z1, z);
+    }
+    k.brk.props.push({ kind: 'tape', x: (x0 + x1) / 2, y: FY, z: (z0 + z1) / 2, hx: (x1 - x0) / 2 + 0.2, hz: (z1 - z0) / 2 + 0.2, h: 1.0, posts, cols: [], ranges: [r], color: hex });
+  }
+
+  function tapeLine(k, pts, hex, posts) {
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1];
       const [bx, bz] = pts[i];
@@ -675,6 +716,7 @@
         const z = az + ((bz - az) * j) / n;
         k.cyl('hall', x, FY, z, 0.16, 0.16, 0.04, 8, COL.dark);
         k.cyl('hall', x, FY + 0.04, z, 0.035, 0.035, 0.94, 6, COL.chrome);
+        posts.push([x, z]);
       }
       const yaw = Math.atan2(bx - ax, bz - az);
       k.S('hall', (ax + bx) / 2, (az + bz) / 2).orientedBox((ax + bx) / 2, (az + bz) / 2, 0.012, len / 2, yaw, FY + 0.86, FY + 0.93, C(hex));
@@ -700,7 +742,8 @@
       // Belt: loading table (landside), machine, collection rollers (airside).
       k.solid('hall', c - 2.0, FY, bz + 3.4, c - 1.0, FY + 0.82, bz - 4.6, 0xa3aab2, null, 'belt');
       k.top('hall', c - 1.9, bz + 3.3, c - 1.1, bz - 4.5, FY + 0.83, 0x26282c);
-      k.solid('hall', c - 2.25, FY, bz - 0.9, c - 0.75, FY + 1.85, bz + 0.9, 0x9aa3ad, null, 'machine');
+      const xray = k.solid('hall', c - 2.25, FY, bz - 0.9, c - 0.75, FY + 1.85, bz + 0.9, 0x9aa3ad, null, 'machine');
+      k.brk.props.push({ kind: 'xray', tough: true, lane: i, x: c - 1.5, y: FY, z: bz, hx: 0.75, hz: 0.9, h: 1.85, cols: [xray], ranges: [] });
       k.box('hall', c - 2.27, FY + 1.5, bz - 0.92, c - 0.73, FY + 1.6, bz + 0.92, COL.teal);
       for (const z of [bz + 0.92, bz - 0.92]) {
         for (let x = c - 1.85; x < c - 1.1; x += 0.16) k.box('hall', x - 0.06, FY + 0.85, z - 0.01, x + 0.06, FY + 1.45, z + 0.01, 0x1b1d21);
@@ -714,10 +757,13 @@
       k.box('hall', c - 3.35, FY + 0.78, bz - 0.35, c - 2.85, FY + 1.2, bz - 0.3, 0x23262b);
       k.vq('screen', c - 3.32, bz - 0.36, c - 2.88, bz - 0.36, FY + 0.82, FY + 1.16, 0, -1, C(0x9fe0c0, 1.0));
       // The arch: two posts and a lintel with a light on top.
-      k.solid('hall', c, FY, bz - 0.35, c + 0.15, FY + 2.15, bz + 0.35, 0xc9ced4, null, 'arch');
-      k.solid('hall', c + 1.05, FY, bz - 0.35, c + 1.2, FY + 2.15, bz + 0.35, 0xc9ced4, null, 'arch');
+      const arch = [
+        k.solid('hall', c, FY, bz - 0.35, c + 0.15, FY + 2.15, bz + 0.35, 0xc9ced4, null, 'arch'),
+        k.solid('hall', c + 1.05, FY, bz - 0.35, c + 1.2, FY + 2.15, bz + 0.35, 0xc9ced4, null, 'arch'),
+      ];
       k.box('hall', c, FY + 2.15, bz - 0.35, c + 1.2, FY + 2.45, bz + 0.35, 0xc9ced4, { bottom: true });
-      k.col(c, FY + 2.15, bz - 0.35, c + 1.2, FY + 2.45, bz + 0.35, 'arch', F().SOLID | F().SHOTS);
+      arch.push(k.col(c, FY + 2.15, bz - 0.35, c + 1.2, FY + 2.45, bz + 0.35, 'arch', F().SOLID | F().SHOTS));
+      k.brk.props.push({ kind: 'arch', tough: true, lane: i, x: ax, y: FY, z: bz, hx: 0.6, hz: 0.35, h: 2.45, cols: arch, ranges: [] });
       // Barrier between this lane and the last; a short panel between machine and arch.
       segs.push([cur, c - 2.25], [c - 0.75, c]);
       cur = c + 1.2;
@@ -742,9 +788,10 @@
       if (b - a < 0.05) continue;
       k.box('hall', a, FY, bz - 0.06, b, FY + 0.12, bz + 0.06, COL.dark);
       k.box('hall', a, FY + 1.86, bz - 0.05, b, FY + 1.95, bz + 0.05, COL.chrome);
-      k.vq('glass', a, bz, b, bz, FY + 0.12, FY + 1.86, 0, 1, COL.glass);
+      const glass = k.span('glass', () => k.vq('glass', a, bz, b, bz, FY + 0.12, FY + 1.86, 0, 1, COL.glass));
       for (let x = a; x <= b + 0.01; x += Math.max(0.5, (b - a) / Math.max(1, Math.round((b - a) / 2)))) k.box('hall', x - 0.03, FY, bz - 0.05, x + 0.03, FY + 1.95, bz + 0.05, COL.chrome);
-      k.col(a, 0, bz - 0.08, b, FY + 1.95, bz + 0.08, 'glass', F().SOLID | F().SHOTS);
+      const col = k.col(a, 0, bz - 0.08, b, FY + 1.95, bz + 0.08, 'glass', F().SOLID | F().SHOTS);
+      k.brk.panes.push({ kind: 'barrier', row: 0, glass, col, y0: FY + 0.12, y1: FY + 1.86, nx: 0, nz: 1, x0: a, z0: bz, x1: b, z1: bz });
     }
     // A rubber floor in the security hall.
     k.top('hall', SEC.x0 + 0.15, NZ + 0.3, SEC.x1 - 0.15, PZ - 0.15, FY + 0.012, COL.rubber);
@@ -1125,7 +1172,8 @@
       k.box('hall', u.x0 + 0.06, FY + 1.05, Math.min(cz0, zf) - 0.04, u.x1 - 0.06, FY + 1.1, Math.max(cz0, zf) + 0.04, 0x3b342d);
       if (u.kind !== 'hire') {
         // A glass case of food (or cakes) on the counter, and a till.
-        k.vq('glass', u.x0 + 0.6, zf - f * 0.15, xc + 0.8, zf - f * 0.15, FY + 1.1, FY + 1.5, 0, f, COL.glass);
+        const glass = k.span('glass', () => k.vq('glass', u.x0 + 0.6, zf - f * 0.15, xc + 0.8, zf - f * 0.15, FY + 1.1, FY + 1.5, 0, f, COL.glass));
+        k.brk.panes.push({ kind: 'case', row: 0, glass, col: null, y0: FY + 1.1, y1: FY + 1.5, nx: 0, nz: f, x0: u.x0 + 0.6, z0: zf - f * 0.15, x1: xc + 0.8, z1: zf - f * 0.15 });
         for (let x = u.x0 + 0.7; x < xc + 0.6; x += 0.34) k.box('hall', x, FY + 1.1, zf - f * 0.6, x + 0.26, FY + 1.18 + rng() * 0.08, zf - f * 0.25, pick([0xd9a05b, 0xf0d39a, 0x8e5a3c, 0xe85f5c, 0x6fbf73]));
         k.box('hall', xc + 1.3, FY + 1.1, cz0 + f * 0.1, xc + 1.7, FY + 1.25, cz0 + f * 0.45, 0x23262b);
         // The kitchen: a back counter with machines on it, and menu boards above.
@@ -1182,12 +1230,18 @@
     return PLANT;
   }
 
-  /** A planter with a small palm or a bush in it (solid). s: 1 big palm, 0.6 bush. */
+  /** A planter with a small palm or a bush in it (solid, breakable). s: 1 big palm, 0.6 bush. */
   function plant(k, x, z, s) {
-    const g = plantGeo();
     const big = s >= 1;
     const hw = big ? 0.6 : 0.45;
-    k.solid('hall', x - hw, FY, z - hw, x + hw, FY + 0.6, z + hw, COL.planter, null, 'planter');
+    let col = null;
+    const r = k.span('hall', () => (col = plantBody(k, x, z, big, hw)));
+    k.brk.props.push({ kind: big ? 'palm' : 'plant', x, y: FY, z, hx: hw, hz: hw, h: big ? 3.9 : 1.4, cols: [col], ranges: [r] });
+  }
+
+  function plantBody(k, x, z, big, hw) {
+    const g = plantGeo();
+    const col = k.solid('hall', x - hw, FY, z - hw, x + hw, FY + 0.6, z + hw, COL.planter, null, 'planter');
     k.top('hall', x - hw + 0.06, z - hw + 0.06, x + hw - 0.06, z + hw - 0.06, FY + 0.6, 0x4a3a2a);
     const m = new THREE.Matrix4();
     const r = new THREE.Matrix4();
@@ -1212,6 +1266,19 @@
         k.merge('hall', g.blob, m, i % 2 ? COL.leaf : COL.leafB);
       }
     }
+    return col;
+  }
+
+  /** A litter bin (solid, breakable) on the floor at height y. */
+  function bin(k, x, z, y) {
+    let col = null;
+    const r = k.span('hall', () => {
+      k.cyl('hall', x, y - 0.1, z, 0.26, 0.26, 1.0, 10, 0x5a6068, true);
+      k.cyl('hall', x, y + 0.9, z, 0.27, 0.22, 0.08, 10, COL.dark, true);
+      k.box('hall', x - 0.12, y + 0.55, z - 0.27, x + 0.12, y + 0.7, z - 0.26, COL.teal);
+      col = k.col(x - 0.28, 0, z - 0.28, x + 0.28, y + 0.98, z + 0.28, 'bin', F().SOLID | F().SHOTS);
+    });
+    k.brk.props.push({ kind: 'bin', x, y, z, hx: 0.28, hz: 0.28, h: 1.0, cols: [col], ranges: [r] });
   }
 
   /** A toilets block: solid, with two dark doorways and the signs. f: which way it faces (±1 in z). */
@@ -1989,6 +2056,37 @@
     return { bad, islands, nodes: nodes.length, links: links.length };
   }
 
+  /**
+   * Litter bins round the halls: by the concourse columns, the gate desks and
+   * the front glass, wherever one is well clear of the people's map and of
+   * anything solid (so nobody's way is blocked). Placed after the map.
+   */
+  function indoorBins(k, gatesOut) {
+    const cand = [];
+    for (const x of COLS_N) cand.push([x - 0.9, NZ], [x + 0.9, NZ]);
+    for (const g of gatesOut) cand.push([g.x + 7.6, -1242.6], [g.x - 33.2, -1236.4]);
+    for (const x of [-416, -391, -346, -298, -281, -251, -206, -181, -151, -126, -96]) cand.push([x, Z1 - 0.9]);
+    const segClear = (x, z) => {
+      for (const [i, j] of k.links) {
+        const a = k.nodes[i];
+        const b = k.nodes[j];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const l2 = dx * dx + dz * dz || 1;
+        const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / l2, 0, 1);
+        if (Math.hypot(a.x + dx * t - x, a.z + dz * t - z) < 1.15) return false;
+      }
+      return true;
+    };
+    let n = 0;
+    for (const [x, z] of cand) {
+      if (n >= 18) break;
+      if (!segClear(x, z) || k.ph.overlaps(x, z, 0.45, FY + 0.05, FY + 1.0)) continue;
+      bin(k, x, z, FY);
+      n++;
+    }
+  }
+
   // ---------------------------------------------------------------- build
   /** Night-time light pools on the hall floor (fx.js draws them). */
   function pools(world) {
@@ -2034,7 +2132,8 @@
       const stands = (data && data.stands) || [];
       const k = makeKit(world);
       const lift = { value: 0.03 };
-      const mats = { hall: hallMaterial(lift), glass: glassMaterial(), roof: world.materials.propMatte };
+      const alert = { value: 0 };
+      const mats = { hall: hallMaterial(lift, alert), glass: glassMaterial(), roof: world.materials.propMatte };
       const airlines = airlineList();
       const desks = [];
       const seats = [];
@@ -2058,6 +2157,7 @@
         k.S('hall', b.x, b.z).orientedBox(b.x - fx * 0.05, b.z - fz * 0.05, b.w / 2 + 0.08, 0.045, b.yaw, b.y - b.h / 2 - 0.08, b.y + b.h / 2 + 0.08, C(0x111316));
       }
       nav(k, gatesOut, lanes);
+      indoorBins(k, gatesOut);
       const signs = buildSigns(k, mats);
       finishOwn(k, mats);
       pools(world);
@@ -2087,6 +2187,7 @@
         carousels,
         meet,
         boards: k.boards,
+        breakables: k.brk, // panes, props, bollards (havoc.js breaks them through new Terminal())
         airlines: airlines.map((a) => ({ name: a.name, code: a.code })),
         bridges: bridgeRects,
         // Where cars stop in the kerb lane (facing west), and where their passengers step out.
@@ -2101,7 +2202,7 @@
         places: { checkin: { x: -377.5, z: -1199 }, gates: { x: -240, z: -1231.6 }, arrivals: { x: -136, z: -1205 }, arrivalsKerb: { x: -140, z: -1192.4 } },
         signs: signs.count,
       };
-      Object.defineProperty(world.terminal, '_rt', { value: { mats, lift }, enumerable: false });
+      Object.defineProperty(world.terminal, '_rt', { value: { mats, lift, alert, meshes: k.meshes }, enumerable: false });
       return world.terminal;
     }
 
@@ -2142,6 +2243,7 @@
       this._buildBoards();
       this._buildArches();
       this._buildShutters();
+      this._buildBreakables();
       this._fallbackT = 60 + Math.random() * 60;
       VH.events.on('airside:arrived', (e) => this._onArrived(e));
     }
@@ -2687,6 +2789,311 @@
       }
     }
 
+    // -------------------------------------------------------- breakables
+    /**
+     * What havoc.js can break (world.terminal.breakables): every pane, prop and
+     * bollard has a `broken` flag, and setPane / setProp / setBollard / setBoard
+     * break it or put it back. havoc.js decides when, and does the effects.
+     */
+    _buildBreakables() {
+      const B = (this.brk = this.T.breakables || { panes: [], props: [], bollards: [] });
+      for (const q of [].concat(B.panes, B.props, B.bollards)) q.broken = false;
+      this.broken = 0; // how many things are broken now
+      this.boardBroken = this.T.boards.map(() => 0); // 0 working, 1 static, 2 dark
+      this.alert = false;
+      this._buildBollards();
+      this._buildBoardFx();
+      this._buildBeacons();
+    }
+
+    /** Off: a collider that blocks nothing (the physics grid has no removal API); on: as built. */
+    static colliderOff(col) {
+      if (!col || col.disabled) return;
+      col._flags0 = col.flags;
+      col.flags = 0;
+      col.disabled = true;
+    }
+
+    static colliderOn(col) {
+      if (!col || !col.disabled) return;
+      col.flags = col._flags0 === undefined ? F().ALL : col._flags0;
+      col.disabled = false;
+    }
+
+    /** Hide a run of vertices in one of our own meshes (all on one point), or bring it back. */
+    _hideRange(r, hide) {
+      const mesh = this.T._rt.meshes && this.T._rt.meshes[r.surf];
+      if (!mesh || r.v1 <= r.v0) return;
+      const pos = mesh.geometry.attributes.position;
+      const a = pos.array;
+      const o = r.v0 * 3;
+      const n = (r.v1 - r.v0) * 3;
+      if (hide) {
+        if (!r.orig) r.orig = a.slice(o, o + n);
+        const x = r.orig[0];
+        const y = r.orig[1];
+        const z = r.orig[2];
+        for (let i = o; i < o + n; i += 3) {
+          a[i] = x;
+          a[i + 1] = y;
+          a[i + 2] = z;
+        }
+      } else if (r.orig) a.set(r.orig, o);
+      else return;
+      pos.addUpdateRange(o, n);
+      pos.needsUpdate = true;
+    }
+
+    /** Shatter pane i, or put it back: the glass goes and so does its collider. */
+    setPane(i, broken) {
+      const q = this.brk.panes[i];
+      if (!q || q.broken === !!broken) return false;
+      q.broken = !!broken;
+      this._hideRange(q.glass, q.broken);
+      if (q.broken) Terminal.colliderOff(q.col);
+      else Terminal.colliderOn(q.col);
+      this.broken += q.broken ? 1 : -1;
+      return true;
+    }
+
+    /** Knock prop i over (it goes, and its collider), or put it back. Tough ones (arches, x-ray machines) stay put. */
+    setProp(i, broken) {
+      const q = this.brk.props[i];
+      if (!q || q.broken === !!broken) return false;
+      q.broken = !!broken;
+      if (!q.tough) {
+        for (const r of q.ranges) this._hideRange(r, q.broken);
+        for (const c of q.cols) {
+          if (q.broken) Terminal.colliderOff(c);
+          else Terminal.colliderOn(c);
+        }
+      }
+      this.broken += q.broken ? 1 : -1;
+      return true;
+    }
+
+    // The forecourt bollards: steel posts with a yellow band, drawn here so a car can flatten one.
+    _buildBollards() {
+      const list = this.brk.bollards;
+      const b = new VH.GeometryBuilder({});
+      b.cylinder(0, 0, 0, 0.11, 0.11, 0.95, 10, C(COL.chrome), true, C(0xd8dde2));
+      b.cylinder(0, 0.67, 0, 0.115, 0.115, 0.1, 10, C(0xe0b12e), false);
+      const geo = b.build();
+      const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.6 });
+      this.bollardParts = [{ geo, mat, shadow: true }];
+      this.bollards = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
+      this.bollards.name = 'terminal bollards';
+      this.bollards.castShadow = true;
+      this.bollards.receiveShadow = true;
+      this.bollards.count = list.length;
+      list.forEach((q, i) => this._placeBollard(i));
+      this.bollards.computeBoundingSphere();
+      this.game.scene.add(this.bollards);
+    }
+
+    _placeBollard(i) {
+      const q = this.brk.bollards[i];
+      const m = this._m || (this._m = new THREE.Matrix4());
+      if (q.broken) m.makeScale(0, 0, 0);
+      else m.makeTranslation(q.x, q.y, q.z);
+      this.bollards.setMatrixAt(i, m);
+      this.bollards.instanceMatrix.needsUpdate = true;
+    }
+
+    /** A bollard knocked flat (or stood back up). */
+    setBollard(i, down) {
+      const q = this.brk.bollards[i];
+      if (!q || q.broken === !!down) return false;
+      q.broken = !!down;
+      if (q.broken) Terminal.colliderOff(q.col);
+      else Terminal.colliderOn(q.col);
+      this._placeBollard(i);
+      this.broken += q.broken ? 1 : -1;
+      return true;
+    }
+
+    // Broken screens: a quad over each one, showing static (redrawn as it flickers) or dark and cracked.
+    _buildBoardFx() {
+      const cv = document.createElement('canvas');
+      cv.width = 256;
+      cv.height = 64;
+      this.fxCanvas = cv;
+      this.fxCtx = cv.getContext('2d');
+      const g = this.fxCtx;
+      // Right half: dark glass with cracks running out from the hit.
+      g.fillStyle = '#050608';
+      g.fillRect(128, 0, 128, 64);
+      g.strokeStyle = 'rgba(200,215,230,0.55)';
+      g.lineWidth = 1;
+      for (let i = 0; i < 9; i++) {
+        let x = 190;
+        let y = 30;
+        g.beginPath();
+        g.moveTo(x, y);
+        const a = (i / 9) * Math.PI * 2;
+        for (let j = 0; j < 5; j++) {
+          x += Math.cos(a + (Math.random() - 0.5) * 0.9) * 9;
+          y += Math.sin(a + (Math.random() - 0.5) * 0.9) * 6;
+          g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+      this._paintStatic();
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.fxTex = tex;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.85, 0.85, 0.85), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      this.boardFx = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      this.boardFx.name = 'terminal broken screens';
+      this.boardFx.visible = false;
+      this.game.scene.add(this.boardFx);
+      this._staticT = 0;
+    }
+
+    _paintStatic() {
+      const g = this.fxCtx;
+      const img = this._staticImg || (this._staticImg = g.createImageData(128, 64));
+      const d = img.data;
+      const roll = Math.floor(Math.random() * 64);
+      for (let y = 0; y < 64; y++) {
+        const band = Math.abs(y - roll) < 4 ? 70 : 0;
+        for (let x = 0; x < 128; x++) {
+          const v = Math.min(255, Math.random() * 190 + band);
+          const i = (y * 128 + x) * 4;
+          d[i] = v;
+          d[i + 1] = v;
+          d[i + 2] = v * 1.05;
+          d[i + 3] = 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+    }
+
+    /** Board i (world.terminal.boards) broken: 1 static, 2 dark; 0 working again. */
+    setBoard(i, state) {
+      if (i < 0 || i >= this.boardBroken.length || this.boardBroken[i] === state) return false;
+      const was = this.boardBroken[i];
+      this.boardBroken[i] = state;
+      if (!was !== !state) this.broken += state ? 1 : -1;
+      const b = new VH.GeometryBuilder({ uv: true });
+      this.T.boards.forEach((q, j) => {
+        const st = this.boardBroken[j];
+        if (!st) return;
+        const u0 = st === 1 ? 0 : 0.5;
+        quadUV(b, q.x + Math.sin(q.yaw) * 0.005, q.y, q.z + Math.cos(q.yaw) * 0.005, q.yaw, q.w, q.h, u0, 0, u0 + 0.5, 1);
+      });
+      this.boardFx.geometry.dispose();
+      this.boardFx.geometry = b.isEmpty ? new THREE.BufferGeometry() : b.build();
+      this.boardFx.visible = !b.isEmpty;
+      return true;
+    }
+
+    // Amber beacons round the columns and over the doors, flashing in a security alert.
+    _buildBeacons() {
+      const pts = [];
+      for (const x of COLS_N) pts.push([x, FY + 4.6, NZ, 0.86]);
+      for (const x of COLS_S) pts.push([x, FY + WALL_H + 0.45, PZ, 0.86]);
+      for (const d of DOORS) pts.push([d.x, FY + DOOR_H + 0.45, Z1 - 0.32, 0.5]);
+      const geo = new THREE.BoxGeometry(1, 0.22, 1);
+      this.beacons = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), pts.length);
+      this.beacons.name = 'terminal alert beacons';
+      const m = new THREE.Matrix4();
+      const sc = new THREE.Vector3();
+      const v = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      pts.forEach(([x, y, z, w], i) => {
+        m.compose(v.set(x, y, z), q, sc.set(w, 1, w));
+        this.beacons.setMatrixAt(i, m);
+      });
+      this.beacons.computeBoundingSphere();
+      this.beacons.visible = false;
+      this.game.scene.add(this.beacons);
+    }
+
+    /** The security alert (havoc.js): boards say so, the hall pulses amber, the beacons flash. */
+    setAlert(on) {
+      if (this.alert === !!on) return;
+      this.alert = !!on;
+      this.beacons.visible = this.alert;
+      if (!this.alert) this.T._rt.alert.value = 0;
+      this._boardT = 0;
+      this._boardKey = '';
+    }
+
+    _updateAlert(dt) {
+      if (!this.alert) return;
+      const ph = this._t * 5.5;
+      const k = Math.pow(Math.max(0, Math.sin(ph)), 3);
+      this.T._rt.alert.value = 0.06 + 0.3 * k;
+      this.beacons.material.color.setRGB(0.4 + 5.5 * k, 0.15 + 2.2 * k, 0.02);
+    }
+
+    _updateBroken(dt) {
+      if (!this.boardFx.visible) return;
+      this._staticT -= dt;
+      if (this._staticT > 0) return;
+      this._staticT = 0.07;
+      this._paintStatic();
+      this.fxTex.needsUpdate = true;
+    }
+
+    /** Put everything back as it was built (havoc.js, when nobody's looking; a new game). */
+    restoreAll() {
+      if (!this.brk) return;
+      this.brk.panes.forEach((q, i) => this.setPane(i, false));
+      this.brk.props.forEach((q, i) => this.setProp(i, false));
+      this.brk.bollards.forEach((q, i) => this.setBollard(i, false));
+      this.boardBroken.forEach((q, i) => this.setBoard(i, 0));
+      this.broken = 0;
+    }
+
+    /**
+     * The first bag on a carousel along a ray (havoc.js: a shot bag bursts open):
+     * { j, t, x, y, z, color } or null.
+     */
+    bagHit(ox, oy, oz, dx, dy, dz, maxT) {
+      if (!this.bags || !this.bags.length) return null;
+      const p = this._bp || (this._bp = {});
+      let best = null;
+      let bestT = maxT;
+      for (let j = 0; j < this.bags.length; j++) {
+        const b = this.bags[j];
+        beltAt(this.carousels[b.ci].c, b.s, CAROUSEL.rc, p);
+        if (Math.abs(p.x - ox) > bestT + 1 || Math.abs(p.z - oz) > bestT + 1) continue;
+        const yaw = Math.atan2(p.tx, p.tz) + b.yaw;
+        const c = Math.cos(yaw);
+        const sn = Math.sin(yaw);
+        const rx = ox - p.x;
+        const rz = oz - p.z;
+        // Into the bag's frame (its local z along the belt).
+        const lox = rx * c - rz * sn;
+        const loz = rx * sn + rz * c;
+        const ldx = dx * c - dz * sn;
+        const ldz = dx * sn + dz * c;
+        let t0 = 0;
+        let t1 = bestT;
+        const slab = (o, d, lo, hi) => {
+          if (Math.abs(d) < 1e-9) return o >= lo && o <= hi;
+          let a = (lo - o) / d;
+          let e = (hi - o) / d;
+          if (a > e) [a, e] = [e, a];
+          t0 = Math.max(t0, a);
+          t1 = Math.min(t1, e);
+          return t0 <= t1;
+        };
+        if (!slab(lox, ldx, -b.w / 2, b.w / 2) || !slab(oy, dy, FY + 0.45, FY + 0.45 + b.h) || !slab(loz, ldz, -b.l / 2, b.l / 2)) continue;
+        bestT = t0;
+        best = { j, t: t0, x: p.x, y: FY + 0.45 + b.h / 2, z: p.z, color: b.color, w: b.w, h: b.h, l: b.l };
+      }
+      return best;
+    }
+
+    /** Bag j off the belt (burst open: havoc.js throws the clothes). */
+    dropBag(j) {
+      if (!this.bags || !this.bags[j]) return null;
+      return this.bags.splice(j, 1)[0];
+    }
+
     // ----------------------------------------------------------- queries
     /** Inside the terminal (the halls, or a jet bridge)? y defaults to the floor. */
     isInside(x, z, y) {
@@ -2721,6 +3128,8 @@
       if (!near) return;
       this._updateDoors(dt, p);
       this._updateArches(dt, p, !pl.inVehicle && !pl.isDead);
+      this._updateAlert(dt);
+      this._updateBroken(dt);
       this._slowT -= dt;
       if (this._slowT <= 0) {
         this._slowT = 0.5;
@@ -2753,6 +3162,8 @@
       }
       for (const d of this.doors) d.open = d.want = 0;
       this._placeDoors();
+      this.setAlert(false);
+      this.restoreAll();
       this._drawBoards(true);
     }
 

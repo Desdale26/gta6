@@ -1873,9 +1873,43 @@
       b.mode = 'walk';
       b.path = pts;
       b.pi = 0;
-      b.then = 'gone';
+      b.then = (bb, aa) => this._intoCabin(bb, aa, g.stand);
       b.dest = pts[pts.length - 1];
       b.speed = Math.max(b.speed, 1.3);
+    }
+
+    /**
+     * At the bridge's mouth: with a cabin there (cabin.js builds them while Jay's near) on
+     * through the door and down the aisle to their row, where they sit down; else into the
+     * plane and gone.
+     */
+    _intoCabin(b, a, stand) {
+      const C = this.game.cabin;
+      const way = C && C.boardPath ? C.boardPath(stand) : null;
+      if (!way) {
+        b.mode = 'gone';
+        b.gone = true;
+        return;
+      }
+      b.stage = 'cabin';
+      b.mode = 'walk';
+      b.path = way.pts;
+      b.pi = 0;
+      b.dest = null; // (no map in there to find another way by)
+      b.then = (bb) => {
+        if (C.seated) C.seated(stand, way.seat);
+        bb.mode = 'gone';
+        bb.gone = true;
+      };
+    }
+
+    /**
+     * Off a plane in a hurry (cabin.js: Jay's in the flight deck): `n` people run out of the
+     * door at `from` and up the bridge of `gate`, then out of the terminal.
+     */
+    cabinRunners(gate, n, from) {
+      if (!this.T || !this.gateBy || !this.gateBy[gate]) return;
+      this._arrivals.push({ flight: null, g: this.gateBy[gate], n, t: 0, atRec: false, run: from, gap: [0.35, 0.8] });
     }
 
     /** Is there a plane at this gate's bridge taking passengers (boarding, or just shut)? */
@@ -1956,8 +1990,8 @@
         const q = this._arrivals[i];
         q.t -= dt;
         if (q.t > 0) continue;
-        q.t = rnd(2, 5.5);
-        if (this._insideCount() < this.capIn + 4) this._arrival(q);
+        q.t = q.gap ? rnd(q.gap[0], q.gap[1]) : rnd(2, 5.5);
+        if (this._insideCount() < this.capIn + (q.run ? 10 : 4)) this._arrival(q);
         if (--q.n <= 0) this._arrivals.splice(i, 1);
       }
     }
@@ -1973,13 +2007,28 @@
         b = this._spawn('arr', n.x + rnd(-0.6, 0.6), n.z, { heading: PI, case: false });
       } else {
         const e = g.end || g.bridge[g.bridge.length - 1];
-        b = this._spawn('arr', (e.mouth !== undefined ? e.mouth + 0.6 : e.x), e.z + rnd(-0.3, 0.3), { heading: PI / 2, y: e.y || 3, case: chance(0.2) });
+        // With a cabin there (cabin.js, Jay near): up out of their seat and along the aisle first.
+        const C = this.game.cabin;
+        const way = !q.run && C && C.exitPath ? C.exitPath(g.stand) : null;
+        const from = q.run ? { x: q.run.x + rnd(-0.2, 0.2), y: q.run.y, z: q.run.z + rnd(-0.25, 0.25) } : way ? way.start : null;
+        b = from
+          ? this._spawn('arr', from.x, from.z, { heading: q.run ? PI / 2 : PI, y: from.y, case: false })
+          : this._spawn('arr', (e.mouth !== undefined ? e.mouth + 0.6 : e.x), e.z + rnd(-0.3, 0.3), { heading: PI / 2, y: e.y || 3, case: chance(0.2) });
         // Up the bridge to the gate door, then on.
-        const pts = (g.bridge || []).slice().reverse();
+        const pts = (way ? way.pts : q.run ? [{ x: q.run.x + 1.5, z: e.z }] : []).concat((g.bridge || []).slice().reverse());
         b.path = pts;
         b.pi = 0;
         b.mode = 'walk';
-        b.dest = pts[pts.length - 1];
+        b.dest = way || q.run ? null : pts[pts.length - 1];
+        if (q.run) {
+          // Running for it: out through the terminal, away from the plane.
+          b.speed = rnd(RUN[0], RUN[1]);
+          b.flight = null;
+          b.gate = g.gate;
+          b.stage = 'panic';
+          b.then = (bb, aa) => this.scare(bb, aa, q.run.x, q.run.z, 30);
+          return;
+        }
       }
       b.flight = q.flight;
       b.gate = g.gate;

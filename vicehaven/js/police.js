@@ -333,6 +333,7 @@
         robbery: { heat: 2, report: 1 }, // a corner shop held up (stores.js)
         killSoldier: { heat: 4, report: 1, add: 1 }, // Fort Breakwater (fort.js)
         stealMilitary: { heat: 5, report: 1 },
+        hijack: { heat: 3, report: 1 }, // an airliner taken from the gate (cabin.js)
       }[kind] || { heat: 1, report: 0.5 };
     }
 
@@ -794,7 +795,7 @@
     }
 
     static crimeText(kind) {
-      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down', robbery: 'an armed robbery', killSoldier: 'a soldier down at Fort Breakwater', stealMilitary: 'a stolen military vehicle' }[kind] || 'a disturbance';
+      return { jack: 'a carjacking', stealCop: 'a stolen patrol car', hitPed: 'a hit-and-run', killPed: 'a pedestrian down', shots: 'shots fired', explosion: 'an explosion', killCop: 'an officer down', robbery: 'an armed robbery', killSoldier: 'a soldier down at Fort Breakwater', stealMilitary: 'a stolen military vehicle', hijack: 'a hijacked airliner at Vicehaven International' }[kind] || 'a disturbance';
     }
 
     static heading(vel) {

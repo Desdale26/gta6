@@ -6,9 +6,12 @@
  *                            arrival every minute and a half or so), the four
  *                            contact stands (A1-A4) and their turnarounds
  *                            (three minutes), three remote stands (R1-R3) for
- *                            the freighters, the runway, the ground vehicles
- *                            and crew, a Skylark doing circuits, a visiting
- *                            helicopter, and jets crossing high over the city
+ *                            the freighters (and now and then an airliner
+ *                            towed off its gate to leave from there later,
+ *                            empty), the runway, the ground vehicles
+ *                            and crew, a Skylark doing circuits and another
+ *                            off on sightseeing trips, a visiting helicopter,
+ *                            and jets crossing high over the city
  *   airside.flights()        [{ id, code, airline, city, kind 'dep'|'arr',
  *                            time (game hours), gate, stand, status, est, pax,
  *                            note }]   (passenger flights only; note: why it's
@@ -18,11 +21,12 @@
  *   events                   airside:landed {flight}, airside:arrived {flight,
  *                            stand, gate}, airside:boarding {flight, stand,
  *                            gate}, airside:closed {flight, stand},
- *                            airside:pushback {flight, stand}, airside:takeoff
- *                            {flight}, airside:gatechange {flight, arrival,
- *                            from, gate, stand}   (stand = the stand's id, 1..4;
- *                            the freighters (flight.cargo) only send landed and
- *                            takeoff)
+ *                            airside:pushback {flight, stand, tow}, airside:
+ *                            takeoff {flight}, airside:gatechange {flight,
+ *                            arrival, from, gate, stand}   (stand = the stand's
+ *                            id, 1..4; the freighters (flight.cargo) only send
+ *                            landed and takeoff; tow: pushed back to be towed
+ *                            away, nobody aboard; it boarded nobody)
  *   VH.Airside.markings()    the paint for the taxilane, stands and roads, and
  *                            the remote stands' paving (airfield.js draws it)
  *
@@ -31,7 +35,8 @@
  *                            time, don't copy it): { id, x, y, z, yaw, state
  *                            (the phase: 'approach' 'rollout' 'taxiin' 'parked'
  *                            'pushback' 'tugoff' 'taxiout' 'lineup' 'takeoff'
- *                            'climb' 'goaround'), flight (the board entry it is
+ *                            'climb' 'goaround', or for a tow 'towready'
+ *                            'tow'), flight (the board entry it is
  *                            now), stand (1..4, or 'R1'..'R3'), model (its
  *                            THREE.Object3D, or null while out of sight), speed
  *                            (m/s), pax (passengers aboard now, about), cargo,
@@ -47,8 +52,8 @@
  *                            it carries on.
  *   airside.removePlane(p)   clear it away for good (a wreck, one Jay took):
  *                            off the runway and the apron, stand freed, flight
- *                            Cancelled; returns { x, y, z, yaw, color, airline,
- *                            flight, stand } or null
+ *                            Cancelled (any tug on it lets go); returns { x, y,
+ *                            z, yaw, color, airline, flight, stand } or null
  *   airside.groundStop(on, reason)
  *                            on: no pushbacks, nobody lines up or rolls (one
  *                            already rolling goes), every arrival not yet down
@@ -56,7 +61,10 @@
  *                            say Delayed with flight.note = reason. off: the
  *                            arrivals come back a minute and a half apart.
  *                            airside.stopped: the reason while on, else null.
- *   airside.abortTakeoff(p)  one on its takeoff roll (under 60 m/s) brakes
+ *   airside.abortTakeoff(p)  one on its takeoff roll (under 60 m/s) brakes to a
+ *                            stop, waits half a minute and (from well down the
+ *                            runway, after backtracking to the end) goes again;
+ *                            false if it's too fast to stop
  *   (the live airliners are this.fleet inside this file; planes() is the way in)
  *
  * It is all scenery: no physics bodies. A plane or a tug stops for Jay (or a
@@ -91,6 +99,9 @@
  *               bay. From a remote stand the push ends on the taxiway.
  *   the merge   where the S-bend meets the taxiway: one plane through it at
  *               a time (a departure, or an arrival for a remote stand).
+ *   tows        pushed back as a departure, then the tug turns round and
+ *               pulls it the departures' way down the S-bend and along the
+ *               taxiway, and into a remote stand as an arrival would.
  *
  * The runway runs like a busy single runway: an arrival is cleared to land
  * 25 s out if the runway is clear or the only thing on it is a departure
@@ -118,8 +129,10 @@
  * The Skylark keeps off the airliners' taxi routes: it taxis west along the
  * taxiway to L3, flies right-hand circuits south of the field with
  * touch-and-goes, and after a full-stop landing rolls on to L5 and its spot
- * on the GA apron. The helicopter uses its own pad, H2, on the GA apron (the
- * big pad is the flyable Sparrow's).
+ * on the GA apron. The second one (yellow) flies out over the bay and away,
+ * and comes back along the downwind leg for a full stop; only one of them is
+ * in the circuit, or taxiing, at a time. The helicopter uses its own pad, H2,
+ * on the GA apron (the big pad is the flyable Sparrow's).
  *
  * Time: the sim runs on its own clock (seconds since the game started); the
  * board times are game hours, one game hour to the real minute.
@@ -151,6 +164,7 @@
   const HOLD_IN = 10; //     nose wheel x at the arrival holding point on the taxiway
   const SEP = 46; //         centre to centre, one taxiing airliner to the next
   const G1 = { x: 190, z: -1318 }; // the Skylark's spot (not the two Jay can take)
+  const G2 = { x: 232, z: -1318 }; // the second one's (it takes people on sightseeing trips)
   const H2 = { x: 300, z: -1336 }; // the visiting helicopter's pad
   const REMOTE = { x: -470, z: -1300 }; // the flyable Albatross, nose north (airfield.js)
   const DEPOT = { x0: 2, x1: 75, z0: -1292, z1: -1251 };
@@ -176,6 +190,12 @@
   const B_FINAL = -48;
   const B_CLOSE = -18;
   const T_CARGO = [330, 520]; // a freighter's turnaround on a remote stand
+  // Now and then an arrival isn't turned round at its gate: once its passengers are off it is
+  // towed away to a remote stand (freeing the gate), and later leaves from there empty, a
+  // positioning flight (not on the boards).
+  const TOW_EVERY = 7; //     about one arrival in this many (when a remote stand is free)
+  const T_TOWOFF = 112; //    on-block to the tow
+  const T_FERRY = [210, 360]; // on the remote stand, from the tow in to off-block
   const PLAN_AHEAD = 1500; // flights planned this far ahead (s)
   // The runway: arrivals a minute and a half apart, with a longer gap every few for the
   // departures that have queued up, the Skylark and the freighters; each arrival is on the
@@ -428,6 +448,27 @@
     p.sLine = p.len;
     p.line(RWY.x1 + 700, RWY.z, 99, 2);
     return p.end(99);
+  }
+
+  /**
+   * Nose-wheel route of a tow from the end of a pushback (on the taxilane, facing west) to a
+   * remote stand: the departures' way down the S-bend (sMerge, sMergeOut as theirs), along
+   * the taxiway and in as an arrival would (sTurnIn), at a walking pace.
+   */
+  function towPath(nx, nz, st) {
+    const p = new Path(nx, nz, -HALF);
+    p.line(-385, LANE_Z, 4.2, 0.6);
+    p.sMerge = p.len;
+    p.line(-400, LANE_Z, 3.6, 0.6);
+    p.turn(-HALF, 21.5, 3.2, 0.6);
+    p.turn(HALF, 21.5, 3.2, 0.6);
+    p.line(st.x + 25, TWY_Z, 4.5, 0.6);
+    p.sMergeOut = sWhere(p, (x, z) => z < TWY_Z + 1 && x < MERGE_X - 42, p.sMerge + 60);
+    p.sTurnIn = p.len;
+    p.turn(HALF, 25, 2.8, 0.6);
+    p.line(st.x, st.z - 12, 2.4, 0.5);
+    p.line(st.x, st.z + NOSE, 1.2, 0.4);
+    return p.end(0);
   }
 
   /**
@@ -768,7 +809,8 @@
       const p = this.phase;
       const f = this.rot.flags;
       const arriving = p === 'approach' || p === 'goaround' || p === 'rollout' || p === 'taxiin' || p === 'new' || (p === 'parked' && !f.deplaned);
-      return arriving ? this.rot.arr : this.rot.dep;
+      // (One being towed away is still the flight it came in as: it has no departure from here.)
+      return arriving || this.rot.towOff ? this.rot.arr : this.rot.dep;
     }
 
     /** How many passengers are aboard, near enough (freighters: none). */
@@ -776,6 +818,7 @@
       const r = this.rot;
       if (r.cargo) return 0;
       const p = this.phase;
+      if (p === 'tow' || p === 'towready') return 0;
       if (p !== 'parked') return p === 'approach' || p === 'goaround' || p === 'rollout' || p === 'taxiin' ? r.arr.pax : r.dep.pax;
       const f = r.flags;
       const t = this.sys.t;
@@ -787,11 +830,13 @@
     }
 
     get onGround() {
-      return this.phase === 'rollout' || this.phase === 'taxiin' || this.phase === 'taxiout' || this.phase === 'pushback' || this.phase === 'lineup' || this.phase === 'takeoff' || this.phase === 'parked' || this.phase === 'tugoff';
+      const p = this.phase;
+      return p === 'rollout' || p === 'taxiin' || p === 'taxiout' || p === 'pushback' || p === 'lineup' || p === 'takeoff' || p === 'parked' || p === 'tugoff' || p === 'tow' || p === 'towready';
     }
 
     get moving() {
-      return this.phase === 'pushback' || ((this.phase === 'rollout' || this.phase === 'taxiin' || this.phase === 'taxiout' || this.phase === 'takeoff') && this.v > 0.15);
+      const p = this.phase;
+      return p === 'pushback' || ((p === 'rollout' || p === 'taxiin' || p === 'taxiout' || p === 'takeoff' || p === 'tow') && this.v > 0.15);
     }
 
     placeParked(st) {
@@ -837,6 +882,7 @@
         case 'rollout':
         case 'taxiin':
         case 'taxiout':
+        case 'tow':
           this._ground(dt);
           break;
         case 'lineup':
@@ -854,6 +900,10 @@
           break;
         case 'tugoff':
           if (this.t > 7) this.sys._beginTaxiOut(this);
+          break;
+        case 'towready':
+          // Pushed back for a tow: the tug turns round to pull, and off we go.
+          if (this.t > 6) this.sys._beginTow(this);
           break;
         default:
           break;
@@ -887,7 +937,7 @@
         this.yaw = wrapAngle(_a.h + PI);
         this.nx = this.x + Math.sin(this.yaw) * NOSE;
         this.nz = this.z + Math.cos(this.yaw) * NOSE;
-      } else if (p === 'rollout' || p === 'taxiin' || p === 'taxiout' || p === 'takeoff') {
+      } else if (p === 'rollout' || p === 'taxiin' || p === 'taxiout' || p === 'takeoff' || p === 'tow') {
         this.s = Math.min(this.path.len, this.s + this.v * dt);
         this._follow(dt);
       }
@@ -964,6 +1014,7 @@
         }
       }
       if (this.phase === 'taxiin' && this.s >= P.len - 0.03) this.sys._onBlock(this);
+      if (this.phase === 'tow' && this.s >= P.len - 0.03) this.sys._towDone(this);
       if (this.phase === 'taxiout' && this.cleared && this.s >= P.sLine - 0.3 && this.v < 0.2) {
         this.phase = 'lineup';
         this.t = 0;
@@ -997,7 +1048,20 @@
       if (jay && this.v < 32) this.reject = true;
       if (this.reject || blk < Infinity) {
         this.v = Math.max(0, this.v - 3.6 * dt);
-        if (this.v === 0 && !jay && blk === Infinity) this.reject = false;
+        // Stopped: off again once it's clear (after an abort, a pause first, and from well down
+        // the runway it backtracks to the end to start again: see Airside._backtrack).
+        this.rejT = this.v === 0 ? (this.rejT || 0) + dt : 0;
+        if (this.v === 0 && !jay && blk === Infinity && this.rejT > (this.aborted ? 25 : 0)) {
+          this.reject = false;
+          this.rejT = 0;
+          if (this.aborted) {
+            this.aborted = false;
+            if (this.x > -800) {
+              this.sys._backtrack(this);
+              return;
+            }
+          }
+        }
       } else this.v += (this.v > 70 ? 1.6 : 2.5) * dt;
       this.s += this.v * dt;
       this._follow(dt);
@@ -1714,6 +1778,7 @@
       this._voiceT = 0;
       this._jayRwy = false;
       this.crew = [];
+      this.skies = []; // the two Skylarks (this.sky, this.sky2), from _init
       this.voices = [];
       this._clock = { h0: 0, t0: 0, set: false };
       this.extras = null;
@@ -1875,7 +1940,10 @@
       this.lastLand = -400; // the first arrival is on its way in already
       this._plan();
       // Light aircraft.
-      this.sky = { phase: 'parked', timer: rand(30, 110), x: G1.x, z: G1.z, y: 0, yaw: PI, pitch: 0, roll: 0, v: 0, model: null, voice: null, circuits: 0, prop: 0 };
+      const lark = (spot, color, tour, timer) => ({ phase: 'parked', timer, x: spot.x, z: spot.z, y: 0, yaw: PI, pitch: 0, roll: 0, v: 0, model: null, voice: null, circuits: 0, prop: 0, spot, color, tour });
+      this.sky = lark(G1, 0xf2f2ee, false, rand(30, 110)); //  circuits and touch-and-goes
+      this.sky2 = lark(G2, 0xf6d23c, true, rand(120, 260)); // a sightseeing trip over the city
+      this.skies = [this.sky, this.sky2];
       this.heli = { phase: 'away', timer: rand(25, 110), x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, v: 0, rpm: 0, model: null, voice: null };
       this._updateStatuses();
     }
@@ -1890,7 +1958,7 @@
       for (const st of this.allStands || []) this._dropStandGse(st);
       this._dropCrew(true);
       this._dropExtras();
-      for (const c of [this.sky, this.heli]) {
+      for (const c of (this.skies || []).concat([this.heli])) {
         if (!c) continue;
         if (c.model) {
           c.model.root.removeFromParent();
@@ -2010,9 +2078,68 @@
         if (!got || got[1] > t + 120) got = pickStand(this.standList) || got;
         if (!got) break;
         t = got[1];
-        this._newRot(got[0], t);
+        const rot = this._newRot(got[0], t);
+        if (!rot.cargo && k % TOW_EVERY === 5) this._planTow(rot);
         this.lastLand = t;
       }
+    }
+
+    /**
+     * Make this arrival one that's towed off its gate to a remote stand once its passengers
+     * are off (if a remote stand will be free for it then; one at a time), and plan the
+     * positioning flight it leaves on from there.
+     */
+    _planTow(rot) {
+      if (this.rots.some((r) => r.ferry && !r.cancelled && r.state !== 'gone')) return;
+      const at = rot.onBlock + T_TOWOFF + 150; // (about when it'll be on the remote stand)
+      let best = null;
+      let bestFree = Infinity;
+      for (const st of shuffle(this.remoteList.slice())) {
+        if (st.blocked) continue;
+        const f = this._freeAt(st);
+        if (f < bestFree) {
+          best = st;
+          bestFree = f;
+        }
+      }
+      if (!best || bestFree > at - 40) return;
+      rot.towOff = true;
+      rot.planOff = rot.off = rot.onBlock + T_TOWOFF;
+      rot.dep.time = this._hours(rot.planOff);
+      const al = rot.airline;
+      const n = this._num.get(al.code) || 101;
+      this._num.set(al.code, n + 2);
+      const id = ++this._serial;
+      const planOff = at + rand(T_FERRY[0], T_FERRY[1]);
+      const fr = {
+        id, st: best, airline: al, cargo: true, ferry: true, landAt: at, planLand: at, onBlock: at, planOff, off: planOff, state: 'towplanned', plane: null, flags: {}, gone: 0, from: rot,
+      };
+      // (Not on the boards: no passengers either way.)
+      fr.arr = { id: rot.arr.id + '-T', code: rot.arr.code, airline: al.name, city: rot.arr.city, kind: 'arr', time: rot.arr.time, gate: null, stand: best.id, status: 'At gate', est: null, pax: 0, cargo: true };
+      fr.dep = { id: al.code + n + '-' + id, code: al.code + ' ' + n, airline: al.name, city: pick(CITIES), kind: 'dep', time: this._hours(planOff), gate: null, stand: best.id, status: 'Scheduled', est: null, pax: 0, cargo: true, ferry: true };
+      best.queue.push(fr);
+      this.rots.push(fr);
+      rot.towTo = fr;
+    }
+
+    /**
+     * The remote stand for a tow about to start: the planned one if it's free, else any free
+     * one with nothing due there soon; the stand is then held for it. Null: wait.
+     */
+    _towStand(r) {
+      const fr = r.towTo;
+      if (!fr || fr.cancelled) return null;
+      const ok = (st) => !st.blocked && (!st.cur || st.cur === fr) && (st === fr.st || !st.queue.some((q) => q !== fr && q.landAt < this.t + 420));
+      let st = ok(fr.st) ? fr.st : null;
+      if (!st) st = this.remoteList.find(ok) || null;
+      if (!st) return null;
+      if (st !== fr.st) {
+        fr.st.queue = fr.st.queue.filter((q) => q !== fr);
+        st.queue.unshift(fr);
+        fr.st = st;
+        fr.arr.stand = fr.dep.stand = st.id;
+      }
+      return st;
     }
 
     /**
@@ -2021,7 +2148,8 @@
      */
     _resequence(rot, after) {
       const t0 = Math.max(this.t + 150, after || 0);
-      const clash = (t) => this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < ARR_SEP + 4);
+      const clash = (t) => this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < ARR_SEP + 4) ||
+        this.skies.some((k) => k.slotT && t > k.slotT - 42 && t < k.slotT + 48); // (a gap booked for a Skylark)
       let t = t0;
       while (t < t0 + 420 && clash(t)) t += 10;
       if (clash(t)) {
@@ -2032,7 +2160,7 @@
       rot.state = 'planned';
       rot.plane = null;
       rot.onBlock = t + this._taxiIn(rot.st);
-      rot.off = Math.max(rot.planOff, rot.onBlock + T_MIN);
+      rot.off = Math.max(rot.planOff, rot.onBlock + (rot.towOff ? T_TOWOFF : T_MIN));
       this.lastLand = Math.max(this.lastLand, ...this.rots.filter((r) => r.state === 'planned').map((r) => r.landAt));
     }
 
@@ -2114,7 +2242,7 @@
         out.push(o);
       };
       const p = g.player;
-      if (p && !p.inVehicle && !p.isDead) add(p.pos.x, p.pos.y, p.pos.z, 0.6, false, true);
+      if (p && !p.inVehicle && !p.isDead && !this._cabinUp(p)) add(p.pos.x, p.pos.y, p.pos.z, 0.6, false, true);
       const inBox = (x, z) => x > -1120 && x < 420 && z > -1560 && z < -1180;
       for (const v of g.vehicles.list) {
         if (v.removed || !inBox(v.pos.x, v.pos.z) || v.pos.y > 25) continue;
@@ -2150,6 +2278,13 @@
         }
         let ok = true;
         for (const q of this.fleet) if (q.phase === 'approach' && Math.abs(q.eta() - eta) < ARR_SEP) ok = false;
+        for (const k of this.skies) {
+          if (k.slotT && this.t + eta > k.slotT - 42 && this.t + eta < k.slotT + 48) {
+            r.landAt = k.slotT + 48; // (not into a gap booked for a Skylark)
+            ok = false;
+          }
+        }
+        if (!ok && r.landAt - this.t > SPAWN_LEAD) continue;
         if (!ok) {
           r.landAt += 10;
           continue;
@@ -2198,14 +2333,17 @@
     // ------------------------------------------------------------ runway
     _arrivalWithin(sec) {
       for (const q of this.fleet) if (q.phase === 'approach' && q.eta() < sec) return true;
-      const s = this.sky;
-      if (s && s.slot && s.eta < sec) return true;
+      for (const s of this.skies) if ((s.slot && s.eta < sec) || (s.slotT && s.slotT - this.t < sec)) return true;
       return false;
     }
 
-    /** May the Skylark go? Nothing on the runway, no arrival within a minute, no ground stop. */
+    /**
+     * May the Skylark go? Nothing on the runway, no ground stop, and no arrival within half a
+     * minute (it's rolling well before the next one needs clearing to land, and climbing away
+     * long before that one touches down).
+     */
     _rwyFree() {
-      return this.rwy.size === 0 && !this._jayRwy && !this.gstop.on && !this._rwyBlocked() && !this._arrivalWithin(56);
+      return this.rwy.size === 0 && !this._jayRwy && !this.gstop.on && !this._rwyBlocked() && !this._arrivalWithin(34);
     }
 
     _rwyRelease(pl) {
@@ -2231,8 +2369,11 @@
       let e = Infinity;
       for (const q of this.fleet) if (q.phase === 'approach' && !q.cleared && !q.disabled) e = Math.min(e, q.eta());
       for (const r of this.rots) if (r.state === 'planned') e = Math.min(e, Math.max(0, r.landAt - this.t));
-      const k = this.sky;
-      if (k && k.slot && !this.rwy.has(k)) e = Math.min(e, k.eta);
+      for (const k of this.skies) {
+        if (this.rwy.has(k)) continue;
+        if (k.slot) e = Math.min(e, k.eta);
+        if (k.slotT) e = Math.min(e, Math.max(0, k.slotT - 40 - this.t)); // (its booked gap starts 40 s before it lands)
+      }
       return e;
     }
 
@@ -2243,7 +2384,7 @@
      * about to cross the threshold.
      */
     _mayLineUp(pl) {
-      if (this.sky && this.sky.phase === 'hold' && this.sky.pri) return false; // (its turn: see _skylark)
+      if (this.skies.some((k) => k.phase === 'hold' && k.pri)) return false; // (its turn: see _skylark)
       let vacate = 0; // seconds until the runway ahead of it is clear (about)
       for (const u of this.rwy) {
         if (u === pl) continue;
@@ -2374,9 +2515,13 @@
         const tug = st.gse && st.gse.tug;
         if (tug && tug.attached) {
           tug.attached = null;
+          tug.towing = false;
           this._tugHome(st, tug);
         }
       }
+      // (One that was to be towed off: its positioning flight from the remote stand won't happen either.)
+      const fr = r.towTo;
+      if (fr && !fr.cancelled && (fr.state === 'towplanned' || fr.state === 'towing')) this._cancelRot(fr, why);
     }
 
     /**
@@ -2391,6 +2536,7 @@
       for (const st of old.remote ? this.remoteList : this.standList) {
         if (st === old || st.cur || st.blocked) continue;
         const next = st.queue.length ? st.queue[0].landAt : Infinity;
+        if (old.remote && next < this.t + 240) continue; // (not one wanted again soon)
         if (next > bestT) {
           best = st;
           bestT = next;
@@ -2406,7 +2552,7 @@
       }
       pl.path = arrivalPath(best);
       pl.align = { x: best.x };
-      VH.events.emit('airside:gatechange', { flight: r.dep, arrival: r.arr, from: old.gate, gate: best.gate, stand: best.id });
+      if (!r.cargo) VH.events.emit('airside:gatechange', { flight: r.dep, arrival: r.arr, from: old.gate, gate: best.gate, stand: best.id });
       return best;
     }
 
@@ -2420,8 +2566,11 @@
       for (const pl of this.fleet) {
         if ((pl.phase !== 'rollout' && pl.phase !== 'taxiin') || pl.released || pl.disabled) continue;
         let st = pl.rot.st;
-        if (st.cur && st.cur !== pl.rot && st.cur.plane && st.cur.plane.disabled && pl.s < pl.path.sHoldIn + 2) st = this._restand(pl) || st;
-        const free = !st.cur || st.cur === pl.rot;
+        // (A freighter's stand still taken as it nears H-IN, its last one late away: another.)
+        const taken = st.cur && st.cur !== pl.rot && pl.s < pl.path.sHoldIn + 2;
+        if (taken && ((st.cur.plane && st.cur.plane.disabled) || (st.remote && pl.s > pl.path.sHoldIn - 60))) st = this._restand(pl) || st;
+        if (st.blocked && pl.s < pl.path.sHoldIn + 2) st = this._restand(pl) || st; // (cabin.js: Jay's taken the plane off it)
+        const free = (!st.cur || st.cur === pl.rot) && !st.blocked;
         let clear = true;
         for (const q of this.fleet) {
           if (q === pl || !q.onGround || q.phase === 'parked') continue;
@@ -2452,7 +2601,7 @@
       pl.align = null;
       pl.engTarget = 0;
       r.onBlock = this.t;
-      r.off = Math.max(r.planOff, this.t + T_MIN);
+      r.off = Math.max(r.planOff, this.t + (r.towOff ? T_TOWOFF : T_MIN));
       r.state = 'atStand';
       r.arr.status = 'At gate';
       st.state = 'parked';
@@ -2466,6 +2615,7 @@
       const tr = this.t - r.onBlock;
       const to = this.t - r.off;
       const ev = { flight: r.arr, stand: st.id, gate: st.gate };
+      if (r.towOff && (!r.towTo || r.towTo.cancelled)) r.towOff = false; // (no tow after all: turned round here)
       if (st.remote) {
         // A freighter: the stairs on, the loading, the doors shut; no boarding calls.
         if (!f.bridge && tr >= T_BRIDGE) f.bridge = true;
@@ -2483,13 +2633,14 @@
         f.deplaned = true;
         if (st.state === 'deplaning') st.state = 'parked';
       }
-      if (!f.boarding && to >= B_BOARD) {
+      // (One to be towed away boards nobody; nor does a freighter.)
+      if (!f.boarding && to >= B_BOARD && !r.towOff && !st.remote) {
         f.boarding = true;
         st.state = 'boarding';
         VH.events.emit('airside:boarding', { flight: r.dep, stand: st.id, gate: st.gate });
       }
-      if (!f.final && to >= B_FINAL) f.final = true;
-      if (!f.closed && to >= B_CLOSE) {
+      if (!f.final && to >= B_FINAL && !r.towOff && !st.remote) f.final = true;
+      if (!f.closed && to >= B_CLOSE && !this._cabinHeld(st)) {
         f.closed = true;
         st.state = 'closed';
         st.cones = false;
@@ -2499,20 +2650,27 @@
       // (held up somewhere): they're done here. Out of sight they're simply put away; after a
       // few minutes, any not right by Jay too.
       if (f.closed && !f.push && to > 60 && st.gse) this._standGseHome(st, to > 180);
-      if (f.closed && !f.push && to >= 0 && !this.gstop.on && this._pushClear(st)) {
+      if (f.closed && !f.push && to >= 0 && !this.gstop.on && this._pushClear(st) && (!r.towOff || this._towStand(r)) && !this._cabinHeld(st)) {
         f.push = true;
         st.state = 'pushback';
         const pl = r.plane;
+        if (r.towOff) {
+          // Its remote stand is held for it from now.
+          const fr = r.towTo;
+          fr.state = 'towing';
+          fr.st.cur = fr;
+          fr.st.state = 'arriving';
+        }
         pl.phase = 'pushback';
         pl.t = 0;
         pl.path = pushPath(st);
         pl.s = 0;
         pl.v = 0;
-        pl.engTarget = 1;
+        pl.engTarget = r.towOff ? 0 : 1; // (a tow: engines off)
         r.pushed = this.t;
         const tug = st.gse && st.gse.tug;
         if (tug) tug.attached = pl;
-        if (!st.remote) VH.events.emit('airside:pushback', { flight: r.dep, stand: st.id });
+        if (!st.remote) VH.events.emit('airside:pushback', { flight: r.dep, stand: st.id, tow: !!r.towOff });
         if (this.onLog) this.onLog('pushback', pl);
       }
     }
@@ -2530,7 +2688,7 @@
       for (const q of this.fleet) {
         if (q.rot === st.cur || !q.onGround || q.phase === 'parked') continue;
         // (One taxiing out from a stand further east will come past behind us.)
-        const east = q.phase === 'taxiout' || q.phase === 'tugoff' || q.phase === 'pushback' ? 330 : 130;
+        const east = q.phase === 'taxiout' || q.phase === 'tugoff' || q.phase === 'pushback' || q.phase === 'tow' || q.phase === 'towready' ? 330 : 130;
         if (q.x > st.x - 45 && q.x < st.x + east && q.z > -1348 && q.z < -1283) return false;
         if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && !q.rot.st.remote && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x + 20) return false;
       }
@@ -2577,8 +2735,9 @@
         if (q === me || !q.onGround || q.phase === 'parked') continue;
         if (q.z < TWY_Z + 26 && q.z > TWY_Z - 30 && q.x > st.x - 55 && q.x < st.x + 270) return false;
         if (q.phase === 'pushback' && q.rot.st.remote) return false;
-        if (q.path && q.path.sMerge !== undefined && q.s > q.path.sMerge - 90 && q.s < q.path.sMergeOut && (q.phase === 'taxiout' || q.phase === 'taxiin')) return false;
+        if (q.path && q.path.sMerge !== undefined && q.s > q.path.sMerge - 90 && q.s < q.path.sMergeOut && (q.phase === 'taxiout' || q.phase === 'taxiin' || q.phase === 'tow')) return false;
         if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && q.rot.st.remote && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x) return false;
+        if ((q.phase === 'tow' || q.phase === 'towready') && q.rot.towTo && q.rot.towTo.st.x < st.x && (q.phase === 'towready' || q.s < q.path.sTurnIn + 5)) return false;
       }
       for (const o of this._obs) {
         if (o.x > st.x - 24 && o.x < st.x + 70 && o.z > TWY_Z - 16 && o.z < st.z + 14 && o.y < 6) {
@@ -2596,7 +2755,7 @@
      */
     _mergeHold(pl) {
       const P = pl.path;
-      if (!P || P.sMerge === undefined || (pl.phase !== 'taxiout' && pl.phase !== 'taxiin')) return Infinity;
+      if (!P || P.sMerge === undefined || (pl.phase !== 'taxiout' && pl.phase !== 'taxiin' && pl.phase !== 'tow')) return Infinity;
       if (this._merge === pl) {
         if (pl.s > P.sMergeOut) this._merge = null;
         return Infinity;
@@ -2604,7 +2763,7 @@
       if (pl.s > P.sMerge + 0.5) return Infinity; // (went through before the merge was watched)
       if (pl.s < P.sMerge - 70) return Infinity;
       const m = this._merge;
-      if (m && (m.gone || !this.fleet.includes(m) || m.disabled || (m.phase !== 'taxiout' && m.phase !== 'taxiin'))) this._merge = null;
+      if (m && (m.gone || !this.fleet.includes(m) || m.disabled || (m.phase !== 'taxiout' && m.phase !== 'taxiin' && m.phase !== 'tow'))) this._merge = null;
       // A remote pushback onto the taxiway in progress holds it too.
       const pushing = this.remoteList.some((r) => r.state === 'pushback');
       if (!this._merge && !pushing && pl.s > P.sMerge - 12) this._merge = pl;
@@ -2655,17 +2814,87 @@
     _pushDone(pl) {
       const r = pl.rot;
       const st = r.st;
-      pl.phase = 'tugoff';
+      pl.phase = r.towOff ? 'towready' : 'tugoff';
       pl.t = 0;
       pl.v = 0;
       st.cur = null;
       st.state = 'empty';
       st.queue = st.queue.filter((q) => q !== r);
-      r.state = 'outbound';
+      r.state = r.towOff ? 'towing' : 'outbound';
       const tug = st.gse && st.gse.tug;
       if (tug && tug.attached === pl) {
+        if (r.towOff) tug.towing = true; // (it stays on, turns round and pulls)
+        else {
+          tug.attached = null;
+          this._tugHome(st, tug);
+        }
+      }
+    }
+
+    /** Pushed back for a tow: off along the taxilane and taxiway to the remote stand held for it. */
+    _beginTow(pl) {
+      const fr = pl.rot.towTo;
+      pl.phase = 'tow';
+      pl.t = 0;
+      pl.path = towPath(pl.nx, pl.nz, fr.st);
+      pl.s = 0;
+      pl.v = 0;
+      pl.stopS = Infinity;
+      pl.align = { x: fr.st.x };
+      if (this.onLog) this.onLog('tow', pl);
+    }
+
+    /**
+     * On the remote stand: from here on it's the positioning flight (its own turnaround with
+     * the stairs, then away like a freighter); the tug unhitches and goes.
+     */
+    _towDone(pl) {
+      const r = pl.rot;
+      const fr = r.towTo;
+      const st = fr.st;
+      pl.phase = 'parked';
+      pl.x = st.x;
+      pl.z = st.z;
+      pl.yaw = 0;
+      pl.nx = st.x;
+      pl.nz = st.z + NOSE;
+      pl.v = 0;
+      pl.align = null;
+      pl.engTarget = 0;
+      r.state = 'towed';
+      r.towedT = this.t;
+      r.plane = null;
+      pl.rot = fr;
+      fr.plane = pl;
+      fr.onBlock = this.t;
+      fr.off = Math.max(fr.planOff, this.t + T_FERRY[0]);
+      fr.state = 'atStand';
+      st.cur = fr;
+      st.state = 'parked';
+      this._unhitch(pl);
+      if (this.onLog) this.onLog('onblock', pl);
+    }
+
+    /**
+     * Any tug on this plane lets go: one pushing it goes home as after a pushback; one that
+     * towed it pulls forward clear and waits there ('away': it's back home later, see
+     * _gseTick).
+     */
+    _unhitch(pl) {
+      for (const st of this.standList) {
+        const tug = st.gse && st.gse.tug;
+        if (!tug || tug.attached !== pl) continue;
         tug.attached = null;
-        this._tugHome(st, tug);
+        if (!tug.towing) {
+          this._tugHome(st, tug);
+          continue;
+        }
+        tug.towing = false;
+        tug.post = 'away';
+        const fx = Math.sin(tug.yaw);
+        const fz = Math.cos(tug.yaw);
+        const p1 = [tug.x + fx * 5, tug.z + fz * 5];
+        tug.go([{ path: route([[tug.x, tug.z], p1, [p1[0] + fx * 3 + fz * 9, p1[1] + fz * 3 - fx * 9]], 4, 3) }]);
       }
     }
 
@@ -2709,8 +2938,13 @@
               return Math.max(0, d - 12);
             }
           }
-          const sk = this.sky;
-          if (sk && sk.onGround && Math.hypot(_c.x - sk.x, _c.z - sk.z) < 28) return Math.max(0, d - 10);
+          // The Skylark taxiing: wait while it's on the move nearby, or standing right in the
+          // way (it waits for us otherwise, see _skylark: one of the two always goes).
+          for (const sk of this.skies) {
+            if (!sk.onGround || sk.phase === 'parked') continue;
+            const ds = Math.hypot(_c.x - sk.x, _c.z - sk.z);
+            if (ds < 28 && (sk.v > 0.3 || ds < 12)) return Math.max(0, d - 10);
+          }
         }
         for (const o of this._obs) {
           const r = o.r + (o.big ? 18 : 8.5);
@@ -2889,8 +3123,7 @@
           }
         }
       }
-      const sk = this.sky;
-      if (sk && sk.onGround && sk.v > 0.3 && Math.hypot(_c.x - sk.x, _c.z - sk.z) < 18) return 0;
+      for (const sk of this.skies) if (sk.onGround && sk.v > 0.3 && Math.hypot(_c.x - sk.x, _c.z - sk.z) < 18) return 0;
       const fx = Math.sin(v.yaw) * (v.rev ? -1 : 1);
       const fz = Math.cos(v.yaw) * (v.rev ? -1 : 1);
       // (Turning across the road just ahead counts as crossing it.)
@@ -3139,6 +3372,13 @@
       }
       const pushing = r && r.plane && r.plane.phase === 'pushback';
       if (pushing) set.tug.attached = r.plane;
+      // (Or out towing a plane from here.)
+      const towed = this.fleet.find((q) => q.rot.st === st && (q.phase === 'tow' || q.phase === 'towready'));
+      if (towed && set.tug) {
+        set.tug.attached = towed;
+        set.tug.towing = true;
+        set.tug.yaw = towed.yaw;
+      }
     }
 
     _toSpot(v, s) {
@@ -3177,6 +3417,22 @@
       });
     }
 
+    /** A tug waiting at the nose for a plane that won't now be pushed back: backs off home. */
+    _tugBack(st, v, s) {
+      const home = () => {
+        v.post = 'home';
+        v.place(s.home[0], s.home[1], s.home[2]);
+      };
+      if (!this._seen(v.x, v.z)) {
+        home();
+        return;
+      }
+      const L = (lx, lz) => W(st, lx, lz);
+      const pts = st.remote ? [L(0, 19.6), L(0, 21.5), L(-8, 26), L(-26, 26)] : [L(0, 19.6), L(0, 21.5), L(-5, 27), L(-12, 27), L(-30, 25)];
+      v.post = 'going';
+      v.go([{ path: route(pts, 4, 2.2), rev: true }], home);
+    }
+
     _gseTick(dt) {
       // Everyone first, so each vehicle can see all the others as it moves.
       const all = (this._allGse = this._allGse || []);
@@ -3210,14 +3466,19 @@
               const hz = Math.cos(pl.yaw);
               v.x = pl.nx + hx * 4.4;
               v.z = pl.nz + hz * 4.4;
-              v.yaw = wrapAngle(pl.yaw + PI);
+              // (Towing, it turns round to face the way they're going: see _pushDone.)
+              v.yaw = v.towing ? dampAngle(v.yaw, pl.yaw, 1.4, dt) : wrapAngle(pl.yaw + PI);
               v.v = pl.v;
               v._pose();
-            }
+            } else if (v.post === 'away' && !v.busy && !this._seen(v.x, v.z) && !this._seen(s.home[0], s.home[1])) {
+              // Left where a tow ended: back home once nobody's looking.
+              v.post = 'home';
+              v.place(s.home[0], s.home[1], s.home[2]);
+            } else if (v.post === 'spot' && !v.busy && !atStand) this._tugBack(st, v, s); // (its plane's gone)
             v.update(dt);
             continue;
           }
-          if (atStand && v.post === 'home' && !v.busy && tr >= s.tin && to < s.tout) {
+          if (atStand && v.post === 'home' && !v.busy && tr >= s.tin && to < s.tout && !(r.towOff && (key === 'cater' || key === 'fuel'))) {
             v.post = 'going';
             v.go(s.legIn(), () => this._arrivedSpot(v));
           } else if (v.post === 'spot' && (!atStand || to >= s.tout)) {
@@ -3347,7 +3608,7 @@
             const rz = Math.sin(pl.yaw);
             hs.brain.goal = { x: pl.nx + rx * 4 + Math.sin(pl.yaw) * 2, z: pl.nz + rz * 4 + Math.cos(pl.yaw) * 2 };
             hs.brain.face = wrapAngle(pl.yaw + PI);
-          } else if (pl.phase === 'tugoff' || pl.phase === 'taxiout') {
+          } else if (pl.phase === 'tugoff' || pl.phase === 'taxiout' || pl.phase === 'towready' || pl.phase === 'tow') {
             if (!hs.brain.leave) {
               const h = L(-30, 22);
               hs.brain.goal = { x: h[0], z: h[1] };
@@ -3567,7 +3828,7 @@
             // A lap of the airside road (turning at the west end), or of the GA apron.
             const pts = v === ex.vanA
               ? [VAN_SLOT, [VAN_SLOT[0], ROAD_W], [-446, ROAD_W], [-446, -1290], [-437, -1290], [-437, ROAD_E], [DEPOT_IN_X, ROAD_E], [DEPOT_IN_X, DEPOT_IN_Z], [VAN_SLOT[0], DEPOT_IN_Z], VAN_SLOT]
-              : [[84, -1290], [84, -1314], [285, -1314], [285, -1272], [90, -1272], [84, -1278], [84, -1290]];
+              : [[84, -1290], [84, -1306], [285, -1306], [285, -1272], [90, -1272], [84, -1278], [84, -1290]];
             v.go([{ path: route(pts, 4, 7.5) }], () => v.place(v.home[0], v.home[1], v.home[2]));
           }
         }
@@ -3650,12 +3911,29 @@
     }
 
     // ---------------------------------------------------- light aircraft
-    _skyPath(kind, x) {
-      // kind 'out': G1 → the taxiway → L3 hold. 'line': hold → lined up east → the take-off run.
-      if (kind === 'out') return route([[G1.x, G1.z], [G1.x, TWY_Z], [L3, TWY_Z], [L3, -1404]], 14, 7);
+    _skyPath(kind, x, g) {
+      // kind 'out': its spot g → the taxiway → L3 hold. 'line': hold → lined up east → the take-off run.
+      if (kind === 'out') return route([[g.x, g.z], [g.x, TWY_Z], [L3, TWY_Z], [L3, -1404]], 14, 7);
       if (kind === 'line') return route([[L3, -1404], [L3, RWY.z], [RWY.x1 + 300, RWY.z]], 15, 99, 99);
-      if (kind === 'in') return route([[x, RWY.z], [L5, RWY.z], [L5, -1305], [G1.x, -1305], [G1.x, G1.z]], 14, 12);
+      if (kind === 'in') return route([[x, RWY.z], [L5, RWY.z], [L5, -1305], [g.x, -1305], [g.x, g.z]], 14, 12);
       return null;
+    }
+
+    /** A sightseeing trip: climbing out east, a left turn out over the bay and away. */
+    _skyTour(x0) {
+      return new Path(x0, RWY.z, HALF).line(900, RWY.z).turn(HALF, 500).line(1400, RWY.z - 4200).end(99);
+    }
+
+    /** Back from one: in from the east along the downwind leg, round onto final, a full stop. */
+    _skyJoin() {
+      const p = new Path(3200, RWY.z + 600, -HALF);
+      p.line(-1250, RWY.z + 600);
+      p.sDecide = p.len - 300;
+      p.turn(-PI, 300);
+      p.sFinal = p.len;
+      p.td = -260;
+      p.line(p.td, RWY.z);
+      return p.end(99);
     }
 
     /** The circuit: upwind, a right turn to the downwind leg south of the field, round onto final. */
@@ -3674,28 +3952,44 @@
     }
 
     _skylark(dt) {
-      const k = this.sky;
-      if (!k) return;
+      if (!this.skies) return;
+      for (const k of this.skies) this._lark(k, dt);
+    }
+
+    /**
+     * One Skylark: the first flies circuits with touch-and-goes, the second (k.tour) takes
+     * people on a trip out over the bay and back. They keep apart: only one taxis at a time,
+     * and only one is ever in the circuit (the second comes back to it once the first is
+     * down, and the first waits at the hold while it does).
+     */
+    _lark(k, dt) {
+      const mate = k === this.sky ? this.sky2 : this.sky;
+      const taxiing = (q) => q.phase === 'taxi' || q.phase === 'hold' || q.phase === 'roll' || q.phase === 'landroll' || q.phase === 'taxiin' || q.phase === 'tng';
+      const inCircuit = (q) => q.phase === 'roll' || q.phase === 'circuit' || q.phase === 'orbit' || q.phase === 'tng';
       k.onGround = k.phase === 'parked' || k.phase === 'taxi' || k.phase === 'hold' || k.phase === 'roll' || k.phase === 'landroll' || k.phase === 'taxiin';
       switch (k.phase) {
         case 'parked':
           k.v = 0;
           k.prop = Math.max(0, k.prop - dt * 0.4);
           k.timer -= dt;
-          if (k.timer <= 0) {
+          if (k.timer <= 0 && !taxiing(mate) && !(mate.join && inCircuit(mate))) {
             k.phase = 'taxi';
-            k.path = this._skyPath('out');
+            k.path = this._skyPath('out', 0, k.spot);
             k.s = 0;
-            k.circuits = 2 + Math.floor(Math.random() * 2);
+            k.circuits = k.tour ? 1 : 1 + Math.floor(Math.random() * 2);
           }
           break;
         case 'taxi':
         case 'taxiin': {
           k.prop = Math.min(0.45, k.prop + dt * 0.3);
           let vt = k.path.cap(k.s);
-          // Give way to airliners.
+          // Give way to airliners: any on the move near where we're going, or one standing
+          // there (one standing to the side, waiting for us, waits while we go by).
           k.path.at(Math.min(k.path.len, k.s + 14), _c);
-          for (const q of this.fleet) if (q.onGround && q.phase !== 'parked' && Math.hypot(_c.x - q.x, _c.z - q.z) < 32) vt = 0;
+          for (const q of this.fleet) {
+            if (!q.onGround || q.phase === 'parked' || Math.hypot(_c.x - q.x, _c.z - q.z) > 34) continue;
+            if (q.v > 0.3 || underPlane(_c.x, _c.z, q.x, q.z, q.yaw, 7)) vt = 0;
+          }
           for (const o of this._obs) if (Math.hypot(o.x - _c.x, o.z - _c.z) < 6 + o.r) vt = 0;
           k.v = k.v < vt ? Math.min(vt, k.v + 1.2 * dt) : Math.max(vt, k.v - 3 * dt);
           k.s = Math.min(k.path.len, k.s + k.v * dt);
@@ -3707,7 +4001,7 @@
             if (k.phase === 'taxi') k.phase = 'hold';
             else {
               k.phase = 'parked';
-              k.timer = rand(300, 560);
+              k.timer = k.tour ? rand(150, 300) : rand(140, 280);
               k.yaw = PI;
             }
           }
@@ -3718,14 +4012,15 @@
           // Kept waiting a while: the tower makes a gap (the arrivals are held back a little,
           // the departures wait) and we go in it.
           k.wait = (k.wait || 0) + dt;
-          if (k.wait > 40 && !k.pri) {
+          if (k.wait > 25 && (!k.pri || k.wait - k.priT > 60)) {
             k.pri = true;
-            this._delayArrivals(this.t, this.t + 80);
+            k.priT = k.wait;
+            this._delayArrivals(this.t + 10, this.t + 70);
           }
-          if (this._rwyFree() && !this.fleet.some((q) => q.phase === 'taxiout' && q.cleared)) {
+          if (this._rwyFree() && !this.fleet.some((q) => q.phase === 'taxiout' && q.cleared) && !(mate.join && inCircuit(mate))) {
             this.rwy.add(k);
             k.phase = 'roll';
-            k.path = this._skyPath('line');
+            k.path = this._skyPath('line', 0, k.spot);
             k.s = 0;
             k.wait = 0;
             k.pri = false;
@@ -3744,13 +4039,54 @@
           k.z = _c.z;
           k.yaw = dampAngle(k.yaw, _c.h, 8, dt);
           if (k.v > 27) {
-            k.phase = 'circuit';
-            k.path = this._skyCircuit(k.x, k.circuits <= 1);
+            k.phase = k.tour ? 'tour' : 'circuit';
+            k.path = k.tour ? this._skyTour(k.x) : this._skyCircuit(k.x, k.circuits <= 1);
             k.s = 0;
             k.y = 0;
           }
           break;
         }
+        case 'tour': {
+          // Out over the bay, climbing to 300 m, until it's well out of sight.
+          k.prop = 1;
+          k.v = moveTowards(k.v, 44, dt * 2);
+          const prevH = k.yaw;
+          k.s += k.v * dt;
+          k.path.at(Math.min(k.s, k.path.len), _c);
+          k.x = _c.x;
+          k.z = _c.z;
+          k.yaw = _c.h;
+          const yr = wrapAngle(k.yaw - prevH) / Math.max(dt, 1e-3);
+          k.roll = dampAngle(k.roll, clamp(-yr * k.v / 9.8, -0.5, 0.5), 3, dt);
+          k.y = smoothstep(0, 1600, k.s) * 300;
+          k.pitch = k.s < 1200 ? 0.12 : 0.02;
+          if (k.s >= k.path.len || (k.s > 2500 && !this._near(k.x, k.z, 1900))) {
+            k.phase = 'away';
+            k.timer = rand(100, 220);
+          }
+          break;
+        }
+        case 'away':
+          // Back in the circuit (once the other one's out of it), in from well out of sight.
+          k.timer -= dt;
+          if (k.timer <= 0 && !inCircuit(mate) && mate.phase !== 'hold' && !this._near(3200, RWY.z + 600, 1700) && !this.gstop.on) {
+            k.phase = 'circuit';
+            k.join = true;
+            k.circuits = 1;
+            k.path = this._skyJoin();
+            k.s = 0;
+            k.slot = false;
+            k.orbits = 0;
+            k.v = 42;
+            k.y = 180;
+            k.pitch = 0;
+            k.roll = 0;
+            k.path.at(0, _c);
+            k.x = _c.x;
+            k.z = _c.z;
+            k.yaw = _c.h;
+          }
+          break;
         case 'circuit':
         case 'orbit': {
           k.prop = 1;
@@ -3777,57 +4113,80 @@
           // Height: climb out to 150 m, 180 m downwind, down through the turn to final, then the runway.
           const sTurn = P.sDecide + 300;
           let y;
-          if (k.s < 900) y = smoothstep(0, 900, k.s) * 150;
+          if (k.join && k.s < sTurn) y = 180; // (back from a trip: in along the downwind leg)
+          else if (k.s < 900) y = Math.max(smoothstep(0, 900, k.s) * 150, k.goY || 0);
           else if (k.s < sTurn) y = lerp(150, 180, smoothstep(900, 1600, k.s));
           else if (k.s < P.sFinal) y = lerp(180, 85, (k.s - sTurn) / (P.sFinal - sTurn));
           else y = 85 * clamp((P.len - k.s) / (P.len - P.sFinal), 0, 1);
-          k.pitch = k.s < 700 ? 0.12 : k.s > P.sFinal ? 0.05 : 0;
+          k.pitch = k.s < 700 && !k.join ? 0.12 : k.s > P.sFinal ? 0.05 : 0;
           k.y = y;
           if (!k.slot && k.s >= P.sDecide && k.s < P.sDecide + 40) {
-            // Ask for the runway: no airliner landing in the minute before us (it needs half a
-            // minute to roll out and turn off), or soon after (we need to be off it, or climbing
-            // away from a touch-and-go); nobody on it. (Anything still on it when we're on short
-            // final sends us round again.)
+            // Ask for the runway. The tower books us a gap: no airliner landing in the 40 s
+            // before us (it needs half a minute to roll out and turn off) or soon after (we
+            // need to be off it, or climbing away from a touch-and-go). Those still far out are
+            // held back to make it; if one too close in to hold is in the way, the gap is a
+            // turn or two later and we orbit till then (the departures keep clear of it too,
+            // see _nextArrival). Anything still on the runway when we're on short final sends
+            // us round again.
             k.eta = (P.len - k.s) / 38;
-            const tdAt = this.t + k.eta;
-            const after = k.circuits <= 1 ? 70 : 48;
-            // (A queue of airliners waiting to go out comes first.) Sent round twice already:
-            // the tower holds the arrivals back to make room.
-            const busyAt = () => this._jayRwy || this.gstop.on || this.fleet.some((q) => q.phase === 'approach' && q.eta() > k.eta - 55 && q.eta() < k.eta + after) ||
-              this._depQueue() >= 3 || this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 55 && r.landAt < tdAt + after);
-            let busy = busyAt();
-            if (busy && (k.orbits || 0) >= 2 && !this.gstop.on) {
-              this._delayArrivals(tdAt - 55, tdAt + after);
-              busy = busyAt();
+            const before = 40;
+            const after = k.circuits <= 1 ? 46 : 34;
+            let turns = 0;
+            if (k.slotT) turns = k.turnsLeft; // (booked already: on round until it's time)
+            else if (this._jayRwy || this.gstop.on || this._rwyBlocked()) turns = 1; // (nothing to book: round and ask again)
+            else {
+              const lap = (2 * PI * 220) / 42;
+              let T = this.t + k.eta;
+              const fixed = [];
+              for (const q of this.fleet) if (q.phase === 'approach' && !q.disabled && (q.cleared || q.eta() < 95)) fixed.push(this.t + q.eta());
+              // (The first time, with a queue of airliners waiting to go out, they go first.)
+              if (!k.orbits && this._depQueue() >= 3) {
+                turns = 1;
+                T += lap;
+              }
+              for (let n = 0; n < 6 && fixed.some((f) => f > T - before - 3 && f < T + after + 3); n++) {
+                turns++;
+                T += lap;
+              }
+              k.slotT = T;
+              this._delayArrivals(T - before, T + after);
             }
-            if (busy) k.orbits = (k.orbits || 0) + 1;
-            else k.orbits = 0;
-            if (busy) {
-              // Hold off: a full turn away from the field and ask again.
+            if (turns > 0) {
+              // A full turn away from the field, then on round the circuit.
+              k.turnsLeft = turns - 1;
+              k.orbits = (k.orbits || 0) + 1;
               k.main = P;
               k.mainS = k.s;
-              const o = new Path(k.x, k.z, k.yaw).turn(2 * PI, 220).end(99);
               k.phase = 'orbit';
-              k.path = o;
+              k.path = new Path(k.x, k.z, k.yaw).turn(2 * PI, 220).end(99);
               k.s = 0;
-            } else k.slot = true;
+            } else {
+              k.slot = true;
+              k.orbits = 0;
+            }
           }
           if (k.slot) k.eta = Math.max(0, (P.len - k.s) / 36);
           if (k.slot && k.s > P.sFinal && !this.rwy.has(k) && k.eta < 30) {
             if (this._jayRwy || this.gstop.on || this._rwyBlocked() || [...this.rwy].some((u) => !this._rollingAway(u))) {
-              // Something on the runway: go round again.
+              // Something on the runway: go round again (climbing away from where it is).
               k.slot = false;
+              k.slotT = 0;
+              k.join = false;
+              k.goY = k.y;
               k.path = this._skyCircuit(k.x, k.circuits <= 1);
               k.s = 0;
             } else this.rwy.add(k);
           }
           if (k.s >= P.len) {
             k.slot = false;
+            k.slotT = 0;
+            k.join = false;
+            k.goY = 0;
             k.y = 0;
             k.circuits--;
             if (k.circuits <= 0) {
               k.phase = 'landroll';
-              k.path = this._skyPath('in', k.x);
+              k.path = this._skyPath('in', k.x, k.spot);
               k.s = 0;
             } else {
               k.phase = 'tng';
@@ -3973,7 +4332,7 @@
             h.y = moveTowards(h.y, to.y, dt * 6);
             if (d < 60 || h.t > 120) {
               h.phase = 'away';
-              h.timer = rand(280, 520);
+              h.timer = rand(150, 300);
               h.v = 0;
             }
           }
@@ -4012,14 +4371,14 @@
         if (d < view && !pl.model) pl.attach();
         else if (d > view + 80 && pl.model) pl.detach();
       }
-      for (const k of [this.sky, this.heli]) {
+      for (const k of this.skies.concat([this.heli])) {
         if (!k) continue;
-        const type = k === this.sky ? 'skylark' : 'sparrow';
+        const type = k === this.heli ? 'sparrow' : 'skylark';
         if (!VH.AircraftModels.spec(type)) continue;
         const d = Math.hypot(k.x - cp.x, k.z - cp.z, k.y - cp.y);
-        const want = d < Math.min(view, 1500) && !(k === this.heli && k.phase === 'away');
+        const want = d < Math.min(view, 1500) && k.phase !== 'away';
         if (want && !k.model) {
-          k.model = this._takeModel(type, k === this.sky ? 0xf2f2ee : 0x1d4fb8);
+          k.model = this._takeModel(type, k === this.heli ? 0x1d4fb8 : k.color);
           this.game.scene.add(k.model.root);
         } else if (!want && k.model) {
           k.model.root.removeFromParent();
@@ -4115,9 +4474,9 @@
         p.voice.update({ gain: fb._gain(p.x, p.z, 70, p.y) * 0.85 * p.eng, pan: fb._pan(p.x, p.z), thrust: p.thrust, burner: 0 });
       }
       // The Skylark's engine and the helicopter.
-      const k = this.sky;
-      if (k && audio.createEngine) {
-        const gain = k.prop > 0.05 ? fb._gain(k.x, k.z, 25, k.y) * Math.min(1, k.prop * 1.6) : 0;
+      for (const k of this.skies) {
+        if (!audio.createEngine) break;
+        const gain = k.prop > 0.05 && k.phase !== 'away' ? fb._gain(k.x, k.z, 25, k.y) * Math.min(1, k.prop * 1.6) : 0;
         if (gain > 0.01 && !k.voice) k.voice = audio.createEngine({ kind: 'prop' });
         if (k.voice) {
           k.voice.update({ rpm: 0.25 + k.prop * 0.7, throttle: k.prop, load: 0.5, gain: gain * 0.8, pan: fb._pan(k.x, k.z) });
@@ -4167,7 +4526,7 @@
         if (p.voice) p.voice.stop();
         p.voice = null;
       }
-      for (const k of [this.sky, this.heli]) {
+      for (const k of this.skies.concat([this.heli])) {
         if (k && k.voice) {
           k.voice.stop();
           k.voice = null;
@@ -4204,7 +4563,8 @@
           a.status = 'At gate';
           const f = r.flags;
           const late = r.off > r.planOff + 60;
-          d.status = f.closed ? 'Gate closed' : f.final ? 'Final call' : f.boarding ? 'Boarding' : f.deplaned ? (late ? 'Delayed' : 'Go to gate') : late ? 'Delayed' : 'Scheduled';
+          if (r.cargo) d.status = f.closed ? 'Loaded' : late ? 'Delayed' : 'Loading';
+          else d.status = f.closed ? 'Gate closed' : f.final ? 'Final call' : f.boarding ? 'Boarding' : f.deplaned ? (late ? 'Delayed' : 'Go to gate') : late ? 'Delayed' : 'Scheduled';
           d.est = late ? this._hours(r.off) : null;
         } else if (st === 'outbound') {
           d.status = 'Gate closed';
@@ -4227,7 +4587,7 @@
 
     _trim() {
       // Done with: departed (or cancelled) more than five minutes ago.
-      const old = (r) => (r.tookOff && this.t - r.tookOff > 300) || (r.cancelled && this.t - r.endT > 300);
+      const old = (r) => (r.tookOff && this.t - r.tookOff > 300) || (r.cancelled && this.t - r.endT > 300) || (r.towedT && this.t - r.towedT > 600);
       if (this.rots.length > 60 || this.rots.some(old)) this.rots = this.rots.filter((r) => !old(r));
     }
 
@@ -4240,7 +4600,7 @@
         if (r.cargo) continue; // (the freighters aren't on the passenger boards)
         const arrGone = r.onBlock < this.t - 600 && r.state !== 'planned' && r.state !== 'inbound' && r.state !== 'landed' && r.state !== 'taxiing';
         if (!arrGone) out.push([r.planLand, r.arr]);
-        out.push([r.planOff, r.dep]);
+        if (!r.towOff) out.push([r.planOff, r.dep]); // (one towed away leaves from a remote stand, empty)
       }
       out.sort((a, b) => a[0] - b[0]);
       return out.map((e) => e[1]);
@@ -4252,8 +4612,8 @@
       return this.standList.map((st) => {
         const r = st.cur;
         let flight = null;
-        if (r) flight = st.state === 'arriving' || st.state === 'deplaning' || (st.state === 'parked' && !r.flags.deplaned) ? r.arr : r.dep;
-        return { id: st.id, gate: st.gate, x: st.x, z: st.z, yaw: st.yaw, door: st.door, state: st.state, flight, arrival: r ? r.arr : null, departure: r ? r.dep : null };
+        if (r) flight = st.state === 'arriving' || st.state === 'deplaning' || (st.state === 'parked' && !r.flags.deplaned) || r.towOff ? r.arr : r.dep;
+        return { id: st.id, gate: st.gate, x: st.x, z: st.z, yaw: st.yaw, door: st.door, state: st.state, flight, arrival: r ? r.arr : null, departure: r && !r.towOff ? r.dep : null, tow: !!(r && r.towOff) };
       });
     }
 
@@ -4315,7 +4675,34 @@
       const pl = this._planeOf(p);
       if (!pl || pl.phase !== 'takeoff' || pl.v > 60) return false;
       pl.reject = true;
+      pl.aborted = true;
       return true;
+    }
+
+    /**
+     * After an aborted takeoff well down the runway: round on the spot (onto the south half of
+     * the runway), back along it to the far end, round again and line up. It keeps the runway
+     * the whole time (arrivals go round).
+     */
+    _backtrack(pl) {
+      const p = new Path(pl.nx, pl.nz, HALF);
+      p.turn(PI, 14, 3, 0.6);
+      p.line(-960, RWY.z - 28, 9, 1.0);
+      p.turn(PI, 14, 3, 0.6);
+      p.line(-905, RWY.z, 4, 1.0);
+      p.sLine = p.len;
+      p.line(RWY.x1 + 700, RWY.z, 99, 2);
+      p.end(99);
+      pl.phase = 'taxiout';
+      pl.t = 0;
+      pl.path = p;
+      pl.s = 0;
+      pl.v = 0;
+      pl.pitch = 0;
+      pl.cleared = true;
+      pl.stopS = p.sLine;
+      this.rwy.add(pl);
+      if (this.onLog) this.onLog('backtrack', pl);
     }
 
     /**
@@ -4334,6 +4721,7 @@
       pl.voice = null;
       this.rwy.delete(pl);
       if (this._merge === pl) this._merge = null;
+      this._unhitch(pl);
       this._cancelRot(r, 'Cancelled');
       for (const q of this.fleet) if (q.blocker === pl) q.blocker = null;
       const fm = this.extras && this.extras.fm;
@@ -4343,6 +4731,72 @@
       }
       this.fleet = this.fleet.filter((q) => q !== pl);
       return out;
+    }
+
+    // ------------------------------------------------ cabin hooks (cabin.js)
+    /**
+     * The airliner parked on contact stand `id` (1..4), for its cabin: { plane (the planes()
+     * view), model, x, z, yaw, color, airline, rot (the rotation's id), bridge, deplaned,
+     * boarding, closed, push (its turnaround so far), disabled, arr, dep, pax, held (seconds
+     * the doors have waited for Jay, or 0) }, or null while there's none there standing still.
+     */
+    cabinPlane(id) {
+      if (!this.ok || !this.inited) return null;
+      const st = this.standList.find((s) => s.id === id);
+      const r = st && st.cur;
+      const pl = r && r.plane;
+      if (!pl || pl.gone || pl.phase !== 'parked' || r.state !== 'atStand' || r.cargo) return null;
+      const f = r.flags;
+      return {
+        plane: pl.api, model: pl.model, x: pl.x, z: pl.z, yaw: pl.yaw, color: pl.color, airline: r.airline.name, rot: r.id,
+        bridge: !!f.bridge, deplaned: !!f.deplaned, boarding: !!f.boarding, closed: !!f.closed, push: !!f.push, disabled: pl.disabled,
+        arr: r.arr, dep: r.dep, pax: pl.pax, held: st.cabinHold && st.cabinHoldT ? this.t - st.cabinHoldT : 0,
+      };
+    }
+
+    /** Jay is aboard the plane on stand `id`: its doors (and so its pushback) wait for him. */
+    cabinHold(id, on) {
+      const st = this.ok && this.standList.find((s) => s.id === id);
+      if (!st) return;
+      st.cabinHold = !!on;
+      if (!on) st.cabinHoldT = 0;
+    }
+
+    /** Held for Jay? Asked only when the doors are due to shut (or the push to start): 42 s at most from then. */
+    _cabinHeld(st) {
+      if (!st.cabinHold) return false;
+      if (!st.cabinHoldT) st.cabinHoldT = this.t;
+      return this.t - st.cabinHoldT < 42;
+    }
+
+    /**
+     * Jay has taken the plane on stand `id`: off the stand for good (as removePlane: the flight
+     * Cancelled, the stand free) and the stand kept clear of arrivals (cabinBlock) until he's
+     * taken it away. Returns removePlane's pose and livery, or null.
+     */
+    cabinTake(id) {
+      const st = this.ok && this.standList.find((s) => s.id === id);
+      const pl = st && st.cur && st.cur.plane;
+      if (!pl) return null;
+      st.cabinHold = false;
+      st.cabinHoldT = 0;
+      const out = this.removePlane(pl);
+      if (out) this.cabinBlock(id, true);
+      this._updateStatuses();
+      return out;
+    }
+
+    /** Keep arrivals off stand `id` (they go to another, or wait), or let them back. */
+    cabinBlock(id, on) {
+      const st = this.ok && this.standList.find((s) => s.id === id);
+      if (st) st.blocked = !!on;
+    }
+
+    /** Jay up in a jet bridge or aboard a parked plane: not in anyone's way on the apron. */
+    _cabinUp(p) {
+      if (p.pos.y < 1.6) return false;
+      const T = this.game.terminal;
+      return !!((this.game.cabin && this.game.cabin.aboard) || (T && T.isInside && T.isInside(p.pos.x, p.pos.z, p.pos.y)));
     }
 
     blips(out, missionRunning) {
@@ -4407,8 +4861,8 @@
     // The depot.
     const D = DEPOT;
     rects.push([D.x0, D.z0, D.x1, D.z0 + 0.25, R], [D.x0, D.z1 - 0.25, D.x1, D.z1, R], [D.x0, D.z0, D.x0 + 0.25, D.z1, R], [D.x1 - 0.25, D.z0, D.x1, D.z1, R]);
-    // The Skylark's spot (a T) and the H2 pad.
-    rects.push([G1.x - 3, G1.z - 4.6, G1.x + 3, G1.z - 4.2, Y], [G1.x - 0.2, G1.z - 4.2, G1.x + 0.2, G1.z + 3, Y]);
+    // The Skylarks' spots (a T each) and the H2 pad.
+    for (const g of [G1, G2]) rects.push([g.x - 3, g.z - 4.6, g.x + 3, g.z - 4.2, Y], [g.x - 0.2, g.z - 4.2, g.x + 0.2, g.z + 3, Y]);
     const h = H2;
     rects.push([h.x - 7, h.z - 7, h.x + 7, h.z - 6.6, Wt], [h.x - 7, h.z + 6.6, h.x + 7, h.z + 7, Wt], [h.x - 7, h.z - 6.6, h.x - 6.6, h.z + 6.6, Wt], [h.x + 6.6, h.z - 6.6, h.x + 7, h.z + 6.6, Wt]);
     rects.push([h.x - 2.6, h.z - 3.4, h.x - 1.7, h.z + 3.4, Wt], [h.x + 1.7, h.z - 3.4, h.x + 2.6, h.z + 3.4, Wt], [h.x - 1.7, h.z - 0.45, h.x + 1.7, h.z + 0.45, Wt]);

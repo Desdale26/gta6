@@ -496,6 +496,14 @@ the kerb; the PA calls the flights. Parked and ready to steal: an Albatross
 airliner (on the remote stand west of the gates), two Skylark light planes
 and a Sparrow helicopter.
 
+Every airliner at a gate has a cabin you can walk into: down the jet bridge
+and through the open door, past the galley and the cabin crew, down the
+aisle between 28 rows of seats (full of passengers on a full flight) and up
+to the flight deck. Still aboard when the doors are due to close and the
+crew walk you back to the gate; sit in the captain's seat and press E to
+take the controls (everyone runs for it, the flight is cancelled and the
+police come for you, three stars).
+
 **Fort Breakwater.** The army base at the west end of Meridian Boulevard:
 walls and razor wire, watchtowers, barracks, a motor pool, two helipads
 and an airstrip. Walk in and you get three seconds' warning; stay, shoot
@@ -643,6 +651,7 @@ vicehaven/
 │   │                       Fort Breakwater, its soldiers and the alarm
 │   ├── terminal.js · airside.js · airportlife.js   the walk-in terminal; flights, turnarounds
 │   │                       and ground crew; the travellers, staff, kerb and PA
+│   ├── cabin.js            inside the airliners at the gates: the cabin, the flight deck, the controls
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
 │   ├── holdup.js · holdup-models.js · audio-holdup.js · data/holdup-lines.js
 │   │                            hold-ups: clerks, the bag, the safe, alarm, CCTV, shoppers, guard
@@ -764,6 +773,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
 - [ ] The title screen says v2.2 and What's new lists the airport, Story so far and the Hustle update
 - [ ] Vicehaven International: walk in from the kerb through the sliding doors, check-in, security (a gun sets the arch off), the concourse, a gate and down a jet bridge to the plane's door, back out through baggage reclaim; watch a plane taxi in, unload, board, push back and take off; travellers queue, sit, board and collect bags
+- [ ] Down a jet bridge, through the open door into the cabin, along the aisle past the seated passengers and into the flight deck; E at the captain's seat takes the plane (three stars); stay aboard at doors-closed and the crew walk you back to the gate
 - [ ] Esc → Story so far on a new game: the prologue and Up next: Homecoming, Set GPS draws the route; after a few jobs every finished one has a recap that matches your choices; Who's who only lists people you've met
 - [ ] Continue a save: a Previously in Vicehaven… card with the last job and what's next
 

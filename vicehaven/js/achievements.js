@@ -42,6 +42,8 @@
     ['heli', 'Flying', '🚁', 'Rotorhead', 'Take off in a helicopter.'],
     ['jet', 'Flying', '🛩', 'Afterburner', 'Take off in the Talon jet.'],
     ['airliner', 'Flying', '🛫', 'Captain Mercer', 'Take off in the Albatross airliner.'],
+    ['frequent_flyer', 'Flying', '🧳', 'Frequent Flyer', 'Walk onto an airliner from a jet bridge.'],
+    ['captain_speaking', 'Flying', '🎙', 'Captain Speaking', 'Take an airliner from the gate.'],
     ['skydive', 'Flying', '🪂', 'Leap of Faith', 'Bail out of an aircraft in the air.'],
     ['first_star', 'Crime', '⭐', 'Wanted', 'Get a wanted level.'],
     ['five_stars', 'Crime', '🌟', 'Most Wanted', 'Reach five stars.'],
