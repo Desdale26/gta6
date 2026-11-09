@@ -39,6 +39,12 @@
  *
  *   .people()  the people (for tests: { kind, mode, stage, x, z, ... })
  *   .census()  counts by kind, by zone and by mode
+ *   .securityAlert(on, { x, z, kind, jay, quiet })   havoc.js: the PA, and
+ *              everyone out by the nearest door (cases dropped where they
+ *              stood), a few hiding behind the counters, the security
+ *              officers drawing on Jay, the airport police pair coming in
+ *   .caseHit(ray...), .burstCase(hit)   a traveller's case (held or dropped)
+ *              in a bullet's way, and it bursting open (havoc.js)
  *   stats      "Flights you've watched leave"
  *
  * Nothing about the people is saved: they come back on their own.
@@ -70,6 +76,8 @@
   const WALK = [1.15, 1.45];
   const RUN = [4.4, 5.4];
   const PA_GAP = [45, 90];
+  const ALERT_TEXT = 'Attention please: a security alert is in progress. Please leave the terminal by the nearest exit.';
+  const ALERT_OVER = 'Attention please: the security alert is over. Thank you for your patience. Flights will resume shortly.';
   const SEC_BEEP = 0.05; //  a traveller who sets the arch off now and then
 
   // Original airlines (airside.js names its own; these colour the uniforms).
@@ -527,6 +535,9 @@
         case 'cop':
           L.copStep(this, a, dt);
           break;
+        case 'guard':
+          L.guardStep(this, a, dt);
+          break;
         case 'gone':
           a.moveSpeed = 0;
           break;
@@ -688,6 +699,10 @@
       this._said = new Map();
       this.boarding = new Map(); // gate → flight boarding now
       this.closed = new Set(); //   flight ids whose doors have shut
+      this.alert = null; //         a security alert (havoc.js): { id, x, z, kind, jay, paT }
+      this._alertN = 0;
+      this.dropped = []; //         cases dropped in the rush for the doors { x, y, z, yaw, color, flat }
+      this._screamQ = []; //        screams to come { x, z, at }
       if (!this.ok) return;
       this.B = (this.T && this.T.bounds) || { x0: a.terminal.x0, z0: a.terminal.z0, x1: a.terminal.x1, z1: a.terminal.z1 };
       this.FY = this.T ? this.T.floorY : 0.45;
@@ -2305,7 +2320,7 @@
 
     /** Frightened: cower or run (for the exits, away from it). */
     scare(b, a, x, z, d, kind) {
-      if (b.kind === 'cop') return;
+      if (b.kind === 'cop' || b.guard) return;
       if (b.mode === 'flee' || b.mode === 'runout') return;
       this._release(b, b.kind === 'staff'); // staff keep their posts: they're back at them once it's over
       if (b.mode === 'sit' || b.mode === 'sitdown' || b.mode === 'standup') {
@@ -2431,11 +2446,340 @@
         g.police.crime('hitPed', a.pos.x, a.pos.z);
         this._copsSaw(a.pos.x, a.pos.z);
       }
+      if (b.guard) return; // (an officer shot at shoots back)
       if (b.mode !== 'flee' && b.mode !== 'runout') {
         b.mode = 'idle';
         this.scare(b, a, g.player.pos.x, g.player.pos.z, 30, 'hit');
         if (b.mode === 'cower' && b.kind !== 'staff') this._flee(b, a);
       }
+    }
+
+    // ---------------------------------------------------- security alert
+    /**
+     * havoc.js: a security alert is on (or over). On: the PA, and everyone in
+     * the hall makes for the doors; the security officers draw on Jay; the
+     * police pair come in. Called again with new trouble while it's on: those
+     * near it run from there. Off: the PA says so (unless quiet); the people
+     * hiding come out and the officers go back to their lanes once it's calm,
+     * and the travellers drift back in a while later.
+     */
+    securityAlert(on, src) {
+      if (!this.ok) return;
+      src = src || {};
+      if (!on) {
+        if (!this.alert) return;
+        this.alert = null;
+        if (!src.quiet && this.on && this._paNear()) {
+          this._pa(ALERT_OVER, false);
+          this._paLast = this._t;
+          this._paT = Math.max(this._paT, 50);
+        }
+        return;
+      }
+      const first = !this.alert;
+      if (first) this.alert = { id: ++this._alertN, x: src.x, z: src.z, kind: src.kind, jay: !!src.jay, paT: 30 };
+      const A = this.alert;
+      A.x = src.x === undefined ? A.x : src.x;
+      A.z = src.z === undefined ? A.z : src.z;
+      this._calm = 0;
+      if (!this.on) return;
+      if (first) {
+        this._paQ.length = 0;
+        if (this._paNear()) this._pa(ALERT_TEXT, true);
+        this._paLast = this._t;
+        this._alertGuards();
+        this._alertCops();
+      }
+      for (const b of this.list) {
+        const a = b.a;
+        if (a.dead || a.removed || b.gone) continue;
+        if (b.evac !== A.id) this._evacuate(b, a);
+        else if (!first && b.mode === 'cower' && !b.hiding && b.kind !== 'staff' && Math.hypot(a.pos.x - A.x, a.pos.z - A.z) < 14) this._evacuate(b, a, true);
+      }
+    }
+
+    /** Out by the nearest door away from the trouble, at a run (some hide behind a counter). */
+    _evacuate(b, a, again) {
+      const A = this.alert;
+      if (b.kind === 'cop' || b.guard || b.mode === 'gone') return (b.evac = A.id);
+      // Already on the way into a plane: let them go.
+      if (b.stage === 'bridge' || b.stage === 'cabin') return (b.evac = A.id);
+      const inHall = a.pos.z > this.B.z0 && a.pos.z < this.B.z1 && a.pos.x > this.B.x0 && a.pos.x < this.B.x1;
+      // (Up a jet bridge, or outside and not near it: told once they're in the hall or near.)
+      if (!inHall && (a.pos.z < this.B.z0 || Math.hypot(a.pos.x - A.x, a.pos.z - A.z) > 60)) return;
+      b.evac = A.id;
+      if (!inHall) {
+        // Outside: just away from it.
+        if (a.pos.z > this.B.z1 && b.mode !== 'flee' && b.mode !== 'runout' && b.kind !== 'kerb') {
+          this._release(b);
+          b.prop = null;
+          b.fear = { x: A.x, z: A.z, kind: 'alert' };
+          b.scared = true;
+          b.speed = rnd(RUN[0], RUN[1]);
+          b.mode = 'runout';
+          b.wt = rnd(6, 10);
+        }
+        return;
+      }
+      // Security officers: armed, and they take Jay on (if it was him).
+      if (b.kind === 'staff' && b.post && b.post.role === 'security' && A.jay) return this._toGuard(b, a);
+      if (b.mode === 'sit' || b.mode === 'sitdown' || b.mode === 'standup') {
+        if (this.seatBy[b.seat] === b) this.seatBy[b.seat] = null;
+        b.seat = -1;
+      }
+      const staff = b.kind === 'staff';
+      this._release(b, staff);
+      b.prop = null;
+      b.fear = { x: A.x, z: A.z, kind: 'alert' };
+      b.scared = true;
+      b.hiding = false;
+      // Down goes the case: nobody stops for it.
+      if (b.case && chance(0.6)) this._dropCase(b, a);
+      // About half the staff stay down behind their counters; a few travellers hide behind one.
+      if (!again && staff && b.post && chance(0.5)) {
+        b.mode = 'cower';
+        b.wt = rnd(14, 24);
+        b.hiding = true;
+        b.face = Math.atan2(A.x - a.pos.x, A.z - a.pos.z);
+        return;
+      }
+      if (staff && b.post && b.post.p === b) b.post.p = null;
+      if (!again && !staff && chance(0.16)) {
+        const h = this._hideSpot(a.pos.x, a.pos.z, A.x, A.z);
+        if (h) {
+          h.n++;
+          b.hiding = true;
+          return this.go(b, a, h.x + rnd(-0.5, 0.5), h.z + rnd(-0.2, 0.2), (bb) => {
+            bb.mode = 'cower';
+            bb.wt = rnd(14, 26);
+            bb.face = h.yaw;
+            h.n = Math.max(0, h.n - 1);
+          }, { flee: true, mode: 'any', speed: rnd(3.4, 4.4) });
+        }
+      }
+      if (chance(0.35) && this._screamQ.length < 6) this._screamQ.push({ x: a.pos.x, z: a.pos.z, at: this._t + rnd(0, 3.5) });
+      const d = this._exitFor(a.pos.x, a.pos.z, A.x, A.z);
+      b.speed = chance(0.75) ? rnd(RUN[0], RUN[1]) : rnd(2.4, 3.2);
+      const far = Math.hypot(A.x - a.pos.x, A.z - a.pos.z) > 9;
+      this.go(b, a, d.out.x + rnd(-1.4, 1.4), d.out.z + rnd(1.5, 3.5), null, { flee: true, mode: 'any', avoid: far ? { x: A.x, z: A.z, r: 8 } : null });
+      b.refugeInside = false;
+    }
+
+    /** The front door to run for: near, and not towards the trouble. */
+    _exitFor(x, z, fx, fz) {
+      let best = null;
+      let bestS = Infinity;
+      for (const d of this.doors) {
+        const toMe = Math.hypot(d.x - x, d.z - z);
+        const toIt = Math.hypot(d.x - fx, d.z - fz);
+        const s = toMe + (toIt < 12 ? 40 : 0) + (toIt < toMe ? 10 : 0);
+        if (s < bestS) {
+          bestS = s;
+          best = d;
+        }
+      }
+      return best;
+    }
+
+    /** Behind a counter (a desk's staff side) on the far side from the trouble, if it can be walked to. */
+    _hideSpot(x, z, fx, fz) {
+      const N = this.nav;
+      if (!N || !this.T || !this.T.desks) return null;
+      if (!this.hides) {
+        // Once: which desks' staff spots the map reaches in a straight line.
+        this.hides = [];
+        for (const d of this.T.desks) {
+          const st = d.staff;
+          if (!st) continue;
+          const i = N.near(st.x, st.z, this.FY, null, true);
+          const n = N.nodes[i];
+          if (n && Math.hypot(n.x - st.x, n.z - st.z) < 9 && N.clear(n.x, n.z, n.y, st.x, st.z, this.FY)) this.hides.push({ x: st.x, z: st.z, yaw: st.yaw, dx: d.x, dz: d.z, n: 0 });
+        }
+      }
+      let best = null;
+      let bestD = 16;
+      for (const h of this.hides) {
+        if (h.n >= 3) continue;
+        const dd = Math.hypot(h.x - x, h.z - z);
+        // The counter between them and it: the trouble is on the desk's front side.
+        const front = (fx - h.x) * (h.dx - h.x) + (fz - h.z) * (h.dz - h.z) > 0;
+        if (dd < bestD && front && Math.hypot(h.x - fx, h.z - fz) > 6) {
+          bestD = dd;
+          best = h;
+        }
+      }
+      return best;
+    }
+
+    /** A case put down where they stood (upright, or knocked flat), left behind. */
+    _dropCase(b, a) {
+      const c = b.case;
+      if (!c) return;
+      b.case = null;
+      this.dropped.push({ x: a.pos.x + rnd(-0.35, 0.35), y: a.pos.y, z: a.pos.z + rnd(-0.35, 0.35), yaw: a.heading + rnd(-0.8, 0.8), color: c.color, flat: chance(0.55) });
+      if (this.dropped.length > 30) this.dropped.shift();
+    }
+
+    // ---- the security officers
+    /** Gun out: a security officer who'll take Jay on (back to their lane once it's over). */
+    _toGuard(b, a) {
+      this._release(b, true);
+      b.guard = true;
+      b.mode = 'guard';
+      b.path = null;
+      b.fireT = rnd(0.8, 1.6);
+      b.seekT = 0;
+      b.officer = null;
+      b.witness = false;
+      a.weapon = 'pistol';
+      a.faction = 'police';
+    }
+
+    /** More officers come out to the lanes when the alert goes up (out of sight). */
+    _alertGuards() {
+      if (!this.posts || !this.alert || !this.alert.jay) return;
+      const p = this.game.player.pos;
+      let n = this.list.filter((b) => b.guard).length;
+      for (const P of this.posts) {
+        if (n >= 3) break;
+        if (P.role !== 'security' || P.p || Math.hypot(P.x - p.x, P.z - p.z) > 110 || !this._canPop(P.x, this.FY, P.z)) continue;
+        const b = this._staff(P);
+        b.evac = this.alert.id;
+        this._toGuard(b, b.a);
+        n++;
+      }
+    }
+
+    guardStep(b, a, dt) {
+      const g = this.game;
+      const an = a.anim;
+      const A = this.alert;
+      if (!A) return this._standDown(b, a, dt);
+      const pl = g.player;
+      const tgt = pl.inVehicle && pl.vehicle ? pl.vehicle : pl;
+      const pol = g.police;
+      const dx = tgt.pos.x - a.pos.x;
+      const dz = tgt.pos.z - a.pos.z;
+      const d = Math.hypot(dx, dz);
+      // Once the police are on him: like any officer.
+      if (pol && pol.level > 0 && VH.Police && VH.Police.OfficerBrain && d < 70 && !pl.isDead) {
+        if (!b.officer) b.officer = new VH.Police.OfficerBrain(pol, null);
+        b.officer.update(a, dt);
+        b.path = null;
+        return;
+      }
+      // Gun drawn on him while he's in sight; armed, he gets shot at.
+      const sees = d < 42 && !pl.isDead && pol && pol.canSee && pol.canSee(a.pos.x, a.pos.y + 1.5, a.pos.z);
+      if (sees) {
+        a.heading = dampAngle(a.heading, Math.atan2(dx, dz), 8, dt);
+        an.aim = 1;
+        an.weaponPose = 'pistol';
+        a.moveSpeed = 0;
+        b.fireT -= dt;
+        if (b.fireT <= 0 && d < 30 && g.combat && g.combat.playerArmed && g.combat.npcFire) {
+          b.fireT = rnd(0.7, 1.4);
+          g.combat.npcFire(a, tgt, 'pistol', 0.3);
+        }
+        return;
+      }
+      an.aim = 0;
+      // Out of sight: after him through the hall (not off round the city).
+      b.seekT -= dt;
+      if (b.seekT <= 0) {
+        b.seekT = 2;
+        b.path = d < 90 && !pl.isDead ? this._route(a.pos.x, a.pos.z, a.pos.y, tgt.pos.x, tgt.pos.z, 'any') : null;
+        b.pi = 0;
+      }
+      if (b.path && b.pi < b.path.length) {
+        an.sprint = d > 14;
+        if (b.walk(a, dt, d > 14 ? 4.4 : 2.2)) b.path = null;
+      }
+    }
+
+    /** It's over: gun away, back to the lane (or off home). */
+    _standDown(b, a) {
+      a.anim.aim = 0;
+      a.weapon = null;
+      a.faction = 'civilian';
+      b.guard = false;
+      b.officer = null;
+      b.witness = true;
+      b.scared = false;
+      const P = b.post;
+      if (P && (!P.p || P.p === b)) {
+        P.p = b;
+        return this.go(b, a, P.x, P.z, (bb) => {
+          bb.mode = 'post';
+        }, { mode: 'any', speed: 1.3 });
+      }
+      this._leave(b, a);
+    }
+
+    /** The airport police pair, in at the door nearest Jay (one out of his sight if there is one). */
+    _alertCops() {
+      if (!this.nav || this.list.some((b) => b.kind === 'cop')) return;
+      const p = this.game.player.pos;
+      if (this._distT(p) > 150) return;
+      const doors = this.doors.slice().sort((d1, d2) => Math.hypot(d1.x - p.x, d1.z - p.z) - Math.hypot(d2.x - p.x, d2.z - p.z));
+      const d = doors.find((q) => this._canPop(q.out.x, this.FY, q.out.z + 2)) || doors[doors.length - 1];
+      if (d) this._copPair(d.out.x, d.out.z + 2);
+    }
+
+    /** Two airport police officers on foot at (x, z). */
+    _copPair(x, z) {
+      const look = VH.Police && VH.Police.COP_LOOK ? Object.assign({}, VH.Police.COP_LOOK, { skin: VH.Crowd.randomLook().skin }) : null;
+      const lead = this._spawn('cop', x - 0.6, z, { look, faction: 'police', name: 'Airport police', case: false, health: 100, armor: 50 });
+      const pal = this._spawn('cop', x + 0.6, z, { look: look ? Object.assign({}, look, { skin: VH.Crowd.randomLook().skin, longHair: chance(0.5), height: 0.97 }) : null, faction: 'police', name: 'Airport police', case: false, health: 100, armor: 50 });
+      for (const b of [lead, pal]) {
+        b.mode = 'cop';
+        b.case = null;
+        b.pack = null;
+        b.wt = rnd(2, 6);
+        b.a.weapon = 'pistol';
+      }
+      pal.lead = lead;
+      return lead;
+    }
+
+    // ---- cases in the line of fire (havoc.js)
+    /** The nearest case (carried, or dropped) a ray passes through: { t, x, y, z, color, drop | b } or null. */
+    caseHit(ox, oy, oz, dx, dy, dz, maxT) {
+      if (!this.on) return null;
+      let best = null;
+      let bt = maxT;
+      const test = (x, y, z, r, color, ref) => {
+        const cx = ox - x;
+        const cy = oy - y;
+        const cz = oz - z;
+        const bq = cx * dx + cy * dy + cz * dz;
+        const disc = bq * bq - (cx * cx + cy * cy + cz * cz - r * r);
+        if (disc < 0) return;
+        let t = -bq - Math.sqrt(disc);
+        if (t < 0) t = -bq + Math.sqrt(disc);
+        if (t < 0 || t > bt) return;
+        bt = t;
+        best = Object.assign({ t, x, y, z, color }, ref);
+      };
+      for (const c of this.dropped) test(c.x, c.y + (c.flat ? 0.12 : 0.33), c.z, 0.3, c.color, { drop: c });
+      for (const b of this.list) if (b.case && b.cp && b.a.visible && !b.a.dead) test(b.cp.x, b.cp.y + 0.33, b.cp.z, 0.27, b.case.color, { b });
+      return best;
+    }
+
+    /** That case bursts open (it's gone from here: havoc.js throws the clothes). */
+    burstCase(hit) {
+      if (!hit) return false;
+      if (hit.drop) {
+        const i = this.dropped.indexOf(hit.drop);
+        if (i < 0) return false;
+        this.dropped.splice(i, 1);
+        return true;
+      }
+      const b = hit.b;
+      if (!b || !b.case) return false;
+      b.case = null;
+      if (b.prop && !b.pack) b.prop = null;
+      if (b.a && !b.a.dead) this.scare(b, b.a, hit.x, hit.z, 1, 'gun');
+      return true;
     }
 
     // ------------------------------------------------------------- kerb
@@ -2969,19 +3313,7 @@
         this._cleanNext(b, b.a);
       }
       const w = N.nodes[N.ix['w-268']];
-      if (w && !have('cop') && near(w.x, w.z) && this._canPop(w.x, w.y, w.z + 3)) {
-        const look = VH.Police && VH.Police.COP_LOOK ? Object.assign({}, VH.Police.COP_LOOK, { skin: VH.Crowd.randomLook().skin }) : null;
-        const lead = this._spawn('cop', w.x - 0.6, w.z + 0.4, { look, faction: 'police', name: 'Airport police', case: false, health: 100, armor: 50 });
-        const pal = this._spawn('cop', w.x + 0.6, w.z + 0.4, { look: look ? Object.assign({}, look, { skin: VH.Crowd.randomLook().skin, longHair: chance(0.5), height: 0.97 }) : null, faction: 'police', name: 'Airport police', case: false, health: 100, armor: 50 });
-        for (const b of [lead, pal]) {
-          b.mode = 'cop';
-          b.case = null;
-          b.pack = null;
-          b.wt = rnd(2, 6);
-          b.a.weapon = 'pistol';
-        }
-        pal.lead = lead;
-      }
+      if (w && !have('cop') && near(w.x, w.z) && this._canPop(w.x, w.y, w.z + 3)) this._copPair(w.x, w.z + 0.4);
     }
 
     /** A traveller somewhere in this part of the hall, partway through their trip. */
@@ -3385,6 +3717,11 @@
           c.setHex(b.case.color);
           cm.setColorAt(nc, c);
           nc++;
+          // (Where it is, for a bullet: caseHit.)
+          const cp = b.cp || (b.cp = {});
+          cp.x = v.x;
+          cp.y = v.y;
+          cp.z = v.z;
         }
         if (b.pack && np < max) {
           const P = b.prop;
@@ -3400,6 +3737,19 @@
           pm.setColorAt(np, c);
           np++;
         }
+      }
+      // Cases left on the floor in an evacuation.
+      for (const d of this.dropped) {
+        if (nc >= max) break;
+        e.set(d.flat ? -PI / 2 : 0, d.yaw, 0);
+        v.set(d.x, d.y + (d.flat ? 0.12 : 0), d.z);
+        q.setFromEuler(e);
+        m.compose(v, q, s);
+        cm.setMatrixAt(nc, m);
+        gm.setMatrixAt(nc, m);
+        c.setHex(d.color);
+        cm.setColorAt(nc, c);
+        nc++;
       }
       for (const [mesh, n] of [[cm, nc], [gm, nc], [pm, np]]) {
         mesh.count = n;
@@ -3468,6 +3818,7 @@
       const g = this.game;
       if (g.state !== 'playing' || document.body.classList.contains('cutscene')) return;
       if (g.dialogue && (g.dialogue.mode === 'scene' || g.dialogue.mode === 'blackout')) return;
+      if (this.alert) return; // (just the alert, every half minute: update)
       this._paT -= dt;
       // Final calls, gate changes and delays from the boards.
       if (this._paNear() && (this._paCheckT = (this._paCheckT || 0) - dt) <= 0) {
@@ -3502,7 +3853,7 @@
       this._pa(this._paText(item.kind, item.f));
     }
 
-    _pa(text) {
+    _pa(text, alert) {
       const g = this.game;
       this.lastPA = text;
       this.paCount = (this.paCount || 0) + 1;
@@ -3517,6 +3868,7 @@
       }
       if (this.paEl) {
         this.paEl.querySelector('.pa-text').textContent = text;
+        this.paEl.classList.toggle('alert', !!alert);
         this.paEl.classList.add('show');
         clearTimeout(this._paHide);
         this._paHide = setTimeout(() => this.paEl && this.paEl.classList.remove('show'), Math.max(6000, text.length * 75));
@@ -3531,6 +3883,61 @@
         setTimeout(() => {
           if (!d.active) d._speak('airport_pa', text);
         }, 1500);
+      }
+    }
+
+    /**
+     * Someone screams (an "aaah!": a sawtooth through two vowel formants, the pitch
+     * up then falling away, a wobble in it). Spread out, a few at a time.
+     */
+    _scream(x, z) {
+      const g = this.game;
+      const au = g.audio;
+      if (!au || !au.ready || !au.ctx || !au.sfx || this._t - (this._screamT || -9) < 0.35) return;
+      const fb = g.vehicleFeedback;
+      const gain = fb && fb._gain ? fb._gain(x, z, 10) : 0.5;
+      if (gain < 0.05) return;
+      this._screamT = this._t;
+      try {
+        const ctx = au.ctx;
+        const t = ctx.currentTime + rnd(0, 0.15);
+        const f0 = rnd(430, 720);
+        const dur = rnd(0.7, 1.2);
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f0 * 0.85, t);
+        osc.frequency.linearRampToValueAtTime(f0 * 1.25, t + 0.12);
+        osc.frequency.linearRampToValueAtTime(f0 * 0.8, t + dur);
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = rnd(5.5, 8);
+        const depth = ctx.createGain();
+        depth.gain.value = f0 * 0.035;
+        lfo.connect(depth);
+        depth.connect(osc.frequency);
+        const out = ctx.createGain();
+        out.gain.value = 0;
+        out.gain.setValueAtTime(0, t);
+        out.gain.linearRampToValueAtTime(0.05 * gain, t + 0.06);
+        out.gain.setTargetAtTime(0, t + dur * 0.6, dur * 0.18);
+        for (const [f, q, k] of [[rnd(800, 950), 5, 1], [rnd(1250, 1450), 6, 0.6], [2900, 4, 0.2]]) {
+          const bp = ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.value = f;
+          bp.Q.value = q;
+          const kg = ctx.createGain();
+          kg.gain.value = k;
+          osc.connect(bp);
+          bp.connect(kg);
+          kg.connect(out);
+        }
+        const pan = au._pan ? au._pan(au.sfx, fb && fb._pan ? fb._pan(x, z) : 0) : au.sfx;
+        out.connect(pan);
+        osc.start(t);
+        lfo.start(t);
+        osc.stop(t + dur + 0.6);
+        lfo.stop(t + dur + 0.6);
+      } catch (err) {
+        /* no scream then */
       }
     }
 
@@ -3630,6 +4037,7 @@
       const g = this.game;
       this._t += dt;
       this._calm += dt;
+      if (this.alert) this._calm = 0; // (nobody new comes in while it's on)
       const p = g.player.pos;
       const d = this._distT(p);
       if (!this.on && d < NEAR) {
@@ -3674,6 +4082,21 @@
         this._dirT = this._fill > 0 ? 0.1 : 0.4;
         this._direct();
         this._pickupsTick();
+        // In an alert, anyone who's turned up since (off a plane, the police) is told too.
+        const A = this.alert;
+        if (A) for (const b of this.list) if (b.evac !== A.id && !b.a.dead && !b.gone) this._evacuate(b, b.a);
+      }
+      if (this._screamQ.length && this._t - (this._screamT || -9) > 0.35) {
+        const i = this._screamQ.findIndex((q) => q.at <= this._t);
+        if (i >= 0) {
+          const q = this._screamQ.splice(i, 1)[0];
+          this._scream(q.x, q.z);
+        }
+      }
+      if (this.alert && (this.alert.paT -= dt) <= 0) {
+        this.alert.paT = 30;
+        if (this._paNear()) this._pa(ALERT_TEXT, true);
+        this._paLast = this._t;
       }
       if (this.T) this._arrivalsTick(dt);
       this._kerbTick(dt);
@@ -3698,6 +4121,9 @@
       }
       this._arrivals.length = 0;
       this._paQ.length = 0;
+      this.dropped.length = 0;
+      this._screamQ.length = 0;
+      if (this.hides) for (const h of this.hides) h.n = 0;
       if (this.taxiLine) this.taxiLine.q.length = 0;
       for (const ln of Object.values(this.lines || {})) ln.q.length = 0;
       for (const ln of this.sec || []) ln.q.length = 0;
@@ -3714,6 +4140,8 @@
     reset() {
       if (!this.ok) return;
       this._sleep();
+      this.alert = null;
+      this.hides = null;
       this.watched = 0;
       this.closed.clear();
       this._said.clear();

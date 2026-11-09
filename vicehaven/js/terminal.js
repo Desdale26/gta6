@@ -2285,9 +2285,11 @@
         for (const s of [0, 1]) {
           const side = s ? 1 : -1;
           const x = d.x + side * (leafW / 2 + 0.01 + e * (leafW - 0.06));
-          m.makeTranslation(x, FY + 0.02, Z1 - 0.12);
+          // Smashed (havoc.js): the leaves are gone, the frames stand open.
+          if (d.broken) m.makeScale(0, 0, 0);
+          else m.makeTranslation(x, FY + 0.02, Z1 - 0.12);
           this.frames.setMatrixAt(i * 2 + s, m);
-          m.makeTranslation(x, FY + 0.02 + (DOOR_H - 0.04) / 2, Z1 - 0.12);
+          if (!d.broken) m.makeTranslation(x, FY + 0.02 + (DOOR_H - 0.04) / 2, Z1 - 0.12);
           this.leaves.setMatrixAt(i * 2 + s, m);
         }
         d.shown = d.open;
@@ -2385,7 +2387,7 @@
       const flights = this.flights();
       const h = this.game.environment ? this.game.environment.hours : 12;
       const clock = hhmm(h);
-      const key = clock.slice(0, 4) + '|' + flights.map((f) => f.code + f.status + f.gate).join(',') + '|' + this.carousels.map((c) => (c.flight ? c.flight.code : '')).join(',');
+      const key = clock.slice(0, 4) + '|' + flights.map((f) => f.code + f.status + f.gate).join(',') + '|' + this.carousels.map((c) => (c.flight ? c.flight.code : '')).join(',') + (this.alert ? '|alert' : '');
       if (!force && key === this._boardKey) return;
       this._boardKey = key;
       const g = this.boardCtx;
@@ -2428,15 +2430,27 @@
       const deps = upcoming('dep', null, 9);
       const arrs = upcoming('arr', null, 9);
       const remark = (f, s) => (/delay/i.test(s) && f.est !== null && f.est !== undefined ? 'Expected ' + hhmm(f.est) : s);
-      drawBoard(g, BOARD_REGIONS.dep, 'Departures', clock, ['Time', 'Flight', 'To', 'Gate', 'Remarks'], deps.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, f.status || '')]), true);
-      drawBoard(g, BOARD_REGIONS.arr, 'Arrivals', clock, ['Time', 'Flight', 'From', 'Gate', 'Status'], arrs.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', remark(f, this._arrStatus(f))]), false);
-      drawReclaim(g, BOARD_REGIONS.reclaim, this.carousels.map((c) => c.flight), clock);
+      // A security alert (havoc.js): nothing's going anywhere. What was boarding is cancelled.
+      const A = this.alert;
+      const depSay = (f) => {
+        const s = f.status || '';
+        if (!A || /depart|cancel/i.test(s)) return remark(f, s);
+        return /board|final|closed/i.test(s) ? 'Cancelled' : 'Delayed';
+      };
+      const arrSay = (f) => {
+        const s = this._arrStatus(f);
+        if (!A || /landed|at gate|bags|arrived|cancel|divert/i.test(s)) return remark(f, s);
+        return 'Delayed';
+      };
+      drawBoard(g, BOARD_REGIONS.dep, 'Departures', clock, ['Time', 'Flight', 'To', 'Gate', 'Remarks'], deps.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', depSay(f)]), true, A);
+      drawBoard(g, BOARD_REGIONS.arr, 'Arrivals', clock, ['Time', 'Flight', 'From', 'Gate', 'Status'], arrs.map((f) => [hhmm(f.time), f.code, f.city, f.gate || '', arrSay(f)]), false, A);
+      drawReclaim(g, BOARD_REGIONS.reclaim, this.carousels.map((c) => c.flight), clock, A);
       const gates = this.T.gates || [];
       gates.forEach((gt, i) => {
         const r = BOARD_REGIONS['gate' + i];
         if (!r) return;
         const mine = upcoming('dep', gt.gate, 1)[0];
-        drawGate(g, r, gt.gate, mine);
+        drawGate(g, r, gt.gate, mine, A);
       });
       this.boardTex.needsUpdate = true;
     }
@@ -2844,6 +2858,16 @@
       pos.needsUpdate = true;
     }
 
+    /** Door set i smashed (its glass leaves gone), or put back. */
+    setDoor(i, broken) {
+      const d = this.doors && this.doors[i];
+      if (!d || !!d.broken === !!broken) return false;
+      d.broken = !!broken;
+      this.broken += d.broken ? 1 : -1;
+      this._placeDoors();
+      return true;
+    }
+
     /** Shatter pane i, or put it back: the glass goes and so does its collider. */
     setPane(i, broken) {
       const q = this.brk.panes[i];
@@ -2994,7 +3018,7 @@
       for (const x of COLS_N) pts.push([x, FY + 4.6, NZ, 0.86]);
       for (const x of COLS_S) pts.push([x, FY + WALL_H + 0.45, PZ, 0.86]);
       for (const d of DOORS) pts.push([d.x, FY + DOOR_H + 0.45, Z1 - 0.32, 0.5]);
-      const geo = new THREE.BoxGeometry(1, 0.22, 1);
+      const geo = new THREE.BoxGeometry(1.25, 0.42, 1.25);
       this.beacons = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), pts.length);
       this.beacons.name = 'terminal alert beacons';
       const m = new THREE.Matrix4();
@@ -3016,16 +3040,17 @@
       this.alert = !!on;
       this.beacons.visible = this.alert;
       if (!this.alert) this.T._rt.alert.value = 0;
-      this._boardT = 0;
-      this._boardKey = '';
+      this._boardT = 4;
+      this._drawBoards(true);
     }
 
     _updateAlert(dt) {
       if (!this.alert) return;
-      const ph = this._t * 5.5;
-      const k = Math.pow(Math.max(0, Math.sin(ph)), 3);
-      this.T._rt.alert.value = 0.06 + 0.3 * k;
-      this.beacons.material.color.setRGB(0.4 + 5.5 * k, 0.15 + 2.2 * k, 0.02);
+      // A slow amber throb through the hall; the beacons always lit, flaring with it.
+      const ph = this._t * 4.2;
+      const k = Math.pow(Math.max(0, Math.sin(ph)), 2);
+      this.T._rt.alert.value = 0.12 + 0.45 * k;
+      this.beacons.material.color.setRGB(1.2 + 5 * k, 0.42 + 2 * k, 0.04);
     }
 
     _updateBroken(dt) {
@@ -3044,6 +3069,7 @@
       this.brk.props.forEach((q, i) => this.setProp(i, false));
       this.brk.bollards.forEach((q, i) => this.setBollard(i, false));
       this.boardBroken.forEach((q, i) => this.setBoard(i, 0));
+      (this.doors || []).forEach((d, i) => this.setDoor(i, false));
       this.broken = 0;
     }
 
@@ -3135,7 +3161,8 @@
         this._slowT = 0.5;
         const night = (g.environment && g.environment.nightFactor) || 0;
         const lift = this.T._rt.lift;
-        lift.value = 0.03 + night * 0.55;
+        // (In a security alert the lights go down to emergency level, so the amber shows.)
+        lift.value = (0.03 + night * 0.55) * (this.alert ? 0.35 : 1);
         this._updateShutters(0.5);
       }
       this._boardT -= dt;
@@ -3224,8 +3251,24 @@
     return hh;
   }
 
-  function drawBoard(g, r, title, clock, cols, rows, dep) {
+  /** A red strip across the foot of a board: the security alert. */
+  function alertStrip(g, w, h, rowH) {
+    const y = h - rowH;
+    g.fillStyle = '#c8261c';
+    g.fillRect(0, y, w, rowH);
+    g.fillStyle = '#ffffff';
+    g.font = '800 ' + Math.round(rowH * 0.62) + 'px ' + FONT;
+    g.textAlign = 'center';
+    let t = 'SECURITY ALERT  \u2022  Please leave the terminal by the nearest exit';
+    if (g.measureText(t).width > w * 0.96) t = 'SECURITY ALERT  \u2022  Please leave the terminal';
+    if (g.measureText(t).width > w * 0.96) t = 'SECURITY ALERT';
+    g.fillText(t, w / 2, y + rowH * 0.54);
+    g.textAlign = 'left';
+  }
+
+  function drawBoard(g, r, title, clock, cols, rows, dep, alert) {
     const [, , w, h] = r;
+    if (alert) rows = rows.slice(0, 8); // (the last row is the alert)
     const hh = boardFrame(g, r, title, clock, dep ? 'plane' : 'land');
     const cx = [0.02, 0.13, 0.3, 0.68, 0.78].map((f) => f * w);
     const rowH = (h - hh) / 10;
@@ -3254,10 +3297,11 @@
       g.fillStyle = '#8fb3e0';
       g.fillText('No more flights today', cx[0], hh + rowH * 1.5);
     }
+    if (alert) alertStrip(g, w, h, rowH);
     g.restore();
   }
 
-  function drawReclaim(g, r, flights, clock) {
+  function drawReclaim(g, r, flights, clock, alert) {
     const [, , w, h] = r;
     const hh = boardFrame(g, r, 'Baggage reclaim', clock, 'bag');
     const rowH = (h - hh) / 3;
@@ -3275,10 +3319,11 @@
       g.font = '600 ' + Math.round(rowH * 0.3) + 'px ' + FONT;
       g.fillText(f ? 'Bags on the belt' : 'Not in use', w * 0.17, y + rowH * 0.28);
     });
+    if (alert) alertStrip(g, w, h, rowH * 0.42);
     g.restore();
   }
 
-  function drawGate(g, r, gate, f) {
+  function drawGate(g, r, gate, f, alert) {
     const [x, y, w, h] = r;
     g.save();
     g.translate(x, y);
@@ -3294,7 +3339,17 @@
     g.font = '800 ' + Math.round(h * 0.36) + 'px ' + FONT;
     g.fillText(gate, w * 0.14, h * 0.6);
     g.textAlign = 'left';
-    if (f) {
+    if (alert) {
+      // A security alert: no boarding here.
+      g.fillStyle = '#c8261c';
+      g.fillRect(w * 0.28, 0, w * 0.72, h);
+      g.fillStyle = '#ffffff';
+      g.font = '800 ' + Math.round(h * 0.2) + 'px ' + FONT;
+      g.fillText('SECURITY', w * 0.33, h * 0.27);
+      g.fillText('ALERT', w * 0.33, h * 0.5);
+      g.font = '600 ' + Math.round(h * 0.12) + 'px ' + FONT;
+      g.fillText(f ? (f.code || '') + '  ' + (/board|final|closed/i.test(f.status || '') ? 'Cancelled' : 'Delayed') : 'No boarding', w * 0.33, h * 0.76);
+    } else if (f) {
       g.fillStyle = '#8fb3e0';
       g.font = '600 ' + Math.round(h * 0.11) + 'px ' + FONT;
       g.fillText((f.airline || '') + '  ' + (f.code || ''), w * 0.33, h * 0.2);

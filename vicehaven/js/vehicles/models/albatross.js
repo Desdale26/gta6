@@ -7,6 +7,11 @@
  * decals, swept airfoil wings with winglets, two turbofans on pylons, and
  * proper gear. The colour is the airline's: the cheatline, the engines and
  * the fin. Sizes and pivots match SPECS.albatross (38 m long, 34 m span).
+ *
+ * VH.AircraftDefs.albatrossFreighter is the cargo version the freighters on
+ * the airport's remote stands fly (scenery only: AircraftModels.build): no
+ * cabin windows, a big main-deck cargo door ahead of the wing on the left,
+ * and a broad band of the airline's colour along the side.
  */
 (function () {
   'use strict';
@@ -31,7 +36,7 @@
   }
 
   VH.AircraftDefs = VH.AircraftDefs || {};
-  VH.AircraftDefs.albatross = function (c, Kit) {
+  function albatross(c, Kit, freighter) {
     const k = new Kit(); //  paint
     const m = new Kit(); //  bare metal
     const r = new Kit(); //  rubber and matte black
@@ -56,24 +61,44 @@
     ], WHITE, {
       seg: 36,
       steps: 4,
-      bands: [[1.6, 1.79, c], [1.79, 1.86, deep], [2.12, Math.PI + 0.01, BELLY]],
+      bands: freighter
+        ? [[0.98, 1.52, c], [1.6, 1.72, deep], [2.12, Math.PI + 0.01, BELLY]]
+        : [[1.6, 1.79, c], [1.79, 1.86, deep], [2.12, Math.PI + 0.01, BELLY]],
       zBands: [[-19.1, -16.9, c]],
       caps: { back: DARK },
     });
 
-    // Cabin windows, both sides, with gaps at the doors and the overwing exits.
+    // Cabin windows, both sides, with gaps at the doors and the overwing exits (a freighter
+    // has none: only the crew door's).
     for (const side of [1, -1]) {
-      for (let z = 13.7; z > -11.3; z -= 0.53) {
+      for (let z = 13.7; z > -11.3 && !freighter; z -= 0.53) {
         if ((z < 1.45 && z > 0.05) || z > 14.1) continue;
         lit.decal(body, z, 1.3, side, 0.25, 0.36, WINDOW, { round: 1, lift: 0.014 });
       }
       // Doors: an outline, the panel (curved to the skin) and its window.
-      for (const [z, wdt, hgt, s] of [[15.0, 0.84, 1.8, 1.42], [-11.9, 0.84, 1.8, 1.42], [0.75, 0.52, 0.95, 1.3]]) {
+      const doors = freighter ? [[15.0, 0.84, 1.8, 1.42], [-11.9, 0.84, 1.8, 1.42]] : [[15.0, 0.84, 1.8, 1.42], [-11.9, 0.84, 1.8, 1.42], [0.75, 0.52, 0.95, 1.3]];
+      // The freighter's main-deck cargo door, left side ahead of the wing, sill at the floor.
+      if (freighter && side === 1) doors.push([9.15, 3.5, 2.44, 1.28]);
+      for (const [z, wdt, hgt, s] of doors) {
         const ds = hgt / 2 / 2.1;
         const os = (hgt + 0.08) / 2 / 2.1;
+        if (wdt > 2) {
+          // The cargo door is painted over, livery and all: just its seams (a frame), the hinge
+          // line along the top and two latches along the sill.
+          const seam = 0x4a4f56;
+          const fs = 0.03;
+          const fz = 0.07;
+          const o = { lift: 0.012, ns: 1, nz: 8 };
+          k.patch(body, z - wdt / 2, z + wdt / 2, [s - ds, s - ds + fs], [s - ds, s - ds + fs], side, seam, o);
+          k.patch(body, z - wdt / 2, z + wdt / 2, [s - ds + 0.07, s - ds + 0.07 + fs * 0.6], [s - ds + 0.07, s - ds + 0.07 + fs * 0.6], side, seam, o);
+          k.patch(body, z - wdt / 2, z + wdt / 2, [s + ds - fs, s + ds], [s + ds - fs, s + ds], side, seam, o);
+          for (const zz of [z - wdt / 2, z + wdt / 2 - fz]) k.patch(body, zz, zz + fz, [s - ds, s + ds], [s - ds, s + ds], side, seam, { lift: 0.012, ns: 10, nz: 1 });
+          for (const dz of [-0.9, 0.9]) k.patch(body, z + dz - 0.18, z + dz + 0.18, [s + ds - 0.15, s + ds - 0.06], [s + ds - 0.15, s + ds - 0.06], side, DARK, { lift: 0.013, ns: 1, nz: 1 });
+          continue;
+        }
         k.patch(body, z - wdt / 2 - 0.04, z + wdt / 2 + 0.04, [s - os, s + os], [s - os, s + os], side, shade(WHITE, 0.8), { lift: 0.006, ns: 6 });
         k.patch(body, z - wdt / 2, z + wdt / 2, [s - ds, s + ds], [s - ds, s + ds], side, DOOR, { lift: 0.01, ns: 6 });
-        lit.decal(body, z, 1.3, side, 0.24, 0.34, WINDOW, { round: 1, lift: 0.016 });
+        if (!freighter || z > 14) lit.decal(body, z, 1.3, side, 0.24, 0.34, WINDOW, { round: 1, lift: 0.016 });
       }
       // Cockpit glazing: the windscreen and two side panes, with frames between.
       gl.patch(body, 17.78, 18.36, [0.1, 0.84], [0.1, 0.62], side, WINDOW, { lift: 0.016 });
@@ -171,5 +196,7 @@
       strobe: [0, 5.82, 0],
       beaconLow: [0, 1.1, 0.5],
     };
-  };
+  }
+  VH.AircraftDefs.albatross = (c, Kit) => albatross(c, Kit, false);
+  VH.AircraftDefs.albatrossFreighter = (c, Kit) => albatross(c, Kit, true);
 })();

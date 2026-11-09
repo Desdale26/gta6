@@ -19,6 +19,8 @@
  *   vehicle:impact { v, other, speed, x, y, z }   vehicle:smash { v, type }
  *   vehicle:land { v, impact, airTime }   vehicle:explode { v }
  *   vehicle:nearMiss { v, other }   player:hitByCar { v, speed }
+ *   vehicle:hitStatic { v, col, nx, nz, x, z }   (a collider with col.brk: the
+ *   listener may disable it, and then the car goes on through)
  */
 (function () {
   'use strict';
@@ -240,6 +242,11 @@
       for (const col of hits) {
         const r = this._satBox(v.pos.x, v.pos.z, c, s, v.hx, v.hz, col.cx, col.cz, col.cos, col.sin, col.hx, col.hz);
         if (!r) continue;
+        // Something that can break (the terminal's glass, bollards, bins: havoc.js) may give way.
+        if (col.brk) {
+          VH.events.emit('vehicle:hitStatic', { v, col, nx: r.nx, nz: r.nz, x: r.px, z: r.pz });
+          if (col.disabled) continue;
+        }
         // Street furniture gets knocked over instead (a tank flattens trees too).
         const smash = col.propType && !col.disabled ? SMASH[col.propType] || (v.kind === 'tank' ? TANK_SMASH : null) : null;
         if (smash && (v.speed > smash.speed || v.kind === 'tank')) {

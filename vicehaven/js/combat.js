@@ -1833,6 +1833,7 @@
       const hx = mx + (dx / len) * endT;
       const hy = my + (dy / len) * endT;
       const hz = mz + (dz / len) * endT;
+      VH.events.emit('combat:npcRay', { ox: mx, oy: my, oz: mz, dx: dx / len, dy: dy / len, dz: dz / len, dist: endT }); // (havoc.js: their shots break glass too)
       g.fx.tracer(mx, my, mz, hx, hy, hz, { width: 0.024, color: [6, 3.4, 1.6] });
       g.fx.muzzle(mx, my, mz, false, w.flash || 1);
       const ig = this.gain(hx, hz, 8);

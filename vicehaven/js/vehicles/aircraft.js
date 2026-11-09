@@ -938,9 +938,9 @@
   /** The model of one aircraft, with the same interface as a car model. */
   class AircraftModel {
     constructor(type, opts, seed) {
-      const spec = SPECS[type];
+      const spec = SPECS[type]; // (none for a scenery-only variant: AircraftDefs.albatrossFreighter)
       const M = mats();
-      const pal = spec.palette;
+      const pal = spec ? spec.palette : [0xffffff];
       this.color = opts.color !== undefined && opts.color !== null ? opts.color : pal[Math.floor(VH.math.hash2(seed || 1, 77) * pal.length) % pal.length];
       const g = geometryFor(type, this.color);
       this.type = type;

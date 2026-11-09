@@ -488,7 +488,13 @@ boards: airliners land, turn off, taxi in and park at the gates, the tugs,
 fuel and catering trucks drive out, passengers come off and board, then
 the plane is pushed back, taxis out and takes off over the bay (planes and
 ground vehicles wait for Jay if he's in the way; an arrival goes round if
-he's on the runway). A Skylark flies circuits and a helicopter visits.
+he's on the runway). It's a busy single runway: arrivals come in threes a
+minute and a half apart (their landing lights in a line on the approach
+after dark), a departure lines up behind each one as it rolls out, and a
+few go one after another in the gaps between. Freighters load on three
+cargo stands further west (air stairs, a high-loader), now and then an
+airliner is towed off its gate to one of them, two Skylarks fly circuits
+and sightseeing trips, a helicopter visits and jets cross high over the city.
 Inside, travellers with suitcases queue, shop, eat, sit at the gates and
 board; arrivals collect bags and head for the greeters, the taxi rank and
 the shuttle; staff, cleaners and an airport police pair; cars and cabs at
@@ -503,6 +509,21 @@ to the flight deck. Still aboard when the doors are due to close and the
 crew walk you back to the gate; sit in the captain's seat and press E to
 take the controls (everyone runs for it, the flight is cancelled and the
 police come for you, three stars).
+
+And the terminal can be wrecked. Every pane of glass shatters when it's
+shot, blown out, rammed or sprinted into (step or drive through the gap);
+the flight boards and gate screens spark and go to static, then dark;
+planters, bins and queue tapes go over; suitcases on the belts or in a
+traveller's hand burst open in a shower of clothes. Drive at the front
+doors fast enough and the bollards go down and the car's in the hall. Any
+of it (or gunfire, a blast, a crash at the terminal) sets off a security
+alert: an alarm, amber lights, the PA telling everyone to leave, every
+board Delayed or Cancelled and all flights held. The hall empties out of
+the doors (cases dropped where people stood, a few hiding behind the
+counters), the security officers draw on you, the airport police come
+in and patrol cars pull up at the kerb (two stars). Two minutes of calm
+and the alert's over. An "Airport chaos" bill counts the damage; it's all
+mended once you've gone.
 
 **Fort Breakwater.** The army base at the west end of Meridian Boulevard:
 walls and razor wire, watchtowers, barracks, a motor pool, two helipads
@@ -652,6 +673,7 @@ vicehaven/
 │   ├── terminal.js · airside.js · airportlife.js   the walk-in terminal; flights, turnarounds
 │   │                       and ground crew; the travellers, staff, kerb and PA
 │   ├── cabin.js            inside the airliners at the gates: the cabin, the flight deck, the controls
+│   ├── havoc.js            trouble at the airport: breaking the terminal, the security alert, the bill
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
 │   ├── holdup.js · holdup-models.js · audio-holdup.js · data/holdup-lines.js
 │   │                            hold-ups: clerks, the bag, the safe, alarm, CCTV, shoppers, guard
@@ -773,6 +795,8 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
 - [ ] The title screen says v2.2 and What's new lists the airport, Story so far and the Hustle update
 - [ ] Vicehaven International: walk in from the kerb through the sliding doors, check-in, security (a gun sets the arch off), the concourse, a gate and down a jet bridge to the plane's door, back out through baggage reclaim; watch a plane taxi in, unload, board, push back and take off; travellers queue, sit, board and collect bags
+- [ ] In the terminal: shoot a pane of glass (it shatters, walk through), a board (static, then dark), a planter and a case on the belt (clothes everywhere); the alarm, amber lights, the PA and Delayed/Cancelled boards; people run out of the doors dropping cases; the security officers draw; two minutes later "the alert is over"
+- [ ] Drive at the terminal's front doors at speed: the bollards go flat, the doors smash and the car is in the hall
 - [ ] Down a jet bridge, through the open door into the cabin, along the aisle past the seated passengers and into the flight deck; E at the captain's seat takes the plane (three stars); stay aboard at doors-closed and the crew walk you back to the gate
 - [ ] Esc → Story so far on a new game: the prologue and Up next: Homecoming, Set GPS draws the route; after a few jobs every finished one has a recap that matches your choices; Who's who only lists people you've met
 - [ ] Continue a save: a Previously in Vicehaven… card with the last job and what's next

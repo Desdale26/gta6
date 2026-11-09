@@ -2,7 +2,8 @@
  * airport.css — the PA announcements at Vicehaven International
  * (airportlife.js): a caption in the colours of the flight boards, above
  * where the subtitles sit, with a little bell that rings as the chime
- * plays. Sized in rem so the "Interface text size" setting scales it.
+ * plays (red in a security alert). And the "Airport chaos" bill (havoc.js).
+ * Sized in rem so the "Interface text size" setting scales it.
  */
 
 .vh-pa {
@@ -87,13 +88,100 @@
   font-family: var(--vh-font);
 }
 
+/* A security alert (havoc.js): red, the tag flashing. */
+.vh-pa.alert {
+  border-color: rgba(255, 120, 100, 0.6);
+  background: linear-gradient(180deg, rgba(150, 26, 20, 0.94), rgba(70, 10, 8, 0.92));
+}
+
+.vh-pa.alert .pa-tag {
+  background: #ffffff;
+  color: #c8261c;
+  animation: vh-pa-flash 0.7s steps(1) infinite;
+}
+
+@keyframes vh-pa-flash {
+  50% { background: #ffd23c; color: #1e2227; }
+}
+
+/* ---- the "Airport chaos" bill: what Jay has broken lately (havoc.js), under the money */
+.hud > .vh-chaos {
+  position: absolute;
+  right: 1.8rem;
+  top: 6.4rem;
+}
+
+.vh-chaos {
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.35rem;
+  border: 1px solid rgba(255, 210, 60, 0.45);
+  border-radius: 10px;
+  background: rgba(8, 20, 38, 0.82);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--vh-text);
+  font-family: var(--vh-font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transform: translateX(0.6rem);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+}
+
+.vh-chaos.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.vh-chaos .ch-tag {
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  background: #ff5a4a;
+  color: #ffffff;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-shadow: none;
+}
+
+.vh-chaos .ch-sum {
+  color: #ffd23c;
+  font-variant-numeric: tabular-nums;
+}
+
+.vh-chaos .ch-add {
+  color: #ff9a8a;
+  font-size: 0.78rem;
+  opacity: 0;
+}
+
+.vh-chaos .ch-add.pop {
+  animation: vh-chaos-pop 1.4s ease-out;
+}
+
+@keyframes vh-chaos-pop {
+  0% { opacity: 1; transform: translateY(0.3rem); }
+  70% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; }
+}
+
 /* Out of the way of menus, cutscenes, the map, the phone, a shop and photo mode. */
 body.in-menu .vh-pa,
 body.cutscene .vh-pa,
 body.photo-mode .vh-pa,
 body.map-open .vh-pa,
 body.phone-open .vh-pa,
-body.shop-open .vh-pa {
+body.shop-open .vh-pa,
+body.in-menu .vh-chaos,
+body.cutscene .vh-chaos,
+body.photo-mode .vh-chaos,
+body.map-open .vh-chaos,
+body.phone-open .vh-chaos,
+body.shop-open .vh-chaos {
   visibility: hidden;
 }
 

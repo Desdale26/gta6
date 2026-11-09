@@ -6,7 +6,8 @@
  *                            arrival every minute and a half or so), the four
  *                            contact stands (A1-A4) and their turnarounds
  *                            (three minutes), three remote stands (R1-R3) for
- *                            the freighters (and now and then an airliner
+ *                            the freighters (the cargo Albatross, without
+ *                            windows: models/albatross.js) (and now and then an airliner
  *                            towed off its gate to leave from there later,
  *                            empty), the runway, the ground vehicles
  *                            and crew, a Skylark doing circuits and another
@@ -108,9 +109,10 @@
  * already rolling (otherwise it goes round); a departure lines up and waits
  * behind an arrival that has touched down (or a departure that's rolling) if
  * it will be rolling itself before the next arrival needs clearing, and rolls
- * as soon as the runway ahead is clear. Arrivals are planned 82-100 s apart
- * with a longer gap every fifth one, and are held back a little while three
- * departures queue for the runway.
+ * as soon as the runway ahead is clear. Arrivals come in threes, 82-100 s
+ * apart (one departure goes between each two), then a gap of two and a half
+ * to three minutes that three or four departures go in one after another; one
+ * is held back a little while three departures queue for the runway.
  *
  * The nose wheel follows the yellow line and the main gear trails it, so a
  * plane cuts its corners like a real one. The taxilane is 46 m behind the
@@ -197,14 +199,15 @@
   const T_TOWOFF = 112; //    on-block to the tow
   const T_FERRY = [210, 360]; // on the remote stand, from the tow in to off-block
   const PLAN_AHEAD = 1500; // flights planned this far ahead (s)
-  // The runway: arrivals a minute and a half apart, with a longer gap every few for the
-  // departures that have queued up, the Skylark and the freighters; each arrival is on the
-  // approach (and in sight, its landing lights at least) for nearly three minutes.
+  // The runway: arrivals in threes a minute and a half apart (three in a line on the
+  // approach), then a longer gap for the departures that have queued up, the Skylark and the
+  // freighters; each arrival is on the approach (and in sight, its landing lights at least)
+  // for over three minutes.
   const ARR_GAP = [82, 100];
-  const BIG_GAP = [55, 85]; //  added to every fifth gap
+  const BIG_GAP = [70, 95]; //  added to every third gap
   const ARR_SEP = 74; //       the closest two arrivals ever touch down
-  const SPAWN_LEAD = 165; //   seconds out on the approach when an arrival appears
-  const LINE_T = 24; //        hold to lined up and rolling, for a departure
+  const SPAWN_LEAD = 192; //   seconds out on the approach when an arrival appears (a bank of three all in sight)
+  const LINE_T = 19; //        hold to lined up and rolling, for a departure
 
   // Original airlines and places only.
   const AIRLINES = [
@@ -442,9 +445,9 @@
     p.turn(-HALF, 30, 5, 1.0); //              right onto L1
     p.line(L1, HOLD_OUT, 4, 1.0);
     p.sHold = p.len; //                        H-OUT
-    p.line(L1, RWY.z + RWY.w / 2, 4, 1.0);
-    p.turn(-HALF, 30, 4, 1.0); //              right onto the runway, lined up east
-    p.line(-905, RWY.z, 4, 1.0);
+    p.line(L1, RWY.z + RWY.w / 2, 6, 1.0); //  (briskly: the next one's waiting)
+    p.turn(-HALF, 30, 5.5, 1.0); //            right onto the runway, lined up east
+    p.line(-905, RWY.z, 6, 1.0);
     p.sLine = p.len;
     p.line(RWY.x1 + 700, RWY.z, 99, 2);
     return p.end(99);
@@ -1092,7 +1095,9 @@
     // ------------------------------------------------------------ looks
     attach() {
       if (this.model || !VH.AircraftModels) return;
-      this.model = this.sys._takeModel('albatross', this.color);
+      // (A freighter is the cargo version: no windows, a big cargo door. One towed off its gate
+      // is still the airliner it came in as.)
+      this.model = this.sys._takeModel(this.rot.airline.cargo ? 'albatrossFreighter' : 'albatross', this.color);
       this.sys.game.scene.add(this.model.root);
       this._pose(0);
     }
@@ -1836,8 +1841,8 @@
         }
         this.game.scene.add(g);
         // Build each airline's geometry now (it's cached per colour), not mid-game.
-        for (const al2 of AIRLINES.slice(1)) {
-          const m = VH.AircraftModels.build('albatross', al2.color);
+        for (const al2 of AIRLINES.slice(1).concat(CARGO_LINES)) {
+          const m = VH.AircraftModels.build(al2.cargo ? 'albatrossFreighter' : 'albatross', al2.color);
           dressAirliner(m);
           this._putModel(m);
         }
@@ -1870,7 +1875,7 @@
       let m = list && list.length ? list.pop() : null;
       if (!m) {
         m = VH.AircraftModels.build(type, color);
-        if (type === 'albatross') dressAirliner(m);
+        if (type === 'albatross' || type === 'albatrossFreighter') dressAirliner(m);
       }
       m.root.visible = true;
       return m;
@@ -2051,7 +2056,7 @@
 
     /**
      * Keep the arrivals planned (25 minutes ahead), each to the stand that frees up first: a
-     * minute and a half apart, every fifth gap a longer one, and every sixth arrival a
+     * minute and a half apart, every third gap a longer one, and every sixth arrival a
      * freighter for a remote stand.
      */
     _plan() {
@@ -2059,7 +2064,7 @@
       while (this.lastLand < this.t + PLAN_AHEAD && guard++ < 40) {
         const k = this._slot++;
         let gap = rand(ARR_GAP[0], ARR_GAP[1]);
-        if (k % 5 === 4) gap += rand(BIG_GAP[0], BIG_GAP[1]);
+        if (k % 3 === 2) gap += rand(BIG_GAP[0], BIG_GAP[1]);
         let t = Math.max(this.t + (this.t < 1 && guard === 1 ? 42 : 60), this.lastLand + gap);
         const pickStand = (list) => {
           let best = null;
@@ -2372,7 +2377,7 @@
       for (const k of this.skies) {
         if (this.rwy.has(k)) continue;
         if (k.slot) e = Math.min(e, k.eta);
-        if (k.slotT) e = Math.min(e, Math.max(0, k.slotT - 40 - this.t)); // (its booked gap starts 40 s before it lands)
+        if (k.slotT) e = Math.min(e, Math.max(0, k.slotT - this.t)); // (a departure just has to be rolling well before it lands)
       }
       return e;
     }
@@ -2528,15 +2533,16 @@
      * Another stand for an arrival whose own is blocked (a disabled plane on it): the free one
      * with the longest until its next flight. The gate changes on the boards.
      */
-    _restand(pl) {
+    _restand(pl, soon) {
       const r = pl.rot;
       const old = r.st;
       let best = null;
       let bestT = -Infinity;
+      if (soon === undefined) soon = old.remote ? 240 : -Infinity;
       for (const st of old.remote ? this.remoteList : this.standList) {
         if (st === old || st.cur || st.blocked) continue;
         const next = st.queue.length ? st.queue[0].landAt : Infinity;
-        if (old.remote && next < this.t + 240) continue; // (not one wanted again soon)
+        if (next < this.t + soon) continue; // (not one wanted again soon)
         if (next > bestT) {
           best = st;
           bestT = next;
@@ -2570,6 +2576,9 @@
         const taken = st.cur && st.cur !== pl.rot && pl.s < pl.path.sHoldIn + 2;
         if (taken && ((st.cur.plane && st.cur.plane.disabled) || (st.remote && pl.s > pl.path.sHoldIn - 60))) st = this._restand(pl) || st;
         if (st.blocked && pl.s < pl.path.sHoldIn + 2) st = this._restand(pl) || st; // (cabin.js: Jay's taken the plane off it)
+        // Its gate still busy (the one on it running late) as it nears H-IN, and another gate
+        // free with nothing due there for five minutes: a gate change rather than a wait.
+        if (taken && !st.remote && st === pl.rot.st && pl.s > pl.path.sHoldIn - 120 && st.cur.off - this.t > 40) st = this._restand(pl, 300) || st;
         const free = (!st.cur || st.cur === pl.rot) && !st.blocked;
         let clear = true;
         for (const q of this.fleet) {
@@ -2578,6 +2587,12 @@
         }
         // Not while a plane is being pushed back across the lane (or the taxiway) it would take.
         for (const s2 of st.remote ? this.remoteList : this.standList) if (s2.state === 'pushback' && s2.x > st.x) clear = false;
+        // First come, first served: never past one still waiting at H-IN (or on its way to it)
+        // ahead on the same way in. (Released, this one would hold the gates' pushbacks while it
+        // sat stuck behind that one, whose own gate is waiting for one of those pushbacks.)
+        for (const q of this.fleet) {
+          if (q !== pl && (q.phase === 'rollout' || q.phase === 'taxiin') && !q.released && q.s > pl.s) clear = false;
+        }
         if (free && clear) {
           pl.released = true;
           pl.stopS = Infinity;
@@ -3931,7 +3946,7 @@
       p.sDecide = p.len - 300;
       p.turn(-PI, 300);
       p.sFinal = p.len;
-      p.td = -260;
+      p.td = -60;
       p.line(p.td, RWY.z);
       return p.end(99);
     }
@@ -3945,7 +3960,7 @@
       p.sDecide = p.len - 300;
       p.turn(-PI, 300);
       p.sFinal = p.len;
-      const td = full ? -260 : -560;
+      const td = full ? -60 : -560; // (a full stop lands long: it's off at L5 the sooner)
       p.line(td, RWY.z);
       p.td = td;
       return p.end(99);
@@ -3976,7 +3991,7 @@
             k.phase = 'taxi';
             k.path = this._skyPath('out', 0, k.spot);
             k.s = 0;
-            k.circuits = k.tour ? 1 : 1 + Math.floor(Math.random() * 2);
+            k.circuits = k.tour || Math.random() < 0.65 ? 1 : 2; // (now and then a touch-and-go first)
           }
           break;
         case 'taxi':
@@ -4001,7 +4016,7 @@
             if (k.phase === 'taxi') k.phase = 'hold';
             else {
               k.phase = 'parked';
-              k.timer = k.tour ? rand(150, 300) : rand(140, 280);
+              k.timer = k.tour ? rand(220, 380) : rand(190, 330);
               k.yaw = PI;
             }
           }
@@ -4012,7 +4027,7 @@
           // Kept waiting a while: the tower makes a gap (the arrivals are held back a little,
           // the departures wait) and we go in it.
           k.wait = (k.wait || 0) + dt;
-          if (k.wait > 25 && (!k.pri || k.wait - k.priT > 60)) {
+          if (k.wait > 50 && (!k.pri || k.wait - k.priT > 60)) {
             k.pri = true;
             k.priT = k.wait;
             this._delayArrivals(this.t + 10, this.t + 70);
@@ -4212,7 +4227,7 @@
           k.y = 0;
           k.pitch = Math.max(0, k.pitch - dt * 0.1);
           let vt = k.path.cap(k.s);
-          if (k.v > vt) k.v = Math.max(vt, k.v - 1.3 * dt);
+          if (k.v > vt) k.v = Math.max(vt, k.v - 2.4 * dt);
           else k.v = Math.min(vt, k.v + 0.8 * dt);
           k.s = Math.min(k.path.len, k.s + k.v * dt);
           k.path.at(k.s, _c);
