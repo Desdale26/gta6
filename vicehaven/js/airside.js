@@ -2,21 +2,62 @@
  * airside.js — the living airside at Vicehaven International: the flights,
  * the airliners and everything else that moves behind the terminal.
  *
- *   new VH.Airside(game)     game.airside: a rolling schedule of flights, the
- *                            four contact stands (A1-A4) and their full
- *                            turnarounds, the runway, the ground vehicles and
- *                            crew, a Skylark doing circuits and a visiting
- *                            helicopter now and then
+ *   new VH.Airside(game)     game.airside: a rolling schedule of flights (an
+ *                            arrival every minute and a half or so), the four
+ *                            contact stands (A1-A4) and their turnarounds
+ *                            (three minutes), three remote stands (R1-R3) for
+ *                            the freighters, the runway, the ground vehicles
+ *                            and crew, a Skylark doing circuits, a visiting
+ *                            helicopter, and jets crossing high over the city
  *   airside.flights()        [{ id, code, airline, city, kind 'dep'|'arr',
- *                            time (game hours), gate, stand, status, est, pax }]
+ *                            time (game hours), gate, stand, status, est, pax,
+ *                            note }]   (passenger flights only; note: why it's
+ *                            delayed in a ground stop, or null)
  *   airside.stands()         [{ id, gate, x, z, yaw, door, state, flight, ... }]
+ *   airside.remoteStands()   the same for R1-R3 (gate null)
  *   events                   airside:landed {flight}, airside:arrived {flight,
  *                            stand, gate}, airside:boarding {flight, stand,
  *                            gate}, airside:closed {flight, stand},
  *                            airside:pushback {flight, stand}, airside:takeoff
- *                            {flight}   (stand = the stand's id, 1..4)
- *   VH.Airside.markings()    the paint for the taxilane, stands and roads
- *                            (airfield.js draws it into the apron)
+ *                            {flight}, airside:gatechange {flight, arrival,
+ *                            from, gate, stand}   (stand = the stand's id, 1..4;
+ *                            the freighters (flight.cargo) only send landed and
+ *                            takeoff)
+ *   VH.Airside.markings()    the paint for the taxilane, stands and roads, and
+ *                            the remote stands' paving (airfield.js draws it)
+ *
+ * ------------------------------------------------- the API for havoc.js
+ *   airside.planes()         every live airliner, as a live view (read it each
+ *                            time, don't copy it): { id, x, y, z, yaw, state
+ *                            (the phase: 'approach' 'rollout' 'taxiin' 'parked'
+ *                            'pushback' 'tugoff' 'taxiout' 'lineup' 'takeoff'
+ *                            'climb' 'goaround'), flight (the board entry it is
+ *                            now), stand (1..4, or 'R1'..'R3'), model (its
+ *                            THREE.Object3D, or null while out of sight), speed
+ *                            (m/s), pax (passengers aboard now, about), cargo,
+ *                            airline, color, gone, disabled, plane (the
+ *                            Airliner itself) }
+ *   plane.disabled = true    it brakes to a stop where it is, engines off, and
+ *                            stays there: the others hold behind it (or, if it
+ *                            sits on their stand, go to another); on the
+ *                            runway it shuts the runway (arrivals go round,
+ *                            departures hold) until it's removed. Its stand's
+ *                            turnaround stops. In the air it diverts (flies
+ *                            off and is gone, flight Diverted). false again:
+ *                            it carries on.
+ *   airside.removePlane(p)   clear it away for good (a wreck, one Jay took):
+ *                            off the runway and the apron, stand freed, flight
+ *                            Cancelled; returns { x, y, z, yaw, color, airline,
+ *                            flight, stand } or null
+ *   airside.groundStop(on, reason)
+ *                            on: no pushbacks, nobody lines up or rolls (one
+ *                            already rolling goes), every arrival not yet down
+ *                            goes round and away and none comes in; the boards
+ *                            say Delayed with flight.note = reason. off: the
+ *                            arrivals come back a minute and a half apart.
+ *                            airside.stopped: the reason while on, else null.
+ *   airside.abortTakeoff(p)  one on its takeoff roll (under 60 m/s) brakes
+ *   (the live airliners are this.fleet inside this file; planes() is the way in)
  *
  * It is all scenery: no physics bodies. A plane or a tug stops for Jay (or a
  * car) in its way; a departure holds and an arrival goes around while he is
@@ -26,7 +67,9 @@
  * From airfield.js: runway 09/27 along z -1450 (x -1000..300, 60 m wide), the
  * parallel taxiway along z -1365, links L1..L5 at x -950, -600, -250, 100,
  * 250, the apron x -520..60 by z -1352..-1250 and stands A1..A4 at x -390,
- * -300, -210, -120, z -1276, nose in towards the terminal.
+ * -300, -210, -120, z -1276, nose in towards the terminal. The remote stands
+ * R1..R3 (x -585, -645, -705) are on their own paving west of the apron, nose
+ * in towards the fence straight off the taxiway.
  *
  * Everyone uses runway 09 (the wind is off the bay): arrivals come in from
  * the west over the approach lights, touch down by the aiming point (x -720)
@@ -36,27 +79,41 @@
  *
  *   arrivals    L4 south → taxiway west (x 70..3) → an S-bend onto the
  *               apron taxilane (z -1322) → west along it → a left turn into
- *               the stand (radius 25) → nose in to the stop bar.
+ *               the stand (radius 25) → nose in to the stop bar. To a remote
+ *               stand: on along the taxiway, through the merge, and left in.
  *               Holding point H-IN: on the taxiway, nose wheel at x 10,
  *               until the stand is free and the end of the taxilane clear.
  *   departures  pushed back from the stand with the tail swinging east, onto
  *               the taxilane facing west (stand x + 30) → west along it →
- *               an S-bend onto the taxiway (x -443) → west to L1 → north to
- *               holding point H-OUT (nose wheel at z -1408, short of the
- *               yellow bars) → lines up east → takeoff roll → over the bay.
+ *               an S-bend onto the taxiway (x -443, the merge) → west to L1
+ *               → north to holding point H-OUT (nose wheel at z -1408, short
+ *               of the yellow bars) → lines up east → takeoff roll → over the
+ *               bay. From a remote stand the push ends on the taxiway.
+ *   the merge   where the S-bend meets the taxiway: one plane through it at
+ *               a time (a departure, or an arrival for a remote stand).
+ *
+ * The runway runs like a busy single runway: an arrival is cleared to land
+ * 25 s out if the runway is clear or the only thing on it is a departure
+ * already rolling (otherwise it goes round); a departure lines up and waits
+ * behind an arrival that has touched down (or a departure that's rolling) if
+ * it will be rolling itself before the next arrival needs clearing, and rolls
+ * as soon as the runway ahead is clear. Arrivals are planned 82-100 s apart
+ * with a longer gap every fifth one, and are held back a little while three
+ * departures queue for the runway.
  *
  * The nose wheel follows the yellow line and the main gear trails it, so a
  * plane cuts its corners like a real one. The taxilane is 46 m behind the
  * parked planes: a taxiing Albatross's wingtips (17 m) clear the parked
- * tails (z -1295) by 10 m and a plane on the taxiway by 9 m. A pushback only
- * starts while nothing on the taxilane is near; a plane keeps 46 m from the
- * one ahead; the runway takes one plane at a time.
+ * tails (z -1295) by 10 m and a plane on the taxiway by 9 m (the same
+ * behind the remote stands). A pushback only starts while nothing on the
+ * taxilane is near; a plane keeps 46 m from the one ahead.
  *
  * The airside road (z -1300, a lane each way) runs between the tails and the
  * taxilane, from the depot east of A4 (fuel bowsers, catering trucks, the
  * follow-me car, the service vans) to the west end. Each stand's own
- * equipment waits on two pads by the terminal (west and east of its bridge).
- * Ground vehicles give way to any plane that is moving near them.
+ * equipment waits on two pads by the terminal (west and east of its bridge);
+ * the remote stands' (air stairs, a high-loader, a belt loader, a tug) on
+ * pads by the fence. Ground vehicles give way to any plane moving near them.
  *
  * The Skylark keeps off the airliners' taxi routes: it taxis west along the
  * taxiway to L3, flies right-hand circuits south of the field with
@@ -103,15 +160,31 @@
   const VAN_SLOT = [64, -1270];
   const APRON_C = { x: -230, z: -1320 };
 
+  // The remote stands R1..R3, west of the apron: nose in towards the fence, straight off the
+  // taxiway (which is their taxilane: a plane on it clears their tails by 9 m, as on the apron).
+  const REMOTE_X = [-585, -645, -705];
+  const REMOTE_Z = TWY_Z + 46;
+  const CARGO_PAD = { x0: -742, x1: -520, z0: -1353, z1: -1266 }; // their paving (airfield.js)
+  const MERGE_X = -443; //   where the departures' S-bend joins the taxiway
+
   // Turnaround (seconds from on-block, or from off-block when negative).
-  const T_BRIDGE = 12; //    the bridge is on: passengers come off
-  const T_DEPLANED = 95;
-  const T_MIN = 300; //      the shortest turnaround
-  const T_TURN = 355; //     the planned one
-  const B_BOARD = -150;
-  const B_FINAL = -65;
-  const B_CLOSE = -25;
-  const PLAN_AHEAD = 1800; // flights planned this far ahead (s)
+  const T_BRIDGE = 8; //     the bridge is on: passengers come off
+  const T_DEPLANED = 58;
+  const T_MIN = 150; //      the shortest turnaround
+  const T_TURN = 178; //     the planned one
+  const B_BOARD = -100;
+  const B_FINAL = -48;
+  const B_CLOSE = -18;
+  const T_CARGO = [330, 520]; // a freighter's turnaround on a remote stand
+  const PLAN_AHEAD = 1500; // flights planned this far ahead (s)
+  // The runway: arrivals a minute and a half apart, with a longer gap every few for the
+  // departures that have queued up, the Skylark and the freighters; each arrival is on the
+  // approach (and in sight, its landing lights at least) for nearly three minutes.
+  const ARR_GAP = [82, 100];
+  const BIG_GAP = [55, 85]; //  added to every fifth gap
+  const ARR_SEP = 74; //       the closest two arrivals ever touch down
+  const SPAWN_LEAD = 165; //   seconds out on the approach when an arrival appears
+  const LINE_T = 24; //        hold to lined up and rolling, for a departure
 
   // Original airlines and places only.
   const AIRLINES = [
@@ -121,6 +194,11 @@
     { name: 'Azurline', code: 'AZ', color: 0x1d4fb8 },
     { name: 'Palmetto Air', code: 'PM', color: 0x2f8f4e },
     { name: 'Kestrel Airways', code: 'KS', color: 0xc8202a },
+  ];
+  // The freighters on the remote stands (not on the passenger boards).
+  const CARGO_LINES = [
+    { name: 'Pelican Freight', code: 'PX', color: 0x8a5a2b, cargo: true },
+    { name: 'Bayhaul Cargo', code: 'BH', color: 0x4b3f8f, cargo: true },
   ];
   const CITIES = ['Port Elmira', 'San Coralo', 'Bellhaven', 'Marisol Bay', 'Lake Ardea', 'Carver City', 'Isla Brava', 'New Albion',
     'Ravenmoor', 'Sandcastle Key', 'Fort Larkin', 'Esperanza Bay', 'Glenmorrow', 'Calder Springs', 'Saint Aubrey', 'Halverton'];
@@ -286,7 +364,17 @@
     return path.end(vEnd === undefined ? 0 : vEnd);
   }
 
-  /** Nose-wheel route from touchdown to the stand's stop bar (an arrival). */
+  /** The distance along a path where (x, z) first passes test, or `none`. */
+  function sWhere(p, test, none) {
+    for (let i = 0; i < p.X.length; i++) if (test(p.X[i], p.Z[i])) return p.S[i];
+    return none;
+  }
+
+  /**
+   * Nose-wheel route from touchdown to the stand's stop bar (an arrival). To a remote stand
+   * it carries on west along the taxiway, past the end of the departures' S-bend (the merge:
+   * sMerge where it would enter it, sMergeOut once the main gear is clear of it).
+   */
   function arrivalPath(st) {
     const p = new Path(TD_X + NOSE, RWY.z, HALF);
     p.line(70, RWY.z, 75, 2.75); //            the landing roll
@@ -295,32 +383,42 @@
     p.turn(-HALF, 30, 7, 1.0); //              right onto the taxiway, westbound
     p.line(HOLD_IN, TWY_Z, 8, 1.0);
     p.sHoldIn = p.len; //                      H-IN
-    p.line(3, TWY_Z, 6, 1.0);
-    p.turn(HALF, 21.5, 5, 1.0); //             the S-bend onto the taxilane
-    p.turn(-HALF, 21.5, 5, 1.0);
-    p.line(st.x + 25, LANE_Z, 8, 1.0);
+    if (st.remote) {
+      p.line(MERGE_X + 80, TWY_Z, 9, 1.0);
+      p.sMerge = p.len;
+      p.line(st.x + 25, TWY_Z, 8, 1.0);
+    } else {
+      p.line(3, TWY_Z, 6, 1.0);
+      p.turn(HALF, 21.5, 5, 1.0); //           the S-bend onto the taxilane
+      p.turn(-HALF, 21.5, 5, 1.0);
+      p.line(st.x + 25, LANE_Z, 8, 1.0);
+    }
     p.sTurnIn = p.len;
     p.turn(HALF, 25, 4, 1.0); //               left into the stand
-    p.line(st.x, STAND_Z - 12, 3, 0.6);
-    p.line(st.x, STAND_Z + NOSE, 1.4, 0.45); // up to the stop bar
-    p.sVacate = 0;
+    p.line(st.x, st.z - 12, 3, 0.6);
+    p.line(st.x, st.z + NOSE, 1.4, 0.45); //   up to the stop bar
     // Off the runway once the nose wheel is past the hold bars on L4.
-    for (let i = 0; i < p.Z.length; i++) {
-      if (p.X[i] > 90 && p.Z[i] > -1400) {
-        p.sVacate = p.S[i];
-        break;
-      }
-    }
+    p.sVacate = sWhere(p, (x, z) => x > 90 && z > -1400, 0);
+    if (st.remote) p.sMergeOut = sWhere(p, (x, z) => x < MERGE_X - 42, p.sTurnIn);
     return p.end(0);
   }
 
-  /** Nose-wheel route from the end of the pushback to the far end of the runway (a departure). */
-  function departurePath(nx, nz) {
+  /**
+   * Nose-wheel route from the end of the pushback to the far end of the runway (a departure):
+   * from a contact stand along the taxilane and down the S-bend onto the taxiway (sMerge,
+   * sMergeOut as arrivalPath's); from a remote stand it's on the taxiway already.
+   */
+  function departurePath(nx, nz, remote) {
     const p = new Path(nx, nz, -HALF);
-    p.line(-400, LANE_Z, 8, 1.0);
-    p.turn(-HALF, 21.5, 5, 1.0); //            the S-bend onto the taxiway
-    p.turn(HALF, 21.5, 5, 1.0);
+    if (!remote) {
+      p.line(-385, LANE_Z, 8, 1.0);
+      p.sMerge = p.len;
+      p.line(-400, LANE_Z, 6, 1.0);
+      p.turn(-HALF, 21.5, 5, 1.0); //          the S-bend onto the taxiway
+      p.turn(HALF, 21.5, 5, 1.0);
+    }
     p.line(-920, TWY_Z, 9, 1.0);
+    if (!remote) p.sMergeOut = sWhere(p, (x, z) => z < TWY_Z + 1 && x < MERGE_X - 42, p.sMerge + 60);
     p.turn(-HALF, 30, 5, 1.0); //              right onto L1
     p.line(L1, HOLD_OUT, 4, 1.0);
     p.sHold = p.len; //                        H-OUT
@@ -332,10 +430,13 @@
     return p.end(99);
   }
 
-  /** Main-gear route of a pushback: straight back, then the tail swings east onto the taxilane. */
+  /**
+   * Main-gear route of a pushback: straight back, then the tail swings east onto the taxilane
+   * (or, from a remote stand, onto the taxiway).
+   */
   function pushPath(st) {
-    const p = new Path(st.x, STAND_Z, PI);
-    p.line(st.x, STAND_Z - 16, 1.5, 0.3);
+    const p = new Path(st.x, st.z, PI);
+    p.line(st.x, st.z - 16, 1.5, 0.3);
     p.turn(-HALF, 30, 1.5, 0.3);
     return p.end(0);
   }
@@ -633,6 +734,56 @@
       this.blocker = null;
       this.outYaw = HALF + rand(-0.35, 0.3);
       this.reject = false;
+      this.disabled = false; // (see the notes at the top: it stops where it is and stays there)
+      this.api = this._makeApi();
+    }
+
+    /** What airside.planes() hands out: a live view of this plane (see the notes at the top). */
+    _makeApi() {
+      const pl = this;
+      return {
+        plane: pl,
+        get id() { return pl.rot.id; },
+        get x() { return pl.x; },
+        get y() { return pl.y; },
+        get z() { return pl.z; },
+        get yaw() { return pl.yaw; },
+        get state() { return pl.phase; },
+        get flight() { return pl.flight; },
+        get stand() { return pl.rot.st.id; },
+        get model() { return pl.model ? pl.model.root : null; },
+        get speed() { return pl.v; },
+        get pax() { return pl.pax; },
+        get cargo() { return !!pl.rot.cargo; },
+        get airline() { return pl.rot.airline.name; },
+        get color() { return pl.color; },
+        get gone() { return pl.gone; },
+        get disabled() { return pl.disabled; },
+        set disabled(v) { pl.disabled = !!v; },
+      };
+    }
+
+    /** The flight it is now: the arrival until its passengers are off, then the departure. */
+    get flight() {
+      const p = this.phase;
+      const f = this.rot.flags;
+      const arriving = p === 'approach' || p === 'goaround' || p === 'rollout' || p === 'taxiin' || p === 'new' || (p === 'parked' && !f.deplaned);
+      return arriving ? this.rot.arr : this.rot.dep;
+    }
+
+    /** How many passengers are aboard, near enough (freighters: none). */
+    get pax() {
+      const r = this.rot;
+      if (r.cargo) return 0;
+      const p = this.phase;
+      if (p !== 'parked') return p === 'approach' || p === 'goaround' || p === 'rollout' || p === 'taxiin' ? r.arr.pax : r.dep.pax;
+      const f = r.flags;
+      const t = this.sys.t;
+      if (!f.bridge) return r.arr.pax;
+      if (!f.deplaned) return Math.round(r.arr.pax * clamp(1 - (t - r.onBlock - T_BRIDGE) / (T_DEPLANED - T_BRIDGE), 0, 1));
+      if (!f.boarding) return 0;
+      if (f.closed) return r.dep.pax;
+      return Math.round(r.dep.pax * clamp((t - r.off - B_BOARD) / (B_CLOSE - B_BOARD), 0, 1));
     }
 
     get onGround() {
@@ -646,11 +797,11 @@
     placeParked(st) {
       this.phase = 'parked';
       this.x = st.x;
-      this.z = STAND_Z;
+      this.z = st.z;
       this.y = 0;
       this.yaw = 0;
       this.nx = st.x;
-      this.nz = STAND_Z + NOSE;
+      this.nz = st.z + NOSE;
       this.v = 0;
       this.eng = this.engTarget = 0;
     }
@@ -674,7 +825,8 @@
     update(dt) {
       this.t += dt;
       this.navT += dt;
-      switch (this.phase) {
+      if (this.disabled) this._disabledTick(dt);
+      else switch (this.phase) {
         case 'approach':
           this._approach(dt);
           break;
@@ -688,7 +840,8 @@
           this._ground(dt);
           break;
         case 'lineup':
-          if (this.t > 3.5 && !this.sys._jayRwy) {
+          // Lined up: rolling as soon as the runway ahead is clear (an arrival turned off).
+          if (this.t > 3.5 && this.sys._mayRoll(this)) {
             this.phase = 'takeoff';
             this.t = 0;
           }
@@ -707,6 +860,37 @@
       }
       this.eng = moveTowards(this.eng, this.engTarget, dt / (this.engTarget > this.eng ? 28 : 14));
       this._thrust();
+    }
+
+    /**
+     * Disabled (airside.planes()[i].disabled): on the ground it brakes to a stop where it is,
+     * engines off, and stays put (still in the way of everyone else, who hold behind it; on
+     * the runway it shuts the runway). In the air it gives up and flies away (a diversion).
+     */
+    _disabledTick(dt) {
+      const p = this.phase;
+      if (p === 'approach' || p === 'goaround' || p === 'climb') {
+        if (p === 'approach') this.sys._goAround(this);
+        this.rot.diverted = true;
+        this._climb(dt);
+        return;
+      }
+      this.engTarget = 0;
+      this.v = Math.max(0, this.v - (p === 'takeoff' || p === 'rollout' ? 3.4 : 2.2) * dt);
+      this.pitch = Math.max(0, this.pitch - 0.08 * dt);
+      if (!this.path || this.v <= 0) return;
+      if (p === 'pushback') {
+        this.s = Math.min(this.path.len - 0.05, this.s + this.v * dt);
+        this.path.at(this.s, _a);
+        this.x = _a.x;
+        this.z = _a.z;
+        this.yaw = wrapAngle(_a.h + PI);
+        this.nx = this.x + Math.sin(this.yaw) * NOSE;
+        this.nz = this.z + Math.cos(this.yaw) * NOSE;
+      } else if (p === 'rollout' || p === 'taxiin' || p === 'taxiout' || p === 'takeoff') {
+        this.s = Math.min(this.path.len, this.s + this.v * dt);
+        this._follow(dt);
+      }
     }
 
     _thrust() {
@@ -763,7 +947,7 @@
     _ground(dt) {
       const P = this.path;
       let vt = P.cap(this.s);
-      let stop = this.stopS;
+      let stop = Math.min(this.stopS, this.sys._mergeHold(this));
       const blk = this.sys._lookAhead(this);
       if (blk < Infinity) stop = Math.min(stop, this.s + blk);
       this.blockT = this.blocker ? this.blockT + dt : 0;
@@ -1273,6 +1457,228 @@
     }
   }
 
+  // ------------------------------------------------------- far and high
+  /** A soft blob a few times wider than it is tall: a far-off aircraft against the sky. */
+  function speckTexture() {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 32;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 16, 0, 32, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.75)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.setTransform(2, 0, 0, 0.55, -32, 7.2);
+    x.fillStyle = g;
+    x.fillRect(0, 0, 64, 32);
+    return new THREE.CanvasTexture(c);
+  }
+
+  /** Along a contrail: thick and white just behind the jet, thinning out to nothing. */
+  function trailTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 8;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 128, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.04, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 128, 8);
+    const v = x.createLinearGradient(0, 0, 0, 8);
+    v.addColorStop(0, 'rgba(0,0,0,1)');
+    v.addColorStop(0.5, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,1)');
+    x.globalCompositeOperation = 'destination-out';
+    x.fillStyle = v;
+    x.fillRect(0, 0, 128, 8);
+    return new THREE.CanvasTexture(c);
+  }
+
+  const TRAIL_N = 24; //   points along a contrail
+  const TRAIL_STEP = 420; // metres between them
+
+  /**
+   * What's too far off to draw for real: the arrivals queued out on the approach (a speck by
+   * day, their landing lights at night) and the departures climbing away, beyond the draw
+   * distance; and now and then an airliner crossing high over the city with a contrail. All
+   * drawn on a shell just inside the far plane, without fog, at the size they'd look.
+   */
+  class SkyTraffic {
+    constructor(sys) {
+      this.sys = sys;
+      const scene = sys.game.scene;
+      const tex = speckTexture();
+      this.mLight = new THREE.SpriteMaterial({ map: poolTexture(), color: 0xfff3dc, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      this.mNav = new THREE.SpriteMaterial({ map: poolTexture(), color: 0xff5040, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      this.mSpeck = new THREE.SpriteMaterial({ map: tex, color: 0x6c7580, transparent: true, depthWrite: false, fog: false });
+      this.mTrail = new THREE.MeshBasicMaterial({ map: trailTexture(), color: 0xffffff, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+      const sprite = (m) => {
+        const o = new THREE.Sprite(m.clone()); // (each its own opacity)
+        o.visible = false;
+        o.frustumCulled = false;
+        o.renderOrder = -900;
+        scene.add(o);
+        return o;
+      };
+      this.far = [];
+      for (let i = 0; i < 10; i++) this.far.push({ light: sprite(this.mLight), speck: sprite(this.mSpeck) });
+      this.jets = [];
+      for (let i = 0; i < 2; i++) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 2 * 3), 3));
+        const uv = new Float32Array(TRAIL_N * 2 * 2);
+        const idx = [];
+        for (let k = 0; k < TRAIL_N; k++) {
+          uv.set([k / (TRAIL_N - 1), 0, k / (TRAIL_N - 1), 1], k * 4);
+          if (k < TRAIL_N - 1) idx.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2);
+        }
+        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        geo.setIndex(idx);
+        const trail = new THREE.Mesh(geo, this.mTrail.clone());
+        trail.frustumCulled = false;
+        trail.visible = false;
+        trail.renderOrder = -950;
+        scene.add(trail);
+        this.jets.push({ on: false, x: 0, y: 0, z: 0, hx: 0, hz: 1, v: 0, t: 0, trail, speck: sprite(this.mSpeck), nav: sprite(this.mNav) });
+      }
+      this.nextJet = rand(15, 70);
+      this._p = new THREE.Vector3();
+      this._q = new THREE.Vector3();
+      this._d = new THREE.Vector3();
+    }
+
+    /** Where (x, y, z) shows on the shell, and how much a metre there counts for (R / distance). */
+    _onShell(x, y, z, out) {
+      const cam = this.sys.game.renderer.camera;
+      const c = cam.position;
+      const d = Math.hypot(x - c.x, y - c.y, z - c.z) || 1;
+      const k = this.R / d;
+      out.set(c.x + (x - c.x) * k, c.y + (y - c.y) * k, c.z + (z - c.z) * k);
+      return k;
+    }
+
+    update(dt, on) {
+      const cam = this.sys.game.renderer.camera;
+      this.R = (cam.far || 900) * 0.9;
+      const night = this.sys.night;
+      const day = 1 - smoothstep(0.1, 0.5, night);
+      const c = cam.position;
+      // Airliners on the approach or climbing out, beyond the far plane.
+      let n = 0;
+      if (on) {
+        for (const pl of this.sys.fleet) {
+          if (n >= this.far.length) break;
+          const ph = pl.phase;
+          if (ph !== 'approach' && ph !== 'climb' && ph !== 'goaround') continue;
+          const d = Math.hypot(pl.x - c.x, pl.y - c.y, pl.z - c.z);
+          const fade = smoothstep(cam.far * 0.86, cam.far * 1.02, d) * (1 - smoothstep(16000, 22000, d));
+          if (fade <= 0.01) continue;
+          const f = this.far[n++];
+          const k = this._onShell(pl.x, pl.y + 3, pl.z, this._p);
+          f.speck.position.copy(this._p);
+          f.speck.scale.set(Math.max(2.4, 44 * k), Math.max(1.2, 13 * k), 1);
+          f.speck.visible = day > 0.02;
+          // The landing lights (on for the approach and the climb out) read as a star at night.
+          f.light.position.copy(this._p);
+          f.light.scale.setScalar(Math.max(3.2, clamp(d * 0.009, 1.6, 70) * k) * (0.65 + 0.35 * (1 - day)));
+          f.light.visible = true;
+          f.light.material.opacity = fade * (0.35 + 0.65 * (1 - day));
+          f.speck.material.opacity = fade * 0.8 * day;
+        }
+      }
+      for (let i = n; i < this.far.length; i++) {
+        this.far[i].speck.visible = false;
+        this.far[i].light.visible = false;
+      }
+      // High overflights: one every few minutes, about 10 km up, straight across the sky.
+      this.nextJet -= dt;
+      if (on && this.nextJet <= 0) {
+        const j = this.jets.find((q) => !q.on);
+        this.nextJet = rand(110, 230);
+        if (j) this._launch(j, c);
+      }
+      for (const j of this.jets) this._jet(j, dt, on, day);
+    }
+
+    _launch(j, c) {
+      // From 32 km off on one side, passing within 12 km of Jay, to 32 km off the other side.
+      const a = Math.random() * PI * 2;
+      const off = rand(-12000, 12000);
+      const hx = Math.sin(a);
+      const hz = Math.cos(a);
+      j.on = true;
+      j.t = 0;
+      j.v = rand(220, 250);
+      j.hx = hx;
+      j.hz = hz;
+      j.x = c.x - hx * 32000 + hz * off;
+      j.z = c.z - hz * 32000 - hx * off;
+      j.y = rand(9000, 11500);
+      j.len = rand(0.6, 1); // how long its contrail lasts (it depends on the air up there)
+    }
+
+    _jet(j, dt, on, day) {
+      if (!j.on || !on) {
+        j.trail.visible = j.speck.visible = j.nav.visible = false;
+        if (!on) j.on = false;
+        return;
+      }
+      j.t += dt;
+      j.x += j.hx * j.v * dt;
+      j.z += j.hz * j.v * dt;
+      const c = this.sys.game.renderer.camera.position;
+      if (j.t * j.v > 64000 + TRAIL_STEP * TRAIL_N) {
+        j.on = false;
+        return;
+      }
+      const k = this._onShell(j.x, j.y, j.z, this._p);
+      j.speck.position.copy(this._p);
+      j.speck.scale.set(Math.max(1.6, 50 * k), Math.max(0.8, 14 * k), 1);
+      j.speck.material.opacity = 0.8 * day;
+      j.speck.visible = day > 0.02;
+      j.nav.position.copy(this._p);
+      j.nav.scale.setScalar(Math.max(2.2, 60 * k));
+      j.nav.visible = day < 0.6 && j.t % 1.4 < 0.12;
+      // The contrail: a ribbon along the track behind it, built on the shell each frame.
+      const pos = j.trail.geometry.attributes.position;
+      const A = pos.array;
+      const P = this._p;
+      const Q = this._q;
+      const D = this._d;
+      const L = TRAIL_STEP * j.len;
+      for (let i = 0; i < TRAIL_N; i++) {
+        const back = Math.min(i * L, j.t * j.v);
+        const wx = j.x - j.hx * back;
+        const wz = j.z - j.hz * back;
+        const kk = this._onShell(wx, j.y - i * 6, wz, P);
+        this._onShell(wx - j.hx * 60, j.y - i * 6, wz - j.hz * 60, Q);
+        // Across the trail, in the plane facing the camera.
+        D.subVectors(Q, P).cross(this._q.copy(P).sub(c)).normalize();
+        const w = (24 + i * 9) * kk;
+        A[i * 6] = P.x + D.x * w;
+        A[i * 6 + 1] = P.y + D.y * w;
+        A[i * 6 + 2] = P.z + D.z * w;
+        A[i * 6 + 3] = P.x - D.x * w;
+        A[i * 6 + 4] = P.y - D.y * w;
+        A[i * 6 + 5] = P.z - D.z * w;
+      }
+      pos.needsUpdate = true;
+      j.trail.visible = true;
+      j.trail.material.opacity = 0.2 + 0.7 * day;
+    }
+
+    hide() {
+      for (const f of this.far) f.speck.visible = f.light.visible = false;
+      for (const j of this.jets) {
+        j.on = false;
+        j.trail.visible = j.speck.visible = j.nav.visible = false;
+      }
+    }
+  }
+
   // ------------------------------------------------------------- airside
   class Airside {
     constructor(game) {
@@ -1286,7 +1692,15 @@
         id: s.id, gate: s.gate, x: s.x, z: s.z, yaw: s.yaw || 0, door: s.door, i,
         state: 'empty', cur: null, queue: [], gse: null, crew: [], cones: false,
       }));
-      this.planes = [];
+      // The remote stands (freighters, with air stairs; no bridge, no gate).
+      this.remoteList = REMOTE_X.map((x, i) => ({
+        id: 'R' + (i + 1), gate: null, x, z: REMOTE_Z, yaw: 0, door: { x: x + 2.1, y: 3.0, z: REMOTE_Z + 15.0 }, i, remote: true,
+        state: 'empty', cur: null, queue: [], gse: null, crew: [], cones: false,
+      }));
+      this.allStands = this.standList.concat(this.remoteList);
+      this.fleet = []; //  every live airliner (an Airliner); planes() hands out their .api views
+      this.gstop = { on: false, reason: '', t: 0 }; // groundStop()
+      this._merge = null; // the plane through the merge (see _mergeHold)
       this.rots = [];
       this.rwy = new Set();
       this._obs = [];
@@ -1323,6 +1737,7 @@
       this.cones.frustumCulled = false;
       this.cones.castShadow = false;
       scene.add(this.cones);
+      this.skyFx = new SkyTraffic(this);
       this._m4 = new THREE.Matrix4();
       this._q = new THREE.Quaternion();
       this._v3 = new THREE.Vector3();
@@ -1413,22 +1828,28 @@
       this._serial = 0;
       this._num = new Map();
       this.rots = [];
-      this.planes = [];
+      this.fleet = [];
       this.rwy.clear();
       this._clock.set = false;
-      for (const st of this.standList) {
+      this._slot = 0;
+      this._merge = null;
+      this.gstop.on = false;
+      for (const st of this.allStands) {
         st.state = 'empty';
         st.cur = null;
         st.queue = [];
         st.cones = false;
       }
-      // Two or three stands busy, each at a different point of its turnaround.
-      const busy = Math.random() < 0.5 ? 2 : 3;
+      // Three or four stands busy, each at a different point of its turnaround; a freighter
+      // or two on the remote stands.
+      const busy = Math.random() < 0.5 ? 3 : 4;
       const order = shuffle([0, 1, 2, 3]);
-      const ages = shuffle([70, 180, 310]);
-      for (let k = 0; k < busy; k++) {
-        const st = this.standList[order[k]];
-        const age = ages[k] + rand(-25, 15);
+      const ages = shuffle([28, 72, 118, 160]);
+      const parked = [];
+      for (let k = 0; k < busy; k++) parked.push([this.standList[order[k]], ages[k] + rand(-12, 10)]);
+      const ro = shuffle([0, 1, 2]);
+      for (let k = 0; k < (Math.random() < 0.5 ? 1 : 2); k++) parked.push([this.remoteList[ro[k]], rand(40, 300)]);
+      for (const [st, age] of parked) {
         const rot = this._newRot(st, -age - this._taxiIn(st));
         rot.onBlock = -age;
         rot.off = rot.planOff;
@@ -1437,7 +1858,7 @@
         const pl = new Airliner(this, rot);
         pl.placeParked(st);
         rot.plane = pl;
-        this.planes.push(pl);
+        this.fleet.push(pl);
         const f = rot.flags;
         f.bridge = age > T_BRIDGE;
         f.deplaned = age > T_DEPLANED;
@@ -1445,7 +1866,8 @@
         f.boarding = to >= B_BOARD;
         f.final = to >= B_FINAL;
         f.closed = to >= B_CLOSE;
-        st.state = f.closed ? 'closed' : f.boarding ? 'boarding' : f.deplaned ? 'parked' : f.bridge ? 'deplaning' : 'parked';
+        if (st.remote) st.state = f.closed ? 'closed' : 'parked';
+        else st.state = f.closed ? 'closed' : f.boarding ? 'boarding' : f.deplaned ? 'parked' : f.bridge ? 'deplaning' : 'parked';
         rot.arr.status = 'At gate';
         st.cones = f.cones = f.bridge && !f.closed;
         if (f.closed) pl.engTarget = 0;
@@ -1453,19 +1875,19 @@
       this.lastLand = -400; // the first arrival is on its way in already
       this._plan();
       // Light aircraft.
-      this.sky = { phase: 'parked', timer: rand(70, 200), x: G1.x, z: G1.z, y: 0, yaw: PI, pitch: 0, roll: 0, v: 0, model: null, voice: null, circuits: 0, prop: 0 };
-      this.heli = { phase: 'away', timer: rand(60, 200), x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, v: 0, rpm: 0, model: null, voice: null };
+      this.sky = { phase: 'parked', timer: rand(30, 110), x: G1.x, z: G1.z, y: 0, yaw: PI, pitch: 0, roll: 0, v: 0, model: null, voice: null, circuits: 0, prop: 0 };
+      this.heli = { phase: 'away', timer: rand(25, 110), x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, v: 0, rpm: 0, model: null, voice: null };
       this._updateStatuses();
     }
 
     _clear() {
-      for (const pl of this.planes) {
+      for (const pl of this.fleet) {
         pl.detach();
         if (pl.voice) pl.voice.stop();
         pl.voice = null;
       }
-      this.planes = [];
-      for (const st of this.standList || []) this._dropStandGse(st);
+      this.fleet = [];
+      for (const st of this.allStands || []) this._dropStandGse(st);
       this._dropCrew(true);
       this._dropExtras();
       for (const c of [this.sky, this.heli]) {
@@ -1480,6 +1902,7 @@
       }
       if (this.beacons) this.beacons.count = 0;
       if (this.cones) this.cones.count = 0;
+      if (this.skyFx) this.skyFx.hide();
       this._stopVoices();
       this.rwy.clear();
     }
@@ -1513,7 +1936,9 @@
     }
 
     // ----------------------------------------------------- the schedule
+    /** Touchdown to on-block (about). */
     _taxiIn(st) {
+      if (st.remote) return 128 + Math.max(0, REMOTE_X[0] - st.x) / 8;
       return 92 + Math.max(0, -65 - st.x) / 7;
     }
 
@@ -1535,60 +1960,80 @@
     }
 
     _newRot(st, landAt) {
-      const al = pick(AIRLINES);
+      const cargo = !!st.remote;
+      const al = pick(cargo ? CARGO_LINES : AIRLINES);
       const city = pick(CITIES);
       let n = this._num.get(al.code);
-      if (!n) n = 101 + Math.floor(Math.random() * 380) * 2;
+      if (!n) n = (cargo ? 701 : 101) + Math.floor(Math.random() * (cargo ? 90 : 380)) * 2;
       this._num.set(al.code, n + 2 + 2 * Math.floor(Math.random() * 3));
       const id = ++this._serial;
       const onBlock = landAt + this._taxiIn(st);
-      const planOff = onBlock + T_TURN;
+      const planOff = onBlock + (cargo ? rand(T_CARGO[0], T_CARGO[1]) : T_TURN);
       const rot = {
-        id, st, airline: al, landAt, planLand: landAt, onBlock, planOff, off: planOff, state: 'planned', plane: null, flags: {}, gone: 0,
+        id, st, airline: al, cargo, landAt, planLand: landAt, onBlock, planOff, off: planOff, state: 'planned', plane: null, flags: {}, gone: 0,
       };
       const back = Math.random() < 0.7 ? city : pick(CITIES);
-      rot.arr = { id: al.code + n + '-' + id, code: al.code + ' ' + n, airline: al.name, city, kind: 'arr', time: this._hours(landAt), gate: st.gate, stand: st.id, status: 'Scheduled', est: null, pax: 90 + Math.floor(Math.random() * 90) };
-      rot.dep = { id: al.code + (n + 1) + '-' + id, code: al.code + ' ' + (n + 1), airline: al.name, city: back, kind: 'dep', time: this._hours(planOff), gate: st.gate, stand: st.id, status: 'Scheduled', est: null, pax: 90 + Math.floor(Math.random() * 90) };
+      const pax = () => (cargo ? 0 : 90 + Math.floor(Math.random() * 90));
+      rot.arr = { id: al.code + n + '-' + id, code: al.code + ' ' + n, airline: al.name, city, kind: 'arr', time: this._hours(landAt), gate: st.gate, stand: st.id, status: 'Scheduled', est: null, pax: pax(), cargo };
+      rot.dep = { id: al.code + (n + 1) + '-' + id, code: al.code + ' ' + (n + 1), airline: al.name, city: back, kind: 'dep', time: this._hours(planOff), gate: st.gate, stand: st.id, status: 'Scheduled', est: null, pax: pax(), cargo };
       st.queue.push(rot);
       this.rots.push(rot);
       return rot;
     }
 
-    /** Keep the arrivals planned half an hour ahead, each to the stand that frees up first. */
+    /**
+     * Keep the arrivals planned (25 minutes ahead), each to the stand that frees up first: a
+     * minute and a half apart, every fifth gap a longer one, and every sixth arrival a
+     * freighter for a remote stand.
+     */
     _plan() {
       let guard = 0;
-      while (this.lastLand < this.t + PLAN_AHEAD && guard++ < 30) {
-        let t = Math.max(this.t + (this.t < 1 && guard === 1 ? 42 : 80), this.lastLand + rand(140, 215));
-        let best = null;
-        let bestFree = Infinity;
-        for (const st of shuffle(this.standList.slice())) {
-          const f = this._freeAt(st);
-          if (f < bestFree) {
-            best = st;
-            bestFree = f;
+      while (this.lastLand < this.t + PLAN_AHEAD && guard++ < 40) {
+        const k = this._slot++;
+        let gap = rand(ARR_GAP[0], ARR_GAP[1]);
+        if (k % 5 === 4) gap += rand(BIG_GAP[0], BIG_GAP[1]);
+        let t = Math.max(this.t + (this.t < 1 && guard === 1 ? 42 : 60), this.lastLand + gap);
+        const pickStand = (list) => {
+          let best = null;
+          let bestFree = Infinity;
+          for (const st of shuffle(list.slice())) {
+            if (st.blocked) continue;
+            const f = this._freeAt(st);
+            if (f < bestFree) {
+              best = st;
+              bestFree = f;
+            }
           }
-        }
-        t = Math.max(t, bestFree + 25 - this._taxiIn(best));
-        this._newRot(best, t);
+          return best ? [best, Math.max(t, bestFree + 25 - this._taxiIn(best))] : null;
+        };
+        let got = k % 6 === 2 ? pickStand(this.remoteList) : null;
+        if (!got || got[1] > t + 120) got = pickStand(this.standList) || got;
+        if (!got) break;
+        t = got[1];
+        this._newRot(got[0], t);
         this.lastLand = t;
       }
     }
 
-    /** Move a flight that couldn't land (a go-around) to the next free slot. */
-    _resequence(rot) {
-      // (The first gap of at least a minute and a bit either side.)
-      let t = this.t + 150;
-      for (let tries = 0; tries < 40; tries++) {
-        const clash = this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < 70);
-        if (!clash) break;
-        t += 30;
+    /**
+     * Move a flight that couldn't land (a go-around, a ground stop) to the next slot: the
+     * first that's far enough from the others, or else the ones planned after it wait.
+     */
+    _resequence(rot, after) {
+      const t0 = Math.max(this.t + 150, after || 0);
+      const clash = (t) => this.rots.some((r) => r !== rot && (r.state === 'planned' || r.state === 'inbound') && Math.abs(r.landAt - t) < ARR_SEP + 4);
+      let t = t0;
+      while (t < t0 + 420 && clash(t)) t += 10;
+      if (clash(t)) {
+        t = t0;
+        for (const r of this.rots) if (r !== rot && r.state === 'planned' && r.landAt > t - ARR_SEP) r.landAt += ARR_GAP[0];
       }
       rot.landAt = t;
       rot.state = 'planned';
       rot.plane = null;
       rot.onBlock = t + this._taxiIn(rot.st);
       rot.off = Math.max(rot.planOff, rot.onBlock + T_MIN);
-      if (t > this.lastLand) this.lastLand = t;
+      this.lastLand = Math.max(this.lastLand, ...this.rots.filter((r) => r.state === 'planned').map((r) => r.landAt));
     }
 
     _clockCheck() {
@@ -1622,10 +2067,10 @@
       this._plan();
       this._spawnDue();
       this._runway();
-      for (let i = 0; i < this.planes.length; i++) this.planes[i].update(dt);
-      if (this.planes.some((p) => p.gone)) this.planes = this.planes.filter((p) => !p.gone);
+      for (let i = 0; i < this.fleet.length; i++) this.fleet[i].update(dt);
+      if (this.fleet.some((p) => p.gone)) this.fleet = this.fleet.filter((p) => !p.gone);
       this._arrivalsIn();
-      for (const st of this.standList) this._standTick(st, dt);
+      for (const st of this.allStands) this._standTick(st, dt);
       this._shutTick();
       this._gseTick(dt);
       this._crewTick(dt);
@@ -1638,7 +2083,8 @@
         this._lod();
         this._clockCheck();
       }
-      for (const pl of this.planes) if (pl.model) pl._pose();
+      for (const pl of this.fleet) if (pl.model) pl._pose();
+      this.skyFx.update(dt, true);
       this._instances();
       this._sound(dt);
       this._statusT -= dt;
@@ -1683,63 +2129,168 @@
       this.jay = pp;
     }
 
+    /**
+     * Arrivals onto the approach, SPAWN_LEAD out, at least ARR_SEP behind the one ahead. While
+     * three or more departures are queued for the runway, each arrival is held back a little
+     * (once) to let them go; in a ground stop none come in.
+     */
     _spawnDue() {
+      const queued = this._depQueue();
       for (const r of this.rots) {
-        if (r.state !== 'planned' || r.landAt - this.t > 75) continue;
-        // Keep a minute between arrivals on the approach.
+        if (r.state !== 'planned' || r.landAt - this.t > SPAWN_LEAD) continue;
+        if (this.gstop.on) {
+          r.landAt = Math.max(r.landAt, this.t + SPAWN_LEAD + 1);
+          continue;
+        }
+        const eta = Math.max(40, r.landAt - this.t);
+        if (queued >= 3 && !r.held && eta > 100) {
+          r.held = true;
+          r.landAt += 45;
+          continue;
+        }
         let ok = true;
-        for (const q of this.planes) if (q.phase === 'approach' && q.eta() > Math.max(35, r.landAt - this.t) - 60) ok = false;
+        for (const q of this.fleet) if (q.phase === 'approach' && Math.abs(q.eta() - eta) < ARR_SEP) ok = false;
         if (!ok) {
-          r.landAt += 20;
+          r.landAt += 10;
           continue;
         }
         const pl = new Airliner(this, r);
-        pl.startApproach(clamp(r.landAt - this.t, 40, 75));
+        pl.startApproach(eta);
         r.plane = pl;
         r.state = 'inbound';
-        this.planes.push(pl);
+        this.fleet.push(pl);
       }
+    }
+
+    /**
+     * Make sure no arrival touches down between t0 and t1 (for the Skylark): the ones planned
+     * then, and any still far out on the approach (out of sight), wait until after it, and
+     * the ones behind them keep their distance. (One too close in to hold back still comes.)
+     */
+    _delayArrivals(t0, t1) {
+      const list = [];
+      for (const q of this.fleet) if (q.phase === 'approach' && !q.cleared && !q.disabled) list.push({ q, t: this.t + q.eta(), fixed: q.eta() < 95 });
+      for (const r of this.rots) if (r.state === 'planned') list.push({ r, t: r.landAt, fixed: false });
+      list.sort((a, b) => a.t - b.t);
+      let last = -Infinity;
+      for (const e of list) {
+        let t = e.t;
+        if (!e.fixed) {
+          if (t > t0 - 1 && t < t1) t = t1;
+          t = Math.max(t, last + ARR_SEP + 2);
+        }
+        if (t > e.t + 0.5) {
+          if (e.q) e.q.x -= (t - e.t) * e.q.v;
+          (e.q ? e.q.rot : e.r).landAt = t;
+        }
+        last = t;
+      }
+      this.lastLand = Math.max(this.lastLand, last);
+    }
+
+    /** Departures taxiing out that are at (or queued for) the holding point. */
+    _depQueue() {
+      let n = 0;
+      for (const q of this.fleet) if (q.phase === 'taxiout' && !q.cleared && q.path && q.s > q.path.sHold - 170) n++;
+      return n;
     }
 
     // ------------------------------------------------------------ runway
     _arrivalWithin(sec) {
-      for (const q of this.planes) if (q.phase === 'approach' && q.eta() < sec) return true;
+      for (const q of this.fleet) if (q.phase === 'approach' && q.eta() < sec) return true;
       const s = this.sky;
       if (s && s.slot && s.eta < sec) return true;
       return false;
     }
 
-    /**
-     * May a departure line up and go? (From the holding point it's lined up and rolling in under
-     * half a minute: before the next arrival, 56 s out, needs clearing to land.)
-     */
+    /** May the Skylark go? Nothing on the runway, no arrival within a minute, no ground stop. */
     _rwyFree() {
-      return this.rwy.size === 0 && !this._jayRwy && !this._arrivalWithin(56);
+      return this.rwy.size === 0 && !this._jayRwy && !this.gstop.on && !this._rwyBlocked() && !this._arrivalWithin(56);
     }
 
     _rwyRelease(pl) {
       this.rwy.delete(pl);
     }
 
+    /** A disabled airliner on the runway shuts it (until airside.removePlane clears it). */
+    _rwyBlocked() {
+      for (const q of this.fleet) {
+        if (q.disabled && q.y < 5 && (this.rwy.has(q) || (Math.abs(q.z - RWY.z) < RWY.w / 2 + 14 && q.x > RWY.x0 - 70 && q.x < RWY.x1 + 70))) return true;
+      }
+      return false;
+    }
+
+    /** Something in this.rwy that's a departure already rolling, or off the ground (it's no bother to an arrival). */
+    _rollingAway(u) {
+      if (u.rot) return !u.disabled && (u.phase === 'climb' || (u.phase === 'takeoff' && !u.reject && u.v > 3));
+      return (u.phase === 'roll' && u.v > 3) || (u.phase === 'circuit' && !u.slot);
+    }
+
+    /** Seconds until the next arrival (an airliner, or the Skylark with its slot) not yet cleared to land touches down. */
+    _nextArrival() {
+      let e = Infinity;
+      for (const q of this.fleet) if (q.phase === 'approach' && !q.cleared && !q.disabled) e = Math.min(e, q.eta());
+      for (const r of this.rots) if (r.state === 'planned') e = Math.min(e, Math.max(0, r.landAt - this.t));
+      const k = this.sky;
+      if (k && k.slot && !this.rwy.has(k)) e = Math.min(e, k.eta);
+      return e;
+    }
+
+    /**
+     * May the departure at the holding point line up? ("Line up and wait": behind an arrival
+     * that has touched down, or a departure that's rolling.) Only if it will itself be rolling
+     * before the next arrival needs clearing to land (25 s out), and never under one that's
+     * about to cross the threshold.
+     */
+    _mayLineUp(pl) {
+      if (this.sky && this.sky.phase === 'hold' && this.sky.pri) return false; // (its turn: see _skylark)
+      let vacate = 0; // seconds until the runway ahead of it is clear (about)
+      for (const u of this.rwy) {
+        if (u === pl) continue;
+        if (u.rot && !u.disabled && u.phase === 'rollout') vacate = Math.max(vacate, Math.max(4, 30 - u.t));
+        else if (this._rollingAway(u)) vacate = Math.max(vacate, u.rot && u.phase === 'takeoff' ? Math.max(6, 34 - u.t) : 4);
+        else return false; // one cleared to land, one lined up already, the Skylark on it ...
+      }
+      return this._nextArrival() > Math.max(LINE_T, vacate) + 31;
+    }
+
+    /** May the departure lined up roll? Once the runway ahead is clear (the arrival turned off, the one before airborne). */
+    _mayRoll(pl) {
+      if (this._jayRwy || this.gstop.on || this._rwyBlocked()) return false;
+      for (const u of this.rwy) {
+        if (u === pl) continue;
+        if (u.rot ? u.phase !== 'climb' : u.phase === 'roll' || u.phase === 'tng' || u.phase === 'landroll') return false;
+      }
+      return true;
+    }
+
+    /**
+     * The runway, run like a busy single runway in mixed mode. An arrival is cleared to land
+     * 25 s out if the runway is clear, or the only thing on it is a departure already rolling
+     * (it's long gone by touchdown); otherwise it goes round. A departure at the holding point
+     * lines up when _mayLineUp says so and rolls when _mayRoll does.
+     */
     _runway() {
-      for (const pl of this.planes) {
+      const shut = this._jayRwy || this.gstop.on || this._rwyBlocked();
+      for (const pl of this.fleet) {
+        if (pl.disabled) continue;
         if (pl.phase === 'approach') {
           const eta = pl.eta();
           if (!pl.cleared && eta < 25) {
-            let ok = !this._jayRwy && this._queueIn() < 2;
-            // (Cleared to land behind a departure that's already rolling: it's long gone by touchdown.)
-            for (const u of this.rwy) if (u !== pl && !(u.phase === 'climb' || (u.phase === 'takeoff' && !u.reject))) ok = false;
+            let ok = !shut && this._queueIn() < 2;
+            for (const u of this.rwy) if (u !== pl && !this._rollingAway(u)) ok = false;
             if (ok) {
               pl.cleared = true;
               this.rwy.add(pl);
             } else this._goAround(pl);
-          } else if (pl.cleared && this._jayRwy && pl.y > 4) this._goAround(pl);
+          } else if (pl.cleared && (this._jayRwy || this._rwyBlocked()) && pl.y > 4) this._goAround(pl);
         } else if (pl.phase === 'taxiout' && !pl.cleared && pl.s > pl.path.sHold - 60) {
           pl.stopS = pl.path.sHold;
-          if (pl.s >= pl.path.sHold - 1.5 && this._rwyFree()) {
+          if (pl.s >= pl.path.sHold - 1.5 && !shut && this._mayLineUp(pl)) {
             pl.cleared = true;
             this.rwy.add(pl);
             pl.stopS = pl.path.sLine;
+            if (this.onLog) this.onLog('lineup', pl);
           }
         }
       }
@@ -1747,7 +2298,7 @@
 
     _queueIn() {
       let n = 0;
-      for (const q of this.planes) if ((q.phase === 'rollout' || q.phase === 'taxiin') && !q.released) n++;
+      for (const q of this.fleet) if ((q.phase === 'rollout' || q.phase === 'taxiin') && !q.released) n++;
       return n;
     }
 
@@ -1799,26 +2350,85 @@
       if (pl.voice) pl.voice.stop();
       pl.voice = null;
       this.rwy.delete(pl);
-      if (pl.phase === 'goaround') {
+      if (pl.phase === 'goaround' && !pl.rot.diverted && !pl.rot.cancelled) {
         // It flew a wide circuit out of sight: back in the queue for another go.
-        this._resequence(pl.rot);
+        this._resequence(pl.rot, this.gstop.on ? this.t + 400 : 0);
+      } else if (pl.phase === 'goaround') this._cancelRot(pl.rot, 'Diverted');
+    }
+
+    /** A rotation that won't happen (a diversion, a wreck cleared away): off the boards as Cancelled. */
+    _cancelRot(r, why) {
+      r.cancelled = true;
+      r.endT = this.t;
+      const done = r.state === 'gone';
+      r.state = 'cancelled';
+      if (!/landed|at gate/i.test(r.arr.status) && !r.landed) r.arr.status = why === 'Diverted' ? 'Diverted' : 'Cancelled';
+      if (!done) r.dep.status = 'Cancelled';
+      r.arr.est = r.dep.est = null;
+      const st = r.st;
+      st.queue = st.queue.filter((q) => q !== r);
+      if (st.cur === r) {
+        st.cur = null;
+        st.state = 'empty';
+        st.cones = false;
+        const tug = st.gse && st.gse.tug;
+        if (tug && tug.attached) {
+          tug.attached = null;
+          this._tugHome(st, tug);
+        }
       }
     }
 
+    /**
+     * Another stand for an arrival whose own is blocked (a disabled plane on it): the free one
+     * with the longest until its next flight. The gate changes on the boards.
+     */
+    _restand(pl) {
+      const r = pl.rot;
+      const old = r.st;
+      let best = null;
+      let bestT = -Infinity;
+      for (const st of old.remote ? this.remoteList : this.standList) {
+        if (st === old || st.cur || st.blocked) continue;
+        const next = st.queue.length ? st.queue[0].landAt : Infinity;
+        if (next > bestT) {
+          best = st;
+          bestT = next;
+        }
+      }
+      if (!best) return null;
+      old.queue = old.queue.filter((q) => q !== r);
+      best.queue.unshift(r);
+      r.st = best;
+      for (const f of [r.arr, r.dep]) {
+        f.gate = best.gate;
+        f.stand = best.id;
+      }
+      pl.path = arrivalPath(best);
+      pl.align = { x: best.x };
+      VH.events.emit('airside:gatechange', { flight: r.dep, arrival: r.arr, from: old.gate, gate: best.gate, stand: best.id });
+      return best;
+    }
+
     // --------------------------------------------------------- the stands
-    /** Arrivals on the ground: hold at H-IN until the stand is free and the taxilane end is clear. */
+    /**
+     * Arrivals on the ground: hold at H-IN until the stand is free and the taxilane end is
+     * clear (for a remote stand: no pushback onto the taxiway it will take). One whose stand
+     * is blocked (a disabled plane on it) goes to another.
+     */
     _arrivalsIn() {
-      for (const pl of this.planes) {
-        if ((pl.phase !== 'rollout' && pl.phase !== 'taxiin') || pl.released) continue;
-        const st = pl.rot.st;
+      for (const pl of this.fleet) {
+        if ((pl.phase !== 'rollout' && pl.phase !== 'taxiin') || pl.released || pl.disabled) continue;
+        let st = pl.rot.st;
+        if (st.cur && st.cur !== pl.rot && st.cur.plane && st.cur.plane.disabled && pl.s < pl.path.sHoldIn + 2) st = this._restand(pl) || st;
         const free = !st.cur || st.cur === pl.rot;
         let clear = true;
-        for (const q of this.planes) {
+        for (const q of this.fleet) {
           if (q === pl || !q.onGround || q.phase === 'parked') continue;
-          if (Math.hypot(q.x - -55, q.z - LANE_Z) < 52) clear = false;
+          if (!st.remote && Math.hypot(q.x - -55, q.z - LANE_Z) < 52) clear = false;
         }
-        // Not while a plane is being pushed back across the lane it would take.
-        for (const s2 of this.standList) if (s2.state === 'pushback' && s2.x > st.x) clear = false;
+        // Not while a plane is being pushed back across the lane (or the taxiway) it would take.
+        for (const s2 of st.remote ? this.remoteList : this.standList) if (s2.state === 'pushback' && s2.x > st.x) clear = false;
         if (free && clear) {
           pl.released = true;
           pl.stopS = Infinity;
@@ -1834,10 +2444,10 @@
       const st = r.st;
       pl.phase = 'parked';
       pl.x = st.x;
-      pl.z = STAND_Z;
+      pl.z = st.z;
       pl.yaw = 0;
       pl.nx = st.x;
-      pl.nz = STAND_Z + NOSE;
+      pl.nz = st.z + NOSE;
       pl.v = 0;
       pl.align = null;
       pl.engTarget = 0;
@@ -1851,17 +2461,24 @@
 
     _standTick(st) {
       const r = st.cur;
-      if (!r || r.state !== 'atStand') return;
+      if (!r || r.state !== 'atStand' || (r.plane && r.plane.disabled)) return;
       const f = r.flags;
       const tr = this.t - r.onBlock;
       const to = this.t - r.off;
       const ev = { flight: r.arr, stand: st.id, gate: st.gate };
-      if (!f.bridge && tr >= T_BRIDGE) {
+      if (st.remote) {
+        // A freighter: the stairs on, the loading, the doors shut; no boarding calls.
+        if (!f.bridge && tr >= T_BRIDGE) f.bridge = true;
+        if (!f.closed && to >= B_CLOSE) {
+          f.closed = f.boarding = f.final = f.deplaned = true;
+          st.state = 'closed';
+        }
+      } else if (!f.bridge && tr >= T_BRIDGE) {
         f.bridge = true;
         st.state = 'deplaning';
         VH.events.emit('airside:arrived', ev);
       }
-      if (!f.cones && tr >= 20 && !f.closed) st.cones = f.cones = true;
+      if (!f.cones && tr >= 14 && !f.closed) st.cones = f.cones = true;
       if (!f.deplaned && tr >= T_DEPLANED) {
         f.deplaned = true;
         if (st.state === 'deplaning') st.state = 'parked';
@@ -1882,7 +2499,7 @@
       // (held up somewhere): they're done here. Out of sight they're simply put away; after a
       // few minutes, any not right by Jay too.
       if (f.closed && !f.push && to > 60 && st.gse) this._standGseHome(st, to > 180);
-      if (f.closed && !f.push && to >= 0 && this._pushClear(st)) {
+      if (f.closed && !f.push && to >= 0 && !this.gstop.on && this._pushClear(st)) {
         f.push = true;
         st.state = 'pushback';
         const pl = r.plane;
@@ -1895,7 +2512,7 @@
         r.pushed = this.t;
         const tug = st.gse && st.gse.tug;
         if (tug) tug.attached = pl;
-        VH.events.emit('airside:pushback', { flight: r.dep, stand: st.id });
+        if (!st.remote) VH.events.emit('airside:pushback', { flight: r.dep, stand: st.id });
         if (this.onLog) this.onLog('pushback', pl);
       }
     }
@@ -1908,13 +2525,14 @@
      * still stops for anything that comes into its way, _lookBehind.)
      */
     _pushClear(st) {
+      if (st.remote) return this._pushClearRemote(st);
       const held = st.cur ? this.t - st.cur.off : 0;
-      for (const q of this.planes) {
+      for (const q of this.fleet) {
         if (q.rot === st.cur || !q.onGround || q.phase === 'parked') continue;
         // (One taxiing out from a stand further east will come past behind us.)
         const east = q.phase === 'taxiout' || q.phase === 'tugoff' || q.phase === 'pushback' ? 330 : 130;
         if (q.x > st.x - 45 && q.x < st.x + east && q.z > -1348 && q.z < -1283) return false;
-        if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x + 20) return false;
+        if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && !q.rot.st.remote && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x + 20) return false;
       }
       for (const o of this._obs) {
         if (o.x > st.x - 24 && o.x < st.x + 58 && o.z > -1342 && o.z < -1262 && o.y < 6) {
@@ -1927,12 +2545,70 @@
         if (v.st === st || !v.root.visible || (this.extras && v === this.extras.stairs)) continue;
         if (v.x > st.x - (v.busy ? 40 : 16) && v.x < st.x + 58 && v.z > -1342 && v.z < -1282) return false;
       }
+      return this._ownGseReady(st, (v) => v.x > st.x - 40 && v.x < st.x + 58 && v.z > -1342 && v.z < -1262);
+    }
+
+    /**
+     * This stand's own vehicles ready for the pushback: the tug on its spot, the rest home or
+     * on their way there and out of the way (`inWay` says what's in the way).
+     */
+    _ownGseReady(st, inWay) {
       const g = st.gse;
-      if (g) {
-        if (g.tug && (g.tug.busy || g.tug.post !== 'spot')) return false;
-        for (const key of Object.keys(g.spec)) if (key !== 'tug' && g[key].post !== 'home') return false;
+      if (!g) return true;
+      if (g.tug && (g.tug.busy || g.tug.post !== 'spot')) return false;
+      for (const key of g.keys) {
+        const v = g[key];
+        if (key === 'tug' || v.post === 'home') continue;
+        if (v.post !== 'leaving' || inWay(v)) return false;
       }
       return true;
+    }
+
+    /**
+     * May the freighter on this remote stand push back onto the taxiway? Nothing on the
+     * taxiway from just west of it to well east, nothing coming through the merge or about to,
+     * no arrival on its way past to a remote stand further west, nobody behind it.
+     */
+    _pushClearRemote(st) {
+      const me = st.cur && st.cur.plane;
+      const held = st.cur ? this.t - st.cur.off : 0;
+      if (this._merge && this._merge !== me) return false;
+      for (const q of this.fleet) {
+        if (q === me || !q.onGround || q.phase === 'parked') continue;
+        if (q.z < TWY_Z + 26 && q.z > TWY_Z - 30 && q.x > st.x - 55 && q.x < st.x + 270) return false;
+        if (q.phase === 'pushback' && q.rot.st.remote) return false;
+        if (q.path && q.path.sMerge !== undefined && q.s > q.path.sMerge - 90 && q.s < q.path.sMergeOut && (q.phase === 'taxiout' || q.phase === 'taxiin')) return false;
+        if (q.released && (q.phase === 'taxiin' || q.phase === 'rollout') && q.rot.st.remote && q.s < q.path.sTurnIn + 5 && q.rot.st.x < st.x) return false;
+      }
+      for (const o of this._obs) {
+        if (o.x > st.x - 24 && o.x < st.x + 70 && o.z > TWY_Z - 16 && o.z < st.z + 14 && o.y < 6) {
+          if (o.still && held > 30 && !this._inPushSweep(st, o)) continue;
+          return false;
+        }
+      }
+      return this._ownGseReady(st, (v) => v.x > st.x - 30 && v.x < st.x + 70 && v.z < st.z + 18);
+    }
+
+    /**
+     * The merge, where the departures' S-bend meets the taxiway: one plane through it at a
+     * time (a departure coming down the S-bend, or an arrival for a remote stand coming along
+     * the taxiway). How far along its path this plane may go, or Infinity.
+     */
+    _mergeHold(pl) {
+      const P = pl.path;
+      if (!P || P.sMerge === undefined || (pl.phase !== 'taxiout' && pl.phase !== 'taxiin')) return Infinity;
+      if (this._merge === pl) {
+        if (pl.s > P.sMergeOut) this._merge = null;
+        return Infinity;
+      }
+      if (pl.s > P.sMerge + 0.5) return Infinity; // (went through before the merge was watched)
+      if (pl.s < P.sMerge - 70) return Infinity;
+      const m = this._merge;
+      if (m && (m.gone || !this.fleet.includes(m) || m.disabled || (m.phase !== 'taxiout' && m.phase !== 'taxiin'))) this._merge = null;
+      // A remote pushback onto the taxiway in progress holds it too.
+      const pushing = this.remoteList.some((r) => r.state === 'pushback');
+      if (!this._merge && !pushing && pl.s > P.sMerge - 12) this._merge = pl;
+      return this._merge === pl ? Infinity : P.sMerge;
     }
 
     /** Put away this stand's vehicles that aren't where a pushback needs them (see _standTick). */
@@ -1996,7 +2672,7 @@
     _beginTaxiOut(pl) {
       pl.phase = 'taxiout';
       pl.t = 0;
-      pl.path = departurePath(pl.nx, pl.nz);
+      pl.path = departurePath(pl.nx, pl.nz, pl.rot.st.remote);
       pl.s = 0;
       pl.v = 0;
       pl.stopS = pl.path.sHold;
@@ -2020,7 +2696,7 @@
           P.at(Math.max(0, sc - NOSE), _c);
           const d0x = pl.x;
           const d0z = pl.z;
-          for (const q of this.planes) {
+          for (const q of this.fleet) {
             if (q === pl || q.gone || !q.onGround || q.phase === 'parked') continue;
             const dq = Math.hypot(_c.x - q.x, _c.z - q.z);
             if (dq < SEP && dq < Math.hypot(d0x - q.x, d0z - q.z) - 0.3) {
@@ -2044,7 +2720,8 @@
         }
       }
       pl.blocker = null;
-      if (!fast && (pl.z > -1362 || (pl.x > -10 && pl.x < 130))) { // (the follow-me comes out onto the taxiway there)
+      // (The follow-me comes out onto the taxiway east of the apron; the remote stands' tugs onto it in the west.)
+      if (!fast && (pl.z > -1362 || (pl.x > -10 && pl.x < 130) || (pl.x < CARGO_PAD.x1 + 10 && pl.x > CARGO_PAD.x0 - 30))) {
         const gd = this._gseAhead(pl, P, pl.s, Math.min(60, reach), false);
         if (gd < Infinity) return Math.max(0, gd - 7);
       }
@@ -2162,7 +2839,7 @@
      */
     _shutTick() {
       for (const st of this.standList) st.shut = false;
-      for (const pl of this.planes) {
+      for (const pl of this.fleet) {
         const st = pl.rot.st;
         if (pl.phase === 'pushback' || (pl.phase === 'taxiin' && pl.path && pl.path.sTurnIn && pl.s > pl.path.sTurnIn - 70)) st.shut = true;
       }
@@ -2194,7 +2871,7 @@
       // Planes on the ground (not parked): keep out from under each one, where it is now and
       // where it will be in three and six seconds. Already under one of those: carry on, out
       // of the way. (The follow-me never waits for the plane it's leading.)
-      for (const q of this.planes) {
+      for (const q of this.fleet) {
         if (!q.onGround || q.phase === 'parked' || q.gone || (q === v.plane && v.state !== 'out') || q === v.waitPl) continue;
         if (v.role === 'tug' && q.rot.st === v.st) continue;
         if (q._gseBlk === v && q.v < 0.5) continue; // it's waiting for us: go
@@ -2354,6 +3031,7 @@
     // ------------------------------------------------- ground equipment
     /** The world position of a stand-local point ([x, z] relative to the stand, z south). */
     _standGseSpec(st) {
+      if (st.remote) return this._remoteGseSpec(st);
       const i = st.i;
       // This stand's bowser and catering truck in the depot (staggered, so each can drive straight out north).
       const fuelSlot = [8 + 12 * i, -1263];
@@ -2362,26 +3040,26 @@
       const depotIn = (slot) => [[DEPOT_IN_X, ROAD_E], [DEPOT_IN_X, DEPOT_IN_Z], [slot[0], DEPOT_IN_Z], [slot[0], slot[1]]];
       const L = (lx, lz) => W(st, lx, lz);
       return {
-        tug: { kind: 'tug', home: [...L(-30, 25), HALF], spot: [...L(0, 19.6), PI], tin: -62 },
+        tug: { kind: 'tug', home: [...L(-30, 25), HALF], spot: [...L(0, 19.6), PI], tin: -48 },
         // (The jet bridge's rotunda stands at x +11.5..+16.5, z +12.5..+17.5 and its tunnel
         // runs south from it to the terminal: everything keeps east or north of them.)
         belt1: {
-          kind: 'belt', home: [...L(21, 21), PI], spot: [...L(6.3, 9.5), -HALF], tin: 25, tout: -40,
+          kind: 'belt', home: [...L(21, 21), PI], spot: [...L(6.3, 9.5), -HALF], tin: 14, tout: -27,
           legIn: () => [{ path: route([L(21, 21), L(21, 9.5), L(6.3, 9.5)], 4, 5) }],
           legOut: () => [{ path: route([L(6.3, 9.5), L(21, 9.5), L(21, 21)], 4, 5), rev: true }],
         },
         belt2: {
-          kind: 'belt', home: [...L(26, 23), PI], spot: [...L(6.3, -8), -HALF], tin: 29, tout: -36,
+          kind: 'belt', home: [...L(26, 23), PI], spot: [...L(6.3, -8), -HALF], tin: 17, tout: -29,
           legIn: () => [{ path: route([L(26, 23), L(26, -4), L(22, -8), L(6.3, -8)], 4, 5) }],
           legOut: () => [{ path: route([L(6.3, -8), L(22, -8), L(26, -4), L(26, 23)], 4, 5), rev: true }],
         },
         train: {
-          kind: 'train', home: [...L(30, 22), -HALF], spot: [...L(13, -8), PI], tin: 44, tout: -52,
+          kind: 'train', home: [...L(30, 22), -HALF], spot: [...L(13, -8), PI], tin: 22, tout: -45,
           legIn: () => [{ path: route([L(30, 22), L(23.5, 22), L(23.5, 3), L(13, 3), L(13, -8)], 5, 5) }],
           legOut: () => [{ path: route([L(13, -8), L(13, -22.5), L(40, -22.5), L(40, 22), L(30, 22)], 5, 6) }],
         },
         cater: {
-          kind: 'cater', home: [...caterSlot, PI], spot: [...L(-4.6, -9), 0], tin: 58, tout: -160,
+          kind: 'cater', home: [...caterSlot, PI], spot: [...L(-4.6, -9), 0], tin: 18, tout: -74,
           legIn: () => [{ path: route(depotOut(caterSlot, st.x + 1.4, ROAD_W).concat([L(-4.6, -18.5), L(-4.6, -9)]), 6, 7) }],
           legOut: () => [
             { path: route([L(-4.6, -9), L(-4.6, -22.5), L(-12, -22.5)], 6, 3), rev: true },
@@ -2390,9 +3068,40 @@
           depotIn: depotIn(caterSlot),
         },
         fuel: {
-          kind: 'fuel', home: [...fuelSlot, PI], spot: [...L(-13, 10), 0], tin: 38, tout: -108,
+          kind: 'fuel', home: [...fuelSlot, PI], spot: [...L(-13, 10), 0], tin: 14, tout: -64,
           legIn: () => [{ path: route(depotOut(fuelSlot, st.x - 24, ROAD_W).concat([L(-24, 0), L(-13, 6), L(-13, 10)]), 6, 7) }],
           legOut: () => [{ path: route([L(-13, 10), L(-13, 16), L(-24, 18), L(-24, -22.5)].concat(depotIn(fuelSlot)), 6, 7) }],
+        },
+      };
+    }
+
+    /**
+     * A remote stand's own: the air stairs at the front door, a high-loader (the catering
+     * truck's lift) at the freighter's main-deck door, a belt loader at the aft hold and a
+     * tug. Their pads are south of the stand, by the fence; the taxiway is the other way.
+     */
+    _remoteGseSpec(st) {
+      const L = (lx, lz) => W(st, lx, lz);
+      return {
+        tug: {
+          kind: 'tug', home: [...L(-26, 26), HALF], spot: [...L(0, 19.6), PI], tin: -50,
+          legIn: () => [{ path: route([L(-26, 26), L(-8, 26), L(0, 21.5), L(0, 19.6)], 4, 4) }],
+          legHome: (bx, bz) => [{ path: route([[bx, bz], [bx + 4, bz + 5], L(11, -4), L(11, 22), L(-34, 30), L(-34, 26), L(-26, 26)], 4, 6) }],
+        },
+        stairs: {
+          kind: 'stairs', home: [...L(18, 33), PI], spot: [...L(5.9, 15), -HALF], tin: 10, tout: -40,
+          legIn: () => [{ path: route([L(18, 33), L(18, 15), L(5.9, 15)], 5, 4) }],
+          legOut: () => [{ path: route([L(5.9, 15), L(18, 15), L(18, 33)], 5, 2.2), rev: true }],
+        },
+        loader: {
+          kind: 'cater', home: [...L(-4.6, 40), 0], spot: [...L(-4.6, 10.5), 0], tin: 20, tout: -85,
+          legIn: () => [{ path: route([L(-4.6, 40), L(-4.6, 10.5)], 4, 2.2), rev: true }],
+          legOut: () => [{ path: route([L(-4.6, 10.5), L(-4.6, 40)], 4, 4) }],
+        },
+        belt: {
+          kind: 'belt', home: [...L(24, 40), PI], spot: [...L(6.3, -8), -HALF], tin: 26, tout: -55,
+          legIn: () => [{ path: route([L(24, 40), L(24, -4), L(20, -8), L(6.3, -8)], 4, 5) }],
+          legOut: () => [{ path: route([L(6.3, -8), L(20, -8), L(24, -4), L(24, 40)], 4, 5), rev: true }],
         },
       };
     }
@@ -2461,7 +3170,7 @@
       tug.post = 'going';
       tug.go([
         { path: route([[tug.x, tug.z], [bx, bz]], 3, 1.5), rev: true },
-        { path: route([[bx, bz], [bx + 4, bz + 5], [st.x + 11, ROAD_W], [st.x - 36, ROAD_W], L(-36, 25), L(-30, 25)], 4, 6) },
+        ...(s.legHome ? s.legHome(bx, bz) : [{ path: route([[bx, bz], [bx + 4, bz + 5], [st.x + 11, ROAD_W], [st.x - 36, ROAD_W], L(-36, 25), L(-30, 25)], 4, 6) }]),
       ], () => {
         tug.post = 'home';
         tug.place(s.home[0], s.home[1], s.home[2]);
@@ -2472,12 +3181,12 @@
       // Everyone first, so each vehicle can see all the others as it moves.
       const all = (this._allGse = this._allGse || []);
       all.length = 0;
-      for (const st of this.standList) {
+      for (const st of this.allStands) {
         if (!st.gse) continue;
         for (const key of st.gse.keys) all.push(st.gse[key]);
       }
       if (this.extras) for (const v of this.extras.list) all.push(v);
-      for (const st of this.standList) {
+      for (const st of this.allStands) {
         const set = st.gse;
         if (!set) continue;
         const r = st.cur;
@@ -2491,7 +3200,7 @@
             if (atStand && to >= s.tin && v.post === 'home' && !v.busy) {
               const L = (lx, lz) => W(st, lx, lz);
               v.post = 'going';
-              v.go([{ path: route([L(-30, 25), L(-12, 27), L(-5, 27), L(0, 21.5), L(0, 19.6)], 4, 4) }], () => {
+              v.go(s.legIn ? s.legIn() : [{ path: route([L(-30, 25), L(-12, 27), L(-5, 27), L(0, 21.5), L(0, 19.6)], 4, 4) }], () => {
                 v.post = 'spot';
               });
             }
@@ -2805,7 +3514,8 @@
         if (fm.carModel.setHeadlights) fm.carModel.setHeadlights(night);
         if (fm.state === 'home') {
           // (Only one still well up the runway: it has to be there first.)
-          const pl = this.planes.find((p) => p.phase === 'rollout' && !p.followed && p.v < 45 && p.x < -200);
+          // (Not for a freighter: it goes on along the taxiway to the remote stands.)
+          const pl = this.fleet.find((p) => p.phase === 'rollout' && !p.followed && !p.rot.st.remote && p.v < 45 && p.x < -200);
           if (pl) {
             pl.followed = true;
             fm.plane = pl;
@@ -2915,7 +3625,7 @@
       const pl = fm.waitPl;
       const done = !pl || pl.gone || pl.phase !== 'taxiin' || pl.z > STAND_Z - 3;
       let crowded = false;
-      for (const q of this.planes) {
+      for (const q of this.fleet) {
         if (q !== pl && q.moving && Math.abs(q.z - LANE_Z) < 30 && q.x > fm.x - 20 && q.x < fm.x + 140) crowded = true;
       }
       // A plane about to push back from the stand west of us (we're behind its tail).
@@ -2985,7 +3695,7 @@
           let vt = k.path.cap(k.s);
           // Give way to airliners.
           k.path.at(Math.min(k.path.len, k.s + 14), _c);
-          for (const q of this.planes) if (q.onGround && q.phase !== 'parked' && Math.hypot(_c.x - q.x, _c.z - q.z) < 32) vt = 0;
+          for (const q of this.fleet) if (q.onGround && q.phase !== 'parked' && Math.hypot(_c.x - q.x, _c.z - q.z) < 32) vt = 0;
           for (const o of this._obs) if (Math.hypot(o.x - _c.x, o.z - _c.z) < 6 + o.r) vt = 0;
           k.v = k.v < vt ? Math.min(vt, k.v + 1.2 * dt) : Math.max(vt, k.v - 3 * dt);
           k.s = Math.min(k.path.len, k.s + k.v * dt);
@@ -3005,11 +3715,20 @@
         }
         case 'hold':
           k.v = 0;
-          if (this._rwyFree() && !this.planes.some((q) => q.phase === 'taxiout' && q.cleared)) {
+          // Kept waiting a while: the tower makes a gap (the arrivals are held back a little,
+          // the departures wait) and we go in it.
+          k.wait = (k.wait || 0) + dt;
+          if (k.wait > 40 && !k.pri) {
+            k.pri = true;
+            this._delayArrivals(this.t, this.t + 80);
+          }
+          if (this._rwyFree() && !this.fleet.some((q) => q.phase === 'taxiout' && q.cleared)) {
             this.rwy.add(k);
             k.phase = 'roll';
             k.path = this._skyPath('line');
             k.s = 0;
+            k.wait = 0;
+            k.pri = false;
           }
           break;
         case 'roll': {
@@ -3072,10 +3791,17 @@
             k.eta = (P.len - k.s) / 38;
             const tdAt = this.t + k.eta;
             const after = k.circuits <= 1 ? 70 : 48;
-            // Airliners waiting to go out come first.
-            const busy = this._jayRwy || this.planes.some((q) => q.phase === 'approach' && q.eta() > k.eta - 62 && q.eta() < k.eta + after) ||
-              this.planes.some((q) => q.phase === 'taxiout' && q.path && q.s > q.path.sHold - 120) ||
-              this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 62 && r.landAt < tdAt + after);
+            // (A queue of airliners waiting to go out comes first.) Sent round twice already:
+            // the tower holds the arrivals back to make room.
+            const busyAt = () => this._jayRwy || this.gstop.on || this.fleet.some((q) => q.phase === 'approach' && q.eta() > k.eta - 55 && q.eta() < k.eta + after) ||
+              this._depQueue() >= 3 || this.rots.some((r) => r.state === 'planned' && r.landAt > tdAt - 55 && r.landAt < tdAt + after);
+            let busy = busyAt();
+            if (busy && (k.orbits || 0) >= 2 && !this.gstop.on) {
+              this._delayArrivals(tdAt - 55, tdAt + after);
+              busy = busyAt();
+            }
+            if (busy) k.orbits = (k.orbits || 0) + 1;
+            else k.orbits = 0;
             if (busy) {
               // Hold off: a full turn away from the field and ask again.
               k.main = P;
@@ -3088,7 +3814,7 @@
           }
           if (k.slot) k.eta = Math.max(0, (P.len - k.s) / 36);
           if (k.slot && k.s > P.sFinal && !this.rwy.has(k) && k.eta < 30) {
-            if (this._jayRwy || this.rwy.size > 0) {
+            if (this._jayRwy || this.gstop.on || this._rwyBlocked() || [...this.rwy].some((u) => !this._rollingAway(u))) {
               // Something on the runway: go round again.
               k.slot = false;
               k.path = this._skyCircuit(k.x, k.circuits <= 1);
@@ -3281,7 +4007,7 @@
       const cam = this.game.renderer.camera;
       const cp = cam.position;
       const view = (cam.far || 900) + 250;
-      for (const pl of this.planes) {
+      for (const pl of this.fleet) {
         const d = Math.hypot(pl.x - cp.x, pl.z - cp.z, pl.y - cp.y);
         if (d < view && !pl.model) pl.attach();
         else if (d > view + 80 && pl.model) pl.detach();
@@ -3302,7 +4028,7 @@
         }
       }
       // Ground equipment only near Jay.
-      for (const st of this.standList) {
+      for (const st of this.allStands) {
         const near = this._near(st.x, st.z, 650);
         if (near && !st.gse) this._makeStandGse(st);
         else if (!this._near(st.x, st.z, 760) && st.gse) this._dropStandGse(st);
@@ -3370,13 +4096,13 @@
       if (this._voiceT <= 0) {
         this._voiceT = 0.3;
         // The three loudest airliners get a voice.
-        const ranked = this.planes
+        const ranked = this.fleet
           .filter((p) => !p.gone && p.eng > 0.02)
           .map((p) => [fb._gain(p.x, p.z, 70, p.y) * p.eng, p])
           .filter((e) => e[0] > 0.012)
           .sort((a, b) => b[0] - a[0]);
         const want = new Set(ranked.slice(0, 3).map((e) => e[1]));
-        for (const p of this.planes) {
+        for (const p of this.fleet) {
           if (want.has(p) && !p.voice) p.voice = audio.createJet();
           else if (!want.has(p) && p.voice) {
             p.voice.stop();
@@ -3384,7 +4110,7 @@
           }
         }
       }
-      for (const p of this.planes) {
+      for (const p of this.fleet) {
         if (!p.voice) continue;
         p.voice.update({ gain: fb._gain(p.x, p.z, 70, p.y) * 0.85 * p.eng, pan: fb._pan(p.x, p.z), thrust: p.thrust, burner: 0 });
       }
@@ -3437,7 +4163,7 @@
     }
 
     _stopVoices() {
-      for (const p of this.planes) {
+      for (const p of this.fleet) {
         if (p.voice) p.voice.stop();
         p.voice = null;
       }
@@ -3455,10 +4181,13 @@
 
     // --------------------------------------------------- boards and API
     _updateStatuses() {
+      const stop = this.gstop.on ? this.gstop.reason || 'Ground stop' : null;
       for (const r of this.rots) {
         const a = r.arr;
         const d = r.dep;
         const st = r.state;
+        if (r.cancelled) continue;
+        a.note = d.note = null;
         if (st === 'planned' || st === 'inbound') {
           const late = r.landAt > r.planLand + 60;
           a.status = st === 'inbound' && r.plane && r.plane.phase === 'approach' ? (late ? 'Delayed' : 'Landing') : late ? 'Delayed' : 'Scheduled';
@@ -3482,14 +4211,24 @@
         } else if (st === 'gone') {
           d.status = 'Departed';
         }
+        // A ground stop: everything not yet away (or down) waits, and the boards say why.
+        if (stop) {
+          if (st === 'planned' || st === 'inbound') {
+            a.status = 'Delayed';
+            a.note = stop;
+          }
+          if (st !== 'gone' && !(st === 'outbound' && r.plane && r.plane.phase === 'takeoff')) {
+            d.status = 'Delayed';
+            d.note = stop;
+          }
+        }
       }
     }
 
     _trim() {
-      // Done with: departed more than five minutes ago.
-      if (this.rots.length > 40 || this.rots.some((r) => r.tookOff && this.t - r.tookOff > 300)) {
-        this.rots = this.rots.filter((r) => !(r.tookOff && this.t - r.tookOff > 300));
-      }
+      // Done with: departed (or cancelled) more than five minutes ago.
+      const old = (r) => (r.tookOff && this.t - r.tookOff > 300) || (r.cancelled && this.t - r.endT > 300);
+      if (this.rots.length > 60 || this.rots.some(old)) this.rots = this.rots.filter((r) => !old(r));
     }
 
     /** The boards: every flight from about ten minutes ago to half an hour ahead, soonest first. */
@@ -3498,6 +4237,7 @@
       if (!this.inited) this._init();
       const out = [];
       for (const r of this.rots) {
+        if (r.cargo) continue; // (the freighters aren't on the passenger boards)
         const arrGone = r.onBlock < this.t - 600 && r.state !== 'planned' && r.state !== 'inbound' && r.state !== 'landed' && r.state !== 'taxiing';
         if (!arrGone) out.push([r.planLand, r.arr]);
         out.push([r.planOff, r.dep]);
@@ -3517,9 +4257,97 @@
       });
     }
 
+    /** The remote stands (freighters): as stands(), with no gate. */
+    remoteStands() {
+      if (!this.ok) return [];
+      return this.remoteList.map((st) => ({ id: st.id, gate: null, x: st.x, z: st.z, yaw: st.yaw, door: st.door, state: st.state, flight: st.cur ? st.cur.dep : null, remote: true }));
+    }
+
+    // ------------------------------------------------- the API for havoc
+    /** Every live airliner, as a live view (see the notes at the top). */
+    planes() {
+      if (!this.ok) return [];
+      const out = [];
+      for (const pl of this.fleet) if (!pl.gone) out.push(pl.api);
+      return out;
+    }
+
+    _planeOf(p) {
+      if (!p) return null;
+      const pl = p.plane || p;
+      return this.fleet.includes(pl) ? pl : null;
+    }
+
+    /**
+     * Hold every departure (no pushbacks, nobody lines up or rolls) and send the arrivals
+     * round and away (they come back, re-sequenced, after it lifts); the boards say "Delayed"
+     * with flight.note = reason. groundStop(false) lifts it.
+     */
+    groundStop(on, reason) {
+      if (!this.ok) return;
+      const g = this.gstop;
+      if (on) {
+        if (!g.on) g.t = this.t;
+        g.on = true;
+        g.reason = reason || g.reason || 'Ground stop';
+        for (const pl of this.fleet) if (pl.phase === 'approach' && !pl.disabled && (!pl.cleared || pl.y > 30)) this._goAround(pl);
+        // A departure lined up (not rolling) and one on its way from the holding point wait there.
+      } else if (g.on) {
+        g.on = false;
+        // The ones held back come in a minute and a half apart from now.
+        let t = this.t + 60;
+        for (const r of this.rots.filter((q) => q.state === 'planned').sort((a, b) => a.landAt - b.landAt)) {
+          r.landAt = Math.max(r.landAt, t);
+          t = r.landAt + rand(ARR_GAP[0], ARR_GAP[1]);
+        }
+        this.lastLand = Math.max(this.lastLand, t);
+      }
+      this._updateStatuses();
+    }
+
+    /** Is there a ground stop on (and why)? */
+    get stopped() {
+      return this.gstop.on ? this.gstop.reason : null;
+    }
+
+    /** A plane on its takeoff roll (below about 60 m/s) brakes to a stop (it tries again once clear). */
+    abortTakeoff(p) {
+      const pl = this._planeOf(p);
+      if (!pl || pl.phase !== 'takeoff' || pl.v > 60) return false;
+      pl.reject = true;
+      return true;
+    }
+
+    /**
+     * Clear a plane away for good (a burnt-out wreck, or one Jay has taken over): gone from
+     * the apron and the runway, its stand freed, its flight Cancelled on the boards. Returns
+     * where it was and how it looked ({ x, y, z, yaw, color, airline, flight, stand }), or null.
+     */
+    removePlane(p) {
+      const pl = this._planeOf(p);
+      if (!pl) return null;
+      const r = pl.rot;
+      const out = { x: pl.x, y: pl.y, z: pl.z, yaw: pl.yaw, color: pl.color, airline: r.airline.name, flight: pl.flight, stand: r.st.id };
+      pl.gone = true;
+      pl.detach();
+      if (pl.voice) pl.voice.stop();
+      pl.voice = null;
+      this.rwy.delete(pl);
+      if (this._merge === pl) this._merge = null;
+      this._cancelRot(r, 'Cancelled');
+      for (const q of this.fleet) if (q.blocker === pl) q.blocker = null;
+      const fm = this.extras && this.extras.fm;
+      if (fm && (fm.plane === pl || fm.waitPl === pl)) {
+        fm.plane = null;
+        fm.waitPl = null;
+      }
+      this.fleet = this.fleet.filter((q) => q !== pl);
+      return out;
+    }
+
     blips(out, missionRunning) {
       if (!this.ok || missionRunning || !this.jay) return;
-      for (const pl of this.planes) {
+      for (const pl of this.fleet) {
         if (pl.phase === 'parked' || pl.gone || !this._near(pl.x, pl.z, 2500)) continue;
         out.push({ x: pl.x, z: pl.z, type: 'plane', heading: pl.yaw, noRim: true, label: pl.rot.dep && pl.phase !== 'approach' && pl.phase !== 'rollout' && pl.phase !== 'taxiin' ? pl.rot.dep.code : pl.rot.arr.code });
       }
@@ -3558,6 +4386,20 @@
         rects.push([x0, z0, x1, z0 + 0.2, R], [x0, z1 - 0.2, x1, z1, R], [x0, z0, x0 + 0.2, z1, R], [x1 - 0.2, z0, x1, z1, R]);
       }
     }
+    // The remote stands: a lead-in straight off the taxiway, the stop bar, the pushback line,
+    // the safety lines either side and a red line across the nose that the vehicles wait behind.
+    for (const x of REMOTE_X) {
+      const z = REMOTE_Z;
+      lines.push({ pts: pts(new Path(x + 25, TWY_Z, -HALF).turn(HALF, 25).line(x, z + NOSE)), w: 0.3, color: Y });
+      rects.push([x - 3, z + NOSE + 0.6, x + 3, z + NOSE + 1.1, Y], [x - 0.25, z + NOSE + 1.1, x + 0.25, z + NOSE + 6, Y]);
+      lines.push({ pts: pts(new Path(x, z - 2, PI).line(x, z - 16).turn(-HALF, 30)), w: 0.2, color: Wt, dash: [2, 2] });
+      for (const k of [-1, 1]) rects.push([x + k * 21, z - 14, x + k * 21 + 0.4 * k, z + 21, Wt]);
+      rects.push([x - 28, z + 22.4, x + 28, z + 22.8, R]);
+      // The equipment pads by the fence (red outlines).
+      for (const [x0, z0, x1, z1] of [[x - 31, z + 23, x - 20, z + 30], [x + 15, z + 28, x + 21, z + 38], [x - 7, z + 35, x - 2, z + 45], [x + 21, z + 35, x + 27, z + 45]]) {
+        rects.push([x0, z0, x1, z0 + 0.2, R], [x0, z1 - 0.2, x1, z1, R], [x0, z0, x0 + 0.2, z1, R], [x1 - 0.2, z0, x1, z1, R]);
+      }
+    }
     // The airside road: two lanes, white edges, a dashed centre line.
     lines.push({ pts: [[-440, ROAD_Z - 3.2], [74, ROAD_Z - 3.2]], w: 0.2, color: Wt });
     lines.push({ pts: [[-440, ROAD_Z + 3.2], [74, ROAD_Z + 3.2]], w: 0.2, color: Wt });
@@ -3570,15 +4412,17 @@
     const h = H2;
     rects.push([h.x - 7, h.z - 7, h.x + 7, h.z - 6.6, Wt], [h.x - 7, h.z + 6.6, h.x + 7, h.z + 7, Wt], [h.x - 7, h.z - 6.6, h.x - 6.6, h.z + 6.6, Wt], [h.x + 6.6, h.z - 6.6, h.x + 7, h.z + 6.6, Wt]);
     rects.push([h.x - 2.6, h.z - 3.4, h.x - 1.7, h.z + 3.4, Wt], [h.x + 1.7, h.z - 3.4, h.x + 2.6, h.z + 3.4, Wt], [h.x - 1.7, h.z - 0.45, h.x + 1.7, h.z + 0.45, Wt]);
-    // Masts between the stands by the terminal, one by the remote stand, one by the depot.
-    const masts = [[-347, -1252], [-257, -1252], [-167, -1252], [-506, -1262], [76, -1302], [180, -1330]];
+    // Masts between the stands by the terminal, one by the remote stand, one by the depot, two
+    // by the fence behind the remote stands.
+    const masts = [[-347, -1252], [-257, -1252], [-167, -1252], [-506, -1262], [76, -1302], [180, -1330], [-615, -1269], [-675, -1269]];
     // The old static equipment (solid boxes), parked between the hangars out of the way.
     const spares = [[178, -1250, 2.4, 7, 0xd7dbe0], [183.5, -1250, 1.6, 3, 0xe0b12e], [185.7, -1250, 1.6, 3, 0xe0b12e], [187.9, -1250, 1.6, 3, 0xe0b12e]];
-    return { lines, rects, masts, spares };
+    return { lines, rects, masts, spares, pads: [CARGO_PAD] };
   };
 
   VH.Airside = Airside;
   VH.Airside.Path = Path; // for tests
+  VH.Airside.CARGO_PAD = CARGO_PAD; // the remote stands' paving (airfield.js lays it and puts it on the map)
   // The airlines that fly from here, for the check-in desks (terminal.js wants CSS colours:
   // a gradient from the livery colour to a darker shade of it).
   const css = (c) => '#' + c.toString(16).padStart(6, '0');

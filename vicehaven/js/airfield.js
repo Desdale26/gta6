@@ -290,6 +290,8 @@
         console.warn('[airfield] airside markings', err);
       }
       if (AM) {
+        // (The remote stands' apron, west of this one, comes with them.)
+        for (const p of AM.pads || []) pave(world, p.x0, p.z0, p.x1, p.z1, 0xb9b7b0);
         for (const l of AM.lines) stripe(world, l.pts, l.w, l.color, l.dash);
         for (const r of AM.rects) mark(world, r[0], r[1], r[2], r[3], r[4], 0.022);
         for (const s of STANDS) for (const k of [-1, 1]) mark(world, s.x + k * 20, s.z - 18, s.x + k * 20 + 0.4 * k, s.z + 8, 0xf4f4ef);
@@ -721,6 +723,8 @@
     const r = a.runway;
     g.fillStyle = '#9b9f9c';
     R(a.apron.x0, a.apron.z0, a.apron.x1, a.apron.z1);
+    const pad = VH.Airside && VH.Airside.CARGO_PAD;
+    if (pad) R(pad.x0, pad.z0, pad.x1, pad.z1);
     R(a.ga.x0, a.ga.z0, a.ga.x1, a.ga.z1);
     R(a.service.x0, a.service.z0, a.service.x1, a.service.z1);
     R(a.carpark.x0, a.carpark.z0, a.carpark.x1, a.carpark.z1);
