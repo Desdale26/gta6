@@ -3026,6 +3026,9 @@
           const m = Math.min(2.5, w.k.len * 0.35);
           if (!underPlane(w.x, w.z, mx, mz, yaw, m)) continue;
           if (underPlane(w.x, w.z, pl.x, pl.z, pl.yaw, m)) {
+            // Already under it behind the main gear (the follow-me leading the next arrival up
+            // under its tail): going on only takes the plane off it, and waiting would gridlock.
+            if (!push && (w.x - pl.x) * Math.sin(pl.yaw) + (w.z - pl.z) * Math.cos(pl.yaw) < -1) continue;
             const ac = across(w.x, w.z, pl.x, pl.z, pl.yaw);
             const sg = w.rev ? -2 : 2;
             const ac2 = across(w.x + Math.sin(w.yaw) * sg, w.z + Math.cos(w.yaw) * sg, pl.x, pl.z, pl.yaw);
@@ -3823,7 +3826,10 @@
               }
             }
             if (fm.state === 'lead') {
-              fm.ls = Math.min(s, fm.ls + (pl.v + 3) * dt);
+              const ls = Math.min(s, fm.ls + (pl.v + 3) * dt);
+              // (Not on up under the plane ahead of ours, waiting on the taxiway.)
+              P.at(ls, _c);
+              if (!this.fleet.some((q) => q !== pl && !q.gone && q.onGround && underPlane(_c.x, _c.z, q.x, q.z, q.yaw, 2))) fm.ls = ls;
               if (fm.ls >= P.sTurnIn) this._fmBack(fm, pl);
               else {
                 P.at(fm.ls, _c);
@@ -4641,7 +4647,7 @@
         const r = st.cur;
         let flight = null;
         if (r) flight = st.state === 'arriving' || st.state === 'deplaning' || (st.state === 'parked' && !r.flags.deplaned) || r.towOff ? r.arr : r.dep;
-        return { id: st.id, gate: st.gate, x: st.x, z: st.z, yaw: st.yaw, door: st.door, state: st.state, flight, arrival: r ? r.arr : null, departure: r && !r.towOff ? r.dep : null, tow: !!(r && r.towOff) };
+        return { id: st.id, gate: st.gate, x: st.x, z: st.z, yaw: st.yaw, door: st.door, state: st.state, flight, arrival: r ? r.arr : null, departure: r && !r.towOff ? r.dep : null, tow: !!(r && r.towOff), disabled: !!(r && r.plane && r.plane.disabled) };
       });
     }
 

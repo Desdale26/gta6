@@ -139,6 +139,13 @@
   const money = (n) => '$' + Math.round(n).toLocaleString('en-GB');
   const _o = { x: 0, z: 0, h: 0 };
   const _w = { x: 0, z: 0 };
+  const _l = { x: 0, z: 0 };
+
+  /** A point in a plane's frame (toLocal) under its body or wings, give or take m metres? */
+  function planeFoot(L, m) {
+    if (Math.abs(L.z) < 19 + m && Math.abs(L.x) < 2.2 + m) return true;
+    return L.z > -8.5 - m && L.z < 6 + m && Math.abs(L.x) < 17.3 + m && L.z < 5.5 - Math.abs(L.x) * 0.55 + m;
+  }
 
   /** The plane's frame: a world point to local (x left/port, z forward). */
   function toLocal(px, pz, yaw, x, z, out) {
@@ -418,11 +425,29 @@
      */
     _ray(e) {
       if (!this._live || !e) return;
-      const A = this.airside;
       const { ox, oy, oz, dx, dy, dz } = e;
       const dist = Math.max(0, e.dist || 0) + 0.6;
       const g = this.game;
       if (g.cabin && g.cabin.aboard) return; // (shots inside a cabin are cabin.js's)
+      const best = this._rayPlanes(ox, oy, oz, dx, dy, dz, dist);
+      // (A ground vehicle in front of it takes the bullet instead.)
+      if (this._rayGse(e, best ? best.t : dist) || !best) return;
+      this._hitPlane(best, { x: ox + dx * best.t, y: oy + dy * best.t, z: oz + dz * best.t, dx, dy, dz });
+    }
+
+    /**
+     * For combat.js's rockets and grenades (and their aim): how far along a ray (unit d) the
+     * first airliner is, within dist, or -1. They go off on it, and _blast does the rest.
+     */
+    rayPlanes(ox, oy, oz, dx, dy, dz, dist) {
+      if (!this._live) return -1;
+      const best = this._rayPlanes(ox, oy, oz, dx, dy, dz, dist);
+      return best ? best.t : -1;
+    }
+
+    /** The nearest plane part along a ray, within dist: { p, P, t, lx, ly, lz, nx, ny, nz } or null. */
+    _rayPlanes(ox, oy, oz, dx, dy, dz, dist) {
+      const A = this.airside;
       let best = null;
       let bestT = dist;
       const L = { x: 0, z: 0 };
@@ -476,9 +501,7 @@
           }
         }
       }
-      // (A ground vehicle in front of it takes the bullet instead.)
-      if (this._rayGse(e, best ? best.t : dist) || !best) return;
-      this._hitPlane(best, { x: ox + dx * best.t, y: oy + dy * best.t, z: oz + dz * best.t, dx, dy, dz });
+      return best;
     }
 
     /** Along a ray in the plane's frame from t0, where it first meets the fuselage skin (or null). */
@@ -607,7 +630,8 @@
       this._disable(S);
       if (first) {
         if (S.jay) this._crime('planeFire', S.pl.x, S.pl.z, 3);
-        this._announce('Attention please. Due to an incident on the airfield, all flights are suspended. Please remain inside the terminal.');
+        // (Not "stay inside" while the terminal's own alert is telling everyone to get out.)
+        this._announce('Attention please. Due to an incident on the airfield, all flights are suspended.' + (this.h.alert ? '' : ' Please remain inside the terminal.'));
       }
     }
 
@@ -1286,9 +1310,9 @@
         const W = this.swaps[i];
         const car = W.v;
         W.t += dt;
-        if (car.driver === 'player' || car.removed || car.wrecked || car.used) {
+        if (car.driver === 'player' || car.removed || car.wrecked) {
           // His now (or gone): the scenery one stays out of the work till the stand's vehicles are put away.
-          if (car.driver === 'player' || car.used) {
+          if (car.driver === 'player') {
             this.n.taken++;
             if (car.type === 'bagtug' && g.achievements) g.achievements.unlock('ground_crew');
           }
@@ -1298,12 +1322,13 @@
         const j = this.jay();
         const moved = Math.hypot(car.pos.x - W.x, car.pos.z - W.z) > 1.2 || car.health < 990;
         const far = Math.hypot(j.x - car.pos.x, j.z - car.pos.z) > 22 || pl.inVehicle;
-        if ((far && !moved && !g.vehicles.entering) || !W.g.root.parent) {
+        // (Knocked about by a bullet, a blast or a bump, but not his: back to work once nobody's looking.)
+        if ((far && (!moved || this._unseen(car.pos.x, car.pos.z, 40)) && !g.vehicles.entering) || !W.g.root.parent) {
           // Back to work (or its stand's vehicles were put away).
           g.vehicles.remove(car);
           if (W.g.root.parent) A.takeGse(W.g, false);
           this.swaps.splice(i, 1);
-        } else if (moved) car.used = true;
+        }
       }
     }
 
@@ -1592,7 +1617,7 @@
         const a = toWorld(q.x, q.z, q.yaw, alx, alz, {});
         if (taken && Math.hypot(taken.x - s.x, taken.z - s.z) < 9) continue;
         if (gse.some((w) => w.root.visible && Math.hypot(w.x - s.x, w.z - s.z) < 6.5)) continue;
-        if (this._inPlane(s.x, s.z, 4)) continue;
+        if (this._inPlane(s.x, s.z, 4) || this._inPlane(a.x, a.z, 4)) continue; // (nor the way up to it under a neighbour's wing)
         if (this.game.vehicles.list.some((o) => !o.removed && o !== E.v && Math.hypot(o.pos.x - s.x, o.pos.z - s.z) < 5.5)) continue;
         return { x: s.x, z: s.z, ax: a.x, az: a.z };
       }
@@ -1607,8 +1632,7 @@
       const L = { x: 0, z: 0 };
       for (const p of this.airside.planes()) {
         toLocal(p.x, p.z, p.yaw, x, z, L);
-        if (Math.abs(L.z) < 19 + m && Math.abs(L.x) < 2.2 + m) return true;
-        if (L.z > -8.5 - m && L.z < 6 + m && Math.abs(L.x) < 17.3 + m && L.z < 5.5 - Math.abs(L.x) * 0.55 + m) return true;
+        if (planeFoot(L, m)) return true;
       }
       return false;
     }
@@ -1656,6 +1680,9 @@
       E.path = L ? L.path : null;
       E.rev = L ? L.rev : false;
       E.s = 0;
+      E.backs = 0;
+      E.backS = 0;
+      E.holdT = 0;
     }
 
     /** Along its path (no physics): it slows for anything in the way and never waits for ever. */
@@ -1666,15 +1693,41 @@
         v.vel.set(0, 0, 0);
         return;
       }
+      // Backing off from an airliner that's waiting on it as it waits on the airliner, then a
+      // pause to let it by.
+      if (E.backS > 0 || E.holdT > 0) {
+        let vF = 0;
+        if (E.backS > 0) {
+          const ds = Math.min(E.backS, 2.5 * dt, E.s);
+          E.backS = ds > 1e-4 ? E.backS - ds : 0;
+          E.s -= ds;
+          vF = -ds / Math.max(dt, 1e-3);
+          P.at(E.s, _o);
+          v.pos.x = _o.x;
+          v.pos.z = _o.z;
+        } else E.holdT -= dt;
+        E.spd = 0;
+        v.vF = vF;
+        v.vel.set(Math.sin(v.yaw) * vF, 0, Math.cos(v.yaw) * vF);
+        v.braking = vF === 0;
+        return;
+      }
       let vt = P.cap(E.s);
       if (E.rev) vt = Math.min(vt, 3);
       if (E.ghostT > 0) E.ghostT -= dt;
       const blk = E.ghostT > 0 ? Infinity : this._ahead(E, v);
-      if (blk < Infinity) vt = Math.min(vt, Math.sqrt(Math.max(0, 2 * 3.5 * (blk - 1.5))));
-      E.blockT = blk < 4 && E.spd < 0.5 ? (E.blockT || 0) + dt : 0;
+      // (To a stop with it at the nearest look, 3 m on: it used to creep on into it at 3 m/s.)
+      if (blk < Infinity) vt = Math.min(vt, Math.sqrt(Math.max(0, 2 * 3.5 * (blk - 3))));
+      // (An airliner going by isn't in the way for long: no clock on that.)
+      const passing = E.blkPl && Math.abs(E.blkPl.v || 0) > 0.3;
+      E.blockT = blk < 4 && E.spd < 0.5 && !passing ? (E.blockT || 0) + dt : 0;
       if (E.blockT > 7) {
-        E.ghostT = 3;
         E.blockT = 0;
+        if (E.blkPl && !E.rev && E.s > 3 && E.backs < 2) {
+          E.backs++;
+          E.backS = 10;
+          E.holdT = 8;
+        } else E.ghostT = 3; // (never through a plane but as a last resort)
       }
       E.spd = E.spd < vt ? Math.min(vt, E.spd + 3.6 * dt) : Math.max(vt, E.spd - 6 * dt);
       E.s = Math.min(P.len, E.s + E.spd * dt);
@@ -1706,6 +1759,11 @@
       const pp = g.player;
       const pl = pp && !pp.inVehicle && !pp.isDead ? pp.pos : null;
       const gse = this.airside.groundVehicles();
+      // Airliners on the ground (bar the one it's going to put out): their wings reach over the lane.
+      const tgt = E.target && E.target.S ? E.target.S.pl : null;
+      const planes = this.airside.planes().filter((q) => q.plane !== tgt && this._onGround(q.plane));
+      const L = _l;
+      E.blkPl = null;
       for (let d = 3; d <= reach; d += 2) {
         P.at(Math.min(P.len, E.s + (E.rev ? -0 : 0) + d), _o);
         if (E.s + d > P.len + 1) break;
@@ -1719,6 +1777,14 @@
         for (const w of gse) {
           if (!w.root.visible) continue;
           if (Math.abs(w.x - x) < 4 && Math.abs(w.z - z) < 4) return d;
+        }
+        for (const q of planes) {
+          if (Math.abs(q.x - x) > 40 || Math.abs(q.z - z) > 40) continue;
+          toLocal(q.x, q.z, q.yaw, x, z, L);
+          if (planeFoot(L, 4)) { // (its own 4.7 m to the bumper, and a little more)
+            E.blkPl = q.plane;
+            return d;
+          }
         }
       }
       return Infinity;
@@ -1924,17 +1990,18 @@
     /** A ground stop while anything's burning on the airfield (havoc.hold: the boards say why). */
     _holdTick() {
       let burning = this.fires.length > 0;
-      let jay = this.fires.some((f) => f.jay);
+      let jay = false; // (an airliner Jay set alight: a bowser's fire alone isn't Grounded)
       for (const S of this.S.values()) {
         if (S.fire.some((f) => f > 0) || (S.wreck && S.wreck.smoulder > 0.3)) {
           burning = true;
           if (S.jay) jay = true;
         }
       }
+      if (jay && !this._jayFire && this.game.achievements) this.game.achievements.unlock('grounded');
+      this._jayFire = jay;
       if (burning === this._held) return;
       this._held = burning;
       this.h.hold('fire', burning, 'Fire on the airfield');
-      if (burning && jay && this.game.achievements) this.game.achievements.unlock('grounded');
     }
 
     // ------------------------------------------------------------- sounds

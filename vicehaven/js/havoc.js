@@ -347,7 +347,9 @@
       });
       E.on('vehicle:impact', (e) => {
         if (!e.v || e.speed < 9 || !this.near(e.x, e.z, 10)) return;
-        this.h.raise('crash', e.x, e.z, e.v.driver === 'player');
+        // (Jay's crash, or one in the hall itself: a bump between two cabs on Airport Road isn't an alert.)
+        const jay = e.v.driver === 'player' || (e.other && e.other.driver === 'player');
+        if (jay || this.distT(e) === 0) this.h.raise('crash', e.x, e.z, jay);
       });
     }
 

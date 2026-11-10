@@ -134,6 +134,14 @@
               hv = v;
             }
           }
+          // Airliners aren't in the physics: havoc-air.js says where one is.
+          const air = this.kind !== 'sticky' && g.airportHavoc && g.airportHavoc.air;
+          const tp = air && air.rayPlanes ? air.rayPlanes(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, Math.min(ht, ha ? ha.t : ht)) : -1;
+          if (tp >= 0) {
+            this.pos.set(this.pos.x + dx * tp, this.pos.y + dy * tp, this.pos.z + dz * tp);
+            this._contact(null);
+            return;
+          }
           if (ha && (!hv || ha.t < ht)) {
             this.pos.addScaledVector(d, ha.t / len);
             this._contact(null);
@@ -1578,9 +1586,13 @@
       const cam = ray.o;
       const tStart = Math.max(0, (new THREE.Vector3().subVectors(p.renderPos, cam)).dot(ray.d) - 0.2);
       const hit = this.trace(cam.x + ray.d.x * tStart, cam.y + ray.d.y * tStart, cam.z + ray.d.z * tStart, ray.d.x, ray.d.y, ray.d.z, w.range || 200, null, p.vehicle);
-      const tx = cam.x + ray.d.x * (tStart + hit.t);
-      const ty = cam.y + ray.d.y * (tStart + hit.t);
-      const tz = cam.z + ray.d.z * (tStart + hit.t);
+      // (An airliner in the crosshair isn't in the trace: aim at it, not past it.)
+      const air = g.airportHavoc && g.airportHavoc.air;
+      const tp = air && air.rayPlanes ? air.rayPlanes(cam.x + ray.d.x * tStart, cam.y + ray.d.y * tStart, cam.z + ray.d.z * tStart, ray.d.x, ray.d.y, ray.d.z, hit.t) : -1;
+      const ht = tp >= 0 ? tp : hit.t;
+      const tx = cam.x + ray.d.x * (tStart + ht);
+      const ty = cam.y + ray.d.y * (tStart + ht);
+      const tz = cam.z + ray.d.z * (tStart + ht);
       const dir = new THREE.Vector3(tx - muzzle.x, ty - muzzle.y, tz - muzzle.z).normalize();
       // A lobbed grenade gets a little lift so it carries to the crosshair at short range.
       if (P.gravity > 0) {

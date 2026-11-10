@@ -1931,7 +1931,7 @@
     _canBoard(gate) {
       this._flights();
       const st = this._st && this._st.find((s) => s.gate === gate);
-      return !st || /^(boarding|closed)$/.test(st.state || ''); // (no airside: the calls are all we have)
+      return !st || (!st.disabled && /^(boarding|closed)$/.test(st.state || '')); // (no airside: the calls are all we have; a shot-up plane: nobody boards)
     }
 
     /** Went to board a plane that isn't there (we slept through it leaving): they've missed it. */
@@ -3836,6 +3836,11 @@
       if (this._t - last > 40) {
         const i = this._paQ.findIndex((q) => q.at <= this._t);
         if (i >= 0) item = this._paQ.splice(i, 1)[0];
+        // (A departure cancelled or gone since it was queued, the plane shot up say: not that call.)
+        if (item && item.f && item.f.kind === 'dep' && item.kind !== 'delay') {
+          const now = this._flights().find((f) => f.id === item.f.id);
+          if (!now || /cancel|depart|closed/i.test(now.status || '')) item = null;
+        }
       }
       if (!item && this._paT <= 0) {
         this._paT = rnd(PA_GAP[0], PA_GAP[1]);

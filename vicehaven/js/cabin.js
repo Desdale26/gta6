@@ -1083,6 +1083,12 @@
       const A = g.airside;
       if (!A.inited) return;
       dt = Math.min(dt, 0.1);
+      if (this._reboard) {
+        const st = A.stands().find((q) => q.id === this._reboard);
+        const p0 = g.player;
+        this._reboard = 0;
+        if (st && !p0.inVehicle && Math.hypot(p0.pos.x - st.door.x, p0.pos.z - st.door.z) < 30) this._toGate(st, true);
+      }
       if (this._warm) {
         this._warm.removeFromParent();
         this._warm = null;
@@ -1121,7 +1127,7 @@
       // The "Take the controls" prompts.
       for (const [id, item] of this.items) {
         const c = on && on.st.id === id ? on : null;
-        item.enabled = !!c && !this.taking && !this.walking && !p.inVehicle && this._localZ(c) > DECK + 0.1;
+        item.enabled = !!c && !c.disabled && !this.taking && !this.walking && !p.inVehicle && this._localZ(c) > DECK + 0.1;
       }
       if (this.taking) this._takingTick(dt);
       if (this.walking) this._walkingTick(dt);
@@ -1210,7 +1216,7 @@
       };
       this.live.push(c);
       this._cols(st, true);
-      this._crewIn(c);
+      if (!info.disabled) this._crewIn(c);
       return c;
     }
 
@@ -1326,6 +1332,10 @@
       this._cut(c, model);
       if (c.model && c.model._air && c.model._air.door) c.model._air.door.visible = false;
       c.group.visible = !!info.model;
+      // Shot up or on fire (havoc-air.js): nobody stays aboard, the crew included (some go up
+      // the bridge, the rest down the slides), and nobody boards. No taking it, either.
+      c.disabled = !!info.disabled;
+      if (c.disabled && !c.panic) this._panic(c, info.pax > 0 || c.pax.count > 0);
       // The lights: a touch brighter after dark.
       const night = A.night || 0;
       mats().lift.value = 0.2 - night * 0.06;
@@ -1360,10 +1370,17 @@
       if (p.state !== 'ground' || p.inVehicle || p.frozen || p.pos.y < FL - 0.5 || p.pos.y > FL + 1) return;
       const vx = p.vel.x;
       const vz = p.vel.z;
-      if (vx * vx + vz * vz < 0.25) return;
       const lx = p.pos.x - c.st.x;
       const lz = p.pos.z - c.st.z;
       const k = Math.min(1, dt * 5);
+      if (vx * vx + vz * vz < 0.25) {
+        // Stopped dead in the aisle while trying to walk (caught on a seat corner, jostled there
+        // by people getting off): back to its middle, where nothing catches.
+        const inp = this.game.input;
+        const mv = inp && inp.moveVector ? inp.moveVector() : null;
+        if (mv && Math.hypot(mv.x, mv.y) > 0.3 && lz > -9.5 && lz < 13.6 && Math.abs(lx) < 0.75) p.pos.x -= lx * k;
+        return;
+      }
       if (lz > -9.5 && lz < 13.6 && Math.abs(lx) < 0.75 && Math.abs(vz) > Math.abs(vx)) p.pos.x -= lx * k; // the aisle
       else if (lx > 1.2 && lx < 4.5 && Math.abs(lz - DOOR.zc) < 1.3 && Math.abs(vx) > Math.abs(vz) * 0.8) p.pos.z -= (lz - DOOR.zc) * k; // the door
       else if (lz > DECK - 1.0 && lz < DECK + 0.6 && Math.abs(lx) < 0.8 && Math.abs(vz) > Math.abs(vx)) p.pos.x -= lx * k; // the flight deck's
@@ -1523,7 +1540,7 @@
     boardPath(stand) {
       if (!this.ok) return null;
       const c = this._liveAt(stand);
-      if (!c || c.phase !== 'dep' || !c.order || this.taking) return null;
+      if (!c || c.panic || c.phase !== 'dep' || !c.order || this.taking) return null;
       const k = Math.max(c.shown, 0) + (c.enRoute || 0);
       if (k >= c.order.length) return null;
       const seat = c.order[k];
@@ -1659,7 +1676,7 @@
       const g = this.game;
       if (this.taking || this.walking || g.player.inVehicle) return;
       const c = this.live.find((q) => q.st.id === stand);
-      if (!c || !this._jayIn(c)) return;
+      if (!c || c.disabled || !this._jayIn(c)) return;
       this.taking = { c, t: 0, done: false };
       g.player.frozen = true;
       this._crewFlee(c);
@@ -1687,6 +1704,11 @@
       const p = g.player;
       const st = c.st;
       const info = A.cabinPlane(st.id);
+      // (Shot up while the screen was going dark: not hers to take now.)
+      if (info && info.disabled) {
+        p.frozen = false;
+        return;
+      }
       // Everyone off: the runners up the bridge, the crew already going.
       this._evacuate(c);
       const crew = c.crew;
@@ -1740,9 +1762,10 @@
       }
     }
 
-    _panic(c) {
+    _panic(c, runners) {
       c.panic = true;
-      this._evacuate(c);
+      if (runners !== false) this._evacuate(c);
+      c.pax.count = 0;
       c.shown = 0;
       this._crewFlee(c);
       this._say(c, 0, LINES.shots, true);
@@ -1793,6 +1816,7 @@
     }
 
     reset() {
+      this._reboard = 0;
       if (!this.ok) return;
       this._clearAll();
     }
@@ -1812,12 +1836,15 @@
     }
 
     serialize() {
-      return { boarded: this.boarded, taken: this.taken };
+      const on = this.ok && this.aboard ? this._jayCabin() : null;
+      return { boarded: this.boarded, taken: this.taken, aboard: on ? on.st.id : undefined };
     }
 
     load(d) {
       this.boarded = d && typeof d.boarded === 'number' ? d.boarded : 0;
       this.taken = d && typeof d.taken === 'number' ? d.taken : 0;
+      // Saved aboard: the cabin isn't there yet on the way back in, so he starts at that gate.
+      this._reboard = d && d.aboard ? d.aboard : 0;
     }
   }
 
