@@ -76,6 +76,10 @@
       this._tmp2 = { x: 0, z: 0 };
       this.voices = new Map(); // vehicle id → { engine, skid, siren, horn, fire }
       this.fixedSpots = []; // vehicles that always wait at a spot (see addFixedSpot)
+      // Solid things that move, as colliders like the city's (the airliners and the ground
+      // vehicles airside: havoc-air.js): [{ x, z, r, cols }], each col within r of (x, z), with
+      // an optional col.onHit(v, contact).
+      this.movers = [];
       this._buildParkingSpots();
     }
 
@@ -239,6 +243,11 @@
         if (col.maxY <= y0 || col.minY >= y1) return;
         hits.push(col);
       });
+      // (Cars and the tank only: an aircraft parked or taxiing among them is left to itself.)
+      if (v.kind === 'car' || v.kind === 'tank') for (const m of this.movers) {
+        if (Math.abs(m.x - v.pos.x) > m.r + ex || Math.abs(m.z - v.pos.z) > m.r + ez) continue;
+        for (const col of m.cols) if (col.maxY > y0 && col.minY < y1) hits.push(col);
+      }
       for (const col of hits) {
         const r = this._satBox(v.pos.x, v.pos.z, c, s, v.hx, v.hz, col.cx, col.cz, col.cos, col.sin, col.hx, col.hz);
         if (!r) continue;
@@ -253,6 +262,7 @@
           this._smash(v, col, smash);
           continue;
         }
+        if (col.onHit) col.onHit(v, r);
         this._resolveStatic(v, r, col);
       }
     }

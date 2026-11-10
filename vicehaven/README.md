@@ -525,6 +525,20 @@ in and patrol cars pull up at the kerb (two stars). Two minutes of calm
 and the alert's over. An "Airport chaos" bill counts the damage; it's all
 mended once you've gone.
 
+The apron too. Shoot an airliner and the bullets spark off it and leave
+holes; an engine smokes, then catches fire, and the plane stops dead (shot
+on its takeoff roll, it aborts). Out come the yellow slides and everyone
+slides down and runs for it; only once they're all off can the fire take
+hold of the whole plane and burn it out in a fireball, leaving a blackened
+wreck (cleared away a few minutes later). Every flight is held while
+anything burns and the plane's flight is Cancelled on the boards (three
+stars for a burning airliner). The airport fire service races out from its
+station east of the hangars, sirens going, and puts the fire out with the
+water cannons on its crash tenders (take one: L for the siren). Shoot a
+fuel bowser and it leaks, then goes up (and the next one with it). The
+planes are solid to cars, and Jay can take the baggage tug (its carts stay
+put), the catering truck and the follow-me car.
+
 **Fort Breakwater.** The army base at the west end of Meridian Boulevard:
 walls and razor wire, watchtowers, barracks, a motor pool, two helipads
 and an airstrip. Walk in and you get three seconds' warning; stay, shoot
@@ -674,6 +688,7 @@ vicehaven/
 │   │                       and ground crew; the travellers, staff, kerb and PA
 │   ├── cabin.js            inside the airliners at the gates: the cabin, the flight deck, the controls
 │   ├── havoc.js            trouble at the airport: breaking the terminal, the security alert, the bill
+│   ├── havoc-air.js        ... and on the apron: burning airliners, slides, the fire service, bowsers
 │   ├── stores.js · ambient.js   corner shops and hold-ups; chases, walkers, the coast tour
 │   ├── holdup.js · holdup-models.js · audio-holdup.js · data/holdup-lines.js
 │   │                            hold-ups: clerks, the bag, the safe, alarm, CCTV, shoppers, guard
@@ -682,7 +697,8 @@ vicehaven/
 │   ├── humanoid.js · player.js · camera.js · crowd.js    people, Jay, the camera, the crowds
 │   ├── vehicles/           carmodels (19 cars), vehicle (physics), vehicles (spawning, collisions),
 │   │                       traffic (lane AI), feedback (smoke, skids, lights, sound),
-│   │                       aircraft (planes, helicopters, rockets), tank
+│   │                       aircraft (planes, helicopters, rockets), tank, airsidecars (the
+│   │                       baggage tug, catering truck, follow-me car and fire engine)
 │   ├── weapons-data.js · weapons-models.js · combat.js · ui-wheel.js   guns, fighting, the wheel
 │   ├── police.js · fx.js   heat, pursuit, helicopter; particles, explosions, light pools
 │   ├── audio.js · audio-drive.js · audio-weapons.js    synthesised sound, engines, the radio

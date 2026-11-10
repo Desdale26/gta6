@@ -66,6 +66,11 @@
  *                            stop, waits half a minute and (from well down the
  *                            runway, after backtracking to the end) goes again;
  *                            false if it's too fast to stop
+ *   airside.groundVehicles() the ground vehicles out now (live Gse objects)
+ *   airside.takeGse(v, on)   one out of the work (Jay has it, or it's a wreck):
+ *                            hidden, stopped, nothing waits for it; off: back
+ *   airside.blockStand(id, on)   no arrivals onto a stand (a wreck on it)
+ *   A disabled plane on the ground shows its departure Cancelled.
  *   (the live airliners are this.fleet inside this file; planes() is the way in)
  *
  * It is all scenery: no physics bodies. A plane or a tug stops for Jay (or a
@@ -819,7 +824,7 @@
     /** How many passengers are aboard, near enough (freighters: none). */
     get pax() {
       const r = this.rot;
-      if (r.cargo) return 0;
+      if (r.cargo || this.emptied) return 0; // (emptied: everyone's down the slides, havoc-air.js)
       const p = this.phase;
       if (p === 'tow' || p === 'towready') return 0;
       if (p !== 'parked') return p === 'approach' || p === 'goaround' || p === 'rollout' || p === 'taxiin' ? r.arr.pax : r.dep.pax;
@@ -1356,7 +1361,7 @@
     }
 
     update(dt) {
-      if (this.attached) return;
+      if (this.attached || this.taken) return; // (taken: Jay has it, see Airside.takeGse)
       if (this.path) {
         const P = this.path;
         let vt = P.cap(this.s);
@@ -3467,6 +3472,7 @@
         for (const key of set.keys) {
           const s = set.spec[key];
           const v = set[key];
+          if (v.taken) continue; // (Jay has it, or it's a wreck: havoc-air.js)
           if (key === 'tug') {
             if (atStand && to >= s.tin && v.post === 'home' && !v.busy) {
               const L = (lx, lz) => W(st, lx, lz);
@@ -3786,7 +3792,7 @@
       const night = this.night > 0.2;
       // Follow-me: out to meet each arrival as it turns off the runway, ahead of it to the stand.
       const fm = ex.fm;
-      if (fm) {
+      if (fm && !fm.taken) {
         if (fm.carModel.setHeadlights) fm.carModel.setHeadlights(night);
         if (fm.state === 'home') {
           // (Only one still well up the runway: it has to be there first.)
@@ -4562,6 +4568,13 @@
         const st = r.state;
         if (r.cancelled) continue;
         a.note = d.note = null;
+        // Disabled on the ground (shot up, on fire: havoc-air.js), it isn't going anywhere.
+        if (r.plane && r.plane.disabled && r.plane.onGround && !r.plane.gone) {
+          if (st === 'planned' || st === 'inbound' || st === 'landed' || st === 'taxiing') a.status = 'Landed';
+          d.status = 'Cancelled';
+          d.est = a.est = null;
+          continue;
+        }
         if (st === 'planned' || st === 'inbound') {
           const late = r.landAt > r.planLand + 60;
           a.status = st === 'inbound' && r.plane && r.plane.phase === 'approach' ? (late ? 'Delayed' : 'Landing') : late ? 'Delayed' : 'Scheduled';
@@ -4748,6 +4761,58 @@
       return out;
     }
 
+    /**
+     * The ground vehicles out on the apron now (each stand's own while Jay is near, the
+     * follow-me, the vans, the stair truck), live: { id, kind ('tug' 'train' 'belt' 'cater'
+     * 'fuel' 'stairs' 'followme' 'van'), x, z, yaw, v (speed), rev, k: { len, h }, root,
+     * carts, taken, st (its stand) }. Read it each time.
+     */
+    groundVehicles() {
+      return this.ok && this._allGse ? this._allGse : [];
+    }
+
+    /**
+     * Take a ground vehicle out of the work, or give it back (havoc-air.js: Jay has it now,
+     * with a real car in its place, or it's a burnt-out wreck). Taken, it is hidden and stops
+     * where it is (a baggage tug's carts stay put) and counts as home, so no pushback waits for
+     * it. Given back, it carries on from where it was.
+     */
+    takeGse(v, on) {
+      if (!this.ok || !v || !!v.taken === !!on) return;
+      if (on) {
+        v._was = { post: v.post, state: v.state, legs: v.legs.slice(), path: v.path, s: v.s, rev: v.rev, onDone: v.onDone, onStuck: v.onStuck };
+        v.taken = true;
+        v.legs.length = 0;
+        v.path = null;
+        v.v = 0;
+        v.onDone = v.onStuck = null;
+        v.hose = false;
+        if (v.parts.hose) v.parts.hose.visible = false;
+        if (v.st) v.post = 'home';
+        v.root.visible = false;
+      } else {
+        const w = v._was || {};
+        v.taken = false;
+        v._was = null;
+        Object.assign(v, { post: w.post || v.post, legs: w.legs || [], path: w.path || null, s: w.s || 0, rev: !!w.rev, onDone: w.onDone || null, onStuck: w.onStuck || null });
+        if (w.state !== undefined) v.state = w.state;
+        v.root.visible = true;
+      }
+    }
+
+    /** Keep arrivals off a stand (1..4 or 'R1'..'R3': a wreck on it, havoc-air.js), or let them back. */
+    blockStand(id, on) {
+      const st = this.ok && this.allStands.find((s) => s.id === id);
+      if (!st) return;
+      if (on) {
+        if (!st.blocked) st.wreckBlock = true;
+        st.blocked = true;
+      } else if (st.wreckBlock) {
+        st.blocked = false;
+        st.wreckBlock = false;
+      }
+    }
+
     // ------------------------------------------------ cabin hooks (cabin.js)
     /**
      * The airliner parked on contact stand `id` (1..4), for its cabin: { plane (the planes()
@@ -4890,7 +4955,10 @@
   };
 
   VH.Airside = Airside;
-  VH.Airside.Path = Path; // for tests
+  VH.Airside.Path = Path; // for tests (and havoc-air.js's fire engines)
+  VH.Airside.route = route;
+  VH.Airside.gseGeometry = gseGeometry; // (vehicles/airsidecars.js builds the ones Jay can drive from these)
+  VH.Airside.KINDS = KINDS;
   VH.Airside.CARGO_PAD = CARGO_PAD; // the remote stands' paving (airfield.js lays it and puts it on the map)
   // The airlines that fly from here, for the check-in desks (terminal.js wants CSS colours:
   // a gradient from the livery colour to a darker shade of it).

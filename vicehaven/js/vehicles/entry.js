@@ -54,6 +54,11 @@
     scout: { door: 'none', climb: 0.25, low: 0, jack: 'shove', openT: 0.2, inT: 0.55 },
     bulwark: { len: 0.95, climb: 0.55, low: 0, jack: 'drag', openT: 0.5, inT: 0.7 },
     hauler: { len: 1.0, climb: 0.7, low: 0, jack: 'drag', openT: 0.5, inT: 0.75 },
+    // The airside vehicles (vehicles/airsidecars.js).
+    bagtug: { door: 'none', climb: 0.3, low: 0, jack: 'shove', openT: 0.2, inT: 0.5 },
+    caterer: { len: 0.95, climb: 0.75, low: 0, jack: 'drag', openT: 0.5, inT: 0.7, y0: 0.95, y1: 2.55 },
+    followme: { len: 1.05, climb: 0.22, low: 0, jack: 'drag' },
+    firetruck: { len: 1.0, climb: 0.85, low: 0, jack: 'drag', openT: 0.5, inT: 0.75, y0: 1.0, y1: 2.75 },
     // Aircraft and the tank: x/z place the door on the model, y0/y1 its height.
     skylark: { door: 'gull', len: 1.05, open: 1.35, climb: 0.45, low: 0.2, y0: 0.95, y1: 1.95, openT: 0.55, inT: 0.6 },
     albatross: { door: 'swing', len: 1.1, open: 1.5, climb: 2.2, low: 0, y0: 3.3, y1: 5.2, openT: 0.6, inT: 1.0 },
