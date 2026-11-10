@@ -22,7 +22,12 @@ buying the city block by block with money Jay once helped steal.
   and the walled mansions of Crestline Estates, with a running day and night.
 - **18 cars, 23 weapons, police with five heat levels and a helicopter,
   traffic that obeys the lights, crowds that run, three radio stations.**
-- **New in v2.2 (Airport update):** walk into Vicehaven International:
+- **New in v2.3 (Airport Havoc update):** walk down a jet bridge onto the
+  plane and up to the flight deck (and take it), a landing or takeoff every
+  minute or so, and havoc: smashing glass, a security alert that empties
+  the terminal, airliners that catch fire and evacuate down their slides,
+  fire engines, exploding fuel bowsers and airside vehicles to steal.
+- **v2.2 (Airport update):** walk into Vicehaven International:
   check-in, security, shops, the gates and the jet bridges, and an airport
   that works: planes land, taxi in, unload, board, push back and take off,
   with ground crew, travellers and a PA.
@@ -809,7 +814,7 @@ World conventions: metres and seconds; +Y is up, +X is east, −Z is north.
 - [ ] Wait a couple of minutes in free roam: a street encounter (pulsing !) starts nearby; ignore it and it goes away
 - [ ] Find the cash stash on the Civic Plaza terrace near the start: a chime as you get close, then the CASH STASH pop
 - [ ] Upgrade a business at its sign with E: the sign shows a star and the payday note itemises the upgrade
-- [ ] The title screen says v2.2 and What's new lists the airport, Story so far and the Hustle update
+- [ ] The title screen says v2.3 and What's new lists Airport Havoc, the airport, Story so far and the Hustle update
 - [ ] Vicehaven International: walk in from the kerb through the sliding doors, check-in, security (a gun sets the arch off), the concourse, a gate and down a jet bridge to the plane's door, back out through baggage reclaim; watch a plane taxi in, unload, board, push back and take off; travellers queue, sit, board and collect bags
 - [ ] In the terminal: shoot a pane of glass (it shatters, walk through), a board (static, then dark), a planter and a case on the belt (clothes everywhere); the alarm, amber lights, the PA and Delayed/Cancelled boards; people run out of the doors dropping cases; the security officers draw; two minutes later "the alert is over"
 - [ ] Drive at the terminal's front doors at speed: the bollards go flat, the doors smash and the car is in the hall

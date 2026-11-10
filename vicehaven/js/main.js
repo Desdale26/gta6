@@ -26,7 +26,7 @@
   // The Hustle update (v2.0): Rep and Dailies first (others report to them), the Phone last.
   const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Cabin', 'AirportHavoc', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Phone'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
-  const NEWS_KEY = 'vicehaven.seen.news-v2.2'; // set once the v2.2 notice has been shown
+  const NEWS_KEY = 'vicehaven.seen.news-v2.3'; // set once the v2.3 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
   const CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js';
 
@@ -1300,7 +1300,7 @@
       if (seen) return;
       this.hud.notify({
         title: 'New in Vicehaven ' + VH.VERSION.replace(/\.0$/, ''),
-        text: 'The airport is open: drive north up Grand Avenue and walk into Vicehaven International, through security to the gates and down a jet bridge, and watch the planes come and go. Skipped a cutscene? Pause → Story so far.',
+        text: 'At Vicehaven International you can now walk down a jet bridge onto the plane, all the way to the flight deck (E in the captain\'s seat takes the controls). Planes come and go every minute or so, and the airport can be wrecked: glass smashes, airliners catch fire and evacuate down their slides, and the fire engines are yours to steal.',
         icon: '★',
         duration: 14000,
       });

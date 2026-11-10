@@ -21,9 +21,9 @@
   'use strict';
 
   const VH = (window.VH = window.VH || {});
-  VH.VERSION = '2.2.0';
+  VH.VERSION = '2.3.0';
   VH.BUILD_NAME = 'Ten and Two';
-  VH.UPDATE_NAME = 'Airport update';
+  VH.UPDATE_NAME = 'Airport Havoc update';
 
   // ---------------------------------------------------------------- events
   class EventBus {
