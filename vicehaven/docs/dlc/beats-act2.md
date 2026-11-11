@@ -13,7 +13,7 @@ Conventions used below:
 ---
 ## d09_minor_fault: Minor Fault
 
-- **id** `d09_minor_fault` · **act** 2 · **title** Minor Fault · **giver** `pip` · **start** `june_house` · **requires** `d08_thirty_four_years` (default) · **time** 13 · **estMinutes** 11
+- **id** `d09_minor_fault` · **act** 2 · **title** Minor Fault · **giver** `pip` · **start** `june_house` · **requires** `d08_thirty_four_years` (default) · **time** 13 · **estMinutes** 10
 - **reward** `{ money: 1500, unlock: ['dside_lessons'] }` (the chain opens on `unlockAfter` anyway; harmless) · **failIf** `['wrecked:learner', 'dead:june', 'dead:pip']`
 - **summary** "The carburettor is in June Marlow's lawnmower. June Marlow is home early."
 - **Core:** escape in a slow car. **Cast:** jay, pip, june, toby (phone, parked across the road), milo (phone, blog on), gs_staff, dash and kit (cameo). **Reads:** `dlc_blog_on` / `dlc_blog_off`.
@@ -48,7 +48,7 @@ Conventions used below:
 ---
 ## d10_heritage_run: The Heritage Run
 
-- **id** `d10_heritage_run` · **title** The Heritage Run · **giver** `chet` · **start** `southbay_speedway` · **time** 14 · **estMinutes** 12
+- **id** `d10_heritage_run` · **title** The Heritage Run · **giver** `chet` · **start** `southbay_speedway` · **time** 14 · **estMinutes** 11
 - **reward** `{ money: 3500, unlock: ['dside_speedway'] }` · **failIf** `['wrecked:heritage_car']` (losing the race fails it: the engine's `race` does that)
 - **summary** "The only way to the honours board is to win. Jay races in Chet Valiant's helmet."
 - **Core:** Speedway race. **Cast:** jay, pip, chet, fenella, teddy, marshal, monty (PA), milo (phone, then in the grandstand), prof_quill (grandstand, one phone line), dash (a rival). **Reads:** nothing; with `dlc_blog_on` Milo's subscriber line.
@@ -110,7 +110,7 @@ Conventions used below:
 - **summary** "A floor safe nobody has opened in fifty years, a clerk called Benny, and a man who doesn't want the money."
 - **Core:** shop hold-up. **Cast:** jay, pip, benny, toby (phone). **Reads:** nothing.
 
-1. `spawnCar` `pip_car` at `sandpiper_promenade`. `camera: 'promenade_kwikpik'`, 4 s, caption "The promenade. Seven in the evening." The Kwik Pik's red sign; above it, in ghost letters that show through three coats of paint when the sun is low: BRASK & MARLOW SPEED SHOP. `music: 'off'`.
+1. `spawnCar` `pip_car` at `sandpiper_promenade`. `camera: 'promenade_kwikpik'`, 4 s, caption "The promenade. Seven in the evening." The Kwik Pik's blue-and-yellow sign (the game's own Kwik Pik brand, `stores.js`); above it, in ghost letters that show through three coats of paint when the sun is low: BRASK & MARLOW SPEED SHOP. `music: 'off'`.
 2. `scene` at `sandpiper_promenade`, cast pip, jay. Pip looks up at the letters for a long time. Pip: "Gran stood here. Every day. Fixing cars on this pavement." Jay: "Now it sells slushies." Pip: "Blue ones. I've had about four hundred of them. I've been in this shop four hundred times." She stays outside as lookout: "If anyone in teal walks past, I'll cough." Jay: "Cough what?" Pip: "Just cough. Loudly. I'm good at coughing."
 3. `goto: 'promenade_kwikpik'` on foot, `stop: true`, objective "Go into the Kwik Pik and ask about the safe" (into the shop interior; see NEW PLACES: the Kwik Pik must be a real `stores.js` corner shop with a floor safe).
 4. `scene` at `promenade_kwikpik`, cast benny, jay. Asking nicely. Jay: "That safe. Behind the counter." Benny: "The floor safe? Nobody knows the combination. The owner says it's structural." Jay: "Structural." Benny: "If you open it the building falls down. He says. I don't think that's how buildings work. I'm doing an engineering degree. Part-time." Jay tries buying a lot of crisps (the objective flashes "Buy something"; a line or two of Jay putting bags on the counter). Benny: "Sir, that's nineteen bags of crisps." Jay: "And the safe." Benny: "I'm still not allowed to open the safe, sir. Would you like a bag for your crisps?"
@@ -127,7 +127,7 @@ Conventions used below:
 ---
 ## d13_the_crusher: The Crusher
 
-- **id** `d13_the_crusher` · **title** The Crusher · **giver** `toby` · **start** `lot_17` · **time** 19.5 · **estMinutes** 11
+- **id** `d13_the_crusher` · **title** The Crusher · **giver** `toby` · **start** `lot_17` · **time** 19.5 · **estMinutes** 10
 - **reward** `{ money: 2500, weapons: ['shotgun'] }` · **failIf** `['dead:pip']`
 - **summary** "Guest Services empty lot 17 and take everything to the Ironside crusher. Jay gets there first. Nearly."
 - **Core:** timed rescue under fire. **Cast:** jay, pip, toby, clem (blog off), milo (phone), gs_staff, kit and dash (cameo, driving off), ottoline (voice on a loudhailer only). **Reads:** `dlc_blog_on` / `dlc_blog_off`.
@@ -270,3 +270,9 @@ New mission vehicle id (existing type): `film_lowloader` (`hauler`, cream 0xefe6
 16. **"And mind the road" in Act 2:** Pip says it twice (end of d09, d16's text). Nobody explains it. June does not say it in Act 2 (her line is saved for d25).
 17. **Unlocks.** `reward.unlock` lists `dside_lessons` (d09) and `dside_speedway` (d10) for the log; the chains open on `unlockAfter` regardless.
 18. **d10 race loss** fails the job (bible); the engine's `race` already does. Dash is a rival who spins on lap one, scripted in Monty's lines; if he finishes ahead of nobody, so much the better.
+
+## EDITOR'S CHANGES (story edit, binding)
+- Estimates: d09 10, d10 11, d13 10 (Act 2 = 78 min).
+- The Kwik Pik is the game's own shop brand (`stores.js`, blue and yellow), so its sign is blue-and-yellow, not red.
+- Pip's first race (aged twelve, d09) is the same race Dess watched in d23 (Act 3 now says twelve, not nine).
+- All [NEW] places above are now in `dlc.js`. Hob speaks from d16 (bible speaker list updated).

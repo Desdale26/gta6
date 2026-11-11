@@ -7,7 +7,7 @@ Conventions used below:
 - Place ids are from `dlc.js` (story places) or the built-in landmarks (bible 6.1). Places not in either are marked **[NEW]** and listed in "NEW PLACES NEEDED" at the end.
 - Vehicles use the bible's mission ids and types (6.3): `pip_car` = white `drifter` 0xf1f0ea; `dash_van` = purple `porter` 0x3b1558; `gs_car1..n` = teal `sovereign` 0x13b5b1; `gs_suv` = teal `tern`; `toby_pickup` = green `mesa` 0x1f3a26.
 - "Banter" = the `say` lines on a drive step; the topic is given, the scripter writes 6 to 12 lines.
-- Running tallies through Act 1 (keep them consistent): **Pip calls Jay "Driver"** in d01 to d07 and "Jay" for the first time in d08. **Milo calls Jay "Mr Mercer"** until d05. **Scoreboard:** d02 "1-0 (+1 rusty tap)", d04 spur, d05 minute hand (Milo learns of it in d06). **Subscribers:** 41 (d02), 60 (d03), back to 41 in d06 (Gran unsubscribes by accident). **Comment cards in Jay's glovebox:** 1 (d01), 2 (d03), 3 (d04), 4 (d07). **Quill carsick** in every car he rides in (d02, d03). **Jay says "damn"** about once a job, often to a car.
+- Running tallies through Act 1 (keep them consistent): **Pip calls Jay "Driver"** in d01 to d07 and "Jay" for the first time in d08. **Milo calls Jay "Mr Mercer"** until d05. **Scoreboard:** d02 "1-0 (+1 rusty tap)", d04 spur, d05 minute hand (Milo learns of it in d06). **Subscribers:** 41 (d02), 60 (d03), back to 41 in d06 (Gran unsubscribes by accident). **Comment cards in Jay's glovebox:** 1 (d01), 2 (d03), 3 (d04), 4 (d07). **The Halcyon clock** is eleven seconds slow until d05, when Jay slides the rally clock out and the big hands stop at 11:14; from d06 it has no minute hand either (Dash). It stays stopped for the rest of the DLC (editor). **Quill carsick** in every car he rides in (d02, d03). **Jay says "damn"** about once a job, often to a car.
 
 ---
 ## d01_lot_17: Lot 17
@@ -41,7 +41,7 @@ Conventions used below:
 
 ## d02_the_tin_man: The Tin Man
 
-- **id** `d02_the_tin_man` · **title** The Tin Man · **giver** `pip` · **start** `lot_17` · **requires** `['d01_lot_17']` (default) · **time** 10 · **estMinutes** 11
+- **id** `d02_the_tin_man` · **title** The Tin Man · **giver** `pip` · **start** `lot_17` · **requires** `['d01_lot_17']` (default) · **time** 10 · **estMinutes** 10
 - **reward** `{ money: 1000 }` · **failIf** `['wrecked:pip_car', 'dead:pip', 'dead:prof_quill']`
 - **summary** "A professor says the car is at the bottom of the bay. His grandson says it's a water tower."
 - **Core:** race the clock, then climb and collect. **Cast:** jay, pip, prof_quill, milo, dash, kit.
@@ -91,7 +91,7 @@ Conventions used below:
 
 ## d04_stunt_double: Stunt Double
 
-- **id** `d04_stunt_double` · **title** Stunt Double · **giver** `pip` · **start** `sunreel_gate` · **time** 9 · **estMinutes** 12
+- **id** `d04_stunt_double` · **title** Stunt Double · **giver** `pip` · **start** `sunreel_gate` · **time** 9 · **estMinutes** 11
 - **reward** `{ money: 3000 }` (the stunt fee) · **failIf** `['wrecked:stunt_car']` during the takes only (see step 6)
 - **summary** "Castellane's film needs a stunt double for Chet Valiant. Jay needs the roof of the sheriff's office."
 - **Core:** stunt course (a timed run through checkpoints with ramps). **Cast:** jay, pip, studio_guard, fenella, chet, dash, kit, ottoline. Unlocks side chain *Take Two* (`dside_stunts`, the engine reads `unlockAfter`).
@@ -111,7 +111,7 @@ Conventions used below:
 13. `scene` at `sunreel_western_set`, ottoline (dropping by the set, "Mr Castellane likes to know his films are being cared for"), jay. Friendly, terrifying. She hands him a card: **(keep)** "How would you rate your first day?" Then: "One to five. Do be honest. We always find out." (Comment card 3.) She looks up at the roof. The plastic chicken points out to sea. She says nothing and walks on.
 14. `goto: 'sunreel_gate'`, vehicle false, objective "Walk off the lot, calmly". `scene` at `sunreel_gate`, pip, jay, studio_guard. Pay envelope from Fenella delivered by the guard ("She says come back tomorrow. She says that to everybody. She means it about you."). Pip turns the bird over. Engraved under the base, small, in a mechanic's hand.
 15. `blackout`, **R3** in full as captions, introduced by `['caption', 'Engraved under the bird\'s base:']`:
-    > "I kept her laps and kept her pace; / now I keep the scholars' place. / Twelve on top and none below, / look behind the face I show. / And mind the road."
+    > "I kept her laps and kept her pace; / now I keep the scholars' place. / Twelve on top and six below, / look behind the face I show. / And mind the road."
 16. `getIn: 'pip_car'`, `goto: 'lot_17'`, vehicle true, stop true, objective "Take the bird to lot 17". Banter topic: **Chet** (Pip: "He's never driven fast? He's a racing driver in four films!" Jay: "Somebody else was."), **Pip on Rex Castellane** ("They're making a film where he WON."). Pip, reading R3 again: "Scholars. Halcyon. That's all I've got." **R3 is not solved.** Jay hangs the red jacket on the BRASK door. End.
 - **Laugh:** eleven Chet Valiants; "I want to see the paint leave"; the plastic chicken; Dash's spur.
 - **Ambient text after** (bible): chet, "Kid. Fenella says you hit that ramp at seventy. SEVENTY..."
@@ -124,7 +124,7 @@ Conventions used below:
 - **Core:** quiet job on foot (sneak and climb). **Cast:** jay, milo (phone only), pip (in the car), plum, dash, kit, prof_quill (voice off, one line).
 
 1. `spawnCar` `pip_car` at `campus_strip`. `camera: 'quill_house'` 3 s: Milo's bedroom window, a torch under the covers, a hand-drawn Firecrest poster.
-2. `phone: 'milo'` (whispering, supposed to be asleep), **the R3 solve** (R3 shown at the end of d04). Opens with a fact: "Did you know a clock face has twelve numbers on top and none underneath? That's the riddle. Probably." Then: "'Twelve on top and none below': a clock face. 'The scholars' place': Halcyon. 'I kept her laps': a rally clock. It's in the clock tower, Mr Mercer. Behind the face. That's why it's eleven seconds slow! Fifty-year-old clock!" Jay: **"Jay. Just Jay."** Milo (a pause; enormously pleased; trying not to sound it): "Jay." Then: "Jay. Jay, there's a security guard called Officer Plum. He has a bicycle. He takes it very seriously."
+2. `phone: 'milo'` (whispering, supposed to be asleep), **the R3 solve** (R3 shown at the end of d04). Opens with a fact: "Did you know a clock face has the twelve at the top and the six at the bottom? That's the riddle. Probably." Then: "'Twelve on top and six below': a clock face. 'The scholars' place': Halcyon. 'I kept her laps': a rally clock. It's in the clock tower, Mr Mercer. Behind the face. That's why it's eleven seconds slow! Fifty-year-old clock!" Jay: **"Jay. Just Jay."** Milo (a pause; enormously pleased; trying not to sound it): "Jay." Then: "Jay. Jay, there's a security guard called Officer Plum. He has a bicycle. He takes it very seriously."
 3. `scene` at `campus_strip`, pip and jay in the Drifter. Pip: "I'll keep the engine warm. Not drive it. Warm." Jay: "You'll stay in the passenger seat." Pip: "I'll stay near the passenger seat." `music: 'tension'`.
 4. `goto: 'halcyon_quad'`, vehicle false, objective "Cross the quad. Stay out of the torchlight". `spawn` `{ id: 'plum', char: 'plum', at: 'halcyon_quad', behavior: 'patrol', faction: 'vpd', weapon: 'fists', hostile: false }` (spotting Jay raises heat 1, which fails the job; see DECISIONS). Say (overheard from Plum, cycling): "Nine past eleven. Quad secure. Lawn secure. Bin secure." Milo on the phone, whispering directions: "He does the fountain, then the library, then the fountain. He really likes the fountain."
 5. `goto: 'clocktower_scaffold'` [NEW], vehicle false, radius 4, objective "Reach the repairers' scaffold at the foot of the clock tower". Crouch through the hedges; Plum circles the fountain.
@@ -165,7 +165,7 @@ Conventions used below:
 
 ## d07_champions_since_day_one: Champions Since Day One
 
-- **id** `d07_champions_since_day_one` · **title** Champions Since Day One · **giver** `pip` · **start** `coral_marina` · **time** 17 · **estMinutes** 11
+- **id** `d07_champions_since_day_one` · **title** Champions Since Day One · **giver** `pip` · **start** `coral_marina` · **time** 17 · **estMinutes** 10
 - **reward** `{ money: 2000 }` · **failIf** `['dead:pip', 'dead:toby']`
 - **summary** "An old man with a flare gun, some polite men in teal, and a hotel king with a cheque book."
 - **Core:** shoot-out on foot. **Cast:** jay, pip, toby, gs_staff, leo, ottoline.
@@ -259,3 +259,9 @@ New mission vehicle ids (existing types, not in bible 6.3): `stunt_car` (`drifte
 18. **d02 timeout.** Missing the 180 s timer fails the job (Pip: "We LOST to a man in a hat?"), even though Dash is first either way.
 19. **d08 ambient text** from Toby is a suggestion; the bible's table has none after d08.
 20. **Nana Lu's memory (d01)** adds one line of my own ("Hands under the blanket. Ten and two.") as a gentle echo of what she taught him; it is true at every point of the main story and refers to nothing after its first act. Drop it if the lead prefers zero main-game echoes.
+
+## EDITOR'S CHANGES (story edit, binding)
+- R3's third line is now "Twelve on top and six below" (a clock face, solvable by a twelve-year-old); d04's text and d05's solve are updated. Bible section 1 matches.
+- The Halcyon clock stops at 11:14 in d05 and stays stopped for the whole DLC (later lines that called it "eleven seconds slow" were changed).
+- Estimates: d02 10, d04 11, d07 10 (Act 1 = 80 min).
+- All [NEW] places above and the new speakers are now in `dlc.js`. The bible's "midnight" for d08 now reads "half past ten"; Milo's T-shirt is drawn in d03 (bible updated).

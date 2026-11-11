@@ -3,7 +3,7 @@
 **Title:** *Chasing the Firecrest*
 **Tagline:** *Seven parts. Seven riddles. One lost racing car somewhere across the bay. And mind the road.*
 **Protagonist:** Jay Mercer, the best getaway driver in Vicehaven, for once the grown-up in the car.
-**Scope:** 30 main jobs in 4 acts (about 5 h 15 min), 4 side chains with 15 jobs (about 2 h 30 min). Data id `dlc1`.
+**Scope:** 30 main jobs in 4 acts (about 5 h 10 min: 308 estimated minutes), 4 side chains with 15 jobs (about 2 h 30 min: 148 minutes). Data id `dlc1`.
 **Where:** mostly the twelve new districts (Sandpiper Beach, Vista Verde, Ironside, The Bowl, Sunreel Studios, Cinder Creek, Halcyon University, Coral Marina, and on Isla Paloma the Neon Strand, Old Paloma, Paloma Heights and Paloma Field), plus Vicehaven International and a guest turn by the old city's Harbor Point and boardwalk.
 
 This is the single source of truth for everyone writing the DLC: the beat-sheet writers, the eight act writers, the two side-chain writers, the recap writer and the engine agent. It follows `docs/mission-format.md` plus the DLC extensions fixed in the master brief (`fly`, `land`, aircraft in `spawnCar`/`goto`/`deliver`/`getIn`, the `airport_terminal` and `airport_arrivals` interiors). If a scene seems to need a room that does not exist, stage it at a doorway, in a car, on a roof, in a hangar mouth or as a `blackout`.
@@ -27,13 +27,13 @@ Fifty years ago Dess Marlow won the Southbay 500 in a car called the Firecrest, 
 - **Finishing the lap.** A race is not over until you cross the line. Dess never got her lap of honour. The finale gives it to her, in front of everybody.
 
 ### Tone
-The main game's sun-bleached neon noir with warmth and wit, pitched a notch lighter and more adventurous: a summer treasure hunt across the bay. Days are white heat, pastel motels, salt on the windscreen and the smell of hot tyres at the Speedway. Nights are the neon of the Strand, the drive-in screen, and two lighthouses blinking at each other across black water. It is a hunt, not a heist. People are funny because of who they are: Pip's impatience, Quill's carsickness, June's clipboard, Hob's marks out of ten, Dash's unbreakable confidence, Chet's refusal to go over thirty. The stakes are real (the truth, a family, a car that matters to a lot of people), the danger is GTA-normal (chases, goons, police heat, things that explode), and nobody dies on screen. The one old death in the story (Rex Castellane, years ago, of old age) is told plainly.
+The main game's sun-bleached neon noir with warmth and wit, pitched a notch lighter and more adventurous: a summer treasure hunt across the bay. Days are white heat, pastel motels, salt on the windscreen and the smell of hot tyres at the Speedway. Nights are the neon of the Strand, the drive-in screen, and two lighthouses blinking at each other across black water. It is a hunt, not a heist. People are funny because of who they are: Pip's impatience, Quill's carsickness, June's clipboard, Hob's marks out of ten, Dash's unbreakable confidence, Chet's refusal to go over thirty. The stakes are real (the truth, a family, a car that matters to a lot of people), the danger is game-normal (chases, goons, police heat, things that explode), and nobody dies on screen. The one old death in the story (Rex Castellane, years ago, of old age) is told plainly.
 
 Reference points for feel (not content): a Saturday-morning adventure serial, a family road trip that goes wrong in the best way, a radio commentator on a hot afternoon.
 
 ### Style rules for the writers
 - **Lines** are `[speakerId, text]`, under about 180 characters. Split long speeches. Stage directions in parentheses at the start: `'(not looking up from the clipboard) Minor fault.'`
-- **Speaker ids:** `jay`, `pip`, `milo`, `prof_quill`, `june`, `toby`, `odie` (Dess before she is revealed, d17 and d22 to d23's reveal), `dess` (after), `dash`, `leo`, `ottoline`, `hob`, `chet`, `monty`, `nana_lu` (memories only), `caption`, plus the minor ids in section 4.15. Never use main-story speakers.
+- **Speaker ids:** `jay`, `pip`, `milo`, `prof_quill`, `june`, `toby`, `odie` (Dess before she is revealed, d17 and d22 to d23's reveal), `dess` (after), `dash`, `leo`, `ottoline`, `hob`, `chet`, `monty`, `nana_lu` (memories only), `caption`, plus the minor ids in section 4.15 (all of them, with looks and voices, are in `dlc.js`). Never use main-story speakers (the main cast's `cop` included: the DLC's police speaker is `officer`).
 - **Language (binding):** mild only. Allowed: damn, hell, crap, "what the hell", "bloody" rarely, a very rare "shit" or "ass" (at most a handful in the whole DLC, never from or near Milo). Never the f-word, never a slur, never anything sexual. No drugs, as a business or a joke. No gambling, casinos or betting (arcades, claw machines, funfairs and raffles are fine; the claw machine is rigged, which is the joke). Drinking: none on screen beyond "a lemonade" and Hob's coffee. Per-character guide: Pip says "crap" when she stalls and "hell" when she's thrilled. Jay says "damn" quietly, about once a job, often to a car. June never swears; she says "Minor fault" instead, which is worse. Quill says "Great Scott" and "blast". Hob says "bloody" and "crikey" in the same breath. Toby says "hell's bells". Dash never swears on camera and swears (mildly) the second the camera is off. Ottoline never swears; she is polite the way a closing door is polite. Milo never swears; he corrects other people's grammar instead.
 - **Violence:** Guest Services goons, police heat, shoot-outs, crashes and explosions are the game's normal. Nobody named is killed. Goons are "down", "out", "taken away". When the finale gets Ottoline arrested, say so plainly. No blood words beyond "hurt".
 - **Humour:** at least one real laugh in every job, from character, not from cruelty. Running gags are listed below; use them where this bible marks them and not so often they wear out.
@@ -43,10 +43,10 @@ Reference points for feel (not content): a Saturday-morning adventure serial, a 
 - **Riddles:** see "How riddles work" below. They are the heart of the DLC. The player must always have the chance to solve one before a character says the answer.
 
 ### How riddles work (binding for every writer)
-1. **Every riddle is a rhyme in Dess's voice**, four to six short lines, for a seventeen-year-old in the 1970s but solvable by a twelve-year-old now, about **one physical object in one real place you can see in the game**. It always ends with the line **"And mind the road."** (Dess's sign-off; she said it every time June's aunt drove off with the baby.)
+1. **Every riddle is a rhyme in Dess's voice**, four to six short lines, for a seventeen-year-old in the 1970s but solvable by a twelve-year-old now, about **one physical object in one real place you can see in the game**. It always ends with the line **"And mind the road."** (Dess's sign-off; she said it every time June's aunt drove off with the baby.) The one riddle not in Dess's voice is Ending C's new trail, which Milo writes (section 8).
 2. **Show it first, solve it later.** The riddle is shown in full as soon as it is found (a `blackout` with the lines as `caption`, or read out by Pip or Toby), then the job **ends or a drive begins before anyone says the answer**. The answer comes from Milo at the start of the next job or at least one full drive later (`phone: 'milo'`). This gives a parent and child time to shout it at the screen.
 3. **Clue chain.** Each part carries the next riddle (engraved, folded inside, scratched on the back). The table below is the canonical text: use it word for word.
-4. **Fair play.** Every riddle's answer is a place the player has already seen on the map or will pass on the drive (writers: put the answer on screen with a `camera` shot on the way, without comment, before Milo says it).
+4. **Fair play.** Every riddle's answer is a place the player has already seen on the map or will pass on the drive (writers: put the answer on screen with a `camera` shot on the way, without comment, before Milo says it). The one exception is R4: June's house is not visited before d09, so the mower is planted by line instead (Pip in d01: "slower than my mum's lawnmower... Does forty... Nobody's allowed in the shed").
 5. **Milo explains how** in one or two lines ("Tin man is what you call a water tower if you're a poet or a seven-year-old. I'm a bit of both."). Then he posts on his blog, and the subscriber count gag fires.
 6. **Characters get it wrong first.** Quill always has a scholarly wrong answer ("Clearly the rhyme refers to the sunken paddle steamer *Tin Mistress*, 1904."). Dash always goes to the most literal wrong place and takes the wrong thing.
 
@@ -55,26 +55,26 @@ Reference points for feel (not content): a Saturday-morning adventure serial, a 
 |---|---|---|---|---|
 | R1 | the tin box (d01) | lot 17, Cinder Creek Storage | "I turned her left, I turned her right, / now I turn the water tight. / Climb the tin man, silver-grey, / and turn me home the other way. / And mind the road." | The steering wheel is the valve wheel on top of the **Cinder Creek water tower** |
 | R2 | inside the horn button of the steering wheel (d02) | Cinder Creek water tower | "My bird flies where the cowboys play, / who never die at end of day. / She's on a roof, she points the wind, / she's never caught and never pinned. / And mind the road." | The Firecrest's bonnet bird is the weathervane on the sheriff's office of the **Sunreel western set** (cowboys who never die = actors). Milo gets it in d03 from the newsreel. |
-| R3 | engraved under the bonnet bird's base (d04) | Sunreel western set | "I kept her laps and kept her pace; / now I keep the scholars' place. / Twelve on top and none below, / look behind the face I show. / And mind the road." | The rally clock is inside the face of the **Halcyon clock tower** |
+| R3 | engraved under the bonnet bird's base (d04) | Sunreel western set | "I kept her laps and kept her pace; / now I keep the scholars' place. / Twelve on top and six below, / look behind the face I show. / And mind the road." | The rally clock is inside the face of the **Halcyon clock tower** |
 | R4 | on the back plate of the rally clock (d05) | Halcyon clock tower | "My heart is home where my baby sleeps, / out in the shed where the spider creeps. / I roar on Sundays, up and down, / the fastest thing in all the town. / And mind the road." | The carburettor is in the lawnmower at **June's house in Vista Verde**, the house June grew up in. Pip gets it before Milo (d08), and goes quiet. |
 | R5 | rolled up in the carburettor's float bowl (d09) | June's garage | "My name was painted, then painted out, / where only winners stand and shout. / Be first across, then look below / the board where all the winners go. / And mind the road." | The honours board in the **Speedway winners' enclosure**. You have to win to stand there (d10). |
 | R6 | scratched on the wall under the honours board (d10) | Southbay Speedway | "Two eyes that never shut all day / watch the swimmers splash and play. / One on each of two tall chairs, / they're bright as mine, and they're a pair. / And mind the road." | The Firecrest's two headlamps are the lamps on two **Sandpiper lifeguard towers** |
 | R7 | nothing riddled: a shop name stamped inside one headlamp, plus a three-number combination (d11) | Sandpiper Beach | (not a riddle) "BRASK & MARLOW SPEED SHOP, THE PROMENADE. 7 - 17 - 50." | The old speed shop is now the **Kwik Pik on the promenade**; its floor safe has never been opened (d12) |
 | R8 | in an envelope in the floor safe (d12) | Sandpiper Kwik Pik | "I'm in a box where nobody wins, / beside a wheel that turns and spins. / Many have tried with a coin and a claw; / the wheel goes round, and goes nowhere at all. / And mind the road." | The gear stick is the prize in the **Golden Grabber claw machine at Wonder Wharf**, beside the big wheel |
 | R9 | inside the gear knob (d19) | Hob's hangar, Paloma Field | "Ring me once when the boats come in, / I'll ring back with a spark within. / I hang above the market square / and swing for every wedding there. / And mind the road." | The ignition coil is inside the clapper of the **Old Paloma church bell**, above Paloma Plaza |
-| R10 | wrapped round the coil (d21) | Old Paloma bell tower | "When two lights say goodnight at ten, / fly the line between them then. / Where the light comes from, I'll be, / the last part is the part that's me. / And mind the road." | The car (and Dess) are at the **Paloma fort lighthouse**, the far end of the beam from the Coral Marina light |
+| R10 | wrapped round the coil (d21) | Old Paloma bell tower | "When two lights say goodnight at ten, / fly the line between them then. / Where the light comes from, I'll be, / the last part is the part that's me. / And mind the road." | The car (and Dess) are at the **Paloma fort lighthouse**, the far end of the beam from the Coral Marina light. The ten o'clock goodnight is an old keepers' custom, a century older than either keeper, which Dess knew as a girl; that is how she could write it fifty years ago |
 
 ### Running gags and callbacks
 - **"And mind the road."** Every riddle ends with it. Pip starts saying it when anyone leaves. June says it to Jay in d25 without knowing why it stops him. Dess says it to June in the finale, and June finally knows where she heard it as a baby. Last line of the DLC (every ending).
-- **The scoreboard.** Milo's blog, *The Firecrest Files*, keeps a running score at the top: "TEAM FIRECREST 1 · LOCKWOOD'S LOST LEGENDS 0 (+1 rusty tap)". Dash's wrong finds pile up: a rusty tap (d02), a cowboy's spur (d04), the Halcyon clock's minute hand (d05), a garden gnome (d09), a lifeguard's whistle (d11), a teddy bear from the claw machine (d19). Subscribers: 41 (d02), 60 (d03), 41 again when his gran unsubscribes by accident (d06), then with `dlc_blog_on` it climbs (900, 12,000, 80,000, 400,000 at d30); with `dlc_blog_off` Milo keeps the board on paper on his wall and reads it down the phone. Milo reads the score out about every second job. Dash reads it too, and is wounded.
+- **The scoreboard.** Milo's blog, *The Firecrest Files*, keeps a running score at the top: "TEAM FIRECREST 1 · LOCKWOOD'S LOST LEGENDS 0 (+1 rusty tap)". Dash's wrong finds pile up: a rusty tap (d02), a cowboy's spur (d04), the Halcyon clock's minute hand (d05), a garden gnome (d09), a lifeguard's whistle (d11, `dlc_blog_on` only: with blog off Dash is not on the beach), a teddy bear from the claw machine (d19). Subscribers: 41 (d02), 60 (d03), 41 again when his gran unsubscribes by accident (d06), then with `dlc_blog_on` it climbs (900 at d11, 12,000 at d16, 80,000 at d21, 100,000-plus at d26, 200,000 at d29, 400,000 at d30); with `dlc_blog_off` Milo keeps the board on paper on his wall and reads it down the phone. Milo reads the score out about every second job. Dash reads it too, and is wounded.
 - **Hob's marks out of ten.** Every landing in a plane or helicopter, Hob (or Hob on the radio) gives a mark: "We walked away. Four." "That was a landing in the legal sense. Six." He never gives a ten until dsf4 (or d30 if `dsf4` is not done: "Nine. Don't let it go to your head.").
 - **June's clipboard.** "Minor fault." "Minor fault." "That was a fountain." She marks Jay's driving even in a pursuit. "Serious fault" is reserved for the moment she means it (d09, when Jay mounts the kerb to save her: she crosses it out).
-- **Monty never gets Jay's name right.** "Jim Mercy!" "Jake Murphy!" "Joe Mercury!" "Jay... Merkin? Jay Somebody!" Finally, in d30, he gets it right, once, and the crowd chants it. (Keep the wrong names gentle and silly.)
-- **Guest Services comment cards.** Ottoline leaves a printed card at every scene she wrecks: "How would you rate your experience of being followed today? 1 to 5." Jay keeps them in the glovebox; there are nine by d28. He fills one in during the finale (with `dlc_dash_in` Dash reads it on air): "One star. Staff were very attentive."
+- **Monty never gets Jay's name right.** "Jim Mercy!" "Jake Murphy!" "Joe Mercury!" "Jay... Mercator? Jay Somebody!" Finally, in d30, he gets it right, once, and the crowd chants it. (Keep the wrong names gentle and silly.)
+- **Guest Services comment cards.** Ottoline leaves a printed card at every scene she wrecks: "How would you rate your experience of being followed today? 1 to 5." Jay keeps them in the glovebox; there are nine by d28 (d01, d03, d04, d07, d11, d13, d14, d20 from Dash's hatband, and the one on the empty powder-store floor in d28). At the end of d28 Ottoline hands him a tenth, blank ("You choose one"); he keeps it in his shirt pocket and fills it in during the finale (with `dlc_dash_in` Dash reads it on air): "One star. Staff were very attentive." Side jobs never hand Jay a card.
 - **Quill gets carsick.** In every car. "I wrote three books proving that car was at the bottom of the bay, and I may yet join it." He is fine in aircraft, which makes no sense to anyone.
 - **Chet won't go over thirty.** "Never over thirty, kid. I made that promise to my insurers and my mother, in that order." He starred in *Oversteer 2: Understeer*. There was no *Oversteer 1*. "Loved the first one," people say. He thanks them.
 - **Dash's catchphrase:** "Legend... FOUND!" said over whatever wrong thing he's holding. Once, in d30 with `dlc_dash_in`, he says it about the right thing, and can't believe it.
-- **The two lighthouses.** Every night at ten the Coral Marina light and the Paloma fort light flash each other three times. Toby calls it "the other keeper saying goodnight." Planted in d07, paid off in d22.
+- **The two lighthouses.** Every night at ten the Coral Marina light and the Paloma fort light flash each other three times: the keepers' goodnight, an old custom kept by whoever holds the two lights. Toby: "Every night at ten the fort light says goodnight. I say it back. Manners." (d08, d22). Planted in d07 (seen, unexplained), solved in d22; in Ending C (`dlc_june_wait`) Dess explains it to June: "The other keeper. Saying goodnight."
 - **Three taps.** Dess tapped the steering wheel three times before every race (seen in the newsreel, d03). Odie taps the café counter three times in d17. The player can spot it. In d30, before the last lap, Dess taps the wheel three times.
 - **Junebug.** Painted under the driver's door of the Firecrest, seen in the newsreel (d03, nobody can read it), revealed in d27 when the dust sheet comes off. June's nickname from Aunt Win; June never knew who gave it to her.
 - **Nana Lu's bedtime story.** Jay's grandmother told him the Firecrest story when he was small (d01 blackout). He remembers her ending: "And she drove into the night, and nobody ever saw her again." "Where did she go?" "Somewhere she could see the sea, I expect." Paid off in d22 when he sees the fort light.
@@ -94,7 +94,7 @@ All times are relative to "this summer", when the DLC is set. Never give a calen
 | 50 years ago, that week | Dess hides. She has seven days before the Castellanes' private detective, **Gorse**, starts asking questions. She takes **seven parts** off the Firecrest so it can never be driven away by anyone else, and hides them round the bay in seven places that mean something to her, each part carrying a rhyme that leads to the next. She ships the car itself on the night ferry to Isla Paloma and walls it into the old **powder store under the Paloma fort**, cup in the boot. She writes the first rhyme, puts it in a tin box with the starter key and gives it to Toby: "On June's seventeenth birthday. Not before. Promise me." Then she lets the world think she drove into the bay. Gorse follows her trail, writes down *where* she went that week, never works out *what* she did there, and closes the file: "Subject believed drowned." |
 | 50 to 34 years ago | June grows up with Aunt Win in Vista Verde, told her mother died in an accident. Dess, under the name **Odie Wren**, gets the job of keeper of the Paloma fort light, from which, on a clear night, she can see the Coral Marina light across the bay. |
 | 34 years ago | June's seventeenth birthday. Toby drives to Win's house with the tin box. A Castellane car is parked across the road (it was a hotel delivery van; he didn't know that). Toby panics, drives away, and every year after it is harder to go back. He puts the box in a storage unit at Cinder Creek: **lot 17**. |
-| 33 years ago | Toby becomes keeper of the **Coral Marina light**. At ten that first night the fort light across the bay flashes three times. He flashes back, out of politeness. They have done it every night since. Toby thinks it's a fellow keeper being friendly. Dess knows exactly who it is. |
+| 33 years ago | Toby becomes keeper of the **Coral Marina light**. At ten that first night the fort light across the bay flashes three times, as the two lights have done every night for a hundred years (the keepers' goodnight). He flashes back, out of politeness. They have done it every night since. Toby thinks it's a fellow keeper keeping up an old custom. Dess knows exactly who it is. |
 | 32 to 20 years ago | June becomes a driving instructor (Marlow School of Motoring, one dual-control Pipit), marries briefly, has **Pip**. She hates racing cars the way you hate the thing that took your mother. Aunt Win dies twenty years ago; June keeps the house, the shed and Win's ancient, frighteningly fast lawnmower. |
 | 10 years ago | Rex Castellane dies, old, in his bed. His son **Leo** inherits forty hotels, the Speedway and the Neon Strand. Clearing his father's desk he finds the Gorse file and reads, in his father's handwriting on the last page, how the race was really won. He locks it in his study and puts "Castellane: Champions Since Day One" on every hotel. |
 | 3 years ago | Professor **Ambrose Quill** publishes the third of his books proving the Firecrest is at the bottom of the bay. They sell 340 copies between them. |
@@ -141,7 +141,7 @@ Already defined by the main game; do not redefine him. In the DLC he is the same
 - **Want:** To find the Firecrest and prove her grandmother was the real winner, so that June will stop hating racing and maybe stop hating Pip's racing.
 - **Secret:** She has not told her mother any of this. Her mum thinks she's doing a summer job at the Speedway shop (out in d09 when June catches them in the shed). Smaller secret: she wrote to Dash Lockwood's show two years ago with the "drowned driver" story and he never replied (comes out in d06; Dash doesn't remember).
 - **Arc:** From "I don't need anyone, I need a driver" to letting other people (June, Jay, Toby, even Dash) be part of it. In Act 4 she gives up the driver's seat of the last lap to whoever the player's choices put there, and is glad.
-- **Habits:** Calls Jay "Driver" until d08, then "Jay". Fiddles with the starter key on its Firecrest keyring. Rates other people's cornering.
+- **Habits:** Calls Jay "Driver" until d08, then "Jay". Fiddles with the starter key on its little gold bird keyring until d17, when she clips it to Jay's belt ("Driver holds the key"); Jay carries it until he hands it to Dess in d27. Rates other people's cornering.
 - **How she talks:** fast, blunt, half-finished sentences, speedway slang. Says "crap" when she stalls and "hell yes" when thrilled. Never cruel; impatient.
 - **Sample lines:**
   - "I'm banned, not dead. Drive. No, not like that. Like that. Yes. Thank you."
@@ -151,7 +151,7 @@ Already defined by the main game; do not redefine him. In the DLC he is the same
   - "And mind the road. (beat) I don't know why I keep saying that."
 
 ### 4.2 Milo Quill (`milo`), 12. The riddle-solver
-- **Look:** `{ skin: 0x8d5a3b, hair: 0x1a1410, top: 0xf2c500, bottom: 0x3a3d42, shoes: 0x2a55d8, build: 'slim' }`. Yellow T-shirt with a hand-drawn Firecrest on it (he drew it in d02 and wears it from d04 on), grey shorts, blue trainers, glasses on a cord like his grandad's.
+- **Look:** `{ skin: 0x8d5a3b, hair: 0x1a1410, top: 0xf2c500, bottom: 0x3a3d42, shoes: 0x2a55d8, build: 'slim' }`. Yellow T-shirt with a hand-drawn Firecrest on it (he sketches the car in d02, draws it on the shirt in d03 and wears it from d04 on), grey shorts, blue trainers, glasses on a cord like his grandad's.
 - **Voice:** `{ gender: 'male', pitch: 1.38, rate: 1.12 }`
 - **Bio:** Professor Quill's grandson, staying at Halcyon for the summer while his parents work abroad. Reads everything, forgets nothing, and runs *The Firecrest Files*, a blog with 41 subscribers, one of whom is his gran.
 - **Want:** To solve the whole thing before the grown-ups. To be taken seriously. (Underneath: to have a summer that isn't just his grandad's study.)
@@ -318,7 +318,7 @@ None in person. The main cast's lives change too much across the main story's br
 ### 4.15 Minor characters
 Give each the look and voice in `dlc.js`; use these ids.
 - **Fenella Moss** (`fenella`), 42: director of *Champions Since Day One*. Megaphone, sun visor, three phones. Hates the script, loves a good stunt. "It's for the movie" is her line before it's anyone's. Lends Jay the replica (d14) and the tyres (d24).
-- **Kit Ambrose** (`kit`), 31: Dash's camera operator and researcher, the one who actually reads Milo's blog. Deadpan. "We're rolling. We're always rolling."
+- **Kit Ambrose** (`kit`, she), 31: Dash's camera operator and researcher, the one who actually reads Milo's blog. Deadpan. "We're rolling. We're always rolling."
 - **Clem Ruddock** (`clem`), 70: Cinder Creek Storage manager and auctioneer, fastest mouth in the west (d01).
 - **Gorse** (no speaker; a name on a file): the Castellanes' private detective fifty years ago.
 - **Officer Plum** (`plum`), 59: Halcyon campus security, torch, bicycle, takes his job very seriously (d05).
@@ -331,6 +331,12 @@ Give each the look and voice in `dlc.js`; use these ids.
 - **Rosa Lindqvist** (`rosa`), 16: June's most nervous pupil (*Dual Control*).
 - **Guest Services staff** (`gs_staff`): generic teal-blazered goons. "Good afternoon." Then they shoot.
 - **Speedway marshal** (`marshal`), **studio guard** (`studio_guard`), **drive-in kid** (`popcorn_kid`) as needed: one-line parts.
+- **Police officer** (`officer`): the DLC's own uniformed officer for spoken lines (d28 "Are you lads a band?", d30 "Are you in the band?"). Never the main cast's `cop`.
+- **Valet** (`valet`): the Castellane Palace valet, one line (d19, optional).
+- **Mechanic** (`mechanic`): a Castellane Racing mechanic in the lock-up (dsr3), "Your uncle's orders, Mr Teddy."
+- **Vicehaven Tower** (`tower`): the air traffic controller, voice only (dsf4).
+- **Dougie Penn** (`dougie`), 11: Vista Verde School's pelican mascot, in costume, in character (dsl2).
+- No lines, so no ids: the car thief (dsl1), Vince the stuntman (dst2), Father Anselmo, Mr Okafor, the security screener and the librarian (captions only), Gary the pyrotechnics man (shouted at, never seen).
 
 ---
 
@@ -443,6 +449,51 @@ The police (`vpd`) work as in the main game: heat from crimes seen, the helicopt
 | `hob_hangar` | palomafield | garage | the Paloma Flying Club hangar: doughnut boxes, a kettle, Hob's Skylark and the club's Sparrow |
 | `field_apron` | palomafield | parking | the apron at the end of the runway where aircraft are parked |
 
+### 6.2b Places added by the beat sheets (editor; all are in `dlc.js`)
+Climbable spots (`water_tower_top`, `sheriff_roof`, `clocktower_ledge`, `clinic_helipad`) and exact track or set points (the `speedway_*` and `stadium_*` ids, `beach_club_sand`, the `crusher_belt_*` ids, the `mall_*` ids) need the district builder to register a precise spot with `places.extra`; a kind-based resolve is only the fallback.
+
+| id | district | kind | desc | used in |
+|---|---|---|---|---|
+| `water_tower_top` | cindercreek | rooftop | the catwalk round the top of the Cinder Creek water tower; the old brass valve wheel | d02 |
+| `projection_booth` | cindercreek | storefront | the Starview's projection booth and snack bar in the middle of the rows | d03 |
+| `truckstop_lockup` | cindercreek | garage | lock-ups behind the Cinder Creek truck stop; a gold Zephyr on stands in one | dsr3 |
+| `city_set_ramp` | sunreel | street | a ramp on the fake city street aimed at a sugar-glass shopfront (MILLER'S FINE HATS) | d04 |
+| `sheriff_roof` | sunreel | rooftop | the sheriff's office roof on the western set; the weathervane (a plastic chicken after d04) | d04 |
+| `subway_ramp` | sunreel | street | a ramp over the fake subway entrance on the city set | dst1 |
+| `fake_bank` | sunreel | bank | the fake bank's breakaway window on the city set | dst1 |
+| `camera_mark` | sunreel | street | a chalked T on the backlot road by the camera crane and Chet's deckchair | dst1 |
+| `clocktower_scaffold` | halcyon | construction | the clock repairers' scaffold at the foot of the clock tower | d05 |
+| `clocktower_ledge` | halcyon | rooftop | the top of the scaffold behind the clock face; a hatch into the works | d05 |
+| `win_shed` | vistaverde | garage | Aunt Win's shed beside June's bungalow; the mower; the key under the gnome | d09 |
+| `mall_cone_slalom` | vistaverde | parking | a corner of the Verde Mall car park with a line of cones | dsl3 |
+| `mall_reverse_corner` | vistaverde | parking | a kerbed corner by a trolley shelter | dsl3 |
+| `mall_trolley_lane` | vistaverde | parking | a lane between parked cars where a trolley rolls out | dsl3 |
+| `mall_trolley_stop` | vistaverde | parking | the stop point just short of the trolley | dsl3 |
+| `mall_parallel_bay` | vistaverde | parking | a kerbside gap between two parked cars | dsl3 |
+| `speedway_grid` | thebowl | street | the start-finish straight and the grid boxes | d10, d30, endings, dsr1, dsr4 |
+| `speedway_turn1` | thebowl | street | turn one of the oval | d10, d30, dsr1, dsr4 |
+| `speedway_back_straight` | thebowl | street | the back straight | d10, d30, dsr1, dsr4 |
+| `speedway_turn3` | thebowl | street | turn three, onto the run to the line | d10, d30, dsr1, dsr4 |
+| `commentary_box` | thebowl | storefront | the commentary box high in the main stand | d30 |
+| `speedway_back_gate` | thebowl | street | the service gate onto the back road to the coast road | Ending C |
+| `stadium_bus_ramp` | thebowl | parking | six buses between two ramps in the stadium car park (resolves to the landing side) | dst4 |
+| `stadium_gate` | thebowl | street | the stadium's marathon gate | dst4 |
+| `stadium_apron_north` | thebowl | street | the service road round the north side of the stadium | dst4 |
+| `stadium_apron_south` | thebowl | street | the service road round the south side, past the players' entrance | dst4 |
+| `beach_club_sand` | sandpiper | beach | the sand inside the Beach Club fence where a car off the skate-park ramp lands | d11 |
+| `crusher_belt_foot` | ironside | warehouse | the low end of the crusher conveyor | d13 |
+| `crusher_belt_top` | ironside | warehouse | the top of the conveyor at the jaws, a catwalk beside it | d13 |
+| `power_chimney_gap` | ironside | overlook | the gap between the power station's two tallest chimneys | dsf2 |
+| `terminal_security` | airport | storefront | the security arches in the departures hall (inside `airport_terminal`) | d15 |
+| `terminal_concourse` | airport | storefront | the airside concourse past security | d15 |
+| `terminal_gate` | airport | storefront | the gate door onto the apron | d15 |
+| `estate_study` | palomaheights | mansion | Leo's study: an open French window on the east terrace, a green lamp | d20 |
+| `clinic_helipad` | palomaheights | rooftop | the H on the private clinic's roof | dsf3 |
+| `observatory_lawn` | palomaheights | park | the flat lawn beside the observatory dome | dsf3 |
+| `fort_gate` | oldpaloma | street | the fort's landward gate and the cobbled ramp up from the lanes | d27, d28, d30 |
+
+The airport's own registered places (`airport_apron`, `airport_gate`, `airport_hangars`, `airport_helipad`, from `js/airfield.js`) and the old city's `grand_avenue`, `harbor_point` and `the_boardwalk` are used by id directly.
+
 ### 6.3 Recurring mission vehicles (existing types only)
 | mission id | type | colour | What it is |
 |---|---|---|---|
@@ -461,7 +512,7 @@ The police (`vpd`) work as in the main game: heat from crimes seen, the helicopt
 | `club_sparrow` | `sparrow` | `0xf2f2ee` | The flying club's white Sparrow, "the island air ambulance on Tuesdays" (d20, dsf3). |
 | `dash_heli` | `sparrow` | `0x3b1558` | Dash's hired purple TV helicopter (d30 with `dlc_dash_in`). |
 | `crash_tender` | `firetruck` | `0xc8202a` | The airport crash tender Jay takes in d26 (and dst3). |
-| `war_tank` | `bastion` | default | The war film's "prop" tank from Sunreel, borrowed from Fort Breakwater for *Desert Thunder* ("It's a prop." It is not). Used once, in d29, delivered to Harbor Point on a low-loader. |
+| `war_tank` | `bastion` | default | The war film's "prop" tank from Sunreel, borrowed from Fort Breakwater for *Sergeant Sandcastle* ("It's a prop." It is not). Used once, in d29, delivered to Harbor Point on a low-loader. |
 | `doughnut_van` | `porter` | `0xefefea` | Hob's cream van, PALOMA FLYING CLUB on the side (d17). |
 | `castellane_racer` | `zephyr` | `0xd29a1c` | Castellane Racing works cars (d10, *Summer Series*). |
 | `heritage_car` | `vireo` | `0xf2c500` | The celebrity Heritage Race car Jay drives in Chet's helmet, number 7 (d10). |
@@ -469,6 +520,16 @@ The police (`vpd`) work as in the main game: heat from crimes seen, the helicopt
 | `villain_car` | `ironclad` | `0x0e0e10` | The film's black villain car, driven by a stuntman (dst2). |
 | `school_van` | `porter` | `0xf2c61f` | Vista Verde School's yellow van (dsl2). |
 | `castellane_transporter` | `hauler` | `0xd29a1c` | Castellane Racing's gold transporter (dsr3). |
+| `stunt_car` | `drifter` | `0xd29a1c` | The film's gold "Rex car" Jay drives for the takes (d04). |
+| `fake_bus` | `hauler` (or the game's bus) | `0xefe6d0` | A parked prop bus on the city set (d04). |
+| `film_lowloader` | `hauler` | `0xefe6d0` | The film unit's low-loader, SUNREEL STUDIOS on the doors; Chet drives it at thirty (d14, d24 told, d29). |
+| `party_car` | `sovereign` | `0xf2f2ee` | A party guest's pearl-white saloon at the valet line (d20). |
+| `keeper_car` | `vireo` | `0x1f3a26` | Dess's bottle-green car, "kept quick", a lighthouse-authority crest on the door (d28). |
+| `pip_spare` | `drifter` | `0xf1f0ea` | Pip's spare Drifter, the *Summer Series* reward; a guard car in d30 with `dsr4_southbay_classic`. |
+| `neighbour_car` | `vireo` | `0xcbbd9c` | A neighbour's car in the cul-de-sac (dsl1). |
+| `privateer1`..`privateer5` | `drifter`, `vireo`, `ironclad`, `pipit`, `zephyr` | `0x2a55d8`, `0x2a6a3a`, `0x6b4a32`, `0xefefea`, `0xc8202a` | Race rivals (dsr1, dsr2, dsr4). |
+| `teddy_road` | `zephyr` | `0xd29a1c` | Teddy's gold road car (dsr3). |
+| `skylark_two` | `skylark` | `0xf2c500` | The club's second Skylark, Jay's on Tuesdays (dsf4 reward only). |
 
 ---
 
@@ -545,7 +606,7 @@ On the start-finish line, the cup in Dess's hands, Leo coming down from his box,
 | The tin box and the trail exist | Toby | d01 | Pip d01; Quill and Milo d02; Dash from the blog d02 on; Leo and Ottoline from d01 (they bid at the auction because Leo's file says "T. Brask"). |
 | Dess hid seven parts with rhymes | Dess, Toby (he doesn't know where) | d02 (Milo works it out from R1 and R2) | Everyone in the hunt d02; Leo from Dash. |
 | Dash reads Milo's blog | Kit, Dash | d06 | Milo d06 (mortified). |
-| Toby never delivered the box | Toby | d08 | Pip d08, June d25 (told) or d27/d30 (wait). |
+| Toby never delivered the box | Toby | d08 | Pip d08, Milo d08 (video call); June: with `dlc_june_told` Jay hints in d25 ("Somebody was meant to bring you a box"), June meets Toby in d26 ("You're the man with the box") and Pip has told her by d27; with `dlc_june_wait`, d30. Toby hands her the box in d30 either way. |
 | The Castellanes stole the race | Leo (the file), Dess, Toby, Monty (saw it as a boy) | d10 (Dess's name painted out), d20 (the file, in Rex's hand) | Pip d10; Chet d14 if told, d30 if kept; Dash d20; the public d30. |
 | June's lawnmower has a racing carburettor | nobody (June just knows it does forty) | d08 (R4) | June d09. |
 | Chet has never driven over thirty, or a race car | Chet | d10 | Fenella always knew. |
@@ -553,7 +614,7 @@ On the start-finish line, the cup in Dess's hands, Leo coming down from his box,
 | The car is walled in the fort powder store | Dess | d23 | everyone in the hunt d23; Ottoline d27. |
 | The real cup (O. MARLOW) is in the Firecrest's boot | Dess, Toby (guessed), Leo (from the file) | d27 | public d30. |
 | Leo has known for ten years | Leo | d20 (the file's last page, in Rex's hand, with Leo's own note "Dad, why?") | public d30, from Leo himself on the line. |
-| June keeps Dess's helmet in the shed | June | d25 | Dess d27 (told) or d30 (wait). |
+| June keeps Dess's helmet in the shed | June | d25 (in the learner's boot) | Dess d27 in both branches (told: June gives it to her; wait: Jay tells her, "She kept it"). |
 
 ---
 
@@ -562,7 +623,7 @@ On the start-finish line, the cup in Dess's hands, Leo coming down from his box,
 The final choice in d30, on the Speedway start-finish line, picks the ending. Flags pick the variant scenes. Each ending plays as the epilogue steps of d30 (5 to 7 minutes), then the DLC credits roll (engine) over the radio. In every ending: Leo Castellane says the true result over the PA himself (he takes the microphone from Monty: "The winner of the Southbay 500, fifty years ago today, was Odessa Marlow. My father knew. I knew. I'm sorry."), Ottoline is already in the back of a police car with an unused comment card, Toby hands June the tin box properly ("Happy birthday. I'm thirty-four years late."), and the last line is someone saying "And mind the road."
 
 ### Ending A: "Hers" (choice: **"It's June's."**)
-The Firecrest goes home to Vista Verde, to the drive beside Aunt Win's shed. Epilogue: a Sunday, weeks later (`camera: june_house`). June gives her mother a driving lesson in the Firecrest round the cul-de-sac; Dess is a terrible modern driver ("What's this for?" "That's an indicator, Mum."). Pip, licence back, mows the lawn with the mower and its new, very ordinary carburettor. Toby is under the bonnet. Jay is invited to lunch and stays.
+The Firecrest goes home to Vista Verde, to the drive beside Aunt Win's shed. Epilogue: a Sunday, weeks later (`camera: june_house`). June gives her mother a driving lesson in the Firecrest round the cul-de-sac; Dess is a terrible modern driver ("What's this for?" "That's an indicator, Mum."). Pip, still banned from the roads for another three months, mows the lawn with the mower and its new, very ordinary carburettor. Toby is under the bonnet. Jay is invited to lunch and stays.
 - **June:** told: June and Dess have had weeks; they argue about the radio like they've done it forever. wait: it's their first week; they're careful with each other, and June marks "Minor fault" with a smile.
 - **Variant:** with `dsl3_test_day`, June uses Jay's old test sheet: "He got a 94. You can get a 94." With `dlc_chet_told`, a film crew is filming at the end of the road ("*Mind the Road*, scene 41, take 1").
 - **Last line:** June, as Jay drives off: "And mind the road." Jay, to his car: "You heard her."
@@ -584,20 +645,20 @@ That night the Firecrest disappears from the Speedway. Everybody knows who won n
 
 ## 9. Main jobs
 
-30 jobs, about 317 estimated minutes. Every entry lists `giver`, `start` (a place id), `time` (the clock hour set on start), `estMinutes` and the **core mechanic**. No two consecutive jobs share a core mechanic. `requires` defaults to the previous DLC job; `d01` waits for the engine's `unlockAfter`. The beat-sheet writers turn each summary into beats; the summary fixes the plot, the place, the mechanic and every flag, and nobody changes those.
+30 jobs, about 308 estimated minutes. Every entry lists `giver`, `start` (a place id), `time` (the clock hour set on start), `estMinutes` and the **core mechanic**. No two consecutive jobs share a core mechanic. `requires` defaults to the previous DLC job; `d01` waits for the engine's `unlockAfter`. The beat-sheet writers turn each summary into beats; the summary fixes the plot, the place, the mechanic and every flag, and nobody changes those.
 
 Weapons handed out (Jay may already have more from the main game; these make the DLC playable from a save just past m03): SMG (d03), shotgun (d13), rifle (d21), grenades (d27). The parachute is automatic on bailing out high up.
 
-Speakers available per act: Act 1 `jay pip milo prof_quill dash kit chet fenella ottoline leo toby clem plum gs_staff studio_guard popcorn_kid nana_lu caption`. Act 2 adds `june monty benny gully daventry teddy marshal`. Act 3 adds `hob odie dess ines lorna`. Act 4 everyone.
+Speakers available per act: Act 1 `jay pip milo prof_quill dash kit chet fenella ottoline leo toby clem plum gs_staff studio_guard popcorn_kid nana_lu caption`. Act 2 adds `june monty benny gully daventry teddy marshal hob` (Hob first speaks on the apron at the end of d16). Act 3 adds `odie dess ines lorna valet`. Act 4 everyone, plus `officer` (d28, d30). Side chains add `rosa dougie tower mechanic`.
 
-### ACT 1: LOT 17 (d01 to d08, 83 min)
+### ACT 1: LOT 17 (d01 to d08, 80 min)
 
 #### d01_lot_17: Lot 17
 `giver: pip` · `start: cinder_storage` · `time: 15.5` · `estMinutes: 10` · Core: **escape from pursuers** (drive away from Guest Services cars, lose them and the heat)
 A text from an unknown number ("Driver wanted. One afternoon. Cash. Cinder Creek Storage. Bring a car with a big boot.") brings Jay to the storage auction just as Clem Ruddock bangs the gavel and Pip Marlow buys lot 17 for $310, outbidding Dash's researcher Kit and a smiling man in a teal blazer. Pip rolls up the BRASK door, opens a tin box (a starter key on a little gold Firecrest keyring, a folded rhyme), and Ottoline Graves walks in to "offer assistance returning it". Pip throws Jay the keys of her Drifter (`pip_car`); Guest Services Sovereigns chase them through the self-storage rows, past the truck stop and round the trailer park; Jay loses them and two stars of heat, and they come back the long way to lot 17, which Pip rents on the spot as HQ. Blackout: Nana Lu at Jay's bedside telling the Firecrest story when he was six ("Somewhere she could see the sea, I expect"); then Pip reads **R1** aloud, and the job ends on the rhyme, unsolved. Reward $1,500.
 
 #### d02_the_tin_man: The Tin Man
-`giver: pip` · `start: lot_17` · `time: 10` · `estMinutes: 11` · Core: **race the clock, then climb and collect**
+`giver: pip` · `start: lot_17` · `time: 10` · `estMinutes: 10` · Core: **race the clock, then climb and collect**
 Jay drives Pip to `quill_study` at Halcyon, where Professor Quill explains at length that the car is at the bottom of the bay and the rhyme refers to a sunken paddle steamer, and his grandson Milo (12, yellow T-shirt) solves R1 in four seconds: the tin man is the Cinder Creek water tower. Milo posts it on *The Firecrest Files* (41 subscribers); within a minute Dash's purple van is seen leaving the campus, so it's a `timer: 180` drive back to `cinder_water_tower` with the professor carsick in the back. Dash gets there first, climbs, and proudly unscrews a new red valve wheel ("Legend... FOUND!", a rusty tap); Jay climbs the ladder and catwalk on foot to the old brass wheel at the top (`collect`), which unscrews to reveal a horn button with **R2** folded inside. Milo opens the scoreboard: "Team Firecrest 1, Lockwood's Lost Legends 0, plus one rusty tap." Reward $1,000.
 
 #### d03_double_feature: Double Feature
@@ -605,33 +666,33 @@ Jay drives Pip to `quill_study` at Halcyon, where Professor Quill explains at le
 Quill admits he owns the only print of the Southbay 500 newsreel and has hired the Starview drive-in for a private showing; Jay drives him, Pip and Milo there (Milo in the back, delighted). The newsreel plays as `caption` lines on a blackout (Dess taps the wheel three times; the little gold bird on the bonnet; Rex Castellane scowling; a young engineer labelled "T. Brask"; a word under the driver's door nobody can read), and Milo matches the bird to **R2**: the weathervane on the sheriff's office of the Sunreel western set ("Cowboys who never die are actors!"). Guest Services pull into the back rows to seize the reel; Milo and Quill are sent to hide behind the projection booth (`protect: prof_quill`) and Jay holds out in `drivein_rows` for two minutes of waves (`survive: 120`) until the projectionist's sprinklers and a police siren send them off. Pip has the answer and the next stop. Reward $2,000, SMG.
 
 #### d04_stunt_double: Stunt Double
-`giver: pip` · `start: sunreel_gate` · `time: 9` · `estMinutes: 12` · Core: **stunt course** (a timed run through checkpoints with ramps, "it's for the movie")
+`giver: pip` · `start: sunreel_gate` · `time: 9` · `estMinutes: 11` · Core: **stunt course** (a timed run through checkpoints with ramps, "it's for the movie")
 The western set is inside Castellane's closed shoot, so Pip has answered a call-sheet ad: *Stunt driver wanted, doubling Mr Chet Valiant*. Fenella Moss hires Jay on sight; Chet ("Never over thirty, kid") lends him the red jacket. Jay drives two takes through `sunreel_city_set` (race-style checkpoints solo, a ramp through a fake shopfront, a near miss with a fake bus), then on the lunch break climbs the sheriff's office on the western set on foot to take the bonnet bird off the weathervane (`collect`), swapping it for a plastic chicken from catering; Dash, filming a "making of", grabs a cowboy's spur off the set instead. Ottoline drops by the set, friendly, and hands Jay a comment card ("How would you rate your first day?"); engraved under the bird's base is **R3**. Reward $3,000 (the stunt fee).
 
 #### d05_clockwork: Clockwork
 `giver: milo` · `start: quill_house` · `time: 23` · `estMinutes: 10` · Core: **quiet job on foot** (sneak; fail if campus security or the police are alerted, `failIf: ['heat:1']`)
-Milo (on the phone from his bedroom, supposed to be asleep) has solved R3 ("Twelve on top and none below: a clock face") and tells Jay to stop calling him Mr Mercer's assistant. Night at the Halcyon clock tower: Officer Plum patrols the quad by bicycle with a torch; Jay crouches through hedges and up the outside of the tower (ledges and the scaffold left by the clock repairers) to the clock face, and finds the Firecrest's rally clock fitted behind it, keeping the university's time eleven seconds slow (`collect`). Dash's crew blunders in below with lights and Dash unscrews the clock's minute hand on camera, drawing Plum away so Jay can climb down. The back plate is engraved "For O.M. from T. Brask" and carries **R4**; Milo reads the scoreboard down the phone and is sent to bed. Reward $1,500.
+Milo (on the phone from his bedroom, supposed to be asleep) has solved R3 ("Twelve on top and six below: a clock face") and tells Jay to stop calling him Mr Mercer's assistant. Night at the Halcyon clock tower: Officer Plum patrols the quad by bicycle with a torch; Jay crouches through hedges and up the outside of the tower (ledges and the scaffold left by the clock repairers) to the clock face, and finds the Firecrest's rally clock fitted behind it, keeping the university's time eleven seconds slow (`collect`). Dash's crew blunders in below with lights and Dash unscrews the clock's minute hand on camera, drawing Plum away so Jay can climb down. The back plate is engraved "For O.M. from T. Brask" and carries **R4**; Milo reads the scoreboard down the phone and is sent to bed. Reward $1,500.
 
 #### d06_breaking_news: Breaking News
 `giver: pip` · `start: lot_17` · `time: 8.5` · `estMinutes: 9` · Core: **chase** (`chase: 'dash_van', mode: 'catch'`)
 Dash is on breakfast TV with the minute hand and a promise: "We know where the next piece is." Pip is furious; Jay drives to `halcyon_quad`, where Dash's purple van is parked outside the student cafés, and it bolts. The chase runs from Halcyon up through the campus strip and out to Coral Marina, where Jay boxes the van in on the marina front (`marina_condos`); inside, on the dashboard, are printouts of every page of *The Firecrest Files*, riddles and photos and all. Dash is cheerful and unashamed ("It's a public blog, mate. It's very good."), lets slip that Castellane is paying for the special, and doesn't remember Pip's letter; Milo, phoned, is mortified ("Four people read it. FOUR. One of them is Gran."). Pip, reading the rally clock again, says the name aloud: "T. Brask." Reward $1,500.
 
 #### d07_champions_since_day_one: Champions Since Day One
-`giver: pip` · `start: coral_marina` · `time: 17` · `estMinutes: 11` · Core: **shoot-out on foot** (`kill` groups on the breakwater)
+`giver: pip` · `start: coral_marina` · `time: 17` · `estMinutes: 10` · Core: **shoot-out on foot** (`kill` groups on the breakwater)
 The marina's harbourmaster says Toby Brask keeps the lighthouse on the breakwater. Jay and Pip walk out along `toby_breakwater` to find Guest Services already there, "helping Mr Brask pack up his old photographs" while Toby has barricaded himself in the lighthouse doorway with a flare gun. Jay fights them back along the breakwater (two groups, cover behind bollards and lobster pots), then Leo Castellane steps off his yacht *Day One* at `day_one_jetty`, all apology and charm, and offers Jay $50,000 to bring him whatever they find ("not a bribe, a finder's fee"); Jay says he'll think about it, and doesn't. Toby won't talk to anybody and shuts his door; at ten the fort light across the bay blinks three times and the marina light blinks back (`camera: marina_lighthouse`). Reward $2,000.
 
 #### d08_thirty_four_years: Thirty-Four Years
 `giver: toby` · `start: marina_lighthouse` · `time: 22.5` · `estMinutes: 10` · Core: **careful delivery, then a choice** (`deliver: 'toby_pickup', to: 'lot_17', maxDamage: 0.3`)
-Toby knocks on Pip's car window at midnight: he'll show them his blueprints of the Firecrest, the only copy, but his pickup's headlights are out and his eyes are worse, so Jay drives `toby_pickup` from the breakwater to Cinder Creek with the drawings loose in the bed, while two Guest Services cars shadow them, nudge and bump (they want the drawings, intact) and Jay keeps the damage under a third. In the car Toby confesses (lines, then a blackout memory of a parked car outside Win's house thirty-four years ago): Dess gave him the tin box for June's seventeenth birthday and he never delivered it. At lot 17 Pip reads **R4** again and goes very quiet: the shed with the spider, the fastest mower in town, is her mother's (she gets it before Milo, who arrives on a video call a beat later and agrees). Milo asks whether he should stop posting: **choice** `dlc_blog_on` / `dlc_blog_off` (section 7). Reward $2,500.
+Toby knocks on Pip's car window at half past ten, after the lights have said goodnight: he'll show them his blueprints of the Firecrest, the only copy, but his pickup's headlights are out and his eyes are worse, so Jay drives `toby_pickup` from the breakwater to Cinder Creek with the drawings loose in the bed, while two Guest Services cars shadow them, nudge and bump (they want the drawings, intact) and Jay keeps the damage under a third. In the car Toby confesses (lines, then a blackout memory of a parked car outside Win's house thirty-four years ago): Dess gave him the tin box for June's seventeenth birthday and he never delivered it. At lot 17 Pip reads **R4** again and goes very quiet: the shed with the spider, the fastest mower in town, is her mother's (she gets it before Milo, who arrives on a video call a beat later and agrees). Milo asks whether he should stop posting: **choice** `dlc_blog_on` / `dlc_blog_off` (section 7). Reward $2,500.
 
-### ACT 2: HIDING IN PLAIN SIGHT (d09 to d16, 81 min)
+### ACT 2: HIDING IN PLAIN SIGHT (d09 to d16, 78 min)
 
 #### d09_minor_fault: Minor Fault
-`giver: pip` · `start: june_house` · `time: 13` · `estMinutes: 11` · Core: **escape in a slow car** (pursued, in the dual-control `learner`)
+`giver: pip` · `start: june_house` · `time: 13` · `estMinutes: 10` · Core: **escape in a slow car** (pursued, in the dual-control `learner`)
 Pip and Jay creep into Aunt Win's shed at `june_house` while June is out on a lesson, and find the lawnmower; Pip unbolts a gleaming racing carburettor from it ("That's why it does forty"), and June comes home early, clipboard in hand. Before the argument is over, Guest Services arrive (blog on: Milo's post said "a shed"; blog off: they tailed Toby), and the only car on the drive is June's pale-blue dual-control Pipit: Jay drives, June in the passenger seat on her own brake pedal marking his faults ("Minor fault. Minor fault. That was a fountain."), Pip in the back with the carburettor. The escape runs through `verde_culdesac` sprinklers and the `verde_mall` car park until the Sovereigns are lost (`loseHeat` plus a `goto` back to `june_house` with no pursuers within 100 m); June crosses out the one "Serious fault", the kerb Jay mounted to keep her side out of a ram. In the kitchen doorway June learns everything she'll allow herself to hear ("Mum died. In a racing car. That's the end of the story."), and Pip finds **R5** rolled in the float bowl; Dash takes the garden gnome. Reward $1,500.
 
 #### d10_heritage_run: The Heritage Run
-`giver: chet` · `start: southbay_speedway` · `time: 14` · `estMinutes: 12` · Core: **Speedway race** (`race`, 3 laps of the oval against 5 rivals)
+`giver: chet` · `start: southbay_speedway` · `time: 14` · `estMinutes: 11` · Core: **Speedway race** (`race`, 3 laps of the oval against 5 rivals)
 Milo solves R5: the honours board is in the Speedway winners' enclosure and you only stand there if you win. Fenella's film needs footage of the Celebrity Heritage Race and Chet is entered, so Chet, in the pits, confesses to Jay that he has never driven a race car, or anything over thirty, in his life ("I've played four racing drivers, two pilots and a submarine"), and Jay races in Chet's helmet and red jacket in the yellow number 7 Vireo (`heritage_car`), against Teddy Castellane in a gold works Zephyr, Dash (driving terribly), and three celebrities. Monty Sprake calls it on the PA ("Chet Valiant has... grown?"), getting the name of the driver wrong all race. Win (a loss fails the job), stand in `winners_enclosure` for the photo, and while Chet takes the bows Pip finds, under the Castellane-painted honours board, O. MARLOW painted over and **R6** scratched into the wall beneath it. Reward $3,500.
 
 #### d11_two_eyes: Two Eyes on the Water
@@ -643,7 +704,7 @@ R6's two eyes on two tall chairs are the lamps on lifeguard towers 7 and 8, but 
 The speed shop's ghost letters are still above the Kwik Pik on the promenade (`promenade_kwikpik`), and the old floor safe behind the counter has never been opened: the clerk, Benny Akande, says nobody knows the combination and the owner says it's "structural". Jay tries asking nicely, then buying a lot of crisps, then holds up the shop with the engine's hold-up mechanic so Benny will open the safe with 7 - 17 - 50, leaving the till alone ("You're not taking the money?" "Just the envelope." "...Can I have a photo?"). The CCTV sends two stars after him; Jay loses them along the coast road (`loseHeat`) with Pip reading the envelope aloud: **R8**, plus a photo of baby June asleep on the Firecrest's passenger seat. As they lose the last patrol car, Toby phones from Cinder Creek: there's a teal truck outside lot 17 and the door is up. Reward $800 and a bag of crisps.
 
 #### d13_the_crusher: The Crusher
-`giver: toby` · `start: lot_17` · `time: 19.5` · `estMinutes: 11` · Core: **timed rescue under fire** (`timer` to the scrapyard, `kill` groups, then `collect` off the conveyor against a second timer)
+`giver: toby` · `start: lot_17` · `time: 19.5` · `estMinutes: 10` · Core: **timed rescue under fire** (`timer` to the scrapyard, `kill` groups, then `collect` off the conveyor against a second timer)
 Lot 17 has been emptied (blog on: Milo's photo showed the unit number; blog off: Ottoline bought Cinder Creek Storage), and Toby, who watched from behind the storage office, saw the boxes go on a teal truck heading south: "Castellane crushes what he can't buy. Ironside." A `timer: 200` drive south to `ironside_scrapyard`, a fight through Guest Services and the scrap crew among the car stacks, and then the crusher's conveyor (`crusher_belt`) is already moving: Jay grabs the boxes off the belt (`collect`, three spots, `timer: 60`) before they reach the jaws. He saves the steering wheel, the bonnet bird and the headlamps; the rally clock and the carburettor are gone, because Kit and Dash took them "for safekeeping, on Mr Castellane's instructions" and drove off in the purple van. Guest Services seal the scrapyard gate behind Jay. Reward $2,500, shotgun.
 
 #### d14_decoy: The Decoy
@@ -660,13 +721,13 @@ Pip talks Jay through it by phone from a flight-simulator video she's watching a
 
 ---
 
-### ACT 3: ISLA PALOMA (d17 to d23, 73 min)
+### ACT 3: ISLA PALOMA (d17 to d23, 71 min)
 
 From here until d26 the Paloma Bridge is watched by Guest Services ("Welcome Checks") and the parts live in Hob's hangar (`hob_hangar`). Jay can still drive over the bridge in free roam; in jobs, the island is reached by air or by Hob's van.
 
 #### d17_contraband: Contraband
 `giver: hob` · `start: hob_hangar` · `time: 7.5` · `estMinutes: 9` · Core: **timed delivery** (`deliver: 'doughnut_van', to: 'plaza_cafe', maxDamage: 0.35, timeLimit: 240`)
-Hob, over a kettle in the hangar mouth, explains the island: Castellane owns every bakery on it, and only Castellane Croissants may be sold, so every Tuesday Hob flies in real doughnuts for the old folk of Old Paloma. In exchange for hiding the parts, Jay drives Hob's cream van of doughnuts from Paloma Field down the Neon Strand to Ines's café on Paloma Plaza, through a Guest Services "Welcome Check" at `strand_checkpoint` (Hob, riding along, hides the boxes under a tarpaulin marked AVIATION PARTS and talks the guards into a confused croissant debate) and past Wonder Wharf's big wheel (`camera: wonder_wharf`, no comment: the fair-play shot for R8). Doughnuts squash if the van is knocked about ("That's a jam casualty, son"). At the café an old woman in a flame-orange cardigan, the fort's lighthouse keeper Odie Wren (speaker `odie`), buys twelve jam ones, taps the counter three times, looks at the gold keyring on Jay's belt and says "Pretty bird," and goes. Milo, on the phone, solves R8: the wheel that goes nowhere is the big wheel, and the box where nobody wins is the Golden Grabber beside it. Reward $1,200 and a doughnut.
+Hob, over a kettle in the hangar mouth, explains the island: Castellane owns every bakery on it, and only Castellane Croissants may be sold, so every Tuesday Hob flies in real doughnuts for the old folk of Old Paloma. In exchange for hiding the parts, Jay drives Hob's cream van of doughnuts from Paloma Field down the Neon Strand to Ines's café on Paloma Plaza, through a Guest Services "Welcome Check" at `strand_checkpoint` (Hob, riding along, hides the boxes under a tarpaulin marked AVIATION PARTS and talks the guards into a confused croissant debate) and past Wonder Wharf's big wheel (`camera: wonder_wharf`, no comment: the fair-play shot for R8). Doughnuts squash if the van is knocked about ("That's a jam casualty, son"). At the café an old woman in a flame-orange cardigan, the fort's lighthouse keeper Odie Wren (speaker `odie`), buys twelve jam ones, taps the counter three times, looks at the gold keyring on Jay's belt (Pip clipped it there that morning: "Driver holds the key") and says "Pretty bird," and goes. Milo, on the phone, solves R8: the wheel that goes nowhere is the big wheel, and the box where nobody wins is the Golden Grabber beside it. Reward $1,200 and a doughnut.
 
 #### d18_ground_school: Ground School
 `giver: hob` · `start: field_apron` · `time: 9.5` · `estMinutes: 10` · Core: **flying lesson** (Skylark: taxi, take off, `fly` rings, `land`)
@@ -677,7 +738,7 @@ Hob says the island is easier from the air and the bridge is watched, so Jay is 
 At arcade row, Lorna Pike, the attendant for forty years, says nobody has ever won the gear stick under the Golden Grabber's dome and Mr Castellane has bought the machine "for his private collection"; it's leaving tonight. Jay tails the teal `transporter` with the machine strapped on the back from `wonder_wharf` along the Neon Strand under the neon (`follow`, min 15; max 140 with `dlc_blog_on`, a reader's text gives the route; max 110 with `dlc_blog_off`, Hob radios from the air) to the loading dock behind the Paloma Convention Centre (`convention_dock`), where the crew go for coffee. Jay takes the truck, machine and all, and loses two Guest Services Sovereigns on the way back to `hob_hangar`. In the hangar (a blackout montage) Jay tries the claw fourteen times; Milo says "Unplug it"; the rigged claw lets go, the gear stick drops, and inside its knob is **R9**. Lockwood score: Dash's crew got a teddy bear out of the prize chute at the wharf. Reward $2,000.
 
 #### d20_the_gorse_file: The Gorse File
-`giver: prof_quill` · `start: hob_hangar` · `time: 22` · `estMinutes: 13` · Core: **helicopter, parachute and a sneak** (`fly` in `club_sparrow`, bail out, `goto` on foot through guards, a choice, then a getaway)
+`giver: prof_quill` · `start: hob_hangar` · `time: 22` · `estMinutes: 12` · Core: **helicopter, parachute and a sneak** (`fly` in `club_sparrow`, bail out, `goto` on foot through guards, a choice, then a getaway)
 Quill has crossed on the ferry (seasick; fine in the helicopter, which makes no sense to anyone) with news from the Halcyon archive: an invoice from a detective called Gorse to Rex Castellane, for "the Marlow file". The file is in Leo's study, and tonight is Leo's summer party. Jay flies the club's white Sparrow (`club_sparrow`) from Paloma Field over Paloma Heights (`fly: 'paloma_observatory', height: 150`), bails out, and parachutes onto the observatory dome (`goto: 'paloma_observatory'` on foot); from there he sneaks through the botanical gardens to the estate lawn (`estate_garden`) past Guest Services (seen: they attack, the job goes on), reaches the open study window, and reads the file (a blackout: Gorse's notes of where Dess went that week, "subject believed drowned", Rex's handwritten last page about "the boys on Seawall Drive", and a note in Leo's handwriting: "Dad, why?"). In the garden, Dash is handcuffed to his own camera crane by Ottoline for losing the parts: **choice** `dlc_dash_in` / `dlc_dash_left`. Jay takes a party guest's car and gets away down the hill from `estate_gate` to `hob_hangar` with Guest Services behind (one more car with `dlc_dash_left`, because Dash is yelling). Reward $3,000.
 
 #### d21_ring_twice: Ring Twice
@@ -689,10 +750,10 @@ R9's bell only swings for a wedding or a festival, and today is Old Paloma's har
 Toby has come across to read R10 and turns grey: "Two lights that say goodnight at ten." Jay takes him up in Hob's Skylark at dusk, out across the bay to the mainland to circle the Coral Marina light (`fly: 'marina_lighthouse', height: 100`); at ten (`setTime: 22`) the fort light blinks three times, Toby's automatic timer blinks back, and Jay flies the line between them, ring after ring (`fly: 'day_one_jetty'` then `fly: 'neon_strand'` then `fly: 'paloma_fort', height: 80`, low over the dark water), while Toby talks about Dess for the first time. Jay's blackout memory: Nana Lu, "Somewhere she could see the sea, I expect." `land: 'paloma_field'` (Hob on the radio: "Night landing. Eight. Don't let it go to your head."), a short drive to `fort_light`, and Odie Wren opens her blue door. The job ends on her face and Toby's. Reward $1,500.
 
 #### d23_odie_wren: Odie Wren
-`giver: toby` · `start: chain` (`resumeAt: fort_light`) · `time: 22.3` · `estMinutes: 11` · Core: **chase** (`chase: 'gs_car1', mode: 'wreck'`, fail if it reaches `estate_gate`)
+`giver: toby` · `start: chain` (`resumeAt: fort_light`) · `time: 22.3` · `estMinutes: 10` · Core: **chase** (`chase: 'gs_car1', mode: 'wreck'`, fail if it reaches `estate_gate`)
 Toby says "Hello, Dess," and from that line on the speaker is `dess`; she says "You took your time," and shows them the bricked-up arch of the powder store (`powder_store`): the car is behind it, and she won't open it ("Some things are better as stories. This one's a good one. Leave it.") She shows them her logbook (lap times, and the stewards' original signed result sheet). Guest Services arrive (blog on: three cars, after Milo's "The two lights!" post; blog off: two cars and Ottoline's, after following the Skylark from the estate) and a teal Sovereign snatches the logbook and the Gorse file from Pip's hands and bolts. Jay chases it out of the fort, through `old_lanes`, up the hill past `paloma_gardens`, and wrecks it before it reaches the estate gate; the papers are scorched but whole (with `dlc_dash_in`, Kit has filmed the whole snatch from the fort steps). Back at the door, Hob admits he always half-knew ("Doughnuts are my business"), and Dess looks at Pip, who has her face: "All right. Let's finish it." Reward $3,000.
 
-### ACT 4: THE LAST LAP (d24 to d30, 80 min)
+### ACT 4: THE LAST LAP (d24 to d30, 79 min)
 
 #### d24_spare_parts: Spare Parts
 `giver: toby` · `start: marina_lighthouse` · `time: 10` · `estMinutes: 10` · Core: **collect across the mainland** (`collect` at three places in any order, then `goto: 'lot_17'`)
@@ -707,7 +768,7 @@ June wants "one lesson, so I know who's been driving my daughter about." Jay dri
 At dawn the bridge is shut by two Guest Services Bulwarks and a line of teal Terns at the island end (`bridge_island_end`), and Toby and his tools must get to the fort. "Nothing gets through those but a fire engine." Jay walks into the airport fire station and takes a crash tender (`crash_tender`, siren on L; two stars), drives it south down Grand Avenue North and through Harbor Point to Anchor Street with Toby's toolbox lashed on the back, across the Paloma Bridge, rams through the roadblock (`destroy` the two `gs_truck`s or `goto` through them with the tender) and uses the water cannon on the Guest Services men behind it. With `dlc_june_told`, June rides in the cab ("I'm a qualified instructor. I've driven worse.") and marks the ram "Minor fault"; with `dlc_june_wait`, June texts "Drive safely. I mean it." Lose the heat on the island and park the tender in the fort's courtyard (`paloma_fort`). Reward $2,500.
 
 #### d27_the_powder_store: The Powder Store
-`giver: dess` · `start: paloma_fort` · `time: 9` · `estMinutes: 12` · Core: **hold-out** (`survive: 150` at the fort walls, `protect: 'toby'`)
+`giver: dess` · `start: paloma_fort` · `time: 9` · `estMinutes: 11` · Core: **hold-out** (`survive: 150` at the fort walls, `protect: 'toby'`)
 With `dlc_june_told`, June meets her mother on the fort steps first: neither can speak until June says "You're very late" and Dess says "I know"; June gives her the helmet. With `dlc_june_wait`, Dess asks about June and Jay says "She's well. She marks everything," and Dess laughs until she cries. Toby knocks through the bricked arch with a "controlled" charge (Dess finds a crate of fifty-year-old flares and some grenades in the powder store; "Probably fine"), the dust sheet comes off (`spawnCar: 'firecrest', type: 'ironclad', at: 'powder_store', color: 0xe0481c`), and there she is, *Junebug* under the driver's door, the real Mariner Cup in the boot with O. MARLOW on it. Ottoline's people attack the fort while Toby rebuilds the car (a blackout montage, one line per part, in the order they were found), and Jay holds the walls for 150 seconds (with `dlc_dash_in`, Dash's crew turn their floodlights on the last wave and it's smaller; with `dlc_dash_left`, Dash is on Castellane's channel calling the fort "a hoax"). Dess taps the wheel three times and the Firecrest starts on the first turn of the key. Reward $4,000, grenades.
 
 #### d28_comment_card: Comment Card
@@ -716,7 +777,7 @@ Pip wakes Jay before dawn: the powder store is empty, and on the floor lies a co
 
 #### d29_road_closed: Road Closed
 `giver: pip` · `start: bridge_mainland` · `time: 10` · `estMinutes: 10` · Core: **the tank** (`getIn: 'war_tank'`, `destroy` Guest Services roadblock trucks)
-Race day: Castellane has closed every road to the Speedway "for the anniversary" with Guest Services Bulwark roadblocks at four points on the finale's route: `bridge_mainland`, `harbor_roadblock` (Seawall Drive), `coast_road` and `bowl_car_park`. Fenella pulls up at Anchor Street with a low-loader and the war film's tank under a tarp ("It's a prop." It is not; it's on loan from Fort Breakwater for *Desert Thunder*, and she wants it back by six). Jay drives the Bastion down the route destroying the roadblock trucks (`destroy`), with police heat rising to three because, as Monty says on the radio, "there is a tank on Seawall Drive"; with `dlc_blog_on`, Milo's readers in home-made Firecrest T-shirts are already sitting in the road at `harbor_roadblock` and `coast_road` and the Guest Services there have given up, so Jay destroys two; with `dlc_blog_off`, all four. With `dlc_chet_told`, Chet rides in the tank: "Top speed twenty-eight. Finally, a vehicle that respects me." The tank goes back on the low-loader at the Speedway car park and Jay loses the heat on foot. Reward $3,000.
+Race day: Castellane has closed every road to the Speedway "for the anniversary" with Guest Services Bulwark roadblocks at four points on the finale's route: `bridge_mainland`, `harbor_roadblock` (Seawall Drive), `coast_road` and `bowl_car_park`. Fenella pulls up at Anchor Street with a low-loader and the war film's tank under a tarp ("It's a prop." It is not; it's on loan from Fort Breakwater for *Sergeant Sandcastle*, and she wants it back by six). Jay drives the Bastion down the route destroying the roadblock trucks (`destroy`), with police heat rising to three because, as Monty says on the radio, "there is a tank on Seawall Drive"; with `dlc_blog_on`, Milo's readers in home-made Firecrest T-shirts are already sitting in the road at `harbor_roadblock` and `coast_road` and the Guest Services there have given up, so Jay destroys two; with `dlc_blog_off`, all four. With `dlc_chet_told`, Chet rides in the tank: "Top speed twenty-eight. Finally, a vehicle that respects me." The tank goes back on the low-loader at the Speedway car park and Jay loses the heat on foot. Reward $3,000.
 
 #### d30_the_last_lap: The Last Lap
 `giver: dess` · `start: paloma_fort` · `time: 15` · `estMinutes: 18` · Core: **the finale run** (`deliver: 'firecrest'` along the route under Guest Services pursuit, then a one-lap `race` at the Speedway, then the final `choice` and the ending)
@@ -726,7 +787,7 @@ The Firecrest leaves the fort with Dess and the cup (and June with `dlc_june_tol
 
 ## 10. Side chains
 
-Four chains, 15 jobs, about 150 minutes. Side jobs `requires` the previous job in their chain; the chain opens at `unlockAfter`. Each chain's last job is the completion flag read by the finale and endings (section 7). Side jobs must never contradict the main plot: they happen "between" main jobs, Dess is never mentioned in them before d23, and nothing in them changes what the main jobs need.
+Four chains, 15 jobs, about 148 minutes. Side jobs `requires` the previous job in their chain; the chain opens at `unlockAfter`. Each chain's last job is the completion flag read by the finale and endings (section 7). Side jobs must never contradict the main plot: they happen "between" main jobs, Dess is never mentioned in them before d23, and nothing in them changes what the main jobs need.
 
 ### Take Two (`dside_stunts`): Chet and Fenella's film. Giver `chet`, unlockAfter `d04_stunt_double`
 Running gag: **Trey**, the stunt car scheduled to explode in every scene, that Jay keeps bringing back in one piece. Fenella: "Trey was supposed to die in act two." Jay: "Trey had other plans."
@@ -763,7 +824,7 @@ Hob's club record round the Ironside chimneys has stood for twenty years. Jay fl
 Tuesday, and the Skylark is in for its check, so the doughnuts go by helicopter. Jay flies the club Sparrow to three helipads and lawns: the private clinic's helipad (`paloma_clinic`; the night nurses), the observatory lawn (`paloma_observatory`; the astronomers, who've been up all night), and across the bay to the Halcyon sports field (`halcyon_field`), where Quill and Milo are waiting and Milo gets the first jam doughnut he's ever been delivered by air. Hob marks each landing over the radio. Reward $2,000.
 
 #### dsf4_check_ride: Check Ride
-`giver: hob` · `start: field_apron` · `time: 17` · `estMinutes: 12` · Core: **cross-country flight with a landing at the big airport** (Skylark, `fly` rings, `land: 'vicehaven_international'`, take off again, `land: 'paloma_field'`)
+`giver: hob` · `start: field_apron` · `time: 17` · `estMinutes: 11` · Core: **cross-country flight with a landing at the big airport** (Skylark, `fly` rings, `land: 'vicehaven_international'`, take off again, `land: 'paloma_field'`)
 Hob's check ride: from Paloma Field to Vicehaven International, landing on the real runway between airliners (the tower is not amused), a stop to taxi off and on again, then back over the Halcyon clock tower and the Coral Marina light and a landing at Paloma Field in a crosswind. Hob climbs out, looks at the windsock, and gives his first ten in forty years. He hands Jay the spare keys to the club's second Skylark ("It's yours on Tuesdays"). Reward $3,000 and a Skylark at Paloma Field; completion flag `dsf4_check_ride`.
 
 ### Summer Series (`dside_speedway`): Pip's racing team. Giver `pip`, unlockAfter `d10_heritage_run`
@@ -782,7 +843,7 @@ The series' street round, on the closed roads round the campus at night: the qua
 Teddy's car is suddenly two seconds a lap faster and Pip smells cheating. Jay tails the Castellane Racing transporter from the Speedway north through the city to a lock-up behind the Cinder Creek truck stop (`cinder_truckstop`), where Castellane mechanics are fitting a banned engine. Teddy turns up too, and it's clear he didn't know; when Guest Services arrive to "tidy up", Jay gets Teddy and Pip out of there (escape to `speedway_pits`). Teddy, ashamed: "I thought I was just good." Reward $2,000.
 
 #### dsr4_southbay_classic: The Southbay Classic
-`giver: pip` · `start: speedway_pits` · `time: 18` · `estMinutes: 12` · Core: **Speedway race** (`race`, 10 laps of the oval, 7 rivals)
+`giver: pip` · `start: speedway_pits` · `time: 18` · `estMinutes: 11` · Core: **Speedway race** (`race`, 10 laps of the oval, 7 rivals)
 The series finale. Teddy has told the stewards about the banned engine, and the stewards (embarrassed) give Pip her racing licence back on the grid. She still lets Jay drive the final: "You got us here. Finish it." Ten laps against the whole field, Teddy fair this time. At the line Pip and Teddy shake hands, and Monty almost gets Jay's name right ("Jay... Mer... Murphy!"). Reward $4,000 and Pip's spare Drifter; completion flag `dsr4_southbay_classic`.
 
 ### Dual Control (`dside_lessons`): June's driving school. Giver `june`, unlockAfter `d09_minor_fault`
@@ -802,7 +863,7 @@ The school bus has broken down on the day of the schools' final at Mariner Stadi
 
 ---
 
-## 11. District coverage
+## Appendix A. District coverage
 Every district hosts at least two jobs.
 
 | District | Main jobs | Side jobs |
@@ -822,7 +883,7 @@ Every district hosts at least two jobs.
 | airport | d15, d16, d26 | dst3, dsf4 |
 | old city (guest) | d26, d29, d30 (Harbor Point, the boardwalk) | |
 
-## 12. Ambient texts
+## Appendix B. Ambient texts
 `D.texts.push({ after, from, message })`. Keep the voices.
 
 | after | from | message |
@@ -840,4 +901,63 @@ Every district hosts at least two jobs.
 | `d23_odie_wren` | dess | "This is Odie. Or Dess. Haven't decided. Toby gave me your number. Don't text back. (Text back.)" |
 | `d27_the_powder_store` | toby | "First turn of the key. Fifty years, and she started first time. Hell's bells, son." |
 | `d28_comment_card` | ottoline | "We notice you haven't completed our survey. We'll be in touch either way." |
-| `d30_the_last_lap` | milo | "FINAL SCORE: TEAM FIRECREST 7 · LOCKWOOD'S LOST LEGENDS 0 (+1 tap, 1 spur, 1 minute hand, 1 gnome, 1 whistle, 1 teddy). GG." |
+| `d30_the_last_lap` | milo | "GG. That means good game. Grandad asked. Then he asked what a game was. Then he wrote it down." (The FINAL SCORE text is a `text` step inside d30, with the whistle only under `dlc_blog_on`.) |
+| `d08_thirty_four_years` | toby | "Drawings are under your table. Don't spill tea on them. Sorry about the box. That's not enough. I know. T.B." |
+| `d17_contraband` | pip | "Hob's given me a job. I'm sorting jam from custard. I'm a Speedway champion." |
+| `d24_spare_parts` | leo | "I don't believe we finished our call. My door is always open. Leo." |
+
+---
+
+## 11. For the scripters
+
+The beat sheets in `docs/dlc/` (`beats-act1.md` … `beats-act4.md`, `beats-side.md`) turn every job in sections 9 and 10 into ordered steps; they were edited into one story with this bible, and where a beat sheet and an older line of this bible ever disagree, the beat sheet's **DECISIONS** and the editor's notes in it win. `js/data/dlc.js` already holds every character who speaks (with look and voice) and every story place the beats use (section 6.2 and 6.2b): do not redefine them in your file; if you truly need a new place or speaker, add it to `dlc.js` with a valid district and kind and say so in your report.
+
+### 11.1 The file split
+Every file starts with the header's IIFE pattern (`const D = (S.dlc = S.dlc || {...})`) and only pushes to `D.missions`, `D.side` and `D.texts`. Each file also pushes the ambient texts (Appendix B) whose `after` is one of its own jobs.
+
+| File | Writer | Job ids, in order |
+|---|---|---|
+| `js/data/dlc-act1a.js` | Act 1a | `d01_lot_17`, `d02_the_tin_man`, `d03_double_feature`, `d04_stunt_double` |
+| `js/data/dlc-act1b.js` | Act 1b | `d05_clockwork`, `d06_breaking_news`, `d07_champions_since_day_one`, `d08_thirty_four_years` |
+| `js/data/dlc-act2a.js` | Act 2a | `d09_minor_fault`, `d10_heritage_run`, `d11_two_eyes`, `d12_floor_safe` |
+| `js/data/dlc-act2b.js` | Act 2b | `d13_the_crusher`, `d14_decoy`, `d15_departures`, `d16_four_out_of_ten` |
+| `js/data/dlc-act3a.js` | Act 3a | `d17_contraband`, `d18_ground_school`, `d19_golden_grabber`, `d20_the_gorse_file` |
+| `js/data/dlc-act3b.js` | Act 3b | `d21_ring_twice`, `d22_two_lights`, `d23_odie_wren` |
+| `js/data/dlc-act4a.js` | Act 4a | `d24_spare_parts`, `d25_junebug`, `d26_blue_lights`, `d27_the_powder_store` |
+| `js/data/dlc-act4b.js` | Act 4b | `d28_comment_card`, `d29_road_closed`, `d30_the_last_lap` (with the three endings as the final `choice`'s `then` lists) |
+| `js/data/dlc-side-stunts.js` | Side 1 | `dside_stunts` *Take Two* (giver `chet`, `unlockAfter: 'd04_stunt_double'`): `dst1_second_unit`, `dst2_night_shoot`, `dst3_rain_machine`, `dst4_the_big_jump` |
+| `js/data/dlc-side-lessons.js` | Side 1 | `dside_lessons` *Dual Control* (giver `june`, `unlockAfter: 'd09_minor_fault'`): `dsl1_three_point_turn`, `dsl2_school_run`, `dsl3_test_day` |
+| `js/data/dlc-side-flying.js` | Side 2 | `dside_flying` *Marks Out of Ten* (giver `hob`, `unlockAfter: 'd18_ground_school'`): `dsf1_banner_day`, `dsf2_chimney_pots`, `dsf3_doughnut_drop`, `dsf4_check_ride` |
+| `js/data/dlc-side-speedway.js` | Side 2 | `dside_speedway` *Summer Series* (giver `pip`, `unlockAfter: 'd10_heritage_run'`): `dsr1_oval_sprint`, `dsr2_campus_sprint`, `dsr3_dirty_air`, `dsr4_southbay_classic` |
+
+30 main jobs, 308 estimated minutes (Act 1 80, Act 2 78, Act 3 71, Act 4 79); 15 side jobs, 148 minutes. Use the `estMinutes` in the beat sheets' headers.
+
+### 11.2 The checklist (every scripter, every job)
+**Flags and where they branch.** Only these are set by choices; completed job ids count as flags. Every `if` has both branches written, and neither is the "bad" one.
+- `dlc_blog_on` / `dlc_blog_off` (d08): d09 why Guest Services come; d10, d11, d16, d19, d21, d24, d26, d27, d28, d29, d30 Milo's subscriber line or paper wall; d11 Dash on the beach (and the whistle) or two extra guards; d13 the photo or the bought storage yard; d19 tail `max` 140 or 110 and who gives the route; d23 three cars or two and Ottoline; d29 fans on two roadblocks or four trucks; d30 crowds block two chasers or full pursuit; endings: the shared news story or the longhand book. Side: dsf3, dsr2 (one line each).
+- `dlc_chet_told` / `dlc_chet_kept` (d14): *Take Two* lines (with an `else` for "not chosen yet", nesting `if: 'dlc_chet_kept'`); d24 Chet brings the tyres or Fenella does; d29 Chet in the tank or on the phone; d30 the commentary box or the jacket on the podium; endings: *Mind the Road* or the shelved film.
+- `dlc_dash_in` / `dlc_dash_left` (d20): d20 escape (Dash narrates, or one extra car); d21 two or three rooftop groups; d23 Kit films the snatch or not; d27 floodlights or "a hoax" on TV; d30 helicopter and police at the tunnel, or two chasers in the infield and the grandstand turn; endings per section 8.
+- `dlc_june_told` / `dlc_june_wait` (d25): d26 June in the cab or her text; d27 the fort steps or "She marks everything"; d28 June stays at the lighthouse or Toby alone; d30 June in the passenger seat and Jay's speech to Dess in the tunnel, or June from the grandstand and Jay's speech to June on the line; endings. Side: one line in dsl3.
+- Final choice (d30): `dlc_end_hers` / `dlc_end_everybody` / `dlc_end_gone`.
+- Completion flags read late: `dst4_the_big_jump` (Fenella's crew, last caption "a film by Fenella Moss"), `dsf4_check_ride` (SHE WON banner, "Ten. Again." or a nine in d30), `dsr4_southbay_classic` (Pip and Teddy as guard cars, parade lap), `dsl3_test_day` (d25 line, Ending A's test sheet), `d25_junebug` (dsl3's 94 line), `d23_odie_wren` (side jobs may mention Dess only inside it).
+
+**Callbacks and tallies (keep the numbers exact).**
+- Pip calls Jay "Driver" until her first "Jay" at the end of d08. Milo says "Mr Mercer" until d05 ("Jay. Just Jay."). Dess says "young man" until "Jay, is it?" at the end of d23. June says "Mr Mercer" until once, in d30.
+- Comment cards: d01, d03, d04, d07, d11, d13, d14, d20 (Dash's hatband), d28 (the floor) = nine in the glovebox; the blank tenth from Ottoline at the end of d28 lives in Jay's shirt pocket and is filled in in d30. Side jobs never give one.
+- Scoreboard parts: 1 wheel (d02), 2 bird (d04), 3 clock (d05), 4 carburettor (d09), 5 headlamps as a pair (d11), "custody" for the clock and carburettor d13 to d16, 6 gear stick (d19), 7 coil (d21), "seven plus one driver" (d23). Lockwood: tap, spur, minute hand (counted from d06), gnome, whistle (blog on only), teddy.
+- Subscribers (blog on): 41 (d02), 60 (d03), 41 (d06, Gran), 900 (d11), 12,000 (d16), "twelve thousand and a bit" (d19), 80,000 (d21), 81,000 (d24), 100,000-plus (d26), 200,000 (d29), 400,000 (d30). With blog off, the paper wall instead, every time.
+- Hob's marks: 4 (d16), 7 (d18), "No mark" (d20), 8 (d22), 9 in d30 only without `dsf4_check_ride`. Side: 5, 8, 6, 7, a disputed five and a half, then the first 10 in dsf4.
+- Monty's names: never right until d30's one "JAY MERCER!". Use Jim Mercy, Jake Murphy, Joe Mercury, Jem Mersey, Jack Mackerel, Jay... Mercator, "Jay... Mer... Murphy!" (dsr4). Never "Merkin".
+- The Halcyon clock is eleven seconds slow until d05; then it is stopped at 11:14 for good (minute hand gone from d06).
+- The starter key on its little gold bird keyring: Pip's from d01, clipped to Jay's belt in d17 ("Driver holds the key"), handed to Dess in d27, back in the tin box for June in d30; Dess gives Jay the gold bird.
+- Toby's lines are each said once: "She's not a car. She's a promise with four wheels" (d08); "I drove to the house. There was a car outside. I drove away. Thirty-four years I've been driving away." (d08; in d23 he says a shorter version to Dess); "Every night at ten the fort light says goodnight. I say it back. Manners." (d08, echoed by him in d22 as the answer to R10). June's "I don't care if they're shooting, Mr Mercer, you indicate" is d09's; "Ninety-four per cent. Nobody gets a hundred. I didn't." is said once, in d25 or dsl3, whichever is first.
+- Pip's first race was at twelve: June watched the first lap through the fence (d09), Dess watched and left before the end (d23).
+- Weapons handed out mid-job: SMG (d03), shotgun (d13), rifle (d21), grenades (d27, weapon id `grenade`).
+
+**Running gags, in their places.** "And mind the road" (every riddle; Pip says it as people leave from d07; June in d25 only; Dess only in d30 and Ending B; the last line of every ending). Quill carsick in every car, fine in every aircraft. Chet never drives over thirty (he rides over it in dst4). Dash's "Legend... FOUND!" over the wrong thing, once over the right one (d30, dash in). June's "Minor fault" (her one "Serious fault" is d09, crossed out). Hob's marks. Milo opens every call with "Did you know...", ends big claims with "Probably.", corrects "less" to "fewer". Kit: "We're rolling. We're always rolling." Ottoline's cards and "We'll be in touch either way." Three taps (newsreel d03, café counter d17, the bricks and door frame d23, the wheel d27 and d30). Third gear sticks and is never fixed. Trey never explodes on cue (side). The plastic chicken on the sheriff's roof (from d04).
+
+**How each character talks (one line each; section 4 has the detail).** Jay: spare, dry, talks to vehicles, "damn" about once a job, one four-line speech in d30. Pip: fast, blunt, half-sentences, "crap" when she stalls, "hell yes" when thrilled, rates cornering out of ten. Milo: a fact first, a joke second, "Probably.", never swears, never in danger. Quill: long sentences, footnotes aloud, "Great Scott", "blast", a scholarly wrong answer first. June: instructor voice, marks everything, never swears; drops the voice only when it matters. Toby: short, engine metaphors, long silences, "hell's bells", "son", "trouble". Dess/Odie: dry, quick, racing slang, questions for answers; `odie` until Toby's "Hello, Dess." in d23. Dash: booming on camera, anxious and mildly sweary ("crap") off it, never nasty. Leo: warm, unhurried, hospitality language, never swears, raises his voice once ("OTTOLINE."). Ottoline: customer-service steel ("I'm afraid", "assistance", "we'd love your feedback"), never swears. Hob: loud, cheerful, "crikey", "bloody" (rarely), "right then", marks out of ten. Chet: grand, kind, quotes his own films, "kid", "Loved the first one" / "There wasn't one". Monty: full-speed commentary, wrong names, heartfelt once. Fenella: "It's for the movie." Kit: deadpan. Gully: whistle and grievance. Teddy: spoilt, fair, not a villain.
+
+**The riddle rules.** Quote R1 to R10 word for word from section 1's table (R3 reads "Twelve on top and six below"). Show each riddle in full (a `blackout` of captions or read aloud) and end the job or start a drive before anyone answers it; the answer comes from Milo at least one drive later, after a `camera` shot of the answer without comment (R4 is planted by line; R7 is not a riddle and is read on the spot). Quill or Dash gets it wrong first. Milo explains how in one or two lines, then the scoreboard. No riddles in side jobs. Ending C's new riddle (Milo's) is never solved on screen.
+
+**Content.** Mild language only (see section 1); at most a handful of "shit"/"ass" in the whole DLC and none in Acts 1 to 4 as written; no f-word, no slurs, nothing sexual, no drugs (not even as a joke or a stage direction), no gambling (the claw machine is an arcade game and rigged, which is the joke). Nobody named dies; goons are "down" or "taken away". Original names only: brands in the DLC are the game's own (Kwik Pik, Sovereign, Tern, Bulwark, Pipit, Drifter, Vireo, Zephyr, Ironclad, Skylark, Sparrow, Albatross, Bastion). No main-story speakers except `nana_lu` in memories; no main-story events.
