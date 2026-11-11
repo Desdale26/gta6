@@ -359,16 +359,34 @@
     const pier = wf.pier;
     const z0 = cfg.lines[0] - 7;
     const z1 = cfg.lines[cfg.lines.length - 1] + 7;
+    // 3.0: where the Paloma Bridge and the Southbay Causeway leave the
+    // mainland, the road runs through the boardwalk and the seawall.
+    const bridgeGaps = ((cfg.island && cfg.island.bridges) || []).map((br) => [br.coord - br.width / 2 - 2.6, br.coord + br.width / 2 + 2.6, br]);
+    const onBridge = (z, pad) => bridgeGaps.some(([a, b]) => z > a - (pad || 0) && z < b + (pad || 0));
+    const cut = (pieces, gapList) => {
+      for (const [ga, gb] of gapList) {
+        const next = [];
+        for (const [pa, pb] of pieces) {
+          if (pb <= ga || pa >= gb) next.push([pa, pb]);
+          else {
+            if (pa < ga) next.push([pa, ga]);
+            if (pb > gb) next.push([gb, pb]);
+          }
+        }
+        pieces = next;
+      }
+      return pieces;
+    };
 
     for (let z = z0; z < z1; z += 48) {
-      const za = z;
-      const zb = Math.min(z1, z + 48);
-      const ctx = world.ctxAt((road + sea) / 2, (za + zb) / 2);
-      // Pavement along the road, then the timber boardwalk.
-      ctx.concrete.box(road, 0, za, road + 4, KERB, zb, VH.col(0xcfcac0), { skip: { top: true, n: za > z0, s: zb < z1 } });
-      ctx.sidewalk.topRect(road, za, road + 4, zb, KERB, VH.col(0xffffff), 3);
-      ctx.wood.box(road + 4, 0, za, sea, KERB, zb, VH.col(0xffffff), { skip: { n: za > z0, s: zb < z1, e: true }, uvScale: 2 });
-      world.physics.addBox(road, -0.5, za, sea, KERB, zb, 'boardwalk');
+      for (const [za, zb] of cut([[z, Math.min(z1, z + 48)]], bridgeGaps.map(([a, b, br]) => [br.coord - br.width / 2, br.coord + br.width / 2]))) {
+        const ctx = world.ctxAt((road + sea) / 2, (za + zb) / 2);
+        // Pavement along the road, then the timber boardwalk.
+        ctx.concrete.box(road, 0, za, road + 4, KERB, zb, VH.col(0xcfcac0), { skip: { top: true, n: za > z0 && !onBridge(za, 1), s: zb < z1 && !onBridge(zb, 1) } });
+        ctx.sidewalk.topRect(road, za, road + 4, zb, KERB, VH.col(0xffffff), 3);
+        ctx.wood.box(road + 4, 0, za, sea, KERB, zb, VH.col(0xffffff), { skip: { n: za > z0 && !onBridge(za, 1), s: zb < z1 && !onBridge(zb, 1), e: true }, uvScale: 2 });
+        world.physics.addBox(road, -0.5, za, sea, KERB, zb, 'boardwalk');
+      }
     }
 
     // Harbor Beach: a strip of sand under the seawall south of the pier, down
@@ -380,24 +398,19 @@
     });
 
     // Seawall with a raised coping, and the railing along it (open where the pier and the beach steps start).
-    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]];
+    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]].concat(bridgeGaps.map(([a, b]) => [a, b]));
     for (let z = b.minZ; z < b.maxZ; z += 48) {
       const za = z;
       const zb = Math.min(b.maxZ, z + 48);
       const ctx = world.ctxAt(sea, (za + zb) / 2);
-      let pieces = [[za, zb]];
-      for (const [ga, gb] of gaps) {
-        const next = [];
-        for (const [pa, pb] of pieces) {
-          if (pb <= ga || pa >= gb) next.push([pa, pb]);
-          else {
-            if (pa < ga) next.push([pa, ga]);
-            if (pb > gb) next.push([gb, pb]);
-          }
-        }
-        pieces = next;
+      const pieces = cut([[za, zb]], gaps);
+      // The wall itself (under the bridges, only up to the road).
+      for (const [wa, wb] of cut([[za, zb]], bridgeGaps)) {
+        ctx.concrete.box(sea - 0.3, -8, wa, sea + 0.5, KERB + (pieces.length ? 0.02 : 0), wb, VH.col(0xa9a39a), { uvScale: 4 });
       }
-      ctx.concrete.box(sea - 0.3, -8, za, sea + 0.5, KERB + (pieces.length ? 0.02 : 0), zb, VH.col(0xa9a39a), { uvScale: 4 });
+      for (const [ga, gb] of bridgeGaps) {
+        if (gb > za && ga < zb) ctx.concrete.box(sea - 0.3, -8, Math.max(za, ga), sea + 0.5, -0.03, Math.min(zb, gb), VH.col(0xa9a39a), { uvScale: 4, skip: { top: true } });
+      }
       for (const [pa, pb] of pieces) {
         ctx.concrete.box(sea - 0.35, KERB, pa, sea + 0.55, KERB + 0.14, pb, VH.col(0xd8d2c6), { uvScale: 4 });
         railing(world, ctx, sea, pa, sea, pb, KERB + 0.14, { height: 1.0 });
@@ -444,8 +457,8 @@
 
     // Lamps, palms and benches along the boardwalk.
     for (let z = z0 + 10; z < z1 - 6; z += 24) {
-      world.addProp('streetlight', sea - 1.4, KERB, z, -Math.PI / 2, 1);
-      if (Math.abs(z) > 12) world.addProp('bench', sea - 2.2, KERB, z + 12, Math.PI / 2, 1);
+      if (!onBridge(z, 1)) world.addProp('streetlight', sea - 1.4, KERB, z, -Math.PI / 2, 1);
+      if (Math.abs(z) > 12 && !onBridge(z + 12, 1.5)) world.addProp('bench', sea - 2.2, KERB, z + 12, Math.PI / 2, 1);
     }
     // The Velvet Tide: an open-air club on the boardwalk just north of the pier.
     const club = (wf.club = {
@@ -462,7 +475,7 @@
       if (z > club.z0 - 2 && z < club.z1 + 2) continue; // the club stands here
       world.addProp('palmTall', road + 17, KERB, z, z * 0.37, 0.9 + ((z * 7) % 3) * 0.08);
     }
-    for (let z = z0 + 8; z < z1 - 7; z += 30) world.addProp('streetlight', road + 0.7, KERB, z, -Math.PI / 2, 1);
+    for (let z = z0 + 8; z < z1 - 7; z += 30) if (!onBridge(z, 1)) world.addProp('streetlight', road + 0.7, KERB, z, -Math.PI / 2, 1);
 
     // Oceanview Pier.
     const deckTop = KERB;
@@ -659,5 +672,5 @@
     ctx.propMatte.box(c.x0 - 1.33, y0 + 0.82, c.doorZ1 + 2, c.x0 - 1.27, y0 + 0.88, c.doorZ1 + 3.5, VH.col(0x8b0f2e));
   }
 
-  VH.Landmarks = { buildPlaza, buildPark, buildTowerBlock, buildWaterfront };
+  VH.Landmarks = { buildPlaza, buildPark, buildTowerBlock, buildWaterfront, railing, invisibleWall, sign, solidBox };
 })();

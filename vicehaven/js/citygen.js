@@ -38,8 +38,13 @@
     streetMedian: (z) => (z === 0 ? 3 : 0),
     seawallX: 424,
     waterLevel: -1.1,
-    // The playable world: the city, the airport to the north, Fort Breakwater to the west.
-    bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
+    // The playable world: the city, the airport to the north, Fort Breakwater
+    // to the west, the new districts south, west and north, and Isla Paloma
+    // across the bay (VICEHAVEN 3.0).
+    bounds: { minX: -1600, maxX: 1560, minZ: -1800, maxZ: 1800 },
+    // The world as it was before 3.0: the outskirts trees are drawn in it, so
+    // they stay exactly where they were.
+    v2Bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
     // The old city limits (its outskirts trees and road-end barriers were laid out in these).
     cityBounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
     // Ground kept clear of trees for the big new places (airfield.js, skyline.js, fort.js).
@@ -50,6 +55,8 @@
       // The two stunt ramps north of Northgate Heights (activities.js).
       pasture: { minX: 30, maxX: 185, minZ: -840, maxZ: -765 },
     },
+    // Isla Paloma and its bridges (data/districts.js).
+    island: null,
     pier: { x0: 424, x1: 588, z0: -7, z1: 7 },
   };
 
@@ -128,6 +135,13 @@
         road.cityFrom = road.from;
         road.from = -512;
       }
+      // 3.0: Grand Avenue runs on south to the South Coast Highway; Coral
+      // and Pelican Avenues and Seawall Drive run north to Halcyon University
+      // and Coral Marina. v2From / v2To keep the old ends (the old trees and
+      // lamps are judged against those).
+      if (x === 0) extendRoad(road, road.from, 1760);
+      if (x === -96 || x === 288) extendRoad(road, -1070, road.to);
+      if (x === 384) extendRoad(road, -1070, road.to);
       layout.roads.push(road);
     }
     for (const z of LINES) {
@@ -144,15 +158,28 @@
       }
       // Anchor and Heron Streets run west to Crestline Estates.
       if (z === -288 || z === 288) road.from = -620;
+      // 3.0: both carry on to Westgate Parkway, and Anchor Street crosses the
+      // Paloma Bridge to Isla Paloma.
+      if (z === -288 || z === 288) extendRoad(road, -636, road.to);
+      if (z === -288) {
+        extendRoad(road, road.from, 1300);
+        road.spans = [[391, 780, 'Paloma Bridge'], [780, 1300, 'Bridge Street']];
+      }
       layout.roads.push(road);
     }
     // Pelican Avenue carries on south into Saltmarsh Docks.
     const pelican = layout.roads.find((r) => r.axis === 'z' && r.coord === 288);
     if (pelican) pelican.to = 620;
+    if (pelican) extendRoad(pelican, pelican.from, 660); // 3.0: on to Southbay Road
     // Crestline Drive, through the estates; Harbor Road and Quay Street across the port.
     for (const extra of EXTRA_ROADS) {
       layout.roads.push(Object.assign({ median: 0 }, extra));
     }
+    // 3.0: the new districts' roads.
+    for (const r of VH.Data.roads3 || []) {
+      layout.roads.push(Object.assign({ median: 0, kind: r.axis === 'z' ? 'avenue' : 'street' }, r, { v3: true }));
+    }
+    CONFIG.island = VH.Data.island || null;
     layout.zones = CONFIG.zones;
     for (const r of layout.roads) {
       const perDir = Math.max(1, Math.floor((r.width - r.median - 1) / 2 / LANE));
@@ -167,12 +194,19 @@
         if (s.coord < a.from || s.coord > a.to || a.coord < s.from || a.coord > s.to) continue;
         const corner = (a.coord === minLine || a.coord === maxLine) && (s.coord === minLine || s.coord === maxLine);
         const inGrid = a.coord >= minLine && a.coord <= maxLine && s.coord >= minLine && s.coord <= maxLine;
+        // 3.0: the new crossroads (four legs, a new road through them) get lights too.
+        const legs4 = s.coord > a.from && s.coord < a.to && a.coord > s.from && a.coord < s.to;
+        const span = (r) => [r.v2From !== undefined ? r.v2From : r.from, r.v2To !== undefined ? r.v2To : r.to];
+        const [af, at] = span(a);
+        const [sf, st] = span(s);
+        const v3 = !!(a.v3 || s.v3) || s.coord < af || s.coord > at || a.coord < sf || a.coord > st;
         layout.intersections.push({
           id: 'x' + a.coord + '_' + s.coord,
           x: a.coord, z: s.coord,
           halfX: a.width / 2, halfZ: s.width / 2,
           avenue: a, street: s,
-          signal: !corner && inGrid,
+          signal: (!corner && inGrid) || (v3 && legs4),
+          v3,
           // Cross-walks on every leg that has road beyond the junction.
           legs: {
             n: s.coord > a.from, s: s.coord < a.to,
@@ -180,6 +214,28 @@
           },
         });
       }
+    }
+
+    /** A road's stretches between junctions as they were before 3.0: [from, to, startsAtJunction, endsAtJunction]. */
+    const v2Span = (q) => [q.v2From !== undefined ? q.v2From : q.from, q.v2To !== undefined ? q.v2To : q.to];
+    function v2Stops(r) {
+      if (r.v3) return [];
+      const [rf, rt] = v2Span(r);
+      const cr = (r.axis === 'z' ? streets : avenues)
+        .filter((c) => !c.v3)
+        .filter((c) => { const [cf, ct] = v2Span(c); return c.coord >= rf && c.coord <= rt && r.coord >= cf && r.coord <= ct; })
+        .sort((p, q) => p.coord - q.coord);
+      const out = [];
+      let cursor = rf;
+      let sj = false;
+      for (const c of cr) {
+        const edge0 = c.coord - c.width / 2;
+        if (edge0 > cursor + 0.01) out.push([cursor, edge0, sj, true]);
+        cursor = c.coord + c.width / 2;
+        sj = true;
+      }
+      if (rt > cursor + 0.01) out.push([cursor, rt, sj, false]);
+      return out;
     }
 
     // --------------------------------------------------------- segments
@@ -212,6 +268,9 @@
         // Does this segment end at a junction (so it needs a stop line and crossing)?
         seg.startsAtJunction = crossers.some((c) => Math.abs(c.coord + c.width / 2 - a) < 0.01);
         seg.endsAtJunction = crossers.some((c) => Math.abs(c.coord - c.width / 2 - b) < 0.01);
+        // 3.0: the stretch this was before the new roads cut it (median palms keep their spots).
+        const old = v2Stops(r).find(([oa, ob]) => (a + b) / 2 > oa && (a + b) / 2 < ob);
+        if (old && (old[0] !== a || old[1] !== b)) seg.v2 = { from: old[0], to: old[1], sj: old[2], ej: old[3] };
         layout.segments.push(seg);
       }
     }
@@ -242,6 +301,14 @@
       }
     }
 
+    // -------------------------------------------- 3.0: the new blocks
+    // Kept out of layout.blocks (story places, the corner-shop plan and the
+    // crowd index the old 8x8 grid there) like the roadside strips.
+    layout.blocks3 = planBlocks3(layout);
+    for (const block of layout.blocks3) for (const lot of block.lots) layout.lots.push(lot);
+    layout.plots = {};
+    for (const block of layout.blocks3) if (block.plot) layout.plots[block.plot] = block;
+
     // ------------------------------------------------------- waterfront
     const east = maxLine + CONFIG.avenueWidth(maxLine) / 2;
     layout.waterfront = {
@@ -260,7 +327,78 @@
     layout.plazaBlock = plaza || null;
 
     layout.districtAt = districtAt;
+    layout.isLand = isLand;
     return layout;
+  }
+
+  /** Lengthen an old road, remembering where it used to end. */
+  function extendRoad(road, from, to) {
+    if (from !== road.from && road.v2From === undefined) road.v2From = road.from;
+    if (to !== road.to && road.v2To === undefined) road.v2To = road.to;
+    road.from = from;
+    road.to = to;
+  }
+
+  /** Is (x, z) dry land (the mainland west of the seawall, or Isla Paloma)? */
+  function isLand(x, z) {
+    if (x <= CONFIG.seawallX) return true;
+    const isl = CONFIG.island;
+    if (!isl) return false;
+    for (const r of isl.land) if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return true;
+    return false;
+  }
+
+  /**
+   * 3.0: blocks for the new districts from VH.Data.cells3. A cell edge on a
+   * road is kerbed back to that road's edge; any other edge comes in 3 m.
+   * Each block's lots come from its own RNG stream (rng.fork(block.id)),
+   * like the old grid's, so nothing here moves anything there.
+   */
+  function planBlocks3(layout) {
+    const rng = new VH.RNG('vicehaven-3');
+    const out = [];
+    const cells = VH.Data.cells3 || [];
+    const byId = new Map(VH.Data.districts.map((d) => [d.id, d]));
+    const roadAt = (axis, coord, along) => layout.roads.find((r) => r.axis === axis && r.coord === coord && along >= r.from - 0.01 && along <= r.to + 0.01);
+    const inset = (axis, coord, along) => {
+      const r = roadAt(axis, coord, along);
+      return r ? r.width / 2 : 3;
+    };
+    cells.forEach((c, i) => {
+      const [x0, x1, z0, z1] = c.r;
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      const block = {
+        id: 'n_' + c.d + '_' + i, v3: true,
+        minX: x0 + inset('z', x0, mz), maxX: x1 - inset('z', x1, mz),
+        minZ: z0 + inset('x', z0, mx), maxZ: z1 - inset('x', z1, mx),
+        district: byId.get(c.d),
+        kind: c.plot ? 'plot' : c.kind || 'buildings',
+        plot: c.plot || null,
+        landmark: null,
+        alley: null,
+        lots: [],
+      };
+      block.cx = (block.minX + block.maxX) / 2;
+      block.cz = (block.minZ + block.maxZ) / 2;
+      if (block.kind === 'buildings' && block.district.archetypes.length) planBlock(block, rng.fork(block.id));
+      out.push(block);
+    });
+    // Neighbours across each road (block.nb.E/W/N/S), for the walkers in crowd.js:
+    // the next block over whose facing edges line up within 14 m.
+    for (const a of out) {
+      a.nb = {};
+      for (const b of out) {
+        if (a === b) continue;
+        const alignZ = Math.abs(a.minZ - b.minZ) < 14 && Math.abs(a.maxZ - b.maxZ) < 14;
+        const alignX = Math.abs(a.minX - b.minX) < 14 && Math.abs(a.maxX - b.maxX) < 14;
+        if (alignZ && b.minX > a.maxX && b.minX - a.maxX < 30) a.nb.E = b;
+        if (alignZ && a.minX > b.maxX && a.minX - b.maxX < 30) a.nb.W = b;
+        if (alignX && b.minZ > a.maxZ && b.minZ - a.maxZ < 30) a.nb.S = b;
+        if (alignX && a.minZ > b.maxZ && a.minZ - b.maxZ < 30) a.nb.N = b;
+      }
+    }
+    return out;
   }
 
   /** Divide a building block into lots (and maybe a service alley). */
@@ -325,6 +463,12 @@
     }
   }
 
+  /** The name a road goes by at `along` (a bridge has its own). */
+  function roadName(r, along) {
+    if (r.spans) for (const [a, b, name] of r.spans) if (along >= a && along <= b) return name;
+    return r.name;
+  }
+
   /** Name of the road at a point, or null (used by the HUD location readout). */
   function roadNameAt(layout, x, z) {
     let best = null;
@@ -340,8 +484,26 @@
         best = r;
       }
     }
-    return best ? best.name : null;
+    return best ? roadName(best, best.axis === 'z' ? z : x) : null;
   }
 
-  VH.CityGen = { CONFIG, EXTRA_ROADS, generate, districtAt, roadNameAt };
+  VH.CityGen = { CONFIG, EXTRA_ROADS, generate, districtAt, roadNameAt, roadName, isLand };
+
+  /**
+   * 3.0: the district builders (js/districts/<id>.js) register here.
+   *   VH.Districts.register({ id, plots: ['plot id', ...], build(world, layout) })
+   * world.js calls each build() once the new blocks stand, and leaves out its
+   * own placeholder on every plot a builder claims. See docs/WORLD.md.
+   */
+  VH.Districts = VH.Districts || {
+    builders: [],
+    register(def) {
+      this.builders.push(def);
+      return def;
+    },
+    /** The builder that claims a plot, if any. */
+    owner(plotId) {
+      return this.builders.find((b) => (b.plots || []).includes(plotId)) || null;
+    },
+  };
 })();

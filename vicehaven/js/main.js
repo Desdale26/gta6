@@ -277,6 +277,8 @@
       this.places = new VH.Places(this);
       if (VH.Docks && this.world.docks) VH.Docks.registerPlaces(this.world.docks, this.places);
       if (VH.Estates && this.world.estates) VH.Estates.registerPlaces(this.world.estates, this.places);
+      // 3.0: the new districts' builders register their spots (before the landmarks fall back to plot fronts).
+      for (const B of (VH.Districts && VH.Districts.builders) || []) if (B.registerPlaces) B.registerPlaces(this.world, this.places);
       // The places beyond the old city limits, and the corner shops.
       for (const k of ['Skyline'].concat(WORLD_SYSTEMS)) if (VH[k] && VH[k].registerPlaces) VH[k].registerPlaces(this.world, this.places);
       this.places.finish();
@@ -296,6 +298,20 @@
         const sys = new VH[k](this);
         this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
         this.systems.push(sys);
+      }
+      // 3.0: a district builder's moving parts (VH.Districts.register({ ..., System })): update(dt) and
+      // optionally reset/stop/blips/stats/serialize/load with saveKey, like the systems above.
+      this.districtSystems = {};
+      for (const B of (VH.Districts && VH.Districts.builders) || []) {
+        if (!B.System) continue;
+        try {
+          const sys = new B.System(this);
+          if (!sys.update) sys.update = () => {};
+          this.districtSystems[B.id] = sys;
+          this.systems.push(sys);
+        } catch (e) {
+          console.error('District system ' + B.id + ' failed', e);
+        }
       }
       if (VH.PhotoMode) this.photo = new VH.PhotoMode(this);
       if (VH.Minimap) {
@@ -1455,7 +1471,7 @@
         const off = r.width / 2 + 2.2;
         const at = (k) => (r.axis === 'z' ? { x: r.coord + k * off, z: lane.along } : { x: lane.along, z: r.coord + k * off });
         for (const t of [at(side), at(-side), { x: lane.x, z: lane.z }]) {
-          if (wf && t.x > wf.seawallX - 0.5) continue;
+          if (wf && t.x > wf.seawallX - 0.5 && !(this.layout.isLand && this.layout.isLand(t.x, t.z))) continue;
           const y = ph.groundHeight(t.x, t.z, 3);
           if (y < -0.5) continue; // not the sea floor
           if (ph.overlaps(t.x, t.z, 0.45, y + 0.3, y + 1.7)) continue;

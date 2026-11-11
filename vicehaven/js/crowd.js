@@ -364,6 +364,9 @@
       this._resolveOut = { x: 0, z: 0, hit: false };
       this.blocks = this.layout.blocks;
       this.blockAt = (bx, bz) => (bx < 0 || bz < 0 || bx > 7 || bz > 7 ? null : this.blocks[bx * 8 + bz]);
+      // 3.0: the new districts' blocks (citygen.js links each to its neighbours across the road: block.nb).
+      this.blocks3 = this.layout.blocks3 || [];
+      this._near3 = [];
       this._bindEvents();
     }
 
@@ -371,7 +374,7 @@
       const q = this.game.settings.get('graphics.quality');
       const base = q === 'low' ? 18 : q === 'medium' ? 28 : q === 'ultra' ? 60 : 42;
       const night = this.game.environment.nightFactor || 0;
-      return Math.round(base * (1 - night * 0.4));
+      return Math.round(base * (this._areaK || 1) * (1 - night * 0.4));
     }
 
     _bindEvents() {
@@ -458,10 +461,21 @@
     }
 
     _spawnWalker(focus) {
+      // 3.0: the new districts' blocks near Jay join the old grid's.
+      const near3 = this._near3;
+      near3.length = 0;
+      for (const b of this.blocks3) {
+        if (b.minX - 120 < focus.x && b.maxX + 120 > focus.x && b.minZ - 120 < focus.z && b.maxZ + 120 > focus.z) near3.push(b);
+      }
+      const nearGrid = Math.abs(focus.x) < 520 && Math.abs(focus.z) < 520;
       for (let tries = 0; tries < 8; tries++) {
-        const bx = Math.floor(Math.random() * 8);
-        const bz = Math.floor(Math.random() * 8);
-        const block = this.blockAt(bx, bz);
+        let block;
+        if (near3.length && (!nearGrid || Math.random() < 0.5)) block = near3[Math.floor(Math.random() * near3.length)];
+        else {
+          const bx = Math.floor(Math.random() * 8);
+          const bz = Math.floor(Math.random() * 8);
+          block = this.blockAt(bx, bz);
+        }
         if (!block) continue;
         const c = Math.floor(Math.random() * 4);
         const dirs = Crowd.edgeDirs(c);
@@ -578,7 +592,7 @@
       const options = [['turn', turnD, 0.5]];
       for (const D of [sx, sz]) {
         if (D === rev[w.D]) continue; // never straight back the way we came
-        const nb = this.blockAt(bx + step[D][0], bz + step[D][1]);
+        const nb = w.block.v3 ? w.block.nb && w.block.nb[D] : this.blockAt(bx + step[D][0], bz + step[D][1]);
         if (nb) options.push(['cross', D, D === w.D ? 0.3 : 0.2, nb]);
       }
       let total = 0;
@@ -646,7 +660,7 @@
     _rejoinWalk(a) {
       let best = null;
       let bestD = Infinity;
-      for (const b of this.blocks) {
+      for (const b of this.blocks.concat(this.blocks3)) {
         for (let c = 0; c < 4; c++) {
           const p = this._corner(b, c);
           const d = Math.hypot(p.x - a.pos.x, p.z - a.pos.z);
@@ -745,6 +759,9 @@
       this._spawnTimer -= dt;
       if (this._spawnTimer <= 0) {
         this._spawnTimer = 0.35;
+        // 3.0: busy streets on the Strip, few people round the rail yard.
+        const dist = game.world.districtAt(focus.x, focus.z);
+        this._areaK = dist && dist.v3 && dist.ambient && dist.ambient.peds ? dist.ambient.peds : 1;
         let walkers = 0;
         for (let i = this.agents.length - 1; i >= 0; i--) {
           const a = this.agents[i];

@@ -1767,13 +1767,23 @@
           marks.push({ name: lm.name, x: lm.x, z: lm.z, kind: lm.kind, major: true, gx: lm.gx, gz: lm.gz, tagline: dist ? dist.tagline : '' });
         } else marks.push({ name: lm.name, x: lm.x, z: lm.z });
       }
+      // 3.0: the new districts' landmarks (the big ones get a badge and their district's name under it).
+      for (const lm of VH.Data.landmarks3 || []) {
+        const bl = lm.plot && lay.plots && lay.plots[lm.plot];
+        const x = bl ? bl.cx : lm.x;
+        const z = bl ? bl.cz : lm.z;
+        if (typeof x !== 'number') continue;
+        const dist = districts.find((d) => d.id === lm.district);
+        if (lm.major) marks.push({ name: lm.name, x, z, kind: 'place', major: true, tagline: dist ? (dist.name === lm.name ? dist.tagline : dist.name) : '' });
+        else marks.push({ name: lm.name, x, z });
+      }
       this._marks = marks;
 
       // Districts with blocks: candidate spots are their plain blocks, nearest the centroid first.
       const plans = [];
       const spots = [];
       for (const d of districts) {
-        const blocks = lay.blocks.filter((b) => b.district && b.district.id === d.id);
+        const blocks = lay.blocks.concat(lay.blocks3 || []).filter((b) => b.district && b.district.id === d.id);
         if (!blocks.length) continue;
         let cx = 0;
         let cz = 0;
@@ -1784,7 +1794,7 @@
         cx /= blocks.length;
         cz /= blocks.length;
         const cands = blocks
-          .filter((b) => !b.landmark)
+          .filter((b) => !b.landmark && !b.plot)
           .map((b) => ({ x: b.cx, z: b.cz, d: Math.hypot(b.cx - cx, b.cz - cz) }))
           .sort((p, q) => p.d - q.d);
         if (!cands.length) cands.push({ x: cx, z: cz, d: 0 });

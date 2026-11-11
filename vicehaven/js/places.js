@@ -22,6 +22,16 @@
 
   const FRONT_KINDS = new Set(['garage', 'storefront', 'bank', 'diner', 'bar', 'motel', 'apartment_front', 'church', 'hospital_front', 'police_station_front', 'warehouse', 'street']);
   const DISTRICT_ALIASES = { oldmarket: 'oldmarket', old_market: 'oldmarket', downtown: 'downtown', palmcrescent: 'palmcrescent', palm_crescent: 'palmcrescent', harborpoint: 'harborpoint', harbor_point: 'harborpoint', saltmarsh_docks: 'saltmarsh', saltmarsh: 'saltmarsh', docks: 'saltmarsh', crestline_estates: 'crestline', crestline: 'crestline' };
+  // 3.0: the new districts, and the obvious other ways of writing them.
+  Object.assign(DISTRICT_ALIASES, {
+    sandpiper: 'sandpiper', sandpiper_beach: 'sandpiper', vistaverde: 'vistaverde', vista_verde: 'vistaverde',
+    ironside: 'ironside', thebowl: 'thebowl', the_bowl: 'thebowl', bowl: 'thebowl',
+    sunreel: 'sunreel', sunreel_studios: 'sunreel', cindercreek: 'cindercreek', cinder_creek: 'cindercreek',
+    halcyon: 'halcyon', halcyon_university: 'halcyon', coralmarina: 'coralmarina', coral_marina: 'coralmarina',
+    neonstrand: 'neonstrand', neon_strand: 'neonstrand', isla_paloma: 'neonstrand', paloma: 'neonstrand', island: 'neonstrand',
+    oldpaloma: 'oldpaloma', old_paloma: 'oldpaloma', palomaheights: 'palomaheights', paloma_heights: 'palomaheights',
+    palomafield: 'palomafield', paloma_field: 'palomafield',
+  });
 
   function hashString(s) {
     let h = 2166136261;
@@ -41,12 +51,20 @@
       this.defs = {};
       this.usedLots = new Set();
       this.extra = { saltmarsh: [], crestline: [] }; // spots registered by the docks/estates builders
+      // 3.0: and by the new districts' builders ({ x, z, y?, yaw, kinds: [...], name? }).
+      for (const d of VH.Data.districts) if (d.v3) this.extra[d.id] = [];
+      this._late = new Set();
       this._builtins();
     }
 
-    /** Story places: { id: { district, kind, desc, name? } } */
-    define(defs) {
+    /**
+     * Story places: { id: { district, kind, desc, name? } }. opts.late:
+     * resolve these after every other place (a new campaign's places then
+     * never take a spot an older story's place would have had).
+     */
+    define(defs, opts) {
       Object.assign(this.defs, defs || {});
+      if (opts && opts.late) for (const id of Object.keys(defs || {})) this._late.add(id);
       if (this._finished) this._resolveAll();
     }
 
@@ -56,7 +74,9 @@
      * map depended on the order of play (and moved after loading a save).
      */
     _resolveAll() {
-      for (const id of Object.keys(this.defs).sort()) this.get(id);
+      const ids = Object.keys(this.defs).sort();
+      for (const id of ids) if (!this._late.has(id)) this.get(id);
+      for (const id of ids) if (this._late.has(id)) this.get(id);
     }
 
     add(id, p) {
@@ -135,6 +155,7 @@
       this.alias('hospital', 'mercy_general');
       if (this.extra.saltmarsh.length && !this.map.has('saltmarsh_docks')) this.add('saltmarsh_docks', Object.assign({ name: 'Saltmarsh Docks' }, this.extra.saltmarsh[0]));
       if (this.extra.crestline.length && !this.map.has('crestline_estates')) this.add('crestline_estates', Object.assign({ name: 'Crestline Estates' }, this.extra.crestline[0]));
+      this._builtins3();
       if (!this.defs.vpd_central) this.defs.vpd_central = { district: 'downtown', kind: 'police_station_front', name: 'VPD Central Precinct' };
       if (!this.defs.mercy_general) this.defs.mercy_general = { district: 'palmcrescent', kind: 'hospital_front', name: 'St. Agnes Mercy General' };
       // The docks and estates spots the fixed ids above took aren't free for story places.
@@ -166,6 +187,7 @@
           p = { x: s.x, z: s.z, y: s.y, yaw: s.yaw || 0, kind, district, name, roof: !!s.roof };
         }
       }
+      if (!p && this.v3Districts().has(district)) p = this._resolve3(h, district, kind, name);
       if (!p && FRONT_KINDS.has(kind)) p = this._front(h, district, kind, name);
       if (!p && kind === 'alley') p = this._alley(h, district);
       if (!p && kind === 'parking') p = this._parking(h, district);
@@ -195,8 +217,134 @@
     }
 
     _districtBlocks(district) {
+      if (this.v3Districts().has(district)) {
+        return (this.layout.blocks3 || []).filter((b) => b.kind === 'buildings' && b.district.id === district);
+      }
       return this.layout.blocks.filter((b) => b.kind === 'buildings' && b.district.id === district);
     }
+
+    // ----------------------------------------------- 3.0: the new districts
+    v3Districts() {
+      if (!this._v3) this._v3 = new Set(VH.Data.districts.filter((d) => d.v3).map((d) => d.id));
+      return this._v3;
+    }
+
+    /**
+     * The landmarks of the new districts as built-in places (unless a
+     * district builder registered a better spot for the id already): on a
+     * plot, on the pavement in the middle of its side on the widest road
+     * beside it, facing in.
+     */
+    _builtins3() {
+      for (const lm of VH.Data.landmarks3 || []) {
+        if (this.map.has(lm.id)) continue;
+        let p = null;
+        const block = lm.plot && this.layout.plots && this.layout.plots[lm.plot];
+        if (block) p = this._plotFront(block);
+        else if (lm.x !== undefined) p = { x: lm.x, z: lm.z, yaw: 0 };
+        if (!p) continue;
+        this.add(lm.id, Object.assign(p, { name: lm.name, kind: lm.kind, district: lm.district, landmark: true }));
+      }
+    }
+
+    /** The pavement at the middle of a block's side on the widest road beside it, facing into the block. */
+    _plotFront(b) {
+      const roads = this.layout.roads;
+      // yaw: facing into the block.
+      const sides = [
+        { s: 'n', x: b.cx, z: b.minZ + 2.2, yaw: 0, axis: 'x', edge: b.minZ, along: b.cx, out: -1 },
+        { s: 's', x: b.cx, z: b.maxZ - 2.2, yaw: Math.PI, axis: 'x', edge: b.maxZ, along: b.cx, out: 1 },
+        { s: 'w', x: b.minX + 2.2, z: b.cz, yaw: Math.PI / 2, axis: 'z', edge: b.minX, along: b.cz, out: -1 },
+        { s: 'e', x: b.maxX - 2.2, z: b.cz, yaw: -Math.PI / 2, axis: 'z', edge: b.maxX, along: b.cz, out: 1 },
+      ];
+      let best = null;
+      let bestW = -1;
+      for (const sd of sides) {
+        const r = roads.find((q) => q.axis === sd.axis && Math.abs(q.coord - (q.width / 2) * sd.out - sd.edge) < 0.6 && sd.along > q.from && sd.along < q.to);
+        if (r && r.width > bestW) {
+          bestW = r.width;
+          best = sd;
+        }
+      }
+      best = best || sides[0];
+      return { x: best.x, z: best.z, y: KERB, yaw: best.yaw, side: best.s };
+    }
+
+    /**
+     * A story place in a new district: a spot a district builder registered
+     * for the kind (places.extra[district]) first, then the generic fill:
+     * shop fronts, alleys, car parks, rooftops and corners of its blocks, and
+     * the special kinds at the district's own landmarks.
+     */
+    _resolve3(h, district, kind, name) {
+      const free = (this.extra[district] || []).filter((s) => !s.used);
+      const first = free.filter((s) => s.kinds && s.kinds[0] === kind);
+      const list = first.length ? first : free.filter((s) => s.kinds && s.kinds.includes(kind));
+      if (list.length) {
+        const s = list[h % list.length];
+        s.used = true;
+        return { x: s.x, z: s.z, y: s.y, yaw: s.yaw || 0, roof: !!s.roof };
+      }
+      const near = (id) => {
+        const p = this.map.get(id);
+        if (!p) return null;
+        // Spread along the landmark's frontage so places of a kind don't stack.
+        const off = (((h >>> 4) % 7) - 3) * 6;
+        const sideways = Math.abs(Math.sin(p.yaw)) > 0.5; // facing east/west: spread along z
+        return { x: p.x + (sideways ? 0 : off), z: p.z + (sideways ? off : 0), y: p.y, yaw: p.yaw };
+      };
+      const special = {
+        beach: { sandpiper: 'sandpiper_beach' },
+        boardwalk: { sandpiper: 'sandpiper_promenade', coralmarina: 'coral_marina', neonstrand: 'wonder_wharf' },
+        pier: { coralmarina: 'coral_marina', oldpaloma: 'paloma_harbour', neonstrand: 'wonder_wharf', sandpiper: 'sandpiper_promenade' },
+        dock: { coralmarina: 'coral_marina', oldpaloma: 'paloma_harbour', ironside: 'ironside_railyard' },
+        warehouse: { ironside: 'ironside_railyard', cindercreek: 'cinder_storage', sunreel: 'sunreel_backlot' },
+        mansion: { palomaheights: 'paloma_estate' },
+        park: { sandpiper: 'skate_park', halcyon: 'halcyon_quad', palomaheights: 'paloma_gardens', oldpaloma: 'paloma_plaza' },
+        overlook: { oldpaloma: 'paloma_fort', palomaheights: 'paloma_observatory', coralmarina: 'marina_lighthouse', sandpiper: 'sandpiper_promenade' },
+        construction: {},
+      };
+      if (special[kind]) {
+        if (kind === 'park') {
+          const park = (this.layout.blocks3 || []).find((b) => b.kind === 'park' && b.district.id === district);
+          if (park) return { x: park.minX + 8 + ((h >>> 3) % 3) * 20, z: park.minZ + 5, y: KERB, yaw: 0 };
+        }
+        if (kind === 'mansion' || kind === 'warehouse') {
+          // A walled villa's gate, a shed's roller doors.
+          const p = this._front(h, district, kind === 'mansion' ? 'storefront' : kind, name);
+          if (p && p.lot && p.lot.archetype === (kind === 'mansion' ? 'villa' : 'shed')) return p;
+          if (p && p.lot) this.usedLots.delete(p.lot.id);
+        }
+        if (kind === 'construction') {
+          const p = this._parking(h, district); // a cleared lot (a builder may register a real site)
+          if (p) return p;
+        }
+        const id = special[kind][district];
+        if (id && this.map.get(id)) return near(id);
+      }
+      // A district with no generic blocks (the airfield): somewhere along its plots' pavements.
+      if (!this._districtBlocks(district).length) return this._edgeSpot(h, district);
+      if (FRONT_KINDS.has(kind)) return this._front(h, district, kind, name);
+      if (kind === 'alley') return this._alley(h, district);
+      if (kind === 'parking') return this._parking(h, district);
+      if (kind === 'rooftop') return this._rooftop(h, district);
+      return this._corner(h, district);
+    }
+
+    /** A spot on the pavement round one of a district's blocks, picked by the hash, facing in. */
+    _edgeSpot(h, district) {
+      const pool = (this.layout.blocks3 || []).filter((b) => b.district.id === district);
+      if (!pool.length) return null;
+      const b = pool[h % pool.length];
+      const side = (h >>> 8) % 4;
+      const t = (((h >>> 12) % 9) + 1) / 10;
+      const i = 2.2;
+      if (side === 0) return { x: b.minX + (b.maxX - b.minX) * t, z: b.minZ + i, y: KERB, yaw: 0 };
+      if (side === 1) return { x: b.minX + (b.maxX - b.minX) * t, z: b.maxZ - i, y: KERB, yaw: Math.PI };
+      if (side === 2) return { x: b.minX + i, z: b.minZ + (b.maxZ - b.minZ) * t, y: KERB, yaw: Math.PI / 2 };
+      return { x: b.maxX - i, z: b.minZ + (b.maxZ - b.minZ) * t, y: KERB, yaw: -Math.PI / 2 };
+    }
+
 
     /** A building's street front: stand on the pavement facing its door. */
     _front(h, district, kind, name) {
@@ -244,6 +392,7 @@
 
     _alley(h, district) {
       const blocks = this._districtBlocks(district).filter((b) => b.alley);
+      if (!blocks.length && this.v3Districts().has(district)) return null; // a corner then
       const pool = blocks.length ? blocks : this.layout.blocks.filter((b) => b.alley);
       if (!pool.length) return null;
       const b = pool[h % pool.length];
@@ -294,7 +443,8 @@
 
     _corner(h, district) {
       const blocks = this._districtBlocks(district);
-      const pool = blocks.length ? blocks : this.layout.blocks;
+      const own3 = this.v3Districts().has(district) ? (this.layout.blocks3 || []).filter((b) => b.district.id === district) : [];
+      const pool = blocks.length ? blocks : own3.length ? own3 : this.layout.blocks;
       const b = pool[h % pool.length];
       const c = (h >>> 8) % 4;
       const i = 2.2;

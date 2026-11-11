@@ -627,7 +627,7 @@
       const q = this.settings.get('graphics.quality');
       const base = q === 'low' ? 10 : q === 'medium' ? 15 : q === 'ultra' ? 26 : 20;
       const night = this.game.environment.nightFactor || 0;
-      return Math.round(base * this.densityScale * (1 - night * 0.3));
+      return Math.round(base * this.densityScale * (this._areaK || 1) * (1 - night * 0.3));
     }
 
     /** Make a car into AI traffic at a lane position. */
@@ -645,6 +645,9 @@
       this._timer -= dt;
       if (this._timer > 0) return;
       this._timer = 0.4;
+      // 3.0: the new districts set their own traffic (a quiet suburb, a busy strip).
+      const dist = this.world && this.world.districtAt(focus.x, focus.z);
+      this._areaK = dist && dist.v3 && dist.ambient && dist.ambient.cars ? dist.ambient.cars : 1;
       const list = this.vehicles.list;
       let count = 0;
       const last = this.vehicles.lastPlayerCar;

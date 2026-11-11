@@ -862,6 +862,36 @@
     g.fillStyle = 'rgba(160, 225, 245, 0.45)';
     R(sea, b.minZ, sea + Math.max(px, 0.9), b.maxZ);
 
+    // 3.0: Isla Paloma (its land, a rim of shallows and the seawall round it) and the bridges' decks.
+    const isl = cfg.island;
+    if (isl) {
+      g.fillStyle = 'rgba(90, 190, 225, 0.22)';
+      for (const r of isl.land) R(r.minX - 14, r.minZ - 14, r.maxX + 14, r.maxZ + 14);
+      for (const r of isl.land) {
+        g.fillStyle = PAL.grass;
+        R(r.minX, r.minZ, r.maxX, r.maxZ);
+        if (o.noise) {
+          g.fillStyle = o.noise;
+          R(r.minX, r.minZ, r.maxX, r.maxZ);
+        }
+      }
+      g.strokeStyle = PAL.seawall;
+      g.lineWidth = Math.max(px, 0.9);
+      for (const e of VH.Island ? VH.Island.shoreEdges(isl) : []) {
+        g.beginPath();
+        if (e.axis === 'x') {
+          g.moveTo(e.from, e.coord);
+          g.lineTo(e.to, e.coord);
+        } else {
+          g.moveTo(e.coord, e.from);
+          g.lineTo(e.coord, e.to);
+        }
+        g.stroke();
+      }
+      g.fillStyle = PAL.boardwalk;
+      for (const br of isl.bridges) R(br.from, br.coord - br.width / 2 - 2.5, br.to, br.coord + br.width / 2 + 2.5);
+    }
+
     // ------------------------------------------------- the paved city
     g.fillStyle = PAL.pave;
     R(west, north, east + SW, south);
@@ -873,7 +903,7 @@
     R(sea - Math.max(px, 0.7), north, sea, south);
 
     // ---------------------------------------------------------- blocks
-    for (const bl of layout.blocks) {
+    for (const bl of layout.blocks3 ? layout.blocks.concat(layout.blocks3) : layout.blocks) {
       if (!on(bl.minX - 4, bl.minZ - 4, bl.maxX + 4, bl.maxZ + 4)) continue;
       const tint = tintOf(bl.district);
       g.fillStyle = PAL.pave;
@@ -894,7 +924,17 @@
       const cx = (ix0 + ix1) / 2;
       const cz = (iz0 + iz1) / 2;
 
-      if (bl.kind === 'park') {
+      if (bl.kind === 'plot') {
+        // 3.0: a landmark's plot (its builder may paint more with VH.MapPainters).
+        g.fillStyle = bl.plot === 'sandpiper_beach' ? '#bfa877' : PAL.lawn;
+        R(ix0, iz0, ix1, iz1);
+        g.strokeStyle = 'rgba(255, 207, 138, 0.35)';
+        g.lineWidth = Math.max(px, 0.6);
+        g.strokeRect(ix0, iz0, ix1 - ix0, iz1 - iz0);
+      } else if (bl.kind === 'park' && bl.v3) {
+        g.fillStyle = PAL.lawn;
+        R(ix0, iz0, ix1, iz1);
+      } else if (bl.kind === 'park') {
         g.fillStyle = PAL.lawn;
         R(ix0, iz0, ix1, iz1);
         g.fillStyle = 'rgba(255, 255, 255, 0.03)';
@@ -1380,7 +1420,7 @@
   /** For districts without blocks (open land, the bay): the longest clear run of their cells. */
   function openDistrictSpots(layout, land, avoid) {
     const districts = VH.Data.districts || [];
-    const withBlocks = new Set(layout.blocks.map((b) => b.district && b.district.id));
+    const withBlocks = new Set(layout.blocks.concat(layout.blocks3 || []).map((b) => b.district && b.district.id));
     const wanted = districts.filter((d) => !withBlocks.has(d.id));
     if (!wanted.length || !layout.districtAt) return [];
     const step = 32;

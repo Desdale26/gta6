@@ -584,7 +584,7 @@
       const L = this.game.layout;
       const m = pad || 0;
       const wf = L.waterfront;
-      if (wf && x > wf.seawallX - 4 - m) return false;
+      if (wf && x > wf.seawallX - 4 - m && !(L.isLand && L.isLand(x - 4 - m, z) && L.isLand(x + 4 + m, z) && L.isLand(x, z - 4 - m) && L.isLand(x, z + 4 + m))) return false; // the bay (Isla Paloma is fine)
       const fw = L.fort && L.fort.wall;
       if (fw && x > fw.x0 - 60 - m && x < fw.x1 + 60 + m && z > fw.z0 - 60 - m && z < fw.z1 + 60 + m) return false;
       const af = L.airport && L.airport.fence;

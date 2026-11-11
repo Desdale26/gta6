@@ -197,8 +197,9 @@
       const physics = this.physics;
       const cfg = layout.config;
 
-      // Terrain: flat city, sea floor beyond the seawall.
-      physics.terrain = (x) => (x > cfg.seawallX ? -8 : 0);
+      // Terrain: flat city, sea floor beyond the seawall (Isla Paloma is land).
+      const isLand = VH.CityGen.isLand;
+      physics.terrain = (x, z) => (x <= cfg.seawallX || isLand(x, z) ? 0 : -8);
 
       progress(0.02, 'Surveying the outskirts');
       this._buildGround(layout);
@@ -220,7 +221,27 @@
       for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i];
         this._buildBlock(block);
-        progress(0.14 + 0.66 * ((i + 1) / blocks.length), 'Raising ' + block.district.name);
+        progress(0.14 + 0.5 * ((i + 1) / blocks.length), 'Raising ' + block.district.name);
+        await slicer.tick();
+      }
+      // 3.0: the new districts' blocks, then Isla Paloma's shore and the bridges.
+      const blocks3 = layout.blocks3 || [];
+      for (let i = 0; i < blocks3.length; i++) {
+        const block = blocks3[i];
+        this._buildBlock3(block);
+        progress(0.64 + 0.16 * ((i + 1) / blocks3.length), 'Raising ' + block.district.name);
+        if (i % 2 === 1) await slicer.tick();
+      }
+      if (VH.Island) this.island = VH.Island.build(this, layout);
+      await slicer.tick();
+      // The district builders (js/districts/*.js) dress the new districts and build their landmarks.
+      for (const B of (VH.Districts && VH.Districts.builders) || []) {
+        progress(0.8, 'Building ' + (B.name || B.id));
+        try {
+          B.build(this, layout);
+        } catch (e) {
+          console.error('District builder ' + B.id + ' failed', e);
+        }
         await slicer.tick();
       }
 
@@ -300,6 +321,8 @@
       const lines = cfg.lines;
       const edge = lines[lines.length - 1] + 7;
       const far = 2600;
+      // Ground tiles are filed in the chunk nearest their middle, within the playable area.
+      const cb = cfg.bounds;
       let rects = [{ minX: -far, maxX: cfg.seawallX, minZ: -far, maxZ: far }];
       // The city core is fully paved.
       rects = subtractRect(rects, { minX: -edge, maxX: cfg.seawallX, minZ: -edge, maxZ: edge });
@@ -315,7 +338,7 @@
             const x1 = Math.min(r.maxX, x + CHUNK);
             const z1 = Math.min(r.maxZ, z + CHUNK);
             // Tiles far outside the playable area are not worth a chunk each.
-            const ctx = this.ctxAt(VH.math.clamp((x + x1) / 2, -900, 900), VH.math.clamp((z + z1) / 2, -900, 900));
+            const ctx = this.ctxAt(VH.math.clamp((x + x1) / 2, cb.minX + 100, cfg.seawallX - 10), VH.math.clamp((z + z1) / 2, cb.minZ + 100, cb.maxZ - 100));
             ctx.grass.topRect(x, z, x1, z1, 0, white, 6);
           }
         }
@@ -396,6 +419,10 @@
       if (M > 0) {
         const m0 = a + (sj ? CW + 0.4 : 0);
         const m1 = b - (ej ? CW + 0.4 : 0);
+        // 3.0: a stretch a new road cut in two plants its palms where the whole stretch had them.
+        const o = seg.v2;
+        const p0 = o ? o.from + (o.sj ? CW + 0.4 : 0) : m0;
+        const p1 = o ? o.to - (o.ej ? CW + 0.4 : 0) : m1;
         if (m1 - m0 > 2) {
           const r = World._roadRect(road, m0, m1, -M / 2, M / 2);
           ctx.concrete.box(r[0], 0, r[1], r[2], KERB, r[3], VH.col(0xc9c4b8), { skip: { top: true } });
@@ -403,7 +430,8 @@
           this.addLawn(r[0], r[1], r[2], r[3]);
           this.physics.addBox(r[0], -0.5, r[1], r[2], KERB, r[3], 'kerb');
           const spacing = road.coord === 0 ? 16 : 20;
-          for (let p = m0 + spacing / 2; p < m1 - 2; p += spacing) {
+          for (let p = p0 + spacing / 2; p < p1 - 2; p += spacing) {
+            if (p < m0 + 0.5 || p > m1 - 0.5) continue;
             const px = road.axis === 'z' ? road.coord : p;
             const pz = road.axis === 'z' ? p : road.coord;
             const type = road.axis === 'z' ? 'palmTall' : (Math.round(p / spacing) % 2 ? 'tree' : 'treeB');
@@ -440,7 +468,7 @@
       const ewArm = j.halfZ > 8 ? 'signal11' : 'signal6';
       // Only on real pavement (junctions on the edge of town have open ground on one side).
       const edge = this.layout.config.lines[this.layout.config.lines.length - 1] + 7;
-      const onPavement = (x, z) => x > -edge && x < this.layout.config.seawallX && z > -edge && z < edge;
+      const onPavement = (x, z) => (x > -edge && x < this.layout.config.seawallX && z > -edge && z < edge) || (j.v3 && this._onSlab3(x, z));
       const pole = (type, x, z, yaw, group) => {
         if (onPavement(x, z)) this.addProp(type, x, KERB, z, yaw, 1, group);
       };
@@ -484,6 +512,58 @@
       this._streetFurniture(block);
     }
 
+    /**
+     * 3.0: a block of the new districts: the kerbed pavement slab, then its
+     * lots (the generic fill), a park, or a reserved landmark plot.
+     */
+    _buildBlock3(block) {
+      const ctx = this.ctxAt(block.cx, block.cz);
+      const { minX, maxX, minZ, maxZ } = block;
+      ctx.concrete.box(minX, 0, minZ, maxX, KERB, maxZ, VH.col(0xcfcac0), { skip: { top: true } });
+      ctx.sidewalk.topRect(minX, minZ, maxX, maxZ, KERB, VH.col(0xffffff), 3);
+      this.physics.addBox(minX, -0.5, minZ, maxX, KERB, maxZ, 'kerb');
+      if (block.kind === 'plot') {
+        if (!(VH.Districts && VH.Districts.owner(block.plot))) this._plotPlaceholder(block);
+        return; // the builder lights and plants its own frontage
+      }
+      if (block.kind === 'park') {
+        const ix0 = minX + 4, ix1 = maxX - 4, iz0 = minZ + 4, iz1 = maxZ - 4;
+        ctx.grassTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xffffff), 6);
+        this.addLawn(ix0, iz0, ix1, iz1);
+        const rng = new VH.RNG(block.id + 'park');
+        for (let i = 0; i < 14; i++) {
+          this.addProp(rng.chance(0.5) ? 'tree' : 'treeB', rng.range(ix0 + 4, ix1 - 4), KERB, rng.range(iz0 + 4, iz1 - 4), rng.range(0, 6.28), rng.range(0.9, 1.3));
+        }
+        for (let i = 0; i < 6; i++) this.addProp('bench', rng.range(ix0 + 6, ix1 - 6), KERB, rng.range(iz0 + 6, iz1 - 6), rng.range(0, 6.28), 1);
+      } else {
+        if (block.alley) this._buildAlley(ctx, block);
+        for (const lot of block.lots) {
+          const lctx = this.ctxAt(lot.cx, lot.cz);
+          const top = VH.Buildings.buildLot(lctx, lot);
+          lot.top = top || 0;
+          if (top > 0) this.stats.buildings++;
+          this.stats.tallest = Math.max(this.stats.tallest, top || 0);
+        }
+        this.stats.lots += block.lots.length;
+      }
+      this._streetFurniture(block);
+    }
+
+    /** A reserved landmark plot nobody has built yet: a lawn (sand on the beach) and a name board. */
+    _plotPlaceholder(block) {
+      const ctx = this.ctxAt(block.cx, block.cz);
+      const ix0 = block.minX + 4, ix1 = block.maxX - 4, iz0 = block.minZ + 4, iz1 = block.maxZ - 4;
+      if (block.plot === 'sandpiper_beach') ctx.plazaTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xf0dca8), 6);
+      else {
+        ctx.grassTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xffffff), 6);
+        this.addLawn(ix0, iz0, ix1, iz1);
+      }
+      const lm = (VH.Data.landmarks3 || []).find((l) => l.plot === block.plot);
+      if (lm && VH.Landmarks.sign) {
+        VH.Landmarks.sign(this, { x: block.cx, y: KERB + 2.2, z: block.minZ + 6, yaw: Math.PI, w: 7, h: 1.4, lines: [lm.name.toUpperCase(), 'Coming soon'], style: 'info', posts: true });
+      }
+    }
+
     _buildAlley(ctx, block) {
       const a = block.alley;
       ctx.asphaltTop.topRect(a.minX, a.minZ, a.maxX, a.maxZ, KERB, VH.col(0xbdbdbd), 6);
@@ -514,9 +594,10 @@
         { side: 'w', a0: block.minZ, a1: block.maxZ, fixed: block.minX, inward: 1, yaw: -Math.PI / 2, alongX: false },
         { side: 'e', a0: block.minZ, a1: block.maxZ, fixed: block.maxX, inward: -1, yaw: Math.PI / 2, alongX: false },
       ];
-      const treeType = d === 'palmcrescent' ? 'palm' : d === 'oldmarket' ? 'tree' : d === 'harborpoint' ? 'palmTall' : 'palm';
-      const treeSpacing = d === 'palmcrescent' ? 18 : 30;
-      const treeChance = d === 'oldmarket' ? 0.45 : d === 'downtown' ? 0.75 : 0.9;
+      const T = block.v3 ? block.district.trees || {} : {}; // 3.0 districts name their own street trees
+      const treeType = T.type || (d === 'palmcrescent' ? 'palm' : d === 'oldmarket' ? 'tree' : d === 'harborpoint' ? 'palmTall' : 'palm');
+      const treeSpacing = T.spacing || (d === 'palmcrescent' ? 18 : 30);
+      const treeChance = T.chance || (d === 'oldmarket' ? 0.45 : d === 'downtown' ? 0.75 : 0.9);
       const noTrees = block.kind === 'plaza' || block.kind === 'tower' || block.kind === 'construction';
       edges.forEach((e, ei) => {
         const pos = (along, inset) => (e.alongX ? [along, e.fixed + e.inward * inset] : [e.fixed + e.inward * inset, along]);
@@ -552,7 +633,7 @@
 
     // ----------------------------------------------------- world edges
     _buildBoundary(layout) {
-      const b = layout.config.bounds;
+      const b = Object.assign({}, layout.config.bounds, { maxX: layout.config.seawallX }); // the bay is the east edge
       const hedgeH = 2.6;
       const t = 1.6;
       const green = VH.col(0x355f2c);
@@ -587,10 +668,18 @@
       for (const r of this.layout.roads) {
         if (skipAxis && r.axis === skipAxis) continue;
         // cityOnly: the roads as they were inside the old city limits.
-        if (cityOnly && r.isNew) continue;
-        const from = cityOnly && r.cityFrom !== undefined ? r.cityFrom : r.from;
+        // cityOnly 'v2': the roads as they were before 3.0 (old ends, no new roads).
+        if (cityOnly && r.isNew && cityOnly !== 'v2') continue;
+        if (cityOnly && r.v3) continue;
+        let from = r.from;
+        let to = r.to;
+        if (cityOnly) {
+          if (r.v2From !== undefined) from = r.v2From;
+          if (r.v2To !== undefined) to = r.v2To;
+          if (cityOnly !== 'v2' && r.cityFrom !== undefined) from = r.cityFrom;
+        }
         const along = r.axis === 'z' ? z : x;
-        if (along < from - m || along > r.to + m) continue;
+        if (along < from - m || along > to + m) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) < r.width / 2 + m) return true;
       }
@@ -620,22 +709,54 @@
         const yaw = rng.range(0, 6.28);
         const scale = rng.range(0.8, 1.35);
         placed++;
-        if (inZone(x, z, 6) || this.onRoad(x, z, 3)) continue;
+        if (inZone(x, z, 6) || this.onRoad(x, z, 3) || this._inNewLand(x, z, 3)) continue;
         this.addProp(type, x, 0, z, yaw, scale);
       }
-      // The new land: north to the airport, west to the fort.
-      const all = cfg.bounds;
+      // The new land: north to the airport, west to the fort. (Drawn in the
+      // world as it was before 3.0, against the roads as they were, so the
+      // same trees come out; those now on a new road or block are left out.)
+      const all = cfg.v2Bounds || cfg.bounds;
       const rng2 = new VH.RNG('outskirts-trees-2');
       let more = 0;
       for (let i = 0; i < 4000 && more < 620; i++) {
         const x = rng2.range(all.minX + 4, all.maxX - 4);
         const z = rng2.range(all.minZ + 4, all.maxZ - 4);
         if (x > b.minX - 6 && x < b.maxX + 6 && z > b.minZ - 6 && z < b.maxZ + 6) continue;
-        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5)) continue;
+        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5, null, 'v2')) continue;
         const type = rng2.chance(0.75) ? (rng2.chance(0.5) ? 'tree' : 'treeB') : 'palm';
-        this.addProp(type, x, 0, z, rng2.range(0, 6.28), rng2.range(0.8, 1.4));
+        const yaw = rng2.range(0, 6.28);
+        const scale = rng2.range(0.8, 1.4);
         more++;
+        if (this.onRoad(x, z, 5) || this._inNewLand(x, z, 6)) continue;
+        this.addProp(type, x, 0, z, yaw, scale);
       }
+      // 3.0: the countryside round the new districts.
+      const rng3 = new VH.RNG('outskirts-trees-3');
+      const v2 = cfg.v2Bounds;
+      let more3 = 0;
+      for (let i = 0; i < 6000 && more3 < 700; i++) {
+        const x = rng3.range(all.minX + 4, cfg.seawallX - 40);
+        const z = rng3.range(cfg.bounds.minZ + 4, cfg.bounds.maxZ - 4);
+        if (v2 && x > v2.minX && x < v2.maxX && z > v2.minZ && z < v2.maxZ) continue; // the old land has its trees
+        if (inZone(x, z, 14) || this.onRoad(x, z, 6) || this._inNewLand(x, z, 8)) continue;
+        const type = rng3.chance(0.7) ? (rng3.chance(0.5) ? 'tree' : 'treeB') : 'palm';
+        this.addProp(type, x, 0, z, rng3.range(0, 6.28), rng3.range(0.8, 1.4));
+        more3++;
+      }
+    }
+
+    /** 3.0: is (x, z) on (or within `pad` of) a new block, or a reserved plot? */
+    _inNewLand(x, z, pad) {
+      const p = pad || 0;
+      for (const b of this.layout.blocks3 || []) {
+        if (x > b.minX - p && x < b.maxX + p && z > b.minZ - p && z < b.maxZ + p) return true;
+      }
+      return false;
+    }
+
+    /** 3.0: is (x, z) on the pavement slab of a new block? */
+    _onSlab3(x, z) {
+      return this._inNewLand(x, z, 0);
     }
 
     // ------------------------------------------------------ signs, water
@@ -715,12 +836,35 @@
       if (x >= pier.x0 && x <= pier.x1 && z >= pier.z0 - 2 && z <= pier.z1 + 2) return 'Oceanview Pier';
       const bw = this.layout.waterfront.boardwalk;
       if (x >= bw.minX && x <= bw.maxX && z >= bw.minZ && z <= bw.maxZ) return 'The Boardwalk';
+      // 3.0: the bridges and the new districts' landmark plots.
+      const br = VH.Island && VH.Island.bridgeAt(x, z);
+      if (br) return br.name;
+      for (const block of this.layout.blocks3 || []) {
+        if (block.plot && x >= block.minX && x <= block.maxX && z >= block.minZ && z <= block.maxZ) {
+          const lm = (VH.Data.landmarks3 || []).find((l) => l.plot === block.plot);
+          if (lm) return lm.name;
+        }
+      }
       return null;
     }
 
     // ------------------------------------------------------------ update
     update(dt, camPos) {
       this.props.update(dt, camPos);
+      // 3.0: the world is three times the size. Chunks wholly beyond the fog
+      // (99.5% fogged at 2.3 / density) aren't drawn; the haze already hid them.
+      this._cullT = (this._cullT || 0) - dt;
+      if (this._cullT <= 0 && camPos) {
+        this._cullT = 0.2;
+        const fog = this.scene.fog;
+        const far = fog && fog.density ? 2.3 / fog.density : Infinity;
+        const h = CHUNK / 2;
+        for (const c of this.chunks.values()) {
+          const dx = Math.max(0, Math.abs(camPos.x - c.center.x) - h);
+          const dz = Math.max(0, Math.abs(camPos.z - c.center.z) - h);
+          c.group.visible = dx * dx + dz * dz < far * far;
+        }
+      }
 
       // Traffic signals cycle (Phase 5 traffic obeys this state).
       const PHASES = [

@@ -588,7 +588,188 @@
     }
   }
 
-  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa };
+  // ---------------------------------------------- 3.0: the new districts
+  /** The side of a lot that faces a street (the first, or 's'). */
+  function mainFront(lot) {
+    const f = frontFaces(lot);
+    return f.length ? f[0] : 's';
+  }
+
+  /** Single-storey suburban house: a lawn, a driveway to a garage door, a pitched roof. */
+  function house(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const front = rng.range(6, 8.5);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = front;
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 7 || r.z1 - r.z0 < 7) return courtyard(ctx, lot, rng) || 0;
+    const wall = pick(rng, pal.walls, 0.05);
+    const F = { wall, style: 1, ww: 0.5, wh: 0.55, bay: rng.range(3, 3.8), floorH: 3.1, seed };
+    const top = KERB + 3.1;
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    // Hipped-ish roof: two slopes along the longer side, gables at the ends.
+    const tile = pick(rng, pal.roofs, 0.06);
+    const o = 0.6;
+    const x0 = r.x0 - o, x1 = r.x1 + o, z0 = r.z0 - o, z1 = r.z1 + o;
+    const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+    const rise = Math.min(2.6, (alongX ? r.z1 - r.z0 : r.x1 - r.x0) * 0.28);
+    const yr = top + rise;
+    b.box(r.x0 - 0.08, top - 0.25, r.z0 - 0.08, r.x1 + 0.08, top, r.z1 + 0.08, VH.colMul(wall, 0.88), { skip: { top: true }, bottom: true });
+    if (alongX) {
+      const zm = (z0 + z1) / 2;
+      b.polygon([[x0, top, z1], [x1, top, z1], [x1, yr, zm], [x0, yr, zm]], tile);
+      b.polygon([[x1, top, z0], [x0, top, z0], [x0, yr, zm], [x1, yr, zm]], tile);
+      b.polygon([[r.x1, top, r.z1], [r.x1, top, r.z0], [r.x1, yr, zm]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x0, top, r.z0], [r.x0, top, r.z1], [r.x0, yr, zm]], wall, [0, 0, 0, seed]);
+    } else {
+      const xm = (x0 + x1) / 2;
+      b.polygon([[x1, top, z1], [x1, top, z0], [xm, yr, z0], [xm, yr, z1]], tile);
+      b.polygon([[x0, top, z0], [x0, top, z1], [xm, yr, z1], [xm, yr, z0]], tile);
+      b.polygon([[r.x0, top, r.z1], [r.x1, top, r.z1], [xm, yr, r.z1]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x1, top, r.z0], [r.x0, top, r.z0], [xm, yr, r.z0]], wall, [0, 0, 0, seed]);
+    }
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + rise * 0.6);
+    // Front lawn and a driveway from the pavement to a garage door at one end.
+    const horiz = side === 'n' || side === 's';
+    let gx0, gx1, gz0, gz1;
+    if (side === 'n') { gx0 = lot.minX; gx1 = lot.maxX; gz0 = lot.minZ; gz1 = r.z0; }
+    else if (side === 's') { gx0 = lot.minX; gx1 = lot.maxX; gz0 = r.z1; gz1 = lot.maxZ; }
+    else if (side === 'w') { gx0 = lot.minX; gx1 = r.x0; gz0 = lot.minZ; gz1 = lot.maxZ; }
+    else { gx0 = r.x1; gx1 = lot.maxX; gz0 = lot.minZ; gz1 = lot.maxZ; }
+    const dw = 3.4; // driveway width
+    const atStart = rng.chance(0.5);
+    const a0 = horiz ? r.x0 : r.z0;
+    const a1 = horiz ? r.x1 : r.z1;
+    const d0 = atStart ? a0 + 0.6 : a1 - 0.6 - dw;
+    const d1 = d0 + dw;
+    const drive = horiz ? [d0, gz0, d1, gz1] : [gx0, d0, gx1, d1];
+    ctx.asphaltTop.topRect(drive[0], drive[1], drive[2], drive[3], KERB, VH.col(0xc8c4bc), 4);
+    for (const g of horiz ? [[gx0, gz0, d0, gz1], [d1, gz0, gx1, gz1]] : [[gx0, gz0, gx1, d0], [gx0, d1, gx1, gz1]]) {
+      if (g[2] - g[0] < 0.5 || g[3] - g[1] < 0.5) continue;
+      ctx.grassTop.topRect(g[0], g[1], g[2], g[3], KERB, VH.col(0xffffff), 6);
+      if (ctx.addLawn) ctx.addLawn(g[0], g[1], g[2], g[3]);
+    }
+    // Garage door and front door on the street face.
+    const door = VH.col(rng.pick([0xe8e4dc, 0xd8cdb8, 0x9a968e, 0x6b5848]));
+    const fd = pick(rng, pal.accents, 0.05);
+    const doorAt = atStart ? a1 - 3 : a0 + 2;
+    if (side === 's') { b.box(d0 + 0.2, KERB, r.z1, d1 - 0.2, KERB + 2.3, r.z1 + 0.08, door); b.box(doorAt, KERB, r.z1, doorAt + 1, KERB + 2.1, r.z1 + 0.08, fd); }
+    else if (side === 'n') { b.box(d0 + 0.2, KERB, r.z0 - 0.08, d1 - 0.2, KERB + 2.3, r.z0, door); b.box(doorAt, KERB, r.z0 - 0.08, doorAt + 1, KERB + 2.1, r.z0, fd); }
+    else if (side === 'e') { b.box(r.x1, KERB, d0 + 0.2, r.x1 + 0.08, KERB + 2.3, d1 - 0.2, door); b.box(r.x1, KERB, doorAt, r.x1 + 0.08, KERB + 2.1, doorAt + 1, fd); }
+    else { b.box(r.x0 - 0.08, KERB, d0 + 0.2, r.x0, KERB + 2.3, d1 - 0.2, door); b.box(r.x0 - 0.08, KERB, doorAt, r.x0, KERB + 2.1, doorAt + 1, fd); }
+    // A tree or a palm in the lawn, and a low fence round the back.
+    if (rng.chance(0.7)) {
+      const tx = horiz ? (atStart ? (d1 + gx1) / 2 : (gx0 + d0) / 2) : (gx0 + gx1) / 2;
+      const tz = horiz ? (gz0 + gz1) / 2 : atStart ? (d1 + gz1) / 2 : (gz0 + d0) / 2;
+      ctx.addProp(rng.chance(0.6) ? 'tree' : 'palm', tx, tz, rng.range(0, 6.28), rng.range(0.6, 0.85), KERB);
+    }
+    return yr;
+  }
+
+  /** Industrial shed or warehouse: a big box, a shallow roof, roller doors and a yard. */
+  function shed(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = rng.range(6, 10); // a forecourt for the lorries
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 8 || r.z1 - r.z0 < 8) return parking(ctx, lot) || 0;
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const h = 4.5 + floors * 2.6;
+    const top = KERB + h;
+    const wall = pick(rng, pal.walls, 0.06);
+    const F = { wall, style: 3, ww: 0.9, wh: 0.18, bay: rng.range(5, 7), floorH: h, seed, vStart: 0.72 };
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    // Ribbed low-pitch roof.
+    const roofCol = pick(rng, pal.roofs, 0.05);
+    roof(b, r.x0, r.z0, r.x1, r.z1, top, roofCol, seed);
+    const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+    for (let p = (alongX ? r.x0 : r.z0) + 3; p < (alongX ? r.x1 : r.z1) - 1; p += 3) {
+      if (alongX) b.box(p - 0.12, top, r.z0, p + 0.12, top + 0.25, r.z1, VH.colMul(roofCol, 0.85), { bottom: false });
+      else b.box(r.x0, top, p - 0.12, r.x1, top + 0.25, p + 0.12, VH.colMul(roofCol, 0.85), { bottom: false });
+    }
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 0.3);
+    // Forecourt and roller doors on the street face.
+    const accent = pick(rng, pal.accents, 0.05);
+    const doors = VH.col(0x8a8f96);
+    alongFace(r, side, inset[side] - 0.2, (x0, z0, x1, z1) => {
+      ctx.asphaltTop.topRect(x0, z0, x1, z1, KERB, VH.col(0xc4c4c4), 6);
+    });
+    const len = side === 'n' || side === 's' ? r.x1 - r.x0 : r.z1 - r.z0;
+    const n = Math.max(1, Math.floor(len / 12));
+    for (let i = 0; i < n; i++) {
+      const c = (i + 0.5) * (len / n);
+      const w = 4.2;
+      if (side === 's') b.box(r.x0 + c - w / 2, KERB, r.z1, r.x0 + c + w / 2, KERB + 4.6, r.z1 + 0.1, doors);
+      else if (side === 'n') b.box(r.x0 + c - w / 2, KERB, r.z0 - 0.1, r.x0 + c + w / 2, KERB + 4.6, r.z0, doors);
+      else if (side === 'e') b.box(r.x1, KERB, r.z0 + c - w / 2, r.x1 + 0.1, KERB + 4.6, r.z0 + c + w / 2, doors);
+      else b.box(r.x0 - 0.1, KERB, r.z0 + c - w / 2, r.x0, KERB + 4.6, r.z0 + c + w / 2, doors);
+    }
+    // A stripe of company colour under the eaves.
+    if (side === 's') b.box(r.x0, top - 1.2, r.z1, r.x1, top - 0.4, r.z1 + 0.06, accent);
+    else if (side === 'n') b.box(r.x0, top - 1.2, r.z0 - 0.06, r.x1, top - 0.4, r.z0, accent);
+    else if (side === 'e') b.box(r.x1, top - 1.2, r.z0, r.x1 + 0.06, top - 0.4, r.z1, accent);
+    else b.box(r.x0 - 0.06, top - 1.2, r.z0, r.x0, top - 0.4, r.z1, accent);
+    if (rng.chance(0.5)) {
+      const px = rng.range(r.x0 + 2, r.x1 - 2);
+      const pz = rng.range(r.z0 + 2, r.z1 - 2);
+      ctx.addProp('dumpster', side === 'e' || side === 'w' ? (side === 'e' ? r.x1 + 1.5 : r.x0 - 1.5) : px, side === 'n' || side === 's' ? (side === 's' ? r.z1 + 1.5 : r.z0 - 1.5) : pz, side === 'e' || side === 'w' ? Math.PI / 2 : 0, 1);
+    }
+    return top + 0.3;
+  }
+
+  /**
+   * Low-rise strip (a motel, beach shops, a diner row): one or two storeys,
+   * a walkway along the front under a canopy, doors and windows in a row.
+   */
+  function lowrise(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const inset = { n: 1.5, s: 1.5, e: 1.5, w: 1.5 };
+    inset[side] = rng.range(3.5, 6);
+    for (const s of ['n', 's', 'e', 'w']) if (s !== side && lot.front[s]) inset[s] = 1;
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 6 || r.z1 - r.z0 < 6) return courtyard(ctx, lot, rng) || 0;
+    const wall = pick(rng, pal.walls, 0.06);
+    const floorH = 3.3;
+    const top = KERB + floors * floorH;
+    const F = { wall, style: 4, ww: rng.range(0.55, 0.75), wh: 0.62, bay: rng.range(3.4, 4.4), floorH, seed };
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    const trim = pick(rng, pal.accents, 0.05);
+    cornice(b, r.x0, r.z0, r.x1, r.z1, top, 0.5, 0.25, trim);
+    roof(b, r.x0, r.z0, r.x1, r.z1, top + 0.5, pick(rng, pal.roofs), seed);
+    parapet(b, r.x0, r.z0, r.x1, r.z1, top + 0.5, 0.6, 0.25, VH.colMul(wall, 0.92));
+    if (rng.chance(0.4)) rooftopClutter(b, rng, r.x0, r.z0, r.x1, r.z1, top + 0.5, { tanks: 0.2 });
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 1.1);
+    // Canopy over the front walkway on slim posts (and a balcony walk on the upper floor).
+    const canopy = pick(rng, pal.accents, 0.05);
+    const depth = Math.min(2.6, inset[side] - 0.6);
+    alongFace(r, side, depth, (x0, z0, x1, z1, ox, oz) => {
+      b.box(x0, KERB + floorH - 0.25, z0, x1, KERB + floorH, z1, canopy, { bottom: true });
+      const alongX = oz !== 0;
+      const a0 = alongX ? x0 : z0;
+      const a1 = alongX ? x1 : z1;
+      const post = VH.colMul(canopy, 0.8);
+      for (let p = a0 + 0.3; p <= a1 - 0.2; p += Math.max(3, (a1 - a0) / Math.max(1, Math.round((a1 - a0) / 4.5)))) {
+        const px = alongX ? p : ox > 0 ? x1 - 0.2 : x0 + 0.1;
+        const pz = alongX ? (oz > 0 ? z1 - 0.2 : z0 + 0.1) : p;
+        b.box(px, KERB, pz, px + 0.12, KERB + floorH - 0.25, pz + 0.12, post);
+      }
+      if (floors > 1) b.box(x0, KERB + floorH + 0.9, z0, x1, KERB + floorH + 1.0, z1, VH.col(0xe8e4dc), { bottom: true });
+    });
+    shopSigns(ctx, lot, r, rng, KERB + floorH + 0.05);
+    return top + 1.1;
+  }
+
+  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa, house, shed, lowrise };
 
   const Buildings = {
     /** Build one lot. Returns the height of the tallest point. */
