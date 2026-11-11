@@ -61,15 +61,40 @@
   const DRIVEBY = ['smg', 'sawnoff', 'revolver', 'pistol'];
 
   // --------------------------------------------------------- projectile
+  /** A point in an airliner's own frame (airside.js: yaw, then the body's pitch, about x, z, y). */
+  function planeLocal(pl, x, y, z) {
+    const c = Math.cos(pl.yaw);
+    const s = Math.sin(pl.yaw);
+    const dx = x - pl.x;
+    const dz = z - pl.z;
+    const yy = y - pl.y;
+    const zz = dx * s + dz * c;
+    const cp = Math.cos(pl.pitch || 0);
+    const sp = Math.sin(pl.pitch || 0);
+    return { x: dx * c - dz * s, y: yy * cp - zz * sp, z: yy * sp + zz * cp };
+  }
+
+  /** ...and back into the world, wherever the plane is now. */
+  function planeWorld(pl, lx, ly, lz) {
+    const cp = Math.cos(pl.pitch || 0);
+    const sp = Math.sin(pl.pitch || 0);
+    const y = ly * cp + lz * sp;
+    const z = -ly * sp + lz * cp;
+    const c = Math.cos(pl.yaw);
+    const s = Math.sin(pl.yaw);
+    return { x: pl.x + lx * c + z * s, y: pl.y + y, z: pl.z - lx * s + z * c };
+  }
+
   /**
    * Anything that flies: a thrown grenade, molotov or limpet charge, a
    * rocket, a 40 mm grenade. What it does comes from the weapon's data:
    *   projectile   launched: straight (rocket) or arcing and bouncing (GL);
    *                bursts on anyone or any car it touches once armed
-   *   sticky       a limpet: sticks to the first thing it hits (cars carry
-   *                it along) and waits for R
+   *   sticky       a limpet: sticks to the first thing it hits (cars and
+   *                airliners carry it along) and waits for R
    *   fuse 0       bursts on impact (a molotov: a pool of fire)
-   *   otherwise    bounces until its fuse runs out (a frag grenade)
+   *   otherwise    bounces until its fuse runs out (a frag grenade; off
+   *                an airliner too, and it can lie on a wing as it taxis)
    */
   class Thrown {
     constructor(combat, weapon, x, y, z, vx, vy, vz, owner) {
@@ -109,6 +134,8 @@
         if (this.blowIn !== undefined) {
           this.blowIn -= dt;
           if (this.blowIn <= 0) this._explode();
+        } else if (this.kind === 'grenade') {
+          if (this.t > this.fuse) this._explode();
         } else if (this.t > 600) this._remove();
         return;
       }
@@ -134,11 +161,23 @@
               hv = v;
             }
           }
-          // Airliners aren't in the physics: havoc-air.js says where one is.
-          const air = this.kind !== 'sticky' && g.airportHavoc && g.airportHavoc.air;
-          const tp = air && air.rayPlanes ? air.rayPlanes(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, Math.min(ht, ha ? ha.t : ht)) : -1;
+          // Airliners aren't in the physics: havoc-air.js says where one is (a limpet sticks on).
+          const air = g.airportHavoc && g.airportHavoc.air;
+          if (this.kind === 'sticky') {
+            const hp = air && air.planeContact ? air.planeContact(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, ht) : null;
+            if (hp) {
+              this._stickPlane(hp, false);
+              return;
+            }
+          }
+          const tp = this.kind !== 'sticky' && air && air.rayPlanes ? air.rayPlanes(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, Math.min(ht, ha ? ha.t : ht)) : -1;
           if (tp >= 0) {
             this.pos.set(this.pos.x + dx * tp, this.pos.y + dy * tp, this.pos.z + dz * tp);
+            // (A molotov on an airliner sets it alight, havoc-air.js, and burns on the ground under it.)
+            if (this.kind === 'burst' && air.molotov) {
+              air.molotov(this.pos.x, this.pos.y, this.pos.z, this.owner === 'player' ? PLAYER_SOURCE : this.owner);
+              this.pos.y = g.physics.groundHeight(this.pos.x, this.pos.z, Math.min(this.pos.y, 1.2));
+            }
             this._contact(null);
             return;
           }
@@ -153,8 +192,34 @@
             return;
           }
         }
-        const hit = g.physics.raycast(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, len + 0.05, { flags: VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS, ground: true });
-        if (hit) {
+        // A grenade off an airliner: it bounces, and once it's barely moving on top of a wing (or
+        // the body) it lies there, going wherever the plane goes, till it goes off.
+        const air = this.kind === 'grenade' && g.airportHavoc && g.airportHavoc.air;
+        const hp = air && air.planeContact ? air.planeContact(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, len + 0.05) : null;
+        const hit = hp ? null : g.physics.raycast(this.pos.x, this.pos.y, this.pos.z, dx, dy, dz, len + 0.05, { flags: VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS, ground: true });
+        if (hp) {
+          const n = this._n || (this._n = new THREE.Vector3());
+          n.set(hp.nx, hp.ny, hp.nz);
+          // (Off the plane's own movement, near enough: a taxiing one knocks it on.)
+          const pv = hp.plane.v || 0;
+          const vx = Math.sin(hp.plane.yaw) * pv;
+          const vz = Math.cos(hp.plane.yaw) * pv;
+          this.vel.x -= vx;
+          this.vel.z -= vz;
+          this.vel.reflect(n).multiplyScalar(0.42);
+          this.vel.x += vx;
+          this.vel.z += vz;
+          const sp = Math.hypot(this.vel.x - vx, this.vel.y, this.vel.z - vz);
+          next.set(hp.x + n.x * 0.06, hp.y + n.y * 0.06, hp.z + n.z * 0.06);
+          if (g.audio.grenadeBounce && sp > 1.5) g.audio.grenadeBounce(c.pan(hp.x, hp.z), c.gain(hp.x, hp.z, 10));
+          if (sp < 2.2 && n.y > 0.55) {
+            hp.x = next.x - n.x * 0.03;
+            hp.y = next.y - n.y * 0.03;
+            hp.z = next.z - n.z * 0.03;
+            this._stickPlane(hp, true);
+            return;
+          }
+        } else if (hit) {
           if (this.kind === 'burst' || (this.kind === 'launched' && !this.w.projectile.bounce && armed)) {
             this.pos.set(hit.x, hit.y, hit.z);
             this._contact(null, hit);
@@ -216,9 +281,43 @@
       VH.events.emit('limpet:stuck', { x: this.pos.x, z: this.pos.z });
     }
 
-    /** A charge on a car goes where the car goes. */
+    /**
+     * On an airliner (a limpet stuck to it, or a grenade come to rest on it), from havoc-air.js's
+     * planeContact: it keeps its place on the plane (in the plane's own frame), wherever it goes.
+     */
+    _stickPlane(hp, rest) {
+      const pl = hp.plane;
+      const n = new THREE.Vector3(hp.nx, hp.ny, hp.nz);
+      this.pos.set(hp.x + n.x * 0.03, hp.y + n.y * 0.03, hp.z + n.z * 0.03);
+      if (!rest) this.mesh.quaternion.setFromUnitVectors(this._fwd.set(0, 1, 0), n);
+      const q = (this._pq || (this._pq = new THREE.Quaternion())).setFromEuler(new THREE.Euler(-(pl.pitch || 0), pl.yaw, 0, 'YXZ'));
+      const L = planeLocal(pl, this.pos.x, this.pos.y, this.pos.z);
+      this.stuck = { v: null, pl, lx: L.x, ly: L.y, lz: L.z, q: q.invert().multiply(this.mesh.quaternion.clone()) };
+      this.vel.set(0, 0, 0);
+      this.mesh.position.copy(this.pos);
+      if (rest) return;
+      const g = this.combat.game;
+      if (g.audio.limpetStick) g.audio.limpetStick(this.combat.pan(this.pos.x, this.pos.z), this.combat.gain(this.pos.x, this.pos.z, 10));
+      VH.events.emit('limpet:stuck', { x: this.pos.x, z: this.pos.z, plane: true });
+    }
+
+    /** A charge on a car (or a plane) goes where the car goes. */
     _ride() {
       const s = this.stuck;
+      if (s.pl) {
+        const pl = s.pl;
+        // The plane's gone (cleared away, or swapped for one Jay flies): it drops off where it was.
+        if (pl.gone) {
+          this.stuck = null;
+          return;
+        }
+        const W = planeWorld(pl, s.lx, s.ly, s.lz);
+        this.pos.set(W.x, W.y, W.z);
+        this.mesh.position.copy(this.pos);
+        const q = (this._pq || (this._pq = new THREE.Quaternion())).setFromEuler(new THREE.Euler(-(pl.pitch || 0), pl.yaw, 0, 'YXZ'));
+        this.mesh.quaternion.copy(q.multiply(s.q));
+        return;
+      }
       if (!s.v) return;
       const v = s.v;
       if (v.removed) {
@@ -1702,7 +1801,7 @@
       if (!inv) return;
       const spare = this.reserve(w.id);
       if (inv.mag + spare <= 0) return;
-      if (w.sticky && this.thrown.filter((t) => t.stuck || (t.w && t.w.sticky)).length >= (pool(w.ammoType) || { max: 8 }).max) {
+      if (w.sticky && this.thrown.filter((t) => t.kind === 'sticky').length >= (pool(w.ammoType) || { max: 8 }).max) {
         g.hud.showToast('Set the charges off first (' + g.input.labelFor('reload') + ')');
         return;
       }
@@ -1742,7 +1841,7 @@
     /** R with limpets out: every planted charge goes off. */
     detonate() {
       const g = this.game;
-      const list = this.thrown.filter((t) => t.stuck && t.blowIn === undefined);
+      const list = this.thrown.filter((t) => t.stuck && t.kind === 'sticky' && t.blowIn === undefined);
       if (!list.length) return;
       if (g.audio.detonatorClick) g.audio.detonatorClick();
       // One after another, a beat apart (game time: a pause holds them).

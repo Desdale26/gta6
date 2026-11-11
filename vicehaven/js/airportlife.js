@@ -66,7 +66,12 @@
   const CAP = { low: [36, 10], medium: [46, 12], high: [60, 14], ultra: [64, 15] };
   // How many travellers each part of the hall wants when Jay is close by.
   const DEMAND = { checkin: 16, landside: 8, arrivals: 6, security: 10, shops: 6, food: 11, baggage: 0, concourse: 5 };
-  const GATE_DEMAND = [2, 12]; // a gate with no flight, with one
+  const GATE_DEMAND = [2, 12, 36]; // a gate with no flight, with one, boarding (a stream down the bridge)
+  // Boarding by Jay: this many more people inside at most (the gate takes them first), the gate
+  // desk scanning passes this fast, and the stream down the bridge at this pace.
+  const BOARD_EXTRA = { low: 8, medium: 12, high: 14, ultra: 14 };
+  const BOARD_SCAN = [0.7, 1.25];
+  const BOARD_WALK = [1.4, 1.65];
   // Which side of the partition each part of the hall is on (Jay can't see over it).
   const LANDSIDE = { checkin: 1, landside: 1, arrivals: 1 };
   // The shops, cafés and desks with someone behind them (the others are closed).
@@ -464,6 +469,8 @@
       this.cart = null;
       this.pace = 0;
       this.lead = null; // the one they walk with
+      this.cab = null; //  on a jet bridge or in a cabin: { stand, x, z, seat } (cabinYield)
+      this.give = null; // ...giving way to Jay there
       this.a = null;
     }
 
@@ -497,6 +504,7 @@
       a.moveSpeed = 0;
       switch (this.mode) {
         case 'walk':
+          if (this.cab && L.cabinYield(this, a, dt)) break;
           if (this.walk(a, dt, this.speed)) L.arrived(this, a);
           break;
         case 'queue':
@@ -777,9 +785,15 @@
       const face = (d) => (d.queue && d.queue.length ? Math.atan2(d.x - d.queue[0].x, d.z - d.queue[0].z) : d.yaw + PI);
       for (const d of this.desks) {
         if (!d.queue || !d.queue.length) continue;
-        const serve = d.kind === 'checkin' ? [16, 32] : d.kind === 'gate' ? [1.6, 2.8] : d.kind === 'cafe' ? [8, 15] : d.kind === 'hire' ? [14, 26] : [5, 10];
-        const ln = new Line(d.id, d.queue, face(d), serve, d.kind === 'gate' ? 4 : 2);
+        const serve = d.kind === 'checkin' ? [16, 32] : d.kind === 'gate' ? BOARD_SCAN : d.kind === 'cafe' ? [8, 15] : d.kind === 'hire' ? [14, 26] : [5, 10];
+        const ln = new Line(d.id, d.queue, face(d), serve, d.kind === 'gate' ? 8 : 2);
         ln.desk = d;
+        // A long boarding queue turns at its end and runs along the lounge (clear of the seats
+        // and of the concourse beyond).
+        if (d.kind === 'gate') {
+          ln.ex = -1.1;
+          ln.ez = 0;
+        }
         this.lines[d.id] = ln;
       }
       // Check-in: one desk open per airline (most of them), a second at the busiest.
@@ -966,8 +980,11 @@
     }
 
     _quality() {
-      const q = this.game.settings && this.game.settings.get ? this.game.settings.get('graphics.quality') : 'medium';
-      return CAP[q] || CAP.medium;
+      return CAP[this._qualityKey()] || CAP.medium;
+    }
+
+    _qualityKey() {
+      return this.game.settings && this.game.settings.get ? this.game.settings.get('graphics.quality') : 'medium';
     }
 
     _flights() {
@@ -1261,7 +1278,8 @@
       b.served = 0;
       b.mode = 'queue';
       // Along the map to where the queue would end at its longest, then up to the back of it.
-      const e = line.spot(line.cap - 1);
+      // (Boarding, straight to the back of it as it is: the stream keeps moving.)
+      const e = line.spot(line.desk && line.desk.kind === 'gate' ? Math.min(line.cap - 1, line.q.length + line.coming - 1) : line.cap - 1);
       const via = b.exitVia;
       b.exitVia = null;
       if (via) {
@@ -1314,9 +1332,11 @@
       const dx = s.x - a.pos.x;
       const dz = s.z - a.pos.z;
       const d = Math.hypot(dx, dz);
-      if (d > 0.22 && !(a.blocked > 1.2 && d < 0.8)) {
+      // (Boarding, the queue keeps moving: the pass is scanned as they step up to the desk.)
+      const brisk = line.desk && line.desk.kind === 'gate';
+      if (d > (brisk && qi === 0 ? 0.55 : 0.22) && !(a.blocked > 1.2 && d < 0.8)) {
         a.heading = dampAngle(a.heading, Math.atan2(dx, dz), 8, dt);
-        a.moveSpeed = Math.min(1.1, d * 1.8 + 0.2);
+        a.moveSpeed = brisk ? Math.min(1.45, d * 2.4 + 0.35) : Math.min(1.1, d * 1.8 + 0.2);
         b.served = 0;
         return;
       }
@@ -1890,7 +1910,147 @@
       b.pi = 0;
       b.then = (bb, aa) => this._intoCabin(bb, aa, g.stand);
       b.dest = pts[pts.length - 1];
-      b.speed = Math.max(b.speed, 1.3);
+      b.speed = Math.max(b.speed, BOARD_WALK[0]);
+      this._cabOn(b, g.stand);
+    }
+
+    /**
+     * On a jet bridge or in a cabin (b.cab: the stand, its plane's frame, their seat): they give
+     * way to Jay there (cabinYield; and crowd.js never has them shove him).
+     */
+    _cabOn(b, stand) {
+      const A = this.game.airside;
+      const st = A && A.stands ? A.stands().find((s) => s.id === stand) : null;
+      b.cab = st ? { stand, x: st.x, z: st.z, seat: -1 } : null;
+      b.give = null;
+      if (b.a) b.a.giveWay = !!b.cab;
+    }
+
+    /**
+     * In a cabin's aisle with Jay in the way, nobody shoves past him: they stop, and if he stays
+     * put (or comes on) they step into the row beside them (a boarding one sits down there if
+     * there's a seat free) until he's by, then carry on. True while they're giving way.
+     */
+    cabinYield(b, a, dt) {
+      const cab = b.cab;
+      const C = this.game.cabin;
+      const p = this.game.player;
+      // Back down on the terminal floor (off the plane): done with that.
+      if ((a.pos.y < 2 && b.stage !== 'bridge') || !C || !C.giveWay) {
+        b.cab = null;
+        b.give = null;
+        a.giveWay = false;
+        a.passJay = false;
+        return false;
+      }
+      const lx = a.pos.x - cab.x;
+      const lz = a.pos.z - cab.z;
+      // Still aboard a cabin that's gone (its plane shut up and moving, or Jay far off): they're
+      // in their seats, out of sight.
+      if (a.pos.y > 2.5 && Math.abs(lx) < 2.3 && lz < 15.6 && lz > -12 && C.live && !C.live.some((q) => q.st.id === cab.stand)) {
+        b.mode = 'gone';
+        b.gone = true;
+        return true;
+      }
+      const inAisle = Math.abs(lx) < 0.7 && lz < 12.7 && lz > -9.5;
+      const w = b.path && b.path[b.pi];
+      let fx = w ? w.x - a.pos.x : Math.sin(a.heading);
+      let fz = w ? w.z - a.pos.z : Math.cos(a.heading);
+      const fl = Math.hypot(fx, fz) || 1;
+      fx /= fl;
+      fz /= fl;
+      const rx = p.pos.x - a.pos.x;
+      const rz = p.pos.z - a.pos.z;
+      const along = rx * fx + rz * fz;
+      const across = Math.abs(rx * fz - rz * fx);
+      const near = !p.inVehicle && Math.abs(p.pos.y - a.pos.y) < 1.2 && Math.hypot(rx, rz) < 4;
+      let G = b.give;
+      // Squeezing past him (he wouldn't budge): on their way, not touching him, till they're by.
+      if (G && G.ph === 'pass') {
+        G.t += dt;
+        if (G.t > 6 || along < -1.1 || !near) {
+          b.give = null;
+          a.passJay = false;
+        }
+        return false;
+      }
+      if (!G) {
+        // Only along the aisle (by the door there's room to step round him; crowd.js sees to that).
+        if (!near || !inAisle || along < 0 || along > 1.45 || across > 0.7) return false;
+        G = b.give = { ph: 'stop', t: 0, dir: Math.sign(fz) || 1 };
+      }
+      G.t += dt;
+      a.moveSpeed = 0;
+      a.vel.x = a.vel.z = 0;
+      const pin = (q, yaw) => {
+        a.pos.x = q.x;
+        a.pos.z = q.z;
+        a.heading = dampAngle(a.heading, yaw, 8, dt);
+      };
+      switch (G.ph) {
+        case 'stop': {
+          if (!near || along < -0.2 || along > 1.9 || across > 0.9) {
+            b.give = null;
+            return false;
+          }
+          a.heading = dampAngle(a.heading, Math.atan2(rx, rz), 5, dt);
+          if (G.t < 0.8) return true;
+          // Still there: into the row beside them (the side he isn't on), and a boarding one
+          // sits down there if there's a seat.
+          const side = p.pos.x - cab.x > 0.05 ? -1 : p.pos.x - cab.x < -0.05 ? 1 : a.id % 2 ? 1 : -1;
+          const to = C.giveWay(cab.stand, a.pos.x, a.pos.z, G.dir, side, b.kind === 'dep' ? cab.seat : -1);
+          if (!to) return true;
+          G.ph = 'out';
+          G.t = 0;
+          G.side = to.side;
+          G.from = { x: a.pos.x, z: a.pos.z };
+          G.to = to;
+          G.seat = to.seat;
+          G.dur = 0.45 + 0.3 * Math.hypot(to.x - a.pos.x, to.z - a.pos.z);
+          if (G.seat >= 0) cab.seat = G.seat;
+          return true;
+        }
+        case 'out': {
+          const k = smoothstep(0, 1, Math.min(1, G.t / G.dur));
+          pin({ x: lerp(G.from.x, G.to.x, k), z: lerp(G.from.z, G.to.z, k) }, G.side > 0 ? PI / 2 : -PI / 2);
+          if (k < 1) return true;
+          if (G.seat >= 0) {
+            // Sat down there: one of the seated passengers now.
+            C.seated(cab.stand, G.seat);
+            b.mode = 'gone';
+            b.gone = true;
+            b.give = null;
+            return true;
+          }
+          G.ph = 'aside';
+          G.t = 0;
+          return true;
+        }
+        case 'aside': {
+          pin(G.to, G.side > 0 ? -PI / 2 : PI / 2);
+          // He's gone by (or off), and the aisle beside them is clear: back out and on. He's
+          // stood there a good while: out anyway, and squeeze past him.
+          const by = (p.pos.z - G.to.z) * G.dir;
+          const clear = Math.hypot(p.pos.x - G.from.x, p.pos.z - G.from.z) > 1.0;
+          if (G.t > 0.6 && ((clear && (!near || by < -0.8 || by > 3.2)) || G.t > 9)) {
+            G.squeeze = near && by > -0.8 && by < 3.2;
+            G.ph = 'back';
+            G.t = 0;
+          }
+          return true;
+        }
+        case 'back': {
+          const k = smoothstep(0, 1, Math.min(1, G.t / G.dur));
+          pin({ x: lerp(G.to.x, G.from.x, k), z: lerp(G.to.z, G.from.z, k) }, G.dir > 0 ? 0 : PI);
+          if (k < 1) return true;
+          b.give = G.squeeze ? { ph: 'pass', t: 0, dir: G.dir } : null;
+          a.passJay = !!G.squeeze;
+          return false;
+        }
+        default:
+          b.give = null;
+          return false;
+      }
     }
 
     /**
@@ -1911,8 +2071,10 @@
       b.path = way.pts;
       b.pi = 0;
       b.dest = null; // (no map in there to find another way by)
+      if (!b.cab) this._cabOn(b, stand);
+      if (b.cab) b.cab.seat = way.seat;
       b.then = (bb) => {
-        if (C.seated) C.seated(stand, way.seat);
+        if (C.seated) C.seated(stand, bb.cab ? bb.cab.seat : way.seat);
         bb.mode = 'gone';
         bb.gone = true;
       };
@@ -1966,7 +2128,7 @@
         if (b.kind !== 'dep' || b.gate !== gate) continue;
         if (b.flight && e.flight && b.flight.id !== e.flight.id) continue;
         b.flight = e.flight || b.flight;
-        b.boardAt = this._t + rnd(2, 55);
+        b.boardAt = this._t + rnd(1, 30);
       }
       this._announce('boarding', e.flight, 6);
     }
@@ -1976,9 +2138,10 @@
       if (!f) return;
       this.closed.add(f.id);
       for (const [g, fl] of this.boarding) if (fl && fl.id === f.id) this.boarding.delete(g);
-      // Anyone still waiting for it has missed it.
+      // Anyone still waiting for it has missed it (those at the front of the queue get on).
       for (const b of this.list) {
-        if (b.kind !== 'dep' || !b.flight || b.flight.id !== f.id || b.stage === 'bridge') continue;
+        if (b.kind !== 'dep' || !b.flight || b.flight.id !== f.id || b.stage === 'bridge' || b.stage === 'cabin') continue;
+        if (b.joined && b.line && b.line.desk && b.line.desk.kind === 'gate' && b.line.q.indexOf(b) < 4) continue;
         b.flight = null;
         b.boardAt = 0;
         if (b.line && b.line.desk && b.line.desk.kind === 'gate') {
@@ -2051,6 +2214,7 @@
       b.stage = 'reclaim';
       b.then = null;
       if (q.atRec) this._arrNext(b, b.a, 'reclaim');
+      else this._cabOn(b, g.stand);
     }
 
     _arrNext(b, a, st) {
@@ -3163,7 +3327,8 @@
     _direct() {
       const g = this.game;
       const p = g.player.pos;
-      const [capIn, capOut] = this._quality();
+      const [cap0, capOut] = this._quality();
+      let capIn = cap0;
       this.capIn = capIn;
       this.capOut = capOut;
       const night = (g.environment && g.environment.nightFactor) || 0;
@@ -3234,16 +3399,25 @@
       }
       // Travellers: each part of the hall's share of the room left.
       if (zones.length) {
+        // A gate boarding by Jay comes first: a stream of travellers to its desk and down the
+        // bridge (and a few more people inside than usual meanwhile); the rest share what's left.
         let sum = 0;
+        let rush = 0;
         for (const z of zones) {
-          const base = z.gate ? (this._depAt(z.gate) ? GATE_DEMAND[1] : GATE_DEMAND[0]) : DEMAND[z.id] || 0;
+          const boarding = !!z.gate && this.boarding.has(z.gate) && this._canBoard(z.gate);
+          const base = z.gate ? (boarding ? GATE_DEMAND[2] : this._depAt(z.gate) ? GATE_DEMAND[1] : GATE_DEMAND[0]) : DEMAND[z.id] || 0;
           z.want = panic ? 0 : base * z.w * nightK;
+          z.rush = boarding && !panic && z.w > 0.4;
           if (z.id === 'baggage' && !panic) z.want = this._belts().length ? 8 * z.w : 0;
-          sum += z.want;
+          if (z.rush) rush += z.want;
+          else sum += z.want;
         }
+        if (rush > 0) capIn += BOARD_EXTRA[this._qualityKey()] || BOARD_EXTRA.medium;
         const room = Math.max(0, capIn - staff - 3);
-        const k = sum > room ? room / sum : 1;
-        for (const z of zones) z.want *= k;
+        const kr = rush > room * 0.75 ? (room * 0.75) / rush : 1;
+        const left = Math.max(0, room - rush * kr);
+        const k = sum > left ? left / sum : 1;
+        for (const z of zones) z.want *= z.rush ? kr : k;
         // Too many here now (Jay walked away): a few quietly go.
         for (const z of zones) {
           if (z.n - z.want < 2.5 && !(inside > capIn && z.w < 0.5)) continue;
@@ -3451,12 +3625,38 @@
         default: {
           if (!z.gate) return null;
           const f = this._depAt(z.gate);
+          const mine = (b) => {
+            b.gate = z.gate;
+            b.flight = f;
+            if (z.rush) b.speed = rnd(BOARD_WALK[0], BOARD_WALK[1]);
+            return b;
+          };
+          if (z.rush) {
+            // Boarding by Jay: the stream to the desk. At the back of its queue (out of his
+            // sight), or along the concourse hurrying to it; else up out of a seat in a moment.
+            const g = this.gateBy[z.gate];
+            const d = g && this.desks[g.desk];
+            const ln = d && this.lines[d.id];
+            if (ln && chance(0.75)) {
+              const b = inLine(ln, { case: false, stage: 'boarding' });
+              if (b) return mine(b);
+            }
+            if (g && chance(0.5)) {
+              const N = this.nav;
+              const near = N.nodes.filter((n) => /^sp-/.test(n.id) && Math.abs(n.x - g.x) < 45 && Math.abs(n.x - g.x) > 8 && ok(n.x, n.z));
+              if (near.length) {
+                const n = pick(near);
+                const b = mine(dep(n.x + rnd(-1, 1), n.z + rnd(-0.6, 0.6), { case: false, stage: 'board' }));
+                this._toBoard(b, b.a);
+                return b;
+              }
+            }
+          }
           if (chance(0.82)) {
             const b = seatIn(id, 1e9, null, 'board');
             if (b) {
-              b.gate = z.gate;
-              b.flight = f;
-              if (this.boarding.has(z.gate)) b.boardAt = this._t + rnd(3, 40);
+              mine(b);
+              if (this.boarding.has(z.gate)) b.boardAt = this._t + (z.rush ? rnd(0.5, 6) : rnd(3, 40));
               return b;
             }
           }

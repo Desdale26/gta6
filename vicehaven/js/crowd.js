@@ -965,7 +965,7 @@
     /** Push Jay out of people (called from the player controller). */
     resolvePlayer(pos, r, y0) {
       for (const a of this.agents) {
-        if (a.state === 'down' || a.hidden) continue;
+        if (a.state === 'down' || a.hidden || a.passJay) continue; // (passJay: squeezing past him in a plane's aisle)
         if (Math.abs(a.pos.y - y0) > 1.2) continue;
         const dx = pos.x - a.pos.x;
         const dz = pos.z - a.pos.z;
@@ -973,10 +973,12 @@
         const d2 = dx * dx + dz * dz;
         if (d2 >= min * min || d2 < 1e-8) continue;
         const d = Math.sqrt(d2);
-        pos.x += (dx / d) * (min - d) * 0.8;
-        pos.z += (dz / d) * (min - d) * 0.8;
-        a.pos.x -= (dx / d) * (min - d) * 0.2;
-        a.pos.z -= (dz / d) * (min - d) * 0.2;
+        // (Someone giving way to him, in a plane's aisle or a jet bridge, mostly moves themselves.)
+        const k = a.giveWay ? 0.12 : 0.8;
+        pos.x += (dx / d) * (min - d) * k;
+        pos.z += (dz / d) * (min - d) * k;
+        a.pos.x -= (dx / d) * (min - d) * (1 - k);
+        a.pos.z -= (dz / d) * (min - d) * (1 - k);
       }
     }
 

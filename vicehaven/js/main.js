@@ -24,7 +24,7 @@
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
   // The Hustle update (v2.0): Rep and Dailies first (others report to them), the Phone last.
-  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Cabin', 'AirportHavoc', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Phone'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Cabin', 'AirportHavoc', 'PlaneSteal', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Phone'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const NEWS_KEY = 'vicehaven.seen.news-v2.3'; // set once the v2.3 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
@@ -1046,7 +1046,7 @@
     _vehiclePrompt() {
       const p = this.player;
       let text = null;
-      if (!p.inVehicle && p.state === 'ground' && !this.vehicles.entering && !this.interaction.current) {
+      if (!p.inVehicle && p.state === 'ground' && !p.frozen && !this.vehicles.entering && !this.interaction.current) {
         const t = this.vehicles.findEnterable(p.pos.x, p.pos.z, 3.2);
         if (t) text = (t.v.driver === 'ai' ? 'Steal ' : 'Get in ') + (t.v.storyName || 'the ' + t.v.name);
       }

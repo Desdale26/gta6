@@ -34,6 +34,12 @@
   class CameraRig {
     constructor(camera, physics, settings, input) {
       this.vehicles = null; // set by the game: the camera keeps out of cars
+      // 0..1: squeezing through a narrow doorway (an airliner's: set by cabin.js): in close,
+      // low and centred, so the arm passes through the opening instead of catching its frame.
+      this.squeeze = 0;
+      // (x, y, z) → true where the aircraft camera mustn't go (inside the terminal, behind its
+      // glass: set by planesteal.js), or null.
+      this.keepOut = null;
       this.camera = camera;
       this.physics = physics;
       this.settings = settings;
@@ -288,9 +294,20 @@
         cam.near = 0.1;
         const m = this.mode;
         const baseDist = Math.max(1.4, m.distance + this.zoom);
-        const dist = lerp(baseDist + sprintFactor * 0.5, 1.75, aim);
+        let dist = lerp(baseDist + sprintFactor * 0.5, 1.75, aim);
         let side = lerp(0.42, 0.62, aim);
-        const up = lerp(m.height, 0.08, aim) - this._dip;
+        let up = lerp(m.height, 0.08, aim) - this._dip;
+        // In a doorway: the arm in and level (the view still looks where it looks).
+        const sq = this.squeeze || 0;
+        let arm = fwd;
+        if (sq > 0.001) {
+          dist = lerp(dist, 1.6, sq);
+          side = lerp(side, 0.06, sq);
+          up = lerp(up, -0.2, sq);
+          const pp = lerp(pitch, clamp(pitch, -0.06, 0.12), sq);
+          const ca = Math.cos(pp);
+          arm = this._tmp.set(Math.sin(yaw) * ca, Math.sin(pp), Math.cos(yaw) * ca);
+        }
 
         // Leg 1: head → shoulder (the shoulder offset must not poke into a wall).
         const hitSide = this.physics.raycast(this.pivot.x, this.pivot.y, this.pivot.z, right.x, 0, right.z, side + 0.25,
@@ -303,16 +320,16 @@
         shoulder.y += up;
 
         // Leg 2: shoulder → back along the view direction.
-        const hit = this.physics.raycast(shoulder.x, shoulder.y, shoulder.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
-          { inflate: 0.2, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
+        const hit = this.physics.raycast(shoulder.x, shoulder.y, shoulder.z, -arm.x, -arm.y, -arm.z, dist + 0.3,
+          { inflate: lerp(0.2, 0.1, sq), flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
         let allowed = hit ? Math.max(0.3, hit.t - 0.15) : dist;
         // Cars aren't in the static world: keep the camera out of a parked van behind Jay.
-        const carT = this._carHit(shoulder, -fwd.x, -fwd.y, -fwd.z, allowed + 0.3, player);
+        const carT = this._carHit(shoulder, -arm.x, -arm.y, -arm.z, allowed + 0.3, player);
         if (carT !== null) allowed = Math.max(0.3, carT - 0.25);
         if (allowed < this.curDist) this.curDist = allowed;
         else this.curDist = damp(this.curDist, allowed, 4.5, dt);
 
-        cam.position.copy(shoulder).addScaledVector(fwd, -this.curDist);
+        cam.position.copy(shoulder).addScaledVector(arm, -this.curDist);
         // Too close to the head: hide Jay rather than show the inside of his skull.
         player.model.setVisible(this.curDist > 0.7);
       }
@@ -491,7 +508,8 @@
         origin.y += (v.camUp !== undefined ? v.camUp : 1.2) * mode.height;
         const hit = this.physics.raycast(origin.x, origin.y, origin.z, -fwd.x, -fwd.y, -fwd.z, dist + 0.3,
           { inflate: 0.25, flags: VH.COLLIDE.CAMERA, ground: true, ignoreInside: true });
-        const allowed = hit ? Math.max(2, hit.t - 0.3) : dist;
+        let allowed = hit ? Math.max(2, hit.t - 0.3) : dist;
+        if (this.keepOut) allowed = this._keepOutArm(origin, fwd, allowed);
         if (allowed < this._carDist) this._carDist = allowed;
         else this._carDist = damp(this._carDist, allowed, 3, dt);
         cam.position.copy(origin).addScaledVector(fwd, -this._carDist);
@@ -514,6 +532,20 @@
       }
       this.aimQuaternion.copy(cam.quaternion);
       cam.updateMatrixWorld();
+    }
+
+    /**
+     * The aircraft camera's arm, cut short of anywhere keepOut says it mustn't go (say a plane
+     * just taken at the gate, facing away from the terminal: not from inside the hall, looking
+     * out through the glass). Unless the aircraft itself is in there.
+     */
+    _keepOutArm(origin, fwd, arm) {
+      const K = this.keepOut;
+      if (K(origin.x, origin.y, origin.z)) return arm;
+      for (let t = 2; t <= arm; t += 1.5) {
+        if (K(origin.x - fwd.x * t, origin.y - fwd.y * t, origin.z - fwd.z * t)) return Math.max(2, t - 2);
+      }
+      return arm;
     }
 
     /**

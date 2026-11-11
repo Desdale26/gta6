@@ -22,6 +22,14 @@
  *   entry.abort(e)        the car was wrecked or removed midway
  *   entry.exitDoor(v, side)  getting out: the door swings open, then shut
  *   entry.update(dt)      every frame: doors swinging
+ *
+ * An airliner (door 'plug'): its front door is a plug door with a stair that
+ * folds down from under it (VH.PlugDoor, models/albatross.js). Jay walks to
+ * the stair's foot (ducking under the nose from the far side), the door
+ * swings open and the stair unfolds, he climbs up and in, and the stair and
+ * the door close behind him; getting out, the reverse: down the stair, which
+ * stays down while he's about (planesteal.js uses the same for a plane taken
+ * from the ground: vehicles.beginEnter on the flyable one).
  */
 (function () {
   'use strict';
@@ -61,7 +69,7 @@
     firetruck: { len: 1.0, climb: 0.85, low: 0, jack: 'drag', openT: 0.5, inT: 0.75, y0: 1.0, y1: 2.75 },
     // Aircraft and the tank: x/z place the door on the model, y0/y1 its height.
     skylark: { door: 'gull', len: 1.05, open: 1.35, climb: 0.45, low: 0.2, y0: 0.95, y1: 1.95, openT: 0.55, inT: 0.6 },
-    albatross: { door: 'swing', len: 1.1, open: 1.5, climb: 2.2, low: 0, y0: 3.3, y1: 5.2, openT: 0.6, inT: 1.0 },
+    albatross: { door: 'plug', climb: 0, low: 0, jack: 'plug', inT: 2.4 },
     talon: { door: 'canopy', len: 1.9, open: 0.85, climb: 1.9, low: 0.3, openT: 0.9, inT: 0.8 },
     sparrow: { door: 'slide', len: 1.2, climb: 0.35, low: 0.25, y0: 0.55, y1: 1.85, openT: 0.45, inT: 0.55 },
     warden: { door: 'gull', len: 1.0, open: 1.3, climb: 0.9, low: 0.2, y0: 1.0, y1: 2.3, openT: 0.6, inT: 0.7 },
@@ -204,6 +212,8 @@
       this.vehicles = vehicles;
       this.doors = new Map(); // v.id:side → door
       this._p = new THREE.Vector3();
+      this.plugs = new Map(); // v.id → { v, rig }: airliners whose door and stair this steps
+      this.exiting = null; //   Jay on his way down an airliner's stair
     }
 
     // ------------------------------------------------------------ doors
@@ -214,6 +224,7 @@
       if (!d) {
         const pr = profileFor(v);
         const m = v.model;
+        if (pr.door === 'plug') return null; // (an airliner's: its rig, below)
         // A car's own door (cut from its body, vehicles/carmodels.js), else a panel.
         if (m && m.doorPivot && (pr.door === 'swing' || pr.door === 'scissor')) {
           d = { v, side, pr, pivot: m.doorPivot(side), real: true, painted: [], angle: 0, target: 0, closeIn: 0 };
@@ -251,6 +262,7 @@
     }
 
     update(dt) {
+      this._plugTick(dt);
       for (const [key, d] of this.doors) {
         if (d.v.removed || !d.v.model) {
           if (d.pivot.parent && !d.real) d.pivot.parent.remove(d.pivot);
@@ -273,12 +285,240 @@
 
     /** Out of a vehicle: the door swings open, then shut a moment later. */
     exitDoor(v, side) {
+      if (profileFor(v).door === 'plug') return this._plugExit(v);
       const d = this.door(v, side || 1);
       if (!d) return;
       d.angle = Math.max(d.angle, 0.85);
       d.target = 1;
       d.closeIn = 0.55;
       this._poseDoor(d);
+    }
+
+    // ------------------------------------------------- an airliner's stair
+    /** The door and stair rig of an airliner (stepped every frame from now on), or null. */
+    _plugRig(v) {
+      const rig = VH.PlugDoor ? VH.PlugDoor.rig(v.model) : null;
+      if (!rig) return null;
+      const t = this.plugs.get(v.id);
+      if (!t || t.v !== v || t.rig !== rig) this.plugs.set(v.id, { v, rig });
+      return rig;
+    }
+
+    /** Where a point on the stair is in the world (model frame k: VH.PlugDoor.stairPoint). */
+    _stairW(v, k, out) {
+      const q = VH.PlugDoor.stairPoint(k, this._sp || (this._sp = {}));
+      return this._w(v, q.x, q.y, q.z, out);
+    }
+
+    _plugTick(dt) {
+      const p = this.game.player;
+      for (const [id, t] of this.plugs) {
+        const v = t.v;
+        if (v.removed || !v.model || v.model._plug !== t.rig) {
+          this.plugs.delete(id);
+          continue;
+        }
+        // Left down for Jay after he got out: up again once he's gone (or the plane moves).
+        if (t.rig.req.exit && !(this.exiting && this.exiting.v === v)) {
+          const far = p.inVehicle || Math.hypot(p.pos.x - v.pos.x, p.pos.z - v.pos.z) > 45;
+          if (far || v.speed > 1.5) t.rig.drop('exit');
+        }
+        t.rig.step(dt);
+        if (!Object.keys(t.rig.req).length && t.rig.door === 0) this.plugs.delete(id);
+      }
+      if (this.exiting) this._plugExitStep(dt);
+    }
+
+    /** Getting in: the way to the foot of the stair (under the nose from the far side). */
+    _plugBegin(e) {
+      const v = e.v;
+      const rig = this._plugRig(v);
+      if (!rig) return false;
+      const p = this.game.player;
+      e.plug = true;
+      e.rig = rig;
+      e.side = 1;
+      e.lift = 0;
+      if (this.exiting) this._plugExitEnd('handover');
+      rig.drop('exit');
+      rig.want('entry', 1, 1); // (opening as he comes over)
+      const F = VH.PlugDoor.FOOT;
+      const l = v.worldToLocal(p.pos.x, p.pos.z, {});
+      const pts = [[l.x, l.z]];
+      // From the other side: duck under the belly just aft of the nose wheel.
+      if (l.x < 1.2) pts.push([Math.min(l.x, -2.4), 12.6], [2.4, 12.6]);
+      pts.push([F.x, F.z]);
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      e.path = pts;
+      e.pathLen = len;
+      e.walkT = Math.max(0.25, len / 3.6);
+      // A pilot aboard (one being flown): they come down the stair and run.
+      e.style = e.jacked ? 'plug' : null;
+      return true;
+    }
+
+    _plugStep(e, dt) {
+      const g = this.game;
+      const p = g.player;
+      const v = e.v;
+      const rig = e.rig;
+      e.t += dt;
+      const face = Math.atan2(-Math.cos(v.yaw), Math.sin(v.yaw)); // toward the plane, up the stair
+      if (e.phase === 'walk') {
+        // Along the way at a brisk walk, crouched under the belly.
+        let d = Math.min(e.pathLen, (e.t / e.walkT) * e.pathLen);
+        let i = 1;
+        while (i < e.path.length - 1 && d > Math.hypot(e.path[i][0] - e.path[i - 1][0], e.path[i][1] - e.path[i - 1][1])) {
+          d -= Math.hypot(e.path[i][0] - e.path[i - 1][0], e.path[i][1] - e.path[i - 1][1]);
+          i++;
+        }
+        const a = e.path[i - 1];
+        const b = e.path[i];
+        const sl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const k = Math.min(1, d / sl);
+        const lx = a[0] + (b[0] - a[0]) * k;
+        const lz = a[1] + (b[1] - a[1]) * k;
+        const w = this._w(v, lx, 0, lz, this._p);
+        p.pos.x = w.x;
+        p.pos.z = w.z;
+        const wb = v.localToWorld(b[0], b[1], {});
+        const wa = v.localToWorld(a[0], a[1], {});
+        if (sl > 0.05) p.heading = VH.math.dampAngle(p.heading, Math.atan2(wb.x - wa.x, wb.z - wa.z), 10, dt);
+        this._pose({ w: 0, speed: e.t < e.walkT ? 3.4 : 0, crouch: Math.abs(lx) < 2.3 && lz < 14.5 ? 0.6 : 0 });
+        if (e.t >= e.walkT) {
+          e.phase = 'open';
+          e.t = 0;
+        }
+        return false;
+      }
+      if (e.phase === 'open') {
+        // At the foot, looking up: the door swings open and the stair folds down to him.
+        this._plugRig(v);
+        rig.want('entry', 1, 1);
+        p.heading = VH.math.dampAngle(p.heading, face, 8, dt);
+        const w = this._stairW(v, -0.12, this._p);
+        p.pos.x = w.x;
+        p.pos.z = w.z;
+        this._pose({ w: 0, speed: 0 });
+        if (e.jacked && !e._out && rig.door > 0.9) {
+          // Whoever was flying it comes down past him and legs it.
+          e._out = true;
+          const ev = { v, side: 1, x: w.x, z: w.z, style: 'gunpoint' };
+          VH.events.emit('vehicle:jack', ev);
+          const a = ev.agents && ev.agents[0];
+          if (a && !a.dead) {
+            a.held = null;
+            a.pos.set(w.x + Math.cos(v.yaw) * 0.8, v.pos.y, w.z - Math.sin(v.yaw) * 0.8);
+            const crowd = g.crowd;
+            if (!a.brain && crowd && crowd._flee) crowd._flee(a, v.pos.x, v.pos.z, 7);
+            VH.events.emit('vehicle:jacked', { v, agent: a, style: 'gunpoint' });
+          }
+        }
+        if (rig.ready && e.t > 0.25) {
+          e.phase = 'climb';
+          e.t = 0;
+        }
+        return false;
+      }
+      // Up the stair and in through the door.
+      const T = e.pr.inT;
+      const k = Math.min(1, e.t / T);
+      const w = this._stairW(v, k * 1.3, this._p);
+      p.pos.x = w.x;
+      p.pos.z = w.z;
+      p.pos.y = w.y;
+      p.heading = face;
+      this._pose({ w: 0, speed: k < 0.97 ? 2.0 : 0 });
+      if (k > 0.9 && p.model.root.visible) p.model.setVisible(false);
+      return k >= 1;
+    }
+
+    /** Getting out of an airliner: the door opens, the stair comes down, and down it he walks. */
+    _plugExit(v) {
+      const rig = this._plugRig(v);
+      if (!rig) return;
+      const g = this.game;
+      const p = g.player;
+      // Only where the stair reaches the ground (not on a roof, not rolling).
+      const F = this._stairW(v, 0, {});
+      const gy = g.physics.groundHeight(F.x, F.z, v.pos.y + 1);
+      if (Math.abs(gy - v.pos.y) > 0.6 || v.speed > 2) {
+        rig.want('exit', 1, 0);
+        return;
+      }
+      rig.want('exit', 1, 1);
+      if (this.exiting) this._plugExitEnd('handover');
+      this.exiting = { v, rig, t: 0, phase: 'door' };
+      p.frozen = true;
+      p.model.setVisible(false);
+      const w = this._stairW(v, 1.3, this._p);
+      p.pos.set(w.x, w.y, w.z);
+      p.prevPos.copy(p.pos);
+      p.heading = p.prevHeading = Math.atan2(Math.cos(v.yaw), -Math.sin(v.yaw)); // facing out
+      p.vel.set(0, 0, 0);
+      // The view from outside, looking up at the door: he comes out and down towards it.
+      const r = g.cameraRig;
+      if (r) {
+        r.yaw = Math.atan2(-Math.cos(v.yaw), Math.sin(v.yaw));
+        r.pitch = 0.08;
+        r._initialised = false;
+      }
+    }
+
+    _plugExitStep(dt) {
+      const x = this.exiting;
+      const p = this.game.player;
+      const v = x.v;
+      // Cut short: the plane's gone, or something else has Jay now (unfrozen him, put him in a car ...).
+      if (v.removed || v.wrecked || !p.frozen || p.inVehicle || p.state === 'dead' || p.state === 'knocked' || v.speed > 3) {
+        this._plugExitEnd(p.frozen && !p.inVehicle && p.state !== 'dead' ? 'drop' : 'handover');
+        return;
+      }
+      x.t += dt;
+      const out = Math.atan2(Math.cos(v.yaw), -Math.sin(v.yaw));
+      if (x.phase === 'door') {
+        const w = this._stairW(v, 1.3, this._p);
+        p.pos.set(w.x, w.y, w.z);
+        if (x.rig.door > 0.8 && !p.model.root.visible) p.model.setVisible(true);
+        this._pose({ w: 0, speed: 0 });
+        if (x.rig.ready || x.t > 6) {
+          x.phase = 'down';
+          x.t = 0;
+        }
+        return;
+      }
+      const T = 2.3;
+      const k = 1.3 * (1 - Math.min(1, x.t / T));
+      const w = this._stairW(v, k, this._p);
+      p.pos.set(w.x, w.y, w.z);
+      p.heading = out;
+      p.model.setVisible(true);
+      this._pose({ w: 0, speed: 2.0 });
+      if (x.t >= T) this._plugExitEnd('down');
+    }
+
+    /**
+     * Down the stair ('down'), or cut short: 'drop' lets him fall from where he is, 'handover'
+     * leaves him to whatever has him now. The stair stays down a while for him.
+     */
+    _plugExitEnd(how) {
+      const x = this.exiting;
+      this.exiting = null;
+      if (!x) return;
+      const p = this.game.player;
+      p.enterPose = null;
+      p.enterLift = 0;
+      if (how === 'drop') {
+        p.frozen = false;
+        p.model.setVisible(true);
+      } else if (how === 'down') {
+        p.frozen = false;
+        p.pos.y = this.game.physics.groundHeight(p.pos.x, p.pos.z, p.pos.y + 0.5);
+        p.prevPos.copy(p.pos);
+        p.vel.set(0, 0, 0);
+        p.model.setVisible(true);
+      }
     }
 
     // ------------------------------------------------------------ Jay
@@ -293,6 +533,7 @@
       const g = this.game;
       const v = e.v;
       e.pr = profileFor(v);
+      if (e.pr.door === 'plug' && this._plugBegin(e)) return;
       e.L = layout(v, e.side, e.pr);
       e.door = this.door(v, e.side);
       e.lift = 0;
@@ -312,6 +553,7 @@
     }
 
     step(e, dt) {
+      if (e.plug) return this._plugStep(e, dt);
       const g = this.game;
       const p = g.player;
       const v = e.v;
@@ -672,6 +914,11 @@
       p.enterPose = null;
       p.enterLift = 0;
       if (e && e.driver) this._release(e, 0, 0, 0, false);
+      // Aboard (or not after all): the stair folds up and the door shuts behind him.
+      if (e && e.plug && e.rig) {
+        e.rig.drop('entry');
+        e.rig.drop('exit');
+      }
     }
 
     abort(e) {
@@ -687,6 +934,9 @@
     }
 
     reset() {
+      for (const t of this.plugs.values()) if (!t.v.removed) t.rig.reset();
+      this.plugs.clear();
+      this.exiting = null;
       for (const d of this.doors.values()) {
         if (d.real) {
           d.angle = 0;

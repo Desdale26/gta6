@@ -64,7 +64,7 @@
       air: {
         span: 34, stall: 40, top: 118, thrust: 6.8, pitchRate: 0.55, rollRate: 0.85, yawRate: 0.25, turnK: 1.7, align: 2.2,
         taxiTurn: 0.45, rollRes: 0.25, brakeDecel: 3.5, crashVs: 5.5, crashSpeed: 22, rotateMax: 0.16,
-        camDist: 52, camLift: 6, camUp: 4, cockpit: { z: 16.6, y: 4.55 }, doorZ: 13.5,
+        camDist: 52, camLift: 6, camUp: 4, cockpit: { z: 16.6, y: 4.55 }, doorZ: 15.0, doorX: 4.95, doorSide: 1, // (in up its own stair: entry.js 'plug')
         voice: 'jet', voiceRef: 45,
         probes: [[0, 3.6, 19], [17, 2.9, -7.5], [-17, 2.9, -7.5], [0, 11, -17.5], [0, 3.6, -19], [6.5, 1.0, 3.5], [-6.5, 1.0, 3.5]],
       },
@@ -1073,6 +1073,8 @@
       this.camUp = A.camUp;
       this.cockpit = A.cockpit;
       this.doorZ = A.doorZ;
+      if (A.doorX !== undefined) this.doorX = A.doorX; // (where Jay stands to get in, out from the middle)
+      if (A.doorSide) this.doorSide = A.doorSide; //     (the one side with a door)
       this.crosshair = !!A.weapons;
       this.voiceRange = 320;
       this.voiceRef = A.voiceRef || 30;
@@ -1086,7 +1088,8 @@
     }
 
     _buildModel(typeId, opts) {
-      return new AircraftModel(typeId, opts, this.id);
+      // (opts.look: another model of the same aircraft, the freighter Albatross: planesteal.js)
+      return new AircraftModel(opts.look && VH.AircraftDefs[opts.look] ? opts.look : typeId, opts, this.id);
     }
 
     place(x, z, heading, y) {

@@ -71,6 +71,10 @@
  *                            hidden, stopped, nothing waits for it; off: back
  *   airside.blockStand(id, on)   no arrivals onto a stand (a wreck on it)
  *   A disabled plane on the ground shows its departure Cancelled.
+ *   For planesteal.js (Jay takes one from the ground): stealHold(p, on) (it
+ *   brakes to a stop and waits while he's at its door), stealTake(p) (as
+ *   removePlane, its stand kept clear till stealFree(id)), lightPlanes() and
+ *   takeLight(k) (the Skylarks and the helicopter): see the hooks' notes.
  *   (the live airliners are this.fleet inside this file; planes() is the way in)
  *
  * It is all scenery: no physics bodies. A plane or a tug stops for Jay (or a
@@ -543,7 +547,6 @@
       pool: new THREE.MeshBasicMaterial({ map: poolTexture(), color: 0xfff0d4, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
       glow: new THREE.SpriteMaterial({ map: poolTexture(), color: 0xfff6e8, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
       beam: new THREE.MeshBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-      doorway: new THREE.MeshBasicMaterial({ vertexColors: true }),
     };
     return MAT;
   }
@@ -879,6 +882,7 @@
       this.t += dt;
       this.navT += dt;
       if (this.disabled) this._disabledTick(dt);
+      else if (this.jayHold && this.onGround) this._jayHoldTick(dt); // (Jay at its door: planesteal.js)
       else switch (this.phase) {
         case 'approach':
           this._approach(dt);
@@ -936,6 +940,22 @@
       this.engTarget = 0;
       this.v = Math.max(0, this.v - (p === 'takeoff' || p === 'rollout' ? 3.4 : 2.2) * dt);
       this.pitch = Math.max(0, this.pitch - 0.08 * dt);
+      this._coast(dt);
+    }
+
+    /**
+     * Jay at its door to take it (airside.stealHold, planesteal.js): on the ground it brakes to
+     * a stop where it is and waits there, engines running, until he's gone or it's let go.
+     */
+    _jayHoldTick(dt) {
+      this.v = Math.max(0, this.v - (this.v > 4 ? 3.0 : 2.2) * dt);
+      this.pitch = Math.max(0, this.pitch - 0.08 * dt);
+      this._coast(dt);
+    }
+
+    /** Braking along its path (disabled, or held): on to where it stops. */
+    _coast(dt) {
+      const p = this.phase;
       if (!this.path || this.v <= 0) return;
       if (p === 'pushback') {
         this.s = Math.min(this.path.len - 0.05, this.s + this.v * dt);
@@ -1114,7 +1134,7 @@
       this.model = null;
     }
 
-    _pose() {
+    _pose(dt) {
       const m = this.model;
       if (!m) return;
       m.root.position.set(this.x, this.y, this.z);
@@ -1131,8 +1151,12 @@
       const x = m._air;
       if (x) {
         x.logo.visible = night > 0.25;
-        // The front door stands open while the bridge is on (from deplaning until the doors close).
-        x.door.visible = p === 'parked' && !!this.rot.flags.bridge && !this.rot.flags.closed;
+        // The front door opens while the bridge (a remote stand's stairs) is on, from deplaning
+        // until the doors close; cabin.js opens it again for Jay, and others may ask (rig.want).
+        if (x.door) {
+          x.door.want('airside', p === 'parked' && !!this.rot.flags.bridge && !this.rot.flags.closed ? 1 : 0, 0);
+          x.door.step(dt || 0);
+        }
         const land = night > 0.12 && (air || (p === 'approach' && this.y < 400));
         for (const l of x.land) l.visible = land;
         x.beam.visible = land && this.y < 250;
@@ -1201,45 +1225,10 @@
     pool.visible = false;
     pool.renderOrder = 2;
     m.root.add(pool);
-    // The front door on the bridge side, open while the bridge is on (see Airliner._pose).
-    const dg = doorGeometry();
-    const door = new THREE.Mesh(dg || new THREE.BufferGeometry(), M.doorway);
-    door.visible = false;
-    m.body.add(door);
+    // The front door on the bridge side: a plug door that opens while the bridge is on (and
+    // the stair under it, which others ask for), js/vehicles/models/albatross.js; see Airliner._pose.
+    const door = VH.PlugDoor ? VH.PlugDoor.rig(m) : null;
     m._air = { logo, land, taxi, beam, pool, glow, door };
-  }
-
-  // The Albatross's fuselage (as js/vehicles/models/albatross.js), for fitting the open door to it.
-  const ALB_BODY = [
-    { z: 19.05, w: 0.04, h: 0.04, y: 3.22 },
-    { z: 18.7, w: 0.6, h: 0.68, y: 3.28 },
-    { z: 18.0, w: 1.14, h: 1.28, y: 3.4 },
-    { z: 17.0, w: 1.58, h: 1.74, y: 3.5 },
-    { z: 15.5, w: 1.94, h: 2.04, y: 3.57 },
-    { z: 13.5, w: 2.08, h: 2.15, y: 3.6 },
-    { z: -9.0, w: 2.08, h: 2.15, y: 3.6 },
-    { z: -12.0, w: 1.98, h: 1.94, y: 3.76 },
-  ];
-  let DOOR_GEO = null;
-  /**
-   * The open front door, port side (+x, where the jet bridge meets it): a dark doorway over
-   * the painted door panel (model z 15.0, 0.84 m wide, 1.8 m tall), the cabin floor at its sill.
-   */
-  function doorGeometry() {
-    if (DOOR_GEO !== null) return DOOR_GEO;
-    DOOR_GEO = false;
-    const K = VH.AircraftKit;
-    if (!K || !VH.AircraftDefs || !VH.AircraftDefs.albatross) return DOOR_GEO;
-    const body = new K().loft(ALB_BODY, 0xffffff, { seg: 36, steps: 4 });
-    const k = new K();
-    const s = 1.42;
-    const ds = 0.9 / 2.1;
-    const z0 = 15.0 - 0.42;
-    const z1 = 15.0 + 0.42;
-    k.patch(body, z0, z1, [s - ds, s + ds - 0.07], [s - ds, s + ds - 0.07], 1, 0x0c0e11, { lift: 0.022, ns: 6, nz: 2 });
-    k.patch(body, z0, z1, [s + ds - 0.07, s + ds], [s + ds - 0.07, s + ds], 1, 0x5b554e, { lift: 0.022, ns: 1, nz: 2 });
-    DOOR_GEO = k.geometry();
-    return DOOR_GEO;
   }
 
   // ------------------------------------------------------ ground vehicles
@@ -1889,6 +1878,7 @@
     _putModel(m) {
       if (!m) return;
       m.root.removeFromParent();
+      if (VH.PlugDoor) VH.PlugDoor.reset(m); // (its door shut, for whoever has it next)
       const key = m.type + '|' + m.color;
       if (!this.pool.has(key)) this.pool.set(key, []);
       const list = this.pool.get(key);
@@ -1914,6 +1904,9 @@
         st.cur = null;
         st.queue = [];
         st.cones = false;
+        // A fresh airfield: nothing (a wreck, a stolen jet, Jay aboard) is keeping arrivals off.
+        st.blocked = st.wreckBlock = st.stealBlock = st.cabinHold = false;
+        st.cabinHoldT = 0;
       }
       // Three or four stands busy, each at a different point of its turnaround; a freighter
       // or two on the remote stands.
@@ -2221,7 +2214,7 @@
         this._lod();
         this._clockCheck();
       }
-      for (const pl of this.fleet) if (pl.model) pl._pose();
+      for (const pl of this.fleet) if (pl.model) pl._pose(dt);
       this.skyFx.update(dt, true);
       this._instances();
       this._sound(dt);
@@ -2240,8 +2233,9 @@
       out.length = 0;
       let n = 0;
       // (still: Jay on foot, or a car standing still: see _pushClear.)
-      const add = (x, y, z, r, big, still) => {
-        const o = this._obsPool[n] || (this._obsPool[n] = { x: 0, y: 0, z: 0, r: 0, big: false, still: false });
+      // (tall: too tall for a wing to pass over, a crash tender: planes keep their wings' sweep off it.)
+      const add = (x, y, z, r, big, still, tall) => {
+        const o = this._obsPool[n] || (this._obsPool[n] = { x: 0, y: 0, z: 0, r: 0, big: false, still: false, tall: false });
         n++;
         o.x = x;
         o.y = y;
@@ -2249,6 +2243,7 @@
         o.r = r;
         o.big = big;
         o.still = still;
+        o.tall = !!tall;
         out.push(o);
       };
       const p = g.player;
@@ -2256,7 +2251,7 @@
       const inBox = (x, z) => x > -1120 && x < 420 && z > -1560 && z < -1180;
       for (const v of g.vehicles.list) {
         if (v.removed || !inBox(v.pos.x, v.pos.z) || v.pos.y > 25) continue;
-        add(v.pos.x, v.pos.y, v.pos.z, Math.max(v.hx || 1, v.hz || 2), (v.hz || 0) > 6, Math.abs(v.speed || 0) < 0.3);
+        add(v.pos.x, v.pos.y, v.pos.z, Math.max(v.hx || 1, v.hz || 2), (v.hz || 0) > 6, Math.abs(v.speed || 0) < 0.3, (v.height || 0) > 2.9);
       }
       let rwy = false;
       for (const o of out) {
@@ -2670,8 +2665,11 @@
       // (held up somewhere): they're done here. Out of sight they're simply put away; after a
       // few minutes, any not right by Jay too.
       if (f.closed && !f.push && to > 60 && st.gse) this._standGseHome(st, to > 180);
-      if (f.closed && !f.push && to >= 0 && !this.gstop.on && this._pushClear(st) && (!r.towOff || this._towStand(r)) && !this._cabinHeld(st)) {
+      // (Not till its front door is shut: it closes once the doors are called. Never for ever.)
+      const dr = r.plane && r.plane.model && r.plane.model._air && r.plane.model._air.door;
+      if (f.closed && !f.push && to >= 0 && !this.gstop.on && this._pushClear(st) && (!r.towOff || this._towStand(r)) && !this._cabinHeld(st) && !(dr && dr.door > 0 && to < 75)) {
         f.push = true;
+        if (dr && dr.door > 0) dr.reset();
         st.state = 'pushback';
         const pl = r.plane;
         if (r.towOff) {
@@ -2971,6 +2969,13 @@
           const dx = o.x - _b.x;
           const dz = o.z - _b.z;
           if (dx * dx + dz * dz < r * r && o.y < 12) return Math.max(0, d - 8);
+          // One too tall for the wings to pass over: anywhere under the plane there (the nose at
+          // _b, the main gear NOSE back along the line).
+          if (o.tall && !fast && o.y < 12 && dx * dx + dz * dz < 1600) {
+            const m = this._tallC || (this._tallC = { x: 0, z: 0, h: 0 });
+            P.at(Math.max(0, sc - NOSE), m);
+            if (underPlane(o.x, o.z, m.x, m.z, Math.atan2(_b.x - m.x, _b.z - m.z), 2.5)) return Math.max(0, d - 8);
+          }
         }
       }
       pl.blocker = null;
@@ -3053,6 +3058,8 @@
         for (const o of this._obs) {
           const r = o.r + (o.big ? 16 : 7);
           if ((Math.hypot(o.x - tx, o.z - tz) < r || Math.hypot(o.x - _b.x, o.z - _b.z) < r) && o.y < 12) return Math.max(0, d - 2);
+          // (One too tall for the wings: under the plane there at all, its wings swinging round.)
+          if (o.tall && o.y < 12 && underPlane(o.x, o.z, _b.x, _b.z, _b.h + PI, 2.5)) return Math.max(0, d - 2);
         }
       }
       const gd = this._gseAhead(pl, P, pl.s, 24, true);
@@ -3861,12 +3868,15 @@
         }
         v.update(dt);
       }
-      // Stair truck: at the door while the flyable Albatross waits there; it backs off when Jay climbs in.
+      // Stair truck: at the door while the flyable Albatross waits there; it backs off when Jay
+      // comes over on foot (the plane has its own stair: entry.js), or climbs in some other way.
       const st = ex.stairs;
       const spot = this._remoteSpot();
       const pv = spot && spot.v;
       const parked = pv && !pv.removed && !pv.wrecked && Math.hypot(pv.pos.x - REMOTE.x, pv.pos.z - REMOTE.z) < 2;
-      if (st.state === 'door' && (!parked || pv.driver)) {
+      const P = this.game.player;
+      const comes = parked && !P.inVehicle && Math.hypot(P.pos.x - st.x, P.pos.z - st.z) < 22;
+      if (st.state === 'door' && (!parked || pv.driver || comes)) {
         st.state = 'away';
         st.go([{ path: route([[st.x, st.z], [st.x - 24, st.z]], 3, 2.2), rev: true }]);
       } else if (st.state === 'away' && !st.busy && parked && !pv.driver && !this._near(REMOTE.x, REMOTE.z, 60) && !this.game.isVisible(REMOTE.x, 3, REMOTE.z, 25)) {
@@ -3999,7 +4009,7 @@
           k.v = 0;
           k.prop = Math.max(0, k.prop - dt * 0.4);
           k.timer -= dt;
-          if (k.timer <= 0 && !taxiing(mate) && !(mate.join && inCircuit(mate))) {
+          if (k.timer <= 0 && !taxiing(mate) && !(mate.join && inCircuit(mate)) && !k.jayHold) {
             k.phase = 'taxi';
             k.path = this._skyPath('out', 0, k.spot);
             k.s = 0;
@@ -4018,6 +4028,7 @@
             if (q.v > 0.3 || underPlane(_c.x, _c.z, q.x, q.z, q.yaw, 7)) vt = 0;
           }
           for (const o of this._obs) if (Math.hypot(o.x - _c.x, o.z - _c.z) < 6 + o.r) vt = 0;
+          if (k.jayHold) vt = 0; // (Jay at its door: planesteal.js)
           k.v = k.v < vt ? Math.min(vt, k.v + 1.2 * dt) : Math.max(vt, k.v - 3 * dt);
           k.s = Math.min(k.path.len, k.s + k.v * dt);
           k.path.at(k.s, _c);
@@ -4044,7 +4055,7 @@
             k.priT = k.wait;
             this._delayArrivals(this.t + 10, this.t + 70);
           }
-          if (this._rwyFree() && !this.fleet.some((q) => q.phase === 'taxiout' && q.cleared) && !(mate.join && inCircuit(mate))) {
+          if (this._rwyFree() && !this.fleet.some((q) => q.phase === 'taxiout' && q.cleared) && !(mate.join && inCircuit(mate)) && !k.jayHold) {
             this.rwy.add(k);
             k.phase = 'roll';
             k.path = this._skyPath('line', 0, k.spot);
@@ -4238,7 +4249,7 @@
         case 'landroll': {
           k.y = 0;
           k.pitch = Math.max(0, k.pitch - dt * 0.1);
-          let vt = k.path.cap(k.s);
+          let vt = k.jayHold ? 0 : k.path.cap(k.s);
           if (k.v > vt) k.v = Math.max(vt, k.v - 2.4 * dt);
           else k.v = Math.min(vt, k.v + 0.8 * dt);
           k.s = Math.min(k.path.len, k.s + k.v * dt);
@@ -4256,6 +4267,13 @@
           }
           break;
         }
+        case 'taken':
+          // Jay took it (planesteal.js): back on its spot a few minutes later, when nobody's looking.
+          k.timer -= dt;
+          if (k.timer <= 0 && !this._seen(k.spot.x, k.spot.z) && !this._obs.some((o) => Math.hypot(o.x - k.spot.x, o.z - k.spot.z) < 9 + o.r)) {
+            Object.assign(k, { phase: 'parked', x: k.spot.x, z: k.spot.z, y: 0, yaw: PI, pitch: 0, roll: 0, v: 0, prop: 0, timer: rand(60, 180), circuits: 0 });
+          }
+          break;
         default:
           break;
       }
@@ -4314,6 +4332,7 @@
           if (d < 0.6 && h.y < 14.5) {
             h.phase = 'descend';
             h.t = 0;
+            h.v = 0; // straight down from here: no ground speed (plane-steal reads it)
           }
           break;
         }
@@ -4337,8 +4356,9 @@
         }
         case 'down':
           h.t += dt;
+          h.v = 0;
           h.rpm = h.t < 18 ? Math.max(0.15, 1 - h.t / 18) : h.t > h.wait - 14 ? Math.min(1, (h.t - (h.wait - 14)) / 12) : 0.15;
-          if (h.t > h.wait) {
+          if (h.t > h.wait && !h.jayHold) {
             h.phase = 'out';
             h.t = 0;
           }
@@ -4403,7 +4423,7 @@
         const type = k === this.heli ? 'sparrow' : 'skylark';
         if (!VH.AircraftModels.spec(type)) continue;
         const d = Math.hypot(k.x - cp.x, k.z - cp.z, k.y - cp.y);
-        const want = d < Math.min(view, 1500) && k.phase !== 'away';
+        const want = d < Math.min(view, 1500) && k.phase !== 'away' && k.phase !== 'taken';
         if (want && !k.model) {
           k.model = this._takeModel(type, k === this.heli ? 0x1d4fb8 : k.color);
           this.game.scene.add(k.model.root);
@@ -4883,6 +4903,95 @@
       if (p.pos.y < 1.6) return false;
       const T = this.game.terminal;
       return !!((this.game.cabin && this.game.cabin.aboard) || (T && T.isInside && T.isInside(p.pos.x, p.pos.z, p.pos.y)));
+    }
+
+    // ------------------------------------------ plane-steal hooks (planesteal.js)
+    /**
+     * Jay on foot at the door of plane p (a planes() view), or of a light aircraft (a
+     * lightPlanes() record): on, it brakes to a stop where it is and waits there (a push, a
+     * taxi, a tow, a slow roll; a Skylark at the hold or a helicopter on its pad stays put);
+     * off, it carries on. (planesteal.js lets go after a while, so nothing waits for ever.)
+     */
+    stealHold(p, on) {
+      const pl = this._planeOf(p);
+      if (pl) pl.jayHold = !!on;
+      else if (p && (this.skies.includes(p) || p === this.heli)) p.jayHold = !!on;
+    }
+
+    /**
+     * Jay has taken plane p from the ground: off airside's books for good (as removePlane:
+     * the flight Cancelled, its stand free, nobody waits for it), and the stand it's standing
+     * on (if it is) kept clear of arrivals until stealFree(id). Returns removePlane's pose and
+     * livery and { cargo, parked, on (that stand's id, or null), gate }, or null.
+     */
+    stealTake(p) {
+      const pl = this._planeOf(p);
+      if (!pl || pl.gone) return null;
+      const r = pl.rot;
+      let on = null;
+      for (const st of this.allStands) if (Math.hypot(pl.x - st.x, pl.z - st.z) < 30) on = st;
+      if (r.st.cabinHold) {
+        r.st.cabinHold = false;
+        r.st.cabinHoldT = 0;
+      }
+      const cargo = !!r.airline.cargo;
+      const parked = pl.phase === 'parked';
+      const out = this.removePlane(pl);
+      if (!out) return null;
+      Object.assign(out, { cargo, parked, on: on ? on.id : null, gate: on && !on.remote ? on.gate : null });
+      if (on && !on.blocked) {
+        on.blocked = true;
+        on.stealBlock = true;
+      }
+      this._updateStatuses();
+      return out;
+    }
+
+    /** The stand Jay took a plane from is clear again (he's taken it away, or it's gone). */
+    stealFree(id) {
+      const st = this.ok && this.allStands.find((s) => s.id === id);
+      if (st && st.stealBlock) {
+        st.blocked = false;
+        st.stealBlock = false;
+      }
+    }
+
+    /**
+     * The light aircraft, for planesteal.js: [{ k, type }] (k: the Skylark's or the
+     * helicopter's own record, live: x, y, z, yaw, v, phase, color; type 'skylark' or
+     * 'sparrow'). On the ground: a Skylark parked, taxiing, at the hold or rolling out; the
+     * helicopter down on its pad.
+     */
+    lightPlanes() {
+      if (!this.ok || !this.inited) return [];
+      if (!this._lights || this._lights.k0 !== this.sky) {
+        this._lights = this.skies.map((k) => ({ k, type: 'skylark' })).concat(this.heli ? [{ k: this.heli, type: 'sparrow' }] : []);
+        this._lights.k0 = this.sky;
+      }
+      return this._lights;
+    }
+
+    /**
+     * Jay has taken a light aircraft (a lightPlanes() k): it's gone from airside (a Skylark
+     * comes back to its spot a few minutes later when nobody's looking; the helicopter flies
+     * in again some time). Returns { x, y, z, yaw, color, type }.
+     */
+    takeLight(k) {
+      if (!this.ok || !k) return null;
+      const heli = k === this.heli;
+      const out = { x: k.x, y: k.y, z: k.z, yaw: k.yaw, color: heli ? 0x1d4fb8 : k.color, type: heli ? 'sparrow' : 'skylark' };
+      if (k.model) {
+        k.model.root.removeFromParent();
+        this._putModel(k.model);
+        k.model = null;
+      }
+      if (k.voice) k.voice.stop();
+      k.voice = null;
+      this.rwy.delete(k);
+      Object.assign(k, { v: 0, y: 0, pitch: 0, roll: 0, jayHold: false });
+      if (heli) Object.assign(k, { phase: 'away', timer: rand(240, 420), rpm: 0 });
+      else Object.assign(k, { phase: 'taken', timer: rand(200, 360), prop: 0, onGround: false, slot: false, slotT: 0, join: false, wait: 0, pri: false });
+      return out;
     }
 
     blips(out, missionRunning) {

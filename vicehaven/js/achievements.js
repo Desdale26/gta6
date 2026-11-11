@@ -45,6 +45,7 @@
     ['airliner', 'Flying', '🛫', 'Captain Mercer', 'Take off in the Albatross airliner.'],
     ['frequent_flyer', 'Flying', '🧳', 'Frequent Flyer', 'Walk onto an airliner from a jet bridge.'],
     ['captain_speaking', 'Flying', '🎙', 'Captain Speaking', 'Take an airliner from the gate.'],
+    ['self_checkin', 'Flying', '🛄', 'Self Check-In', 'Steal an aircraft from the ground at the airport, like a car.'],
     ['skydive', 'Flying', '🪂', 'Leap of Faith', 'Bail out of an aircraft in the air.'],
     ['first_star', 'Crime', '⭐', 'Wanted', 'Get a wanted level.'],
     ['five_stars', 'Crime', '🌟', 'Most Wanted', 'Reach five stars.'],

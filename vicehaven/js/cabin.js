@@ -6,12 +6,15 @@
  *   new VH.Cabin(game)       game.cabin, a world system
  *
  * Every Albatross parked on a contact stand (A1-A4) has a cabin. Its front
- * port door stands open whenever the plane is on the stand with the bridge
- * on and not pushing back (deplaning, servicing, boarding; once the doors
- * have shut the crew open up again for Jay when he comes down the bridge).
- * The fuselage skin round the door is cut away on that model (a copy of its
- * geometry, cached per livery), so the opening is real: the bridge's rubber
- * collar round it, the threshold, the cabin beyond.
+ * port door is open whenever the plane is on the stand with the bridge on
+ * and not pushing back (deplaning, servicing, boarding; once the doors have
+ * shut the crew open up again for Jay when he comes down the bridge): a plug
+ * door (VH.PlugDoor, models/albatross.js) that swings out and forward over a
+ * second or two. While it's anything but shut, the fuselage skin round it is
+ * cut away on that model (a copy of its geometry, cached per livery), so the
+ * opening is real: the bridge's rubber collar round it, the threshold, the
+ * cabin beyond. Going through, the camera squeezes in close and level and
+ * looks the way he's going (camera.js squeeze), so it doesn't snap in.
  *
  * The cabin is drawn inside the model's one-sided shell (which is invisible
  * from inside, so the window and windscreen openings look straight out): a
@@ -27,7 +30,7 @@
  * are made once per stand the first time a cabin is wanted there, and parked
  * out of the way (far below the ground) whenever that cabin is down, always
  * before the plane moves. The bridge's sill across its mouth is parked while
- * the door is open and two jambs either side of the door take its place.
+ * the door is (nearly) wide open and two jambs either side take its place.
  *
  * People: the seats fill as the flight boards (back rows first) and empty
  * front first as it deplanes, from airside's passenger count. Boarding
@@ -51,7 +54,11 @@
  *   cabin.aboard             true while Jay is inside a cabin
  *   cabin.boardPath(stand)   for airportlife.js: { pts, seat } on from the
  *                            bridge mouth to a row, or null (no cabin there)
- *   cabin.seated(stand, seat)   ...and that traveller has sat down
+ *   cabin.seated(stand, seat)   ...and that traveller has sat down (the
+ *                            seat they're walking to stays empty till then)
+ *   cabin.giveWay(stand, x, z, dir, side, seat)   somewhere in a row to step
+ *                            into to let Jay by in the aisle (and a free
+ *                            seat there to take)
  *   cabin.exitPath(stand)    { start, pts } from a seat to the bridge mouth,
  *                            or null
  *   events                   cabin:aboard {stand, gate}, cabin:hijack {stand,
@@ -62,7 +69,7 @@
   'use strict';
 
   const VH = window.VH;
-  const { clamp, lerp, dampAngle } = VH.math;
+  const { clamp, lerp, dampAngle, smoothstep: smooth } = VH.math;
   const PI = Math.PI;
 
   // ------------------------------------------------------------ the plan
@@ -120,7 +127,7 @@
   const FAR = 96; //       ... and dropped beyond this
   const LIVE_MAX = 2;
   const HOLD_WALK = 34; // Jay aboard this long after the doors were due to shut: walked off
-  const OPEN_NEAR = 6; //  doors shut, Jay this close to the door on the bridge: they open up again
+  const OPEN_NEAR = 8; //  doors shut, Jay this close to the door on the bridge: they open up again
 
   const WHITE = 0xf3f4f2; // the livery (albatross.js), for the skin round the cut-out door
   const SHADE = (hex, k) => {
@@ -1124,6 +1131,7 @@
       const on = this._jayCabin();
       this.aboard = !!on;
       if (this.aboard !== was) this._camera(this.aboard);
+      this._doorCam(dt);
       // The "Take the controls" prompts.
       for (const [id, item] of this.items) {
         const c = on && on.st.id === id ? on : null;
@@ -1179,6 +1187,46 @@
         r.zoom = this._zoomWas;
         this._zoomWas = null;
       }
+    }
+
+    /**
+     * Through the door: the camera squeezes in close, low and centred (camera.js squeeze) and
+     * turns to look along the way through, so it passes through the opening smoothly instead
+     * of catching on the frame and snapping in to his shoulder for a moment.
+     */
+    _doorCam(dt) {
+      const r = this.game.cameraRig;
+      if (!r) return;
+      const p = this.game.player;
+      let k = 0;
+      let c = null;
+      if (!p.inVehicle && p.state === 'ground' && p.pos.y > FL - 0.5 && p.pos.y < FL + 1.2) {
+        // Near the door's opening: Jay, or the camera trailing him through it.
+        const cp = this.game.renderer.camera.position;
+        const zone = (x, z) => {
+          const dx = x - 2.05; // across the door's plane (+: the bridge side)
+          const dz = z - DOOR.zc;
+          return (1 - smooth(0.7, 1.5, Math.abs(dz))) * (1 - smooth(dx < 0 ? 1.8 : 2.4, dx < 0 ? 2.6 : 3.6, Math.abs(dx)));
+        };
+        for (const q of this.live) {
+          const rig = q.rig;
+          if (!q.open && !(rig && rig.door > 0.5)) continue;
+          const w = Math.max(zone(p.pos.x - q.st.x, p.pos.z - q.st.z), zone(cp.x - q.st.x, cp.z - q.st.z));
+          if (w > k) {
+            k = w;
+            c = q;
+          }
+        }
+      }
+      r.squeeze = k > r.squeeze ? Math.min(k, r.squeeze + dt * 2) : Math.max(k, r.squeeze - dt * 1.4);
+      if (!c || k < 0.2) return;
+      // Walking through (not just standing about): the view comes round to look the way he's going.
+      const vx = p.vel.x;
+      const vz = p.vel.z;
+      if (vx * vx + vz * vz < 0.5 || Math.abs(vx) < Math.abs(vz) * 1.2) return;
+      const want = vx < 0 ? -PI / 2 : PI / 2;
+      const off = Math.atan2(Math.sin(want - r.yaw), Math.cos(want - r.yaw));
+      if (Math.abs(off) < 1.3) r.yaw = dampAngle(r.yaw, want, 7 * k, dt);
     }
 
     // ------------------------------------------------------------ building
@@ -1242,6 +1290,7 @@
       c.dropped = true;
       this._uncut(c);
       this._doorOpen(c, false);
+      if (c.rig) c.rig.drop('cabin');
       this._cols(c.st, false);
       c.group.removeFromParent();
       c.group.remove(c.pax);
@@ -1304,12 +1353,13 @@
           mesh.geometry = cut;
         }
       });
+      if (model._plug) model._plug.cut = true; // (its painted doorway hidden: the opening's real)
     }
 
     _uncut(c) {
       for (const [mesh, geo] of c.swapped) mesh.geometry = geo;
       c.swapped = [];
-      if (c.model && c.model._air && c.model._air.door) c.model._air.door.visible = false;
+      if (c.model && c.model._plug) c.model._plug.cut = false;
       c.model = null;
     }
 
@@ -1327,10 +1377,16 @@
       const near = !p.inVehicle && Math.hypot(p.pos.x - c.st.door.x, p.pos.z - c.st.door.z) < OPEN_NEAR && p.pos.y > FL - 1;
       const inside = this._jayIn(c);
       const open = info.bridge && !info.push && (!info.closed || near || inside || !!c.holding);
-      this._doorOpen(c, open);
-      const model = open ? (info.model || null) : null;
+      // The plug door (VH.PlugDoor, models/albatross.js) takes a second or two to swing open or
+      // shut: the skin round it is cut away from the moment it moves until it's shut again, and
+      // the bridge's sill only steps aside once it's nearly wide open.
+      const rig = info.model && VH.PlugDoor ? VH.PlugDoor.rig(info.model) : null;
+      if (c.rig && c.rig !== rig) c.rig.drop('cabin');
+      c.rig = rig;
+      if (rig) rig.want('cabin', open ? 1 : 0, 0);
+      this._doorOpen(c, open && (!rig || rig.door > 0.7));
+      const model = open || (rig && rig.door > 0) ? (info.model || null) : null;
       this._cut(c, model);
-      if (c.model && c.model._air && c.model._air.door) c.model._air.door.visible = false;
       c.group.visible = !!info.model;
       // Shot up or on fire (havoc-air.js): nobody stays aboard, the crew included (some go up
       // the bridge, the rest down the slides), and nobody boards. No taking it, either.
@@ -1339,7 +1395,7 @@
       // The lights: a touch brighter after dark.
       const night = A.night || 0;
       mats().lift.value = 0.2 - night * 0.06;
-      this._seats(c, info);
+      this._seats(c, info, dt);
       this._crewTick(c, info, dt);
       this._assist(c, dt);
       // Jay on board.
@@ -1447,7 +1503,7 @@
 
     // ------------------------------------------------------- the passengers
     /** The seats: how many full for where the flight is, filled back first and emptied front first. */
-    _seats(c, info) {
+    _seats(c, info, dt) {
       let kind;
       let n;
       let flight;
@@ -1463,19 +1519,37 @@
       const total = Math.min(SEATS, flight ? flight.pax : 0);
       if (c.phase !== kind) {
         c.phase = kind;
-        c.sat = 0;
         c.stood = 0;
-        c.enRoute = 0;
+        c.res = new Map(); // boarding: seat → when someone set off down the aisle to it (it waits for them)
+        c.walked = new Set(); // ... and the seats they sat down in
+        c.resV = 0;
         this._order(c, flight, kind, total);
       }
+      c.clock = (c.clock || 0) + (dt || 0);
       n = Math.min(n, total);
-      if (kind === 'dep') n = Math.max(n, Math.min(total, c.sat));
-      else n = Math.min(n, total - c.stood);
+      if (kind === 'arr') n = Math.min(n, total - c.stood);
       n = c.panic ? 0 : clamp(n, 0, SEATS);
-      if (n === c.shown) return;
+      // (A seat nobody's turned up for in a minute and more: they're not coming.)
+      for (const [j, t] of c.res) {
+        if (c.clock - t < 80) continue;
+        c.res.delete(j);
+        c.resV++;
+      }
+      if (n === c.shown && c.resV === c.drawnV) return;
       c.shown = n;
-      // The ones shown are the first n of the order (boarding) or the last n (deplaning).
-      const list = kind === 'dep' ? c.order.slice(0, n) : c.order.slice(c.order.length - n);
+      c.drawnV = c.resV;
+      // The ones shown are the first n of the order (boarding: less the seats someone is walking
+      // to, plus those they've sat down in) or the last n (deplaning).
+      let list;
+      if (kind === 'dep') {
+        list = [];
+        for (const j of c.order) {
+          if (list.length >= n) break;
+          if (!c.res.has(j) && !c.walked.has(j)) list.push(j);
+        }
+        if (!c.panic) for (const j of c.walked) list.push(j);
+      } else list = c.order.slice(c.order.length - n);
+      c.drawn = new Set(list);
       const m = this._m4;
       for (let i = 0; i < list.length; i++) {
         const j = list[i];
@@ -1541,10 +1615,20 @@
       if (!this.ok) return null;
       const c = this._liveAt(stand);
       if (!c || c.panic || c.phase !== 'dep' || !c.order || this.taking) return null;
-      const k = Math.max(c.shown, 0) + (c.enRoute || 0);
-      if (k >= c.order.length) return null;
-      const seat = c.order[k];
-      c.enRoute = (c.enRoute || 0) + 1;
+      // The first empty seat on from those filled so far that nobody's walking to yet.
+      const n = Math.max(c.shown, 0);
+      let k = 0;
+      let seat = -1;
+      for (const j of c.order) {
+        if (c.res.has(j) || c.walked.has(j) || k++ < n) continue;
+        seat = j;
+        break;
+      }
+      // (All the flight's seats shown already: an empty one, the front rows first.)
+      for (let j = 0; seat < 0 && j < SEATS; j++) if (!c.res.has(j) && !c.walked.has(j) && !(c.drawn && c.drawn.has(j))) seat = j;
+      if (seat < 0) return null;
+      c.res.set(seat, c.clock || 0);
+      c.resV++;
       const sp = seatPos(seat);
       const x0 = c.st.x;
       const z0 = c.st.z;
@@ -1557,10 +1641,43 @@
     /** ...and they've sat down (their figure shows from now on). */
     seated(stand, seat) {
       const c = this.live.find((q) => q.st.id === stand);
-      if (!c || c.phase !== 'dep' || !c.order) return;
-      c.enRoute = Math.max(0, (c.enRoute || 0) - 1);
-      const k = c.order.indexOf(seat);
-      if (k >= 0) c.sat = Math.max(c.sat, k + 1);
+      if (!c || c.phase !== 'dep' || !c.order || seat < 0) return;
+      c.res.delete(seat);
+      c.walked.add(seat);
+      c.resV++;
+    }
+
+    /**
+     * For airportlife.js: someone in the aisle of the cabin at `stand`, at (x, z), going `dir` (1
+     * towards the nose, -1 aft), with Jay in their way. Where to step aside: { x, z, row, side,
+     * seat }, into the row beside them on `side` (1 port, -1 starboard), or null (not along the
+     * rows). One boarding (`seat`: the seat they're walking to) sits down there instead if there's
+     * a seat free in that row or one just behind them, either side (`seat` in the result: theirs
+     * now; -1: none, they stand in the row till he's by).
+     */
+    giveWay(stand, x, z, dir, side, seat) {
+      const c = this.live.find((q) => q.st.id === stand);
+      if (!c) return null;
+      const row0 = Math.round((ROW0 + 0.52 - (z - c.st.z)) / PITCH);
+      if (row0 < 0 || row0 >= ROWS) return null;
+      const spot = (row, sd, j) => ({ x: c.st.x + sd * 0.62, z: c.st.z + ROW0 - row * PITCH + 0.52, row, side: sd, seat: j });
+      if (seat >= 0 && c.phase === 'dep' && c.res && !c.panic) {
+        for (let k = 0; k < 3; k++) {
+          const row = row0 + (dir < 0 ? -k : k); // (rows count aft, so "behind them" is back the way they came)
+          if (row < 0 || row >= ROWS) continue;
+          for (const sd of [side, -side]) {
+            for (let s3 = 0; s3 < 3; s3++) {
+              const j = row * 6 + (sd > 0 ? s3 : 3 + s3);
+              if (j !== seat && (c.res.has(j) || c.walked.has(j) || (c.drawn && c.drawn.has(j)))) continue;
+              c.res.delete(seat);
+              c.res.set(j, c.clock || 0);
+              c.resV++;
+              return spot(row, sd, j);
+            }
+          }
+        }
+      }
+      return spot(row0, side, -1);
     }
 
     /** For an arriving passenger: up out of their seat ({ start }) and along to the door ({ pts }), or null. */

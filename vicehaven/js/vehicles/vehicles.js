@@ -566,7 +566,7 @@
       for (const v of this.list) {
         if (v.wrecked || v.driver === 'player' || v.noEnter) continue;
         if (v.speed > 5) continue;
-        for (const side of [1, -1]) {
+        for (const side of v.doorSide ? [v.doorSide] : [1, -1]) {
           const d0 = this._doorPoint(v, side, 0.5, this._tmp);
           const d = Math.hypot(d0.x - px, d0.z - pz);
           if (d < bestD) {
@@ -580,7 +580,7 @@
           const d = Math.abs(l.x) - v.hx;
           if (d < bestD) {
             bestD = d;
-            const side = l.x >= 0 ? 1 : -1;
+            const side = v.doorSide || (l.x >= 0 ? 1 : -1); // (an airliner: round to its one door)
             const d0 = this._doorPoint(v, side, 0.5, this._tmp);
             best = { v, side, x: d0.x, z: d0.z };
           }

@@ -22,7 +22,9 @@
  * big enough to burn the plane out: a fireball and a blackened wreck, cleared
  * a few minutes later when nobody's looking (or when Jay leaves the airport).
  * A plane shot on its takeoff roll aborts. In the air it just diverts.
- * Rockets and grenades hurt them too. One that's been put out (or never
+ * Rockets and grenades hurt them too (a thrown grenade bounces off one and can
+ * come to rest on a wing; a limpet sticks and rides along: planeContact), and
+ * a molotov sets one alight. One that's been put out (or never
  * caught) sits there, its flight Cancelled, until it's towed away.
  *
  * The fire service: a fire station east of the hangars with two crash
@@ -72,7 +74,12 @@
   // The fire station, east of Hangar 2 on the GA apron: two bays, doors north.
   const STATION = { x0: 288, x1: 326, z0: -1262, z1: -1226, h: 7.6 };
   const BAYS = [{ x: 297.5, z: -1244 }, { x: 316.5, z: -1244 }];
-  const LANE = -1309; //      the fire engines' way along the apron: just north of the airside road (z -1300)
+  // The fire engines' way along the apron: the airside road (z -1300), out of reach of the wings
+  // of the planes on the taxilane (z -1322, 17.3 m to a wingtip) and too tall to go under them;
+  // and west of the apron, between the taxilane and the taxiway (z -1365).
+  const LANE = -1301.5; //   (out along the westbound lane, home along the eastbound)
+  const LANE_BACK = -1298.5;
+  const LANE_W = -1343.5;
 
   // An Albatross in its own frame (nose +z, port +x, the ground at y 0): the fuselage loft (as
   // models/albatross.js), and the boxes a bullet or a car can hit.
@@ -145,6 +152,32 @@
   function planeFoot(L, m) {
     if (Math.abs(L.z) < 19 + m && Math.abs(L.x) < 2.2 + m) return true;
     return L.z > -8.5 - m && L.z < 6 + m && Math.abs(L.x) < 17.3 + m && L.z < 5.5 - Math.abs(L.x) * 0.55 + m;
+  }
+
+  /**
+   * Where an airliner on the ground is ({ x, z, yaw } of its main gear) and, on the move, where
+   * it is going: every 4 m of what's left of a pushback (its tail swings wide), or the next 30 m
+   * of a taxi (its path is the nose wheel's, the main gear 15.2 m behind).
+   */
+  const _sw = { x: 0, z: 0, h: 0 };
+  function sweep(pl) {
+    const out = [{ x: pl.x, z: pl.z, yaw: pl.yaw }];
+    const P = pl.path;
+    const push = pl.phase === 'pushback';
+    if (!P || pl.disabled || (!push && Math.abs(pl.v || 0) < 0.15) || !/^(pushback|taxiin|taxiout|tugoff|tow|towready)$/.test(pl.phase)) return out;
+    const far = push ? P.len - pl.s : Math.min(30, P.len - pl.s);
+    for (let d = 4; d <= far + 0.1; d += 4) {
+      const s1 = Math.min(P.len, pl.s + d);
+      P.at(s1, _sw);
+      if (push) out.push({ x: _sw.x, z: _sw.z, yaw: _sw.h + PI });
+      else {
+        const nx = _sw.x;
+        const nz = _sw.z;
+        P.at(Math.max(0, s1 - 15.2), _sw);
+        out.push({ x: _sw.x, z: _sw.z, yaw: Math.atan2(nx - _sw.x, nz - _sw.z) });
+      }
+    }
+    return out;
   }
 
   /** The plane's frame: a world point to local (x left/port, z forward). */
@@ -443,6 +476,58 @@
       if (!this._live) return -1;
       const best = this._rayPlanes(ox, oy, oz, dx, dy, dz, dist);
       return best ? best.t : -1;
+    }
+
+    /**
+     * For combat.js's thrown grenades and limpet charges: where a ray (unit d) first meets an
+     * airliner within dist, { t, x, y, z, nx, ny, nz (the skin's outward normal, in the world),
+     * plane (the Airliner: x, y, z, yaw, pitch, gone) }, or null. A grenade bounces off it (and
+     * comes to rest on a wing), a limpet sticks and goes wherever the plane goes.
+     */
+    planeContact(ox, oy, oz, dx, dy, dz, dist) {
+      if (!this._live) return null;
+      const h = this._rayPlanes(ox, oy, oz, dx, dy, dz, dist);
+      if (!h) return null;
+      const P = h.P;
+      let { nx, ny, nz } = h;
+      if (!P.loft && P.cyl === undefined) {
+        // A box (a wing, the fin, a gear leg): the face it came in through.
+        const f = [[h.lx - P.x0, -1, 0, 0], [P.x1 - h.lx, 1, 0, 0], [h.ly - P.y0, 0, -1, 0], [P.y1 - h.ly, 0, 1, 0], [h.lz - P.z0, 0, 0, -1], [P.z1 - h.lz, 0, 0, 1]];
+        let best = f[0];
+        for (const q of f) if (q[0] < best[0]) best = q;
+        [, nx, ny, nz] = best;
+      }
+      const pl = h.p.plane;
+      const c = Math.cos(pl.yaw);
+      const s = Math.sin(pl.yaw);
+      const l = Math.hypot(nx, ny, nz) || 1;
+      return { t: h.t, x: ox + dx * h.t, y: oy + dy * h.t, z: oz + dz * h.t, nx: (nx * c + nz * s) / l, ny: ny / l, nz: (-nx * s + nz * c) / l, plane: pl };
+    }
+
+    /**
+     * A molotov burst on an airliner at (x, y, z) (combat.js): it catches there, on the body or,
+     * on a wing, that side's engine (and either way it's disabled: everyone off down the slides).
+     */
+    molotov(x, y, z, source) {
+      if (!this._live) return;
+      const by = this._byJay(source) ? 'player' : null;
+      const L = { x: 0, z: 0 };
+      for (const p of this.airside.planes()) {
+        const pl = p.plane;
+        if (Math.abs(pl.x - x) > 25 || Math.abs(pl.z - z) > 25 || y - pl.y > 13) continue;
+        if (!planeFoot(toLocal(pl.x, pl.z, pl.yaw, x, z, L), 1.5)) continue;
+        const S = this._st(p);
+        const body = Math.abs(L.x) < 3;
+        const i = L.x > 0 ? 0 : 1;
+        if (body) this._hurt(S, -1, BODY_HP + 40, by);
+        else this._hurt(S, i, ENG_HP * 1.2, by);
+        this._ignite(S, body ? 2 : i, 0.3);
+        if (by && !this._shot.has(pl)) {
+          this._shot.add(pl);
+          this._crime('shootPlane', pl.x, pl.z, 2);
+        }
+        return;
+      }
     }
 
     /** The nearest plane part along a ray, within dist: { p, P, t, lx, ly, lz, nx, ny, nz } or null. */
@@ -1561,8 +1646,8 @@
       if (!stop) return;
       E.target = t;
       E.stop = stop;
-      // Out of the bay, across the GA apron (between the Skylarks), and along the apron just
-      // north of the airside road (z -1309), clear of the stands' vehicles.
+      // Out of the bay, across the GA apron (between the Skylarks), and along the airside road
+      // (LANE), out of reach of the wings of the planes taxiing behind the stands.
       const pts = [[b.x, b.z], [b.x, -1270], [84, -1306], [70, LANE]];
       E.road = pts.slice(2);
       const ax = stop.ax;
@@ -1570,7 +1655,7 @@
       if (ax >= -440) {
         if (Math.abs(az - LANE) > 3) pts.push([clamp(ax, -440, 66), LANE]);
       } else {
-        pts.push([-445, LANE], [-445, -1345], [ax, -1345]);
+        pts.push([-445, LANE], [-445, LANE_W], [ax, LANE_W]);
       }
       E.road = E.road.concat(pts.slice(4));
       E.app = [ax, az];
@@ -1644,14 +1729,18 @@
       E.target = null;
       v.siren = false;
       // Back off a little first, then the way it came, and back into the bay.
+      // (Not back in under a plane: then it just pulls away.)
       const fx = Math.sin(v.yaw);
       const fz = Math.cos(v.yaw);
-      const bx = v.pos.x - fx * 9;
-      const bz = v.pos.z - fz * 9;
-      const road = (E.road || [[84, -1306], [70, LANE]]).slice().reverse();
+      let back = 9;
+      while (back > 0 && [0.5, 1].some((k) => this._inPlane(v.pos.x - fx * back * k, v.pos.z - fz * back * k, 2.5))) back -= 3;
+      const bx = v.pos.x - fx * back;
+      const bz = v.pos.z - fz * back;
+      // (Home in the road's other lane, so two engines never meet head on.)
+      const road = (E.road || [[84, -1306], [70, LANE]]).slice().reverse().map(([x, z]) => [x, z === LANE ? LANE_BACK : z]);
       const pts = [[bx, bz]].concat(E.app ? [E.app] : [], road, [[b.x + 11, -1272]]);
       E.legs = [
-        { path: this._route([[v.pos.x, v.pos.z], [bx, bz]], 10), rev: true },
+        ...(back > 0 ? [{ path: this._route([[v.pos.x, v.pos.z], [bx, bz]], 10), rev: true }] : []),
         { path: this._route(pts, 14, 12), rev: false },
         { path: this._route([[b.x + 11, -1272], [b.x + 1.5, -1265], [b.x, -1258], [b.x, b.z]], 3.5), rev: true },
       ];
@@ -1715,11 +1804,13 @@
       let vt = P.cap(E.s);
       if (E.rev) vt = Math.min(vt, 3);
       if (E.ghostT > 0) E.ghostT -= dt;
-      const blk = E.ghostT > 0 ? Infinity : this._ahead(E, v);
+      // (Given up waiting: on through cars and vehicles, but never under a plane.)
+      const blk = this._ahead(E, v, E.ghostT > 0);
       // (To a stop with it at the nearest look, 3 m on: it used to creep on into it at 3 m/s.)
       if (blk < Infinity) vt = Math.min(vt, Math.sqrt(Math.max(0, 2 * 3.5 * (blk - 3))));
       // (An airliner going by isn't in the way for long: no clock on that.)
-      const passing = E.blkPl && Math.abs(E.blkPl.v || 0) > 0.3;
+      // (Nor is the other engine, waiting for one: it'll go when the plane has.)
+      const passing = (E.blkPl && Math.abs(E.blkPl.v || 0) > 0.3) || (E.blkV && this.engines.some((o) => o !== E && o.v === E.blkV && o.blkPl));
       E.blockT = blk < 4 && E.spd < 0.5 && !passing ? (E.blockT || 0) + dt : 0;
       if (E.blockT > 7) {
         E.blockT = 0;
@@ -1752,38 +1843,65 @@
     }
 
     /** Anything in the engine's way along its path: Jay, a car, a ground vehicle (how far). */
-    _ahead(E, v) {
+    _ahead(E, v, planesOnly) {
       const P = E.path;
       const g = this.game;
       const reach = 6 + (E.spd * E.spd) / 5;
       const pp = g.player;
       const pl = pp && !pp.inVehicle && !pp.isDead ? pp.pos : null;
       const gse = this.airside.groundVehicles();
-      // Airliners on the ground (bar the one it's going to put out): their wings reach over the lane.
+      // Airliners on the ground (bar the one it's going to put out): where each is, and one on the
+      // move where it will be in three and six seconds too (its wings sweep wide in a turn or a
+      // push). Already in the way of one of those: drive on clear (the plane waits for us).
       const tgt = E.target && E.target.S ? E.target.S.pl : null;
-      const planes = this.airside.planes().filter((q) => q.plane !== tgt && this._onGround(q.plane));
+      const A = this.airside;
       const L = _l;
+      const planes = [];
+      for (const q of A.planes()) {
+        if (q.plane === tgt || !this._onGround(q.plane) || Math.abs(q.x - v.pos.x) > 100 || Math.abs(q.z - v.pos.z) > 100) continue;
+        const poses = sweep(q.plane);
+        let under = false;
+        for (let i = 1; i < poses.length && !under; i++) under = planeFoot(toLocal(poses[i].x, poses[i].z, poses[i].yaw, v.pos.x, v.pos.z, L), 1.5);
+        // (A plane standing still is passed close by, its tail along the road; one moving, wide.
+        // Where it's about to go: only from outside it; already in its way, on and clear of it.)
+        planes.push({ q, poses: under ? poses.slice(0, 1) : poses, m: poses.length > 1 ? 4 : 1.8 });
+      }
       E.blkPl = null;
+      E.blkV = null;
       for (let d = 3; d <= reach; d += 2) {
         P.at(Math.min(P.len, E.s + (E.rev ? -0 : 0) + d), _o);
         if (E.s + d > P.len + 1) break;
         const x = _o.x;
         const z = _o.z;
-        if (pl && Math.hypot(pl.x - x, pl.z - z) < 2.2) return d;
-        for (const o of g.vehicles.list) {
+        if (pl && !planesOnly && Math.hypot(pl.x - x, pl.z - z) < 2.2) return d;
+        // (Along the way and across it: one in the road's other lane isn't in the way.)
+        const hs = Math.sin(_o.h);
+        const hc = Math.cos(_o.h);
+        for (const o of planesOnly ? [] : g.vehicles.list) {
           if (o === v || o.removed) continue;
-          if (Math.abs(o.pos.x - x) < 3.2 && Math.abs(o.pos.z - z) < 3.2 && Math.hypot(o.pos.x - x, o.pos.z - z) < 1.6 + Math.max(o.hx || 1, Math.min(o.hz || 2, 3))) return d;
-        }
-        for (const w of gse) {
-          if (!w.root.visible) continue;
-          if (Math.abs(w.x - x) < 4 && Math.abs(w.z - z) < 4) return d;
-        }
-        for (const q of planes) {
-          if (Math.abs(q.x - x) > 40 || Math.abs(q.z - z) > 40) continue;
-          toLocal(q.x, q.z, q.yaw, x, z, L);
-          if (planeFoot(L, 4)) { // (its own 4.7 m to the bumper, and a little more)
-            E.blkPl = q.plane;
+          const dx = o.pos.x - x;
+          const dz = o.pos.z - z;
+          if (Math.abs(dx) > 8 || Math.abs(dz) > 8) continue;
+          if (Math.abs(dx * hc - dz * hs) < 1.5 + (o.hx || 1) && Math.abs(dx * hs + dz * hc) < 1.6 + Math.min(o.hz || 2, 3)) {
+            E.blkV = o;
             return d;
+          }
+        }
+        for (const w of planesOnly ? [] : gse) {
+          if (!w.root.visible) continue;
+          const dx = w.x - x;
+          const dz = w.z - z;
+          if (Math.abs(dx) > 8 || Math.abs(dz) > 8) continue;
+          if (Math.abs(dx * hc - dz * hs) < 2.6 && Math.abs(dx * hs + dz * hc) < 2 + ((w.k && w.k.len) || 4) / 2) return d;
+        }
+        for (const { q, poses, m } of planes) {
+          if (Math.abs(q.x - x) > 60 || Math.abs(q.z - z) > 60 || (planesOnly && poses.length < 2)) continue; // (one standing still for ever: past it at last)
+          for (const o of poses) {
+            toLocal(o.x, o.z, o.yaw, x, z, L);
+            if (planeFoot(L, m)) { // (its own 4.7 m to the bumper, and a little more)
+              E.blkPl = q.plane;
+              return d;
+            }
           }
         }
       }
