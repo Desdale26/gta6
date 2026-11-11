@@ -217,15 +217,13 @@
         for (const q of A.planes()) {
           if (q.disabled || q.gone || !q.model || q.y > 0.5 || q.speed > MAX_V || !GROUND.has(q.state)) continue;
           if (Math.abs(q.x - P.x) > 45 || Math.abs(q.z - P.z) > 45) continue;
-          const port = this._portFree(q); // (true, false, or the air stairs at it)
+          const port = this._portFree(q);
           for (let s = 1; s >= -1; s -= 2) {
             if (s === 1 && !port) continue;
-            const truck = s === 1 && port !== true ? port : null;
-            if (truck) toWorld(truck.x, truck.z, truck.yaw, 0, TRUCK.foot, _w); // (up the air stairs)
-            else toWorld(q.x, q.z, q.yaw, s * ALB.foot, ALB.z, _w);
+            toWorld(q.x, q.z, q.yaw, s * ALB.foot, ALB.z, _w);
             const d = Math.hypot(_w.x - P.x, _w.z - P.z);
             if (d < HOLD_R) near.add(q);
-            if (d < c.d) this._pick('airliner', q, null, s, q.speed, d, truck);
+            if (d < c.d) this._pick('airliner', q, null, s, q.speed, d);
           }
         }
         for (const L of A.lightPlanes()) {
@@ -271,10 +269,9 @@
     }
 
     /** The nearest door so far (at _w). */
-    _pick(kind, q, k, side, v, d, truck) {
+    _pick(kind, q, k, side, v, d) {
       const c = this.cand;
       c.kind = kind;
-      c.truck = truck || null;
       c.q = q;
       c.k = k;
       c.side = side;
@@ -285,8 +282,8 @@
     }
 
     /**
-     * Is an airliner's front port door free? true; false with a jet bridge at it (or air stairs
-     * on the move); the air stairs standing at it (a remote stand: up those he goes).
+     * Is an airliner's front port door free? false with a jet bridge or the air stairs at it
+     * (he takes the starboard door then).
      */
     _portFree(q) {
       const A = this.game.airside;
@@ -297,7 +294,7 @@
       toWorld(q.x, q.z, q.yaw, ALB.skin + 3, ALB.z, _w);
       for (const w of A.groundVehicles()) {
         if (w.kind === 'stairs' && w.root.visible && Math.abs(w.x - _w.x) < 6 && Math.abs(w.z - _w.z) < 6) {
-          return !w.taken && Math.abs(w.v || 0) < 0.2 && Math.abs(w.x - _w.x) < 1.5 && Math.abs(w.z - _w.z) < 1.5 ? w : false;
+          return false; // (air stairs at the port door: he takes the starboard one)
         }
       }
       return true;
