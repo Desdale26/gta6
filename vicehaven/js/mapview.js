@@ -75,6 +75,7 @@
     waypoint: { name: 'GPS waypoint', cat: 'always', edge: true, labelAt: 0 },
     enemy: { name: 'Hostile', cat: 'always', labelAt: 99 },
     mission: { name: 'Story job', cat: 'story', cluster: true, labelAt: 0.4, tip: 'Walk into the marker to start the job.' },
+    dlc: { name: 'Story DLC job', cat: 'story', cluster: true, labelAt: 0.4, tip: 'A job in the story DLC. Walk into the marker to start it.' },
     race: { name: 'Street race', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Drive into the marker to start the race.' },
     challenge: { name: 'Side job', cat: 'jobs', cluster: true, labelAt: 0.75, tip: 'Walk into the marker to start.' },
     // The Hustle update's money makers.

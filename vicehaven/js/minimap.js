@@ -86,13 +86,14 @@
   const POLICE_BLUE = [47, 123, 255];
 
   // Drawing order: later types sit on top.
-  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, gunshop: 0, chopshop: 0, property: 0, owned: 1, pickup: 0, stash: 1, oddjob: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, encounter: 3, hustle: 3, police: 3, waypoint: 4, mission: 4, objective: 5 };
+  const PRIORITY = { car: 0, shop: 0, store: 0, spray: 0, gunshop: 0, chopshop: 0, property: 0, owned: 1, pickup: 0, stash: 1, oddjob: 1, plane: 0, heli: 0, tank: 0, safehouse: 1, race: 1, challenge: 1, enemy: 2, encounter: 3, hustle: 3, police: 3, waypoint: 4, mission: 4, dlc: 4, objective: 5 };
   const MAX_PRIORITY = 5;
 
   const LEGEND = [
     ['player', 'You'],
     ['objective', 'Objective'],
     ['mission', 'Mission'],
+    ['dlc', 'Story DLC job (giver\'s initial)'],
     ['route', 'GPS route'],
     ['police', 'Police'],
     ['search', 'Search area'],
@@ -358,6 +359,19 @@
       diamond(g, 3.3);
       g.fillStyle = INK;
       g.fill();
+    },
+    // The story DLC's jobs: a crimson-to-gold disc; the giver's initial goes on top (_drawBlip).
+    dlc(g) {
+      glow(g, 13, '255,64,110', 0.45);
+      g.beginPath();
+      g.arc(0, 0, 7.2, 0, TAU);
+      const gr = g.createLinearGradient(-7, -7, 7, 7);
+      gr.addColorStop(0, '#ff3d6e');
+      gr.addColorStop(1, '#ffb020');
+      inkThenFill(g, gr, 3.2);
+      g.lineWidth = 1.3;
+      g.strokeStyle = '#ffffff';
+      g.stroke();
     },
     police_r(g) {
       policeDot(g, POLICE_RED);
@@ -1884,7 +1898,7 @@
           // noRim: lots of the same thing (shops, parked aircraft) shows on the
           // radar only when near, though the full map shows them all.
           if (!BC[i] || blips[i].noRim || (PRIORITY[blips[i].type] || 0) !== p) continue;
-          this._drawBlip(g, d, this._spr, blips[i], BX[i], BY[i], blips[i].type === 'objective' || blips[i].type === 'mission' ? 0.95 : 0.78, i, cam, k, true);
+          this._drawBlip(g, d, this._spr, blips[i], BX[i], BY[i], blips[i].type === 'objective' || blips[i].type === 'mission' || blips[i].type === 'dlc' ? 0.95 : 0.78, i, cam, k, true);
         }
       }
       if (objective >= 0 && BC[objective]) {
@@ -1997,7 +2011,7 @@
         rotate = true;
       }
       if (!sprite) sprite = spr.mission;
-      let alpha = clamped && type !== 'objective' && type !== 'mission' ? 0.85 : 1;
+      let alpha = clamped && type !== 'objective' && type !== 'mission' && type !== 'dlc' ? 0.85 : 1;
       if (bl.flash && type !== 'police') alpha *= 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * TAU * (this._reduced ? 0.8 : 2.6)));
       if (type === 'objective' && !this._reduced) scale *= 1 + 0.08 * Math.sin(t * TAU * 1.2);
       // A street encounter pulses, with a ring going out from it.
@@ -2016,6 +2030,14 @@
       else {
         const s = sprite.size * scale;
         g.drawImage(sprite.canvas, X - s / 2, Y - s / 2, s, s);
+      }
+      // A story DLC job: its giver's initial.
+      if (bl.letter) {
+        g.font = '800 ' + (8.5 * scale).toFixed(1) + 'px ' + FONT;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = type === 'dlc' ? INK : '#ffffff';
+        g.fillText(bl.letter, X, Y + 0.6 * scale);
       }
       g.globalAlpha = 1;
     }

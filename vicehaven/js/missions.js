@@ -38,9 +38,10 @@
   const SETUP_STEPS = new Set(['spawnCar', 'spawn', 'join', 'leave', 'setFlag', 'protect', 'music', 'setTime']);
   // Steps that wait for Jay to do something; their objective ends with them.
   // Each one is also a checkpoint: a failed job can be retried from there.
-  const OBJECTIVE_STEPS = new Set(['goto', 'getIn', 'kill', 'survive', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'loseHeat']);
-  // Steps that wait (and so use up a timer set just before them).
-  const WAIT_STEPS = new Set([...OBJECTIVE_STEPS, 'wait', 'fade', 'camera', 'scene']);
+  const OBJECTIVE_STEPS = new Set(['goto', 'getIn', 'kill', 'survive', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'loseHeat', 'holdup']);
+  // Steps that wait (and so use up a timer set just before them). fly and land
+  // wait too, but aren't checkpoints: a retry never starts in mid-air.
+  const WAIT_STEPS = new Set([...OBJECTIVE_STEPS, 'wait', 'fade', 'camera', 'scene', 'fly', 'land']);
 
   // ------------------------------------------------------------ brains
   /** A story character standing about: faces Jay, gestures when speaking. */
@@ -604,8 +605,19 @@
       this._abort = null;
       this._markerTime = 0;
       this.stats = { missions: 0, side: 0 };
+      // The story DLC (S.dlc, js/data/dlc*.js): its own cast, places and
+      // factions merged with the main story's. Its places resolve last, so
+      // they never take a spot a main-story place would have had.
+      const D = this.story.dlc && this.story.dlc.id ? this.story.dlc : null;
+      this.dlc = D;
+      this.chars = Object.assign({}, this.story.characters || {}, (D && D.characters) || {});
+      this.factions = Object.assign({}, this.story.factions || {}, (D && D.factions) || {});
       this.game.dialogue.addCast(this.story.characters || {});
       this.game.places.define(this.story.places || {});
+      if (D) {
+        this.game.dialogue.addCast(D.characters || {});
+        this.game.places.define(D.places || {}, { late: true });
+      }
       this._index();
       this._buildMarkerAssets();
       this._bindEvents();
@@ -629,6 +641,32 @@
           this.all.set(m.id, m);
         });
       }
+      // The DLC's main jobs are a chain of their own (_dlcMain, never _main:
+      // the main story's next job, credits and completion don't see them);
+      // the first waits for D.unlockAfter. Its side chains work like the main ones.
+      this.dlcMain = [];
+      this.dlcSide = [];
+      const D = this.dlc;
+      if (!D) return;
+      this.dlcMain = (D.missions || []).slice();
+      this.dlcMain.forEach((m, i) => {
+        m._dlc = true;
+        m._dlcMain = true;
+        m._index = i;
+        if (!m.requires) m.requires = i > 0 ? [this.dlcMain[i - 1].id] : D.unlockAfter ? [D.unlockAfter] : [];
+        this.all.set(m.id, m);
+      });
+      this.dlcSide = D.side || [];
+      for (const chain of this.dlcSide) {
+        chain._dlc = true;
+        (chain.missions || []).forEach((m, i) => {
+          m._dlc = true;
+          m._chain = chain;
+          if (!m.requires) m.requires = i > 0 ? [chain.missions[i - 1].id] : chain.unlockAfter ? [chain.unlockAfter] : [];
+          if (!m.giver) m.giver = chain.giver;
+          this.all.set(m.id, m);
+        });
+      }
     }
 
     _bindEvents() {
@@ -640,7 +678,7 @@
     isAvailable(m) {
       if (this.completed[m.id] && !m.repeatable) return false;
       for (const r of m.requires || []) if (!this.completed[r]) return false;
-      if (m.requiresFlag && !this.flags[m.requiresFlag]) return false;
+      if (m.requiresFlag && !MissionEngine.testFlag(Object.assign({}, this.completed, this.flags), m.requiresFlag)) return false;
       return true;
     }
 
@@ -654,10 +692,63 @@
       return this.main.find((m) => !this.completed[m.id]) || null;
     }
 
+    /** The main game's jobs (the DLC counts separately: dlcProgress). */
     get progress() {
-      const total = this.all.size;
-      const done = Object.keys(this.completed).filter((id) => this.all.has(id)).length;
+      let total = 0;
+      let done = 0;
+      for (const m of this.all.values()) {
+        if (m._dlc) continue;
+        total++;
+        if (this.completed[m.id]) done++;
+      }
       return { done, total, pct: total ? done / total : 0 };
+    }
+
+    /** The DLC's next main job (null when it's finished or there is none). */
+    get nextDlc() {
+      return this.dlcMain.find((m) => !this.completed[m.id]) || null;
+    }
+
+    /** Is the DLC open (its unlockAfter job passed)? */
+    get dlcUnlocked() {
+      return !!this.dlc && (!this.dlc.unlockAfter || !!this.completed[this.dlc.unlockAfter]);
+    }
+
+    /** The DLC's jobs: { done, total, pct, main: [done, total], side: [done, total] }. */
+    get dlcProgress() {
+      const main = [0, 0];
+      const side = [0, 0];
+      for (const m of this.all.values()) {
+        if (!m._dlc) continue;
+        const c = m._dlcMain ? main : side;
+        c[1]++;
+        if (this.completed[m.id]) c[0]++;
+      }
+      const done = main[0] + side[0];
+      const total = main[1] + side[1];
+      return { done, total, pct: total ? done / total : 0, main, side };
+    }
+
+    /**
+     * The DLC has just opened (its unlockAfter job passed, or a save already
+     * past it was loaded): once per save, a text from its first giver (or
+     * D.unlockText) and a note; the first job's marker is up by then.
+     */
+    _dlcUnlockCheck(delay) {
+      const D = this.dlc;
+      if (!D || !this.dlcMain.length || this.flags._dlcUnlocked || !this.dlcUnlocked) return;
+      this.flags._dlcUnlocked = true;
+      const first = this.dlcMain[0];
+      const t = D.unlockText || { from: first.giver, message: 'Got a job for a driver. Come and find me: ' + (((this.game.places.get(first.start) || {}).name) || 'the marker on your map') + '.' };
+      const show = () => {
+        if (this.game.state === 'title') return;
+        // Not over a story job's scenes (a chained main job may start first): after it.
+        if (this.run && (this.run.m._main || this.run.m._dlcMain)) return void setTimeout(show, 20000);
+        this.game.hud.notify({ title: 'New story: ' + (D.title || 'DLC'), text: D.tagline || '', icon: '★', duration: 8000 });
+        this.game.dialogue.text(t.from, t.message);
+        if (!this.run) this.refreshMarkers();
+      };
+      setTimeout(show, (delay || 0) * 1000);
     }
 
     // ---------------------------------------------------------- markers
@@ -703,7 +794,8 @@
         }
       }
       if (taken) taken.push(place);
-      const color = m._main ? new THREE.Color(3, 1.3, 0.35) : new THREE.Color(0.4, 1.6, 3);
+      // Main story amber, the DLC's story crimson, side jobs blue.
+      const color = m._main ? new THREE.Color(3, 1.3, 0.35) : m._dlcMain ? new THREE.Color(3.2, 0.42, 0.62) : new THREE.Color(0.4, 1.6, 3);
       const g = new THREE.Group();
       const ring = new THREE.Mesh(this._ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
       const beam = new THREE.Mesh(this._beamGeo, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(0.55), transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
@@ -713,7 +805,7 @@
       this.game.scene.add(g);
       const item = {
         id: 'mission:' + m.id, kind: 'mission', mission: m, x: place.x, y: (place.y || 0.15) + 1, z: place.z, radius: 2.8,
-        label: (m._main ? 'Start ' : 'Side job: ') + '“' + m.title + '”',
+        label: (m._main || m._dlcMain ? 'Start ' : 'Side job: ') + '“' + m.title + '”',
       };
       this.game.interaction.register(item);
       return { m, g, ring, item, place };
@@ -729,7 +821,8 @@
       if (this.run) return;
       const taken = [];
       // Story jobs first, so they keep the spot and the side job moves over.
-      const list = this.available().slice().sort((a, b) => (b._main ? 1 : 0) - (a._main ? 1 : 0));
+      const rank = (m) => (m._main ? 2 : m._dlcMain ? 1 : 0);
+      const list = this.available().slice().sort((a, b) => rank(b) - rank(a));
       for (const m of list) {
         if (MissionEngine.selfStarting(m) && (!m.resumeAt || this._chainPending === m.id)) continue;
         const mk = this._markerFor(m, taken);
@@ -740,7 +833,13 @@
     /** Minimap blips for jobs and the current objective. */
     blips(out) {
       if (!this.run) {
-        for (const mk of this.markers) out.push({ x: mk.place.x, z: mk.place.z, type: mk.m._main ? 'mission' : mk.m.giver === 'race' ? 'race' : 'challenge', label: mk.m.title });
+        for (const mk of this.markers) {
+          const m = mk.m;
+          // The DLC's jobs: their own blip (side jobs as side jobs), with the giver's initial.
+          const b = { x: mk.place.x, z: mk.place.z, type: m._main ? 'mission' : m._dlcMain ? 'dlc' : m.giver === 'race' ? 'race' : 'challenge', label: m.title };
+          if (m._dlc) b.letter = m._letter || (m._letter = (((this.chars[m.giver] || {}).name || m.giver || '?') + '')[0].toUpperCase());
+          out.push(b);
+        }
         return;
       }
       const r = this.run;
@@ -784,7 +883,7 @@
       this._abort = run.token;
       document.body.classList.add('on-mission');
       this.refreshMarkers();
-      game.hud.missionTitle(m.title, m._main ? 'Act ' + (m.act || 1) : (m._chain ? m._chain.title : 'Side job'));
+      game.hud.missionTitle(m.title, m._main ? 'Act ' + (m.act || 1) : m._dlcMain ? (this.dlc.title ? this.dlc.title + ' · ' : '') + 'Act ' + (m.act || 1) : (m._chain ? m._chain.title : 'Side job'));
       if (game.audio.missionStart) game.audio.missionStart();
       VH.events.emit('mission:start', { m });
       if (m.time !== undefined && !fromCheckpoint) this._setTime(m.time, true);
@@ -834,6 +933,8 @@
     /** A checkpoint at top-level step i: a retry starts here, with the world as it is now. */
     _checkpoint(run, i, kind, resumed) {
       const game = this.game;
+      // Not in mid-air: a retry would drop the aircraft out of the sky. The last one stands.
+      if (game.player.vehicle && game.player.vehicle.flying) return;
       run.checkpoint = i;
       this._checkpointPos = this._snapshotPlayer();
       // What a retry from here starts with (choices made before it stay made).
@@ -981,8 +1082,8 @@
       // Story characters a scene brought on (scenes aren't replayed): back where they stood.
       for (const key of Object.keys(snap.actors)) {
         const s = snap.actors[key];
-        if (run.actors.has(key) || !s.char || !(this.story.characters || {})[s.char]) continue;
-        const a = game.crowd.spawn(s.x, s.z, { look: this.lookFor(s.char), faction: 'story', role: 'story', persistent: true, health: 200, name: this.story.characters[s.char].name });
+        if (run.actors.has(key) || !s.char || !this.chars[s.char]) continue;
+        const a = game.crowd.spawn(s.x, s.z, { look: this.lookFor(s.char), faction: 'story', role: 'story', persistent: true, health: 200, name: this.chars[s.char].name });
         a.pos.y = s.y;
         a.heading = s.heading;
         a.charId = s.char;
@@ -1052,7 +1153,7 @@
     }
 
     static kindOf(step) {
-      const keys = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'objective', 'checkpoint'];
+      const keys = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'objective', 'checkpoint', 'fly', 'land', 'holdup', 'explode'];
       for (const k of keys) if (step[k] !== undefined) return k;
       if (step.say) return 'say';
       return 'none';
@@ -1121,6 +1222,22 @@
           return this._collect(step, run);
         case 'destroy':
           return this._destroy(step, run);
+        case 'fly':
+          return this._fly(step, run);
+        case 'land':
+          return this._land(step, run);
+        case 'holdup':
+          return this._holdup(step, run);
+        case 'explode': {
+          const v = run.cars.get(step.explode);
+          if (v && !v.wrecked && !v.removed) {
+            // Whoever's inside gets out first (Jay too): it's a stunt, not a death.
+            if (game.player.vehicle === v) game.vehicles.exitVehicle();
+            if (v.driver === 'ai') this.ejectDriver(v);
+            v.explode();
+          }
+          return;
+        }
         case 'heat':
           game.police.setLevel(step.heat, 'mission');
           game.police._sawPlayer();
@@ -1242,6 +1359,17 @@
       return best;
     }
 
+    /** Is anyone of `faction` (this job's people, on foot or driving) within r of Jay? */
+    _near(run, faction, r) {
+      const p = this.game.player.pos;
+      for (const a of run.actors.values()) {
+        if (a.dead || a.removed || a.leaving || a.faction !== faction) continue;
+        const at = a.inCar ? a.inCar.pos : a.pos;
+        if (Math.abs(at.x - p.x) < r && Math.abs(at.z - p.z) < r && Math.hypot(at.x - p.x, at.z - p.z) < r) return true;
+      }
+      return false;
+    }
+
     _setMarker(pos, opts) {
       const run = this.run;
       if (!run) return;
@@ -1272,7 +1400,7 @@
 
     // --------------------------------------------------------- people
     lookFor(charId) {
-      const c = (this.story.characters || {})[charId];
+      const c = this.chars[charId];
       if (!c) return null;
       const L = c.look || {};
       const build = L.build || 'average';
@@ -1286,7 +1414,7 @@
     }
 
     factionLook(fid, i) {
-      const f = (this.story.factions || {})[fid];
+      const f = this.factions[fid];
       const base = VH.Crowd.randomLook();
       if (fid === 'police' || fid === 'vpd') return Object.assign({}, VH.Police.COP_LOOK, { skin: base.skin });
       if (!f || !f.colors) return base;
@@ -1358,7 +1486,7 @@
           const z = spot.z;
           const hostile = e.hostile !== undefined ? e.hostile : e.faction && e.faction !== 'civilian' && e.faction !== 'crew' && e.faction !== 'friendly';
           const look = e.char ? this.lookFor(e.char) : this.factionLook(e.faction, i);
-          const opts = { look, faction: e.faction || (e.char ? 'story' : 'civilian'), role: 'story', persistent: true, health: e.health || (hostile ? 100 : 150), armor: e.armor || 0, heading: place.yaw || 0, name: e.char ? (this.story.characters[e.char] || {}).name : null };
+          const opts = { look, faction: e.faction || (e.char ? 'story' : 'civilian'), role: 'story', persistent: true, health: e.health || (hostile ? 100 : 150), armor: e.armor || 0, heading: place.yaw || 0, name: e.char ? (this.chars[e.char] || {}).name : null };
           let a;
           const behavior = e.behavior || (hostile ? 'guard' : 'idle');
           if (hostile || behavior === 'attack' || behavior === 'guard' || behavior === 'patrol') {
@@ -1423,11 +1551,11 @@
 
     _join(id, run, weapon) {
       let a = run.actors.get(id);
-      if (!a && (this.story.characters || {})[id]) {
+      if (!a && this.chars[id]) {
         // Not placed yet: bring them in next to Jay.
         const p = this.game.player;
         const spot = this._standSpot(p.pos.x - Math.sin(p.heading) * 2, p.pos.z - Math.cos(p.heading) * 2, p.pos.y, [p.pos], 6);
-        a = this.game.crowd.spawn(spot.x, spot.z, { look: this.lookFor(id), faction: 'crew', role: 'story', persistent: true, health: 200, name: this.story.characters[id].name });
+        a = this.game.crowd.spawn(spot.x, spot.z, { look: this.lookFor(id), faction: 'crew', role: 'story', persistent: true, health: 200, name: this.chars[id].name });
         a.pos.y = spot.y;
         a.charId = id;
         run.actors.set(id, a);
@@ -1480,6 +1608,13 @@
       let place = this._place(step.at) || game.player.pos;
       // A rooftop's cars wait in the street by its stairs, not up on the roof.
       if (place.roof && place.door) place = place.door;
+      // Planes and helicopters: on clear, flat ground, a plane facing its longest clear run.
+      const spec = VH.Vehicle.typeSpec(step.type);
+      if (spec && (spec.kind === 'plane' || spec.kind === 'heli')) {
+        const spot = step.exact ? { x: place.x, z: place.z, y: this._floorOf(place), heading: step.heading !== undefined ? step.heading : place.yaw || 0 } : this._airSpot(place, spec, step);
+        const v = game.vehicles.spawn(step.type, spot.x, spot.z, spot.heading, { color: step.color, role: 'mission', persistent: true, y: spot.y });
+        return this._ownCar(v, step, run);
+      }
       let x = place.x;
       let z = place.z;
       let heading = step.heading !== undefined ? step.heading : place.yaw || 0;
@@ -1520,6 +1655,11 @@
       }
       const type = VH.Vehicle.typeSpec(step.type) ? step.type : 'halcyon';
       const v = game.vehicles.spawn(type, x, z, heading, { color: step.color, role: 'mission', persistent: true });
+      return this._ownCar(v, step, run);
+    }
+
+    /** A car (or aircraft) spawned by a step becomes the job's, under its id. */
+    _ownCar(v, step, run) {
       v.role = 'mission';
       v.persistent = true;
       v.missionOwned = true;
@@ -1530,6 +1670,88 @@
       if (run.failIf.includes('wrecked:' + step.spawnCar)) v.damageScale = 0.4;
       if (step.watch !== false) run.watchCars.push(v);
       return v;
+    }
+
+    static isAircraft(v) {
+      return !!v && (v.kind === 'plane' || v.kind === 'heli');
+    }
+
+    /**
+     * Where an aircraft spawned at `place` goes: the nearest spot (outward
+     * from the place) where its whole footprint, wings or rotor included, is
+     * on flat open ground clear of walls and vehicles, facing the heading
+     * with the longest clear run ahead (a plane lines up along a runway or
+     * open ground; a helicopter keeps the place's facing). step.heading fixes it.
+     */
+    _airSpot(place, spec, step) {
+      const ph = this.game.physics;
+      const A = spec.air || {};
+      const heli = spec.kind === 'heli';
+      const L = spec.length || 10;
+      const W = Math.max(A.span || 0, spec.width || 2);
+      const H = Math.min(spec.height || 3, 6);
+      const y0 = this._floorOf(place);
+      const flat = (x, z, tol) => {
+        const g = ph.groundHeight(x, z, y0 + 2);
+        return Math.abs(g - y0) < tol && !ph.overlaps(x, z, 0.9, g + 0.4, g + H) ? g : null;
+      };
+      const vehClear = (x, z) => {
+        for (const o of this.game.vehicles.list) {
+          if (o.removed || Math.abs(o.pos.x - x) > 60 || Math.abs(o.pos.z - z) > 60) continue;
+          const ro = Math.max(o.hx || 1, o.hz || 2, (o.span || 0) / 2);
+          if (Math.hypot(o.pos.x - x, o.pos.z - z) < W / 2 + ro + 1.5) return false;
+        }
+        return true;
+      };
+      const fits = (x, z, yaw) => {
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        for (const u of [-L / 2, 0, L / 2]) {
+          for (const w of [-W / 2, 0, W / 2]) {
+            if (flat(x + fx * u + fz * w, z + fz * u - fx * w, 0.6) === null) return false;
+          }
+        }
+        return true;
+      };
+      // Clear run ahead of the nose (metres, up to 400): the take-off roll.
+      const run = (x, z, yaw) => {
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        let d = L / 2;
+        for (; d < 400; d += 10) {
+          if (flat(x + fx * d, z + fz * d, 1.5) === null) break;
+          if (flat(x + fx * d + fz * W * 0.45, z + fz * d - fx * W * 0.45, 1.5) === null) break;
+          if (flat(x + fx * d - fz * W * 0.45, z + fz * d + fx * W * 0.45, 1.5) === null) break;
+        }
+        return d;
+      };
+      const yaw0 = place.yaw || 0;
+      const headings = step.heading !== undefined ? [step.heading] : [yaw0];
+      if (step.heading === undefined) for (let i = 1; i < 16; i++) headings.push(yaw0 + (i * Math.PI) / 8);
+      for (let r = 0; r <= 120; r += 8) {
+        const n = r === 0 ? 1 : Math.max(8, Math.round(r / 4));
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          const x = place.x + Math.cos(a) * r;
+          const z = place.z + Math.sin(a) * r;
+          if (!vehClear(x, z)) continue;
+          const ok = headings.filter((hd) => fits(x, z, hd));
+          if (!ok.length) continue;
+          let best = ok[0];
+          if (!heli && ok.length > 1) {
+            let bl = -1;
+            for (const hd of ok) {
+              const l = run(x, z, hd);
+              if (l > bl + 5) {
+                bl = l;
+                best = hd;
+              }
+            }
+          }
+          return { x, z, y: ph.groundHeight(x, z, y0 + 2), heading: best };
+        }
+      }
+      return { x: place.x, z: place.z, y: y0, heading: step.heading !== undefined ? step.heading : yaw0 };
     }
 
     /** Does a later step of this job give car `id` an AI driver? */
@@ -1668,8 +1890,10 @@
       if (!place) return;
       const radius = step.radius || (step.vehicle ? 7 : 3.2);
       const needCar = step.vehicle === true;
-      const carId = typeof step.vehicle === 'string' ? step.vehicle : null;
+      const needAir = step.vehicle === 'aircraft'; // any plane or helicopter
+      const carId = typeof step.vehicle === 'string' && !needAir ? step.vehicle : null;
       const onFoot = step.vehicle === false;
+      const clear = step.clearOf ? { faction: step.clearOf.faction, r: step.clearOf.radius || 100 } : null;
       const label = step.objective || 'Go to ' + (place.name || 'the marker');
       // Rooftops: the door first, then up the stairs.
       if (place.roof && place.door) {
@@ -1691,6 +1915,10 @@
           this._objective('Get a car');
           return false;
         }
+        if (needAir && !MissionEngine.isAircraft(v)) {
+          this._objective('Get in an aircraft');
+          return false;
+        }
         if (carId) {
           const car = run.cars.get(carId);
           if (car && car.wrecked) throw new MissionFailed(carRef(car, true) + ' was wrecked.');
@@ -1703,11 +1931,20 @@
           if (Math.hypot(p.pos.x - place.x, p.pos.z - place.z) < radius + 12) this._objective('Get out of the car');
           return false;
         }
+        // clearOf: nobody of that faction within r of Jay (on foot or driving).
+        if (clear && this._near(run, clear.faction, clear.r)) {
+          this._objective(step.clearObjective || 'Lose them');
+          return false;
+        }
         this._objective(label);
         const d = Math.hypot(p.pos.x - place.x, p.pos.z - place.z);
         if (d > radius) return false;
+        if (step.stop !== false && v && v.flying) {
+          this._objective('Land');
+          return false;
+        }
         if (step.stop !== false && v && v.speed > 2) {
-          this._objective('Stop the car');
+          this._objective(MissionEngine.isAircraft(v) ? 'Bring it to a stop' : 'Stop the car');
           return false;
         }
         return true;
@@ -1723,6 +1960,11 @@
         this._setMarker(null);
         return this._until(() => !!game.player.vehicle, run);
       }
+      if (id === 'aircraft') {
+        this._objective(step.objective || 'Get in a plane or a helicopter');
+        this._setMarker(null);
+        return this._until(() => MissionEngine.isAircraft(game.player.vehicle), run);
+      }
       const car = run.cars.get(id);
       if (!car) return;
       // Whatever locked it earlier (a chase, a tail, `locked`), Jay is told to get in now.
@@ -1734,6 +1976,143 @@
         return game.player.vehicle === car;
       }, run);
       this._setMarker(null);
+    }
+
+    // ----------------------------------------------------------- flying
+    /** The aircraft this flying step is about: step.vehicle's, else whichever Jay is in. */
+    _airFor(step, run) {
+      const p = this.game.player;
+      const want = step.vehicle ? run.cars.get(step.vehicle) : null;
+      if (want && want.wrecked) throw new MissionFailed(carRef(want, true) + ' was wrecked.');
+      const v = p.vehicle;
+      if (MissionEngine.isAircraft(v) && (!want || v === want)) {
+        run.lastAir = v;
+        run.airMk = null;
+        return v;
+      }
+      // Jay's out of it: crashed (wrecked) is a fail; bailed out or on the ground, he gets back in.
+      if (run.lastAir && run.lastAir.wrecked && !want) throw new MissionFailed(carRef(run.lastAir, true) + ' was wrecked.');
+      this._objective(want ? 'Get back in ' + carRef(want) : 'Get in a plane or a helicopter');
+      if (want && run.airMk !== want) this._setMarker(want.pos, { r: 3, noRing: true });
+      run.airMk = want || run.airMk;
+      return null;
+    }
+
+    /** The ring in the sky (one, reused): a glowing hoop facing the way Jay comes in. */
+    _showSkyRing(c, r, from) {
+      if (!this._skyRing) {
+        const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.045, 8, 72), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.6, 0.3), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+        m.name = 'mission sky ring';
+        m.frustumCulled = false;
+        this.game.scene.add(m);
+        this._skyRing = m;
+      }
+      const m = this._skyRing;
+      m.position.set(c.x, c.y, c.z);
+      m.scale.setScalar(r);
+      m.rotation.set(0, Math.atan2(c.x - from.x, c.z - from.z), 0);
+      m.visible = true;
+    }
+
+    async _fly(step, run) {
+      const game = this.game;
+      const place = this._place(step.fly);
+      if (!place) return;
+      const height = step.height !== undefined ? step.height : 120;
+      const radius = step.radius || 60;
+      // Above whatever stands there (roofs, a lighthouse), never below the sea.
+      const base = Math.max(0, game.physics.groundHeight(place.x, place.z, 800));
+      const c = { x: place.x, y: base + height, z: place.z };
+      this._showSkyRing(c, radius, game.player.pos);
+      const label = step.objective || 'Fly through the ring' + (place.name ? ' over ' + place.name : '');
+      this._setMarker(c, { r: radius, noRing: true, noRoute: true });
+      await this._until(() => {
+        const v = this._airFor(step, run);
+        if (!v) return false;
+        if (!run.marker || run.marker.x !== c.x || run.marker.z !== c.z) this._setMarker(c, { r: radius, noRing: true, noRoute: true });
+        const dy = c.y - v.pos.y;
+        const dh = Math.hypot(c.x - v.pos.x, c.z - v.pos.z);
+        // Close enough to matter and well off its height: say which way.
+        const hint = dh < 600 && Math.abs(dy) > radius * 0.7 ? (dy > 0 ? ' (climb)' : ' (lower)') : '';
+        this._objective(label + hint);
+        return Math.hypot(dh, dy) < radius;
+      }, run);
+      if (this._skyRing) this._skyRing.visible = false;
+      this._setMarker(null);
+      if (game.audio.checkpoint) game.audio.checkpoint();
+    }
+
+    async _land(step, run) {
+      const game = this.game;
+      const place = this._place(step.land);
+      if (!place) return;
+      const radius = step.radius || 40;
+      const label = step.objective || 'Land at ' + (place.name || 'the marker');
+      await this._until(() => {
+        const v = this._airFor(step, run);
+        if (!v) return false;
+        if (!run.marker || run.marker.x !== place.x || run.marker.z !== place.z) this._setMarker(place, { r: radius, noRoute: true });
+        if (v.flying || Math.hypot(v.pos.x - place.x, v.pos.z - place.z) > radius) {
+          this._objective(label);
+          return false;
+        }
+        if (v.speed > 1.5) {
+          this._objective('Bring it to a stop');
+          return false;
+        }
+        return true;
+      }, run);
+      this._setMarker(null);
+    }
+
+    /** Is a hold-up of shop `s` this job's (holdup.js lets it happen mid-job)? */
+    holdupAllowed(s) {
+      return !!(this.run && this.run.holdupStore && this.run.holdupStore === s);
+    }
+
+    /**
+     * Hold up a shop (holdup.js): the one with that id (store_N), else the
+     * shop nearest the place ('any': nearest Jay), one with a safe when
+     * safe: true. Done when he hands over the safe (safe: true) or the bag.
+     */
+    async _holdup(step, run) {
+      const game = this.game;
+      const st = game.stores;
+      if (!st || !st.ok) return;
+      let s = st.byId.get(step.holdup);
+      if (!s) {
+        const at = step.holdup === 'any' ? game.player.pos : this._place(step.holdup) || game.player.pos;
+        let bd = Infinity;
+        for (const o of st.list) {
+          if (step.safe && !(o.hold && o.hold.hasSafe)) continue;
+          const d = Math.hypot(o.door.x - at.x, o.door.z - at.z);
+          if (d < bd) {
+            bd = d;
+            s = o;
+          }
+        }
+      }
+      if (!s) return;
+      // Open, with a full till and a safe worth opening, whatever happened there before.
+      st.until[s.id] = 0;
+      if (st.holdup && st.holdup._shop) st.holdup._shop(s.id).safeUntil = 0;
+      run.holdupStore = s;
+      let done = false;
+      const off = VH.events.on(step.safe ? 'holdup:safe' : 'holdup:bag', (e) => {
+        if (e && e.s === s) done = true;
+      });
+      try {
+        this._setMarker(s.door, { r: 2.5 });
+        await this._until(() => {
+          const inside = Math.hypot(game.player.pos.x - s.centre.x, game.player.pos.z - s.centre.z) < 9;
+          this._objective(step.objective || (inside ? (step.safe ? 'Aim at the clerk. Make him open the safe' : 'Aim at the clerk') : 'Hold up ' + s.name));
+          return done;
+        }, run);
+      } finally {
+        // (run.holdupStore stays: the hold-up plays out to its end, the bag and the getaway.)
+        off();
+        this._setMarker(null);
+      }
     }
 
     // ---------------------------------------------------------- scenes
@@ -1779,7 +2158,7 @@
         }
         if (!a || a.dead) {
           const s = spot();
-          a = game.crowd.spawn(s.x, s.z, { look: this.lookFor(id) || VH.Crowd.randomLook(), faction: 'story', role: 'story', persistent: true, health: 200, name: (this.story.characters[id] || {}).name });
+          a = game.crowd.spawn(s.x, s.z, { look: this.lookFor(id) || VH.Crowd.randomLook(), faction: 'story', role: 'story', persistent: true, health: 200, name: (this.chars[id] || {}).name });
           a.pos.y = s.y;
           a.charId = id;
           a.brain = new IdleBrain(this);
@@ -2021,7 +2400,17 @@
       const base = step.objective || 'Take them out';
       this._track(() => this._nearestOf(list));
       await this._until(() => {
-        const dead = list.filter((a) => a.dead || a.removed).length;
+        // Bowled over by the crash tender's water cannon counts as down: they get up and run.
+        const pv = this.game.player.vehicle;
+        if (pv && pv.type === 'firetruck' && pv.jet) {
+          for (const a of list) {
+            if (a._hosed || a.dead || a.state !== 'down' || a.lastAttacker !== 'player') continue;
+            a._hosed = true;
+            this._standDown(run, [a]);
+            run.targets = list;
+          }
+        }
+        const dead = list.filter((a) => a.dead || a.removed || a._hosed).length;
         this._objective(base + (list.length > 1 ? ' (' + Math.max(0, need - dead) + ' left)' : ''));
         return dead >= need;
       }, run);
@@ -2109,6 +2498,9 @@
       const car = run.cars.get(step.chase);
       if (!car) return;
       const route = (step.route || []).map((id) => this._place(id)).filter(Boolean);
+      // escapeTo: they make for that place, and reaching it fails the job.
+      const escapeTo = step.escapeTo ? this._place(step.escapeTo) : null;
+      if (escapeTo && !route.length) route.push(escapeTo);
       car.driver = 'ai';
       car.controller = new FleeDriver(this, car, route.length ? route : null);
       car.noEnter = true;
@@ -2146,6 +2538,7 @@
             return true;
           }
         }
+        if (escapeTo && !(car.controller && car.controller.gaveUp) && Math.hypot(car.pos.x - escapeTo.x, car.pos.z - escapeTo.z) < (step.escapeRadius || 25)) throw new MissionFailed(step.escapeReason || 'They got away.');
         if (d > (step.escape || 260)) lostT += this._dt;
         else lostT = 0;
         if (lostT > 6) throw new MissionFailed('They got away.');
@@ -2164,17 +2557,19 @@
       car.controller = drv;
       car.noEnter = true;
       run.targetCars = [car];
-      const min = step.min || 12;
+      // min: 0 is a friendly escort: no "too close", and a bump is only a bump.
+      const min = step.min !== undefined ? step.min : 12;
+      const friendly = min <= 0;
       const max = step.max || 110;
       let close = 0;
       let far = 0;
-      this._objective(step.objective || 'Follow ' + carRef(car) + ' — not too close');
+      this._objective(step.objective || 'Follow ' + carRef(car) + (friendly ? '' : ' — not too close'));
       this._track(() => (car.wrecked || car.removed ? null : car));
       await this._until(() => {
         const p = game.player;
         const d = Math.hypot(car.pos.x - p.pos.x, car.pos.z - p.pos.z);
         if (car.wrecked) throw new MissionFailed('You wrecked the car you were supposed to follow.');
-        if (drv.bumped) throw new MissionFailed('You hit them. Cover blown.');
+        if (drv.bumped && !friendly) throw new MissionFailed('You hit them. Cover blown.');
         if (d < min) close += this._dt;
         else close = Math.max(0, close - this._dt * 0.5);
         if (d > max) far += this._dt;
@@ -2232,7 +2627,7 @@
         v.driver = 'ai';
         v.noEnter = true;
         v.controller = new RaceDriver(this, v, valid, rv.skill || 0.85 + i * 0.05);
-        v.racerName = rv.char ? (this.story.characters[rv.char] || {}).name || rv.char : rv.name || 'Rival';
+        v.racerName = rv.char ? (this.chars[rv.char] || {}).name || rv.char : rv.name || 'Rival';
         rivals.push(v);
         run.cars.set('rival' + i, v);
       });
@@ -2293,7 +2688,8 @@
       const place = this._place(step.to);
       if (!car || !place) return;
       const minHealth = 1000 * (1 - (step.maxDamage === undefined ? 0.6 : step.maxDamage));
-      this._setMarker(place, { r: 7 });
+      const radius = step.radius || 7;
+      this._setMarker(place, { r: radius });
       if (step.timeLimit) run.pendingTimer = step.timeLimit;
       await this._until(() => {
         if (car.wrecked || car.health < minHealth) throw new MissionFailed(carRef(car, true) + ' is too damaged.');
@@ -2302,7 +2698,13 @@
           return false;
         }
         this._objective(step.objective || 'Deliver ' + carRef(car) + ' (' + Math.round(car.health / 10) + '% condition)');
-        return Math.hypot(car.pos.x - place.x, car.pos.z - place.z) < 7 && car.speed < 2;
+        if (Math.hypot(car.pos.x - place.x, car.pos.z - place.z) >= radius) return false;
+        // An aircraft is delivered on the ground (and, like a car, stopped unless stop: false).
+        if (car.flying) {
+          this._objective('Land');
+          return false;
+        }
+        return step.stop === false || car.speed < 2;
       }, run);
       this._setMarker(null);
     }
@@ -2462,6 +2864,8 @@
       this._cleanup(run, false);
       this.completed[m.id] = true;
       if (m._main) this.stats.missions++;
+      else if (m._dlcMain) this.stats.dlc = (this.stats.dlc || 0) + 1;
+      else if (m._dlc) this.stats.dlcSide = (this.stats.dlcSide || 0) + 1;
       else this.stats.side++;
       const gear = this._reward(m.reward, false) || '';
       const money = (m.reward && m.reward.money) || 0;
@@ -2476,6 +2880,15 @@
         this.completed._credits = true;
         setTimeout(() => game.endCredits && game.endCredits(), 6500);
       }
+      // The DLC's last main job: its own ending (ui.js rolls its credits on dlc:complete).
+      if (m._dlcMain && !this.nextDlc && !this.completed._dlcCredits) {
+        this.completed._dlcCredits = true;
+        setTimeout(() => {
+          VH.events.emit('dlc:complete', { dlc: this.dlc, m });
+          if (game.dlcCredits) game.dlcCredits();
+        }, 6500);
+      }
+      this._dlcUnlockCheck(9);
       // Chained missions start straight away.
       const next = this.available().find((n) => n.start === 'chain' && (n.requires || []).includes(m.id));
       if (next) {
@@ -2489,10 +2902,10 @@
         }, 4200);
       }
       // Ambient texts after this mission.
-      for (const t of this.story.texts || []) {
+      for (const t of (this.story.texts || []).concat((this.dlc && this.dlc.texts) || [])) {
         if (t.after !== m.id || (t.requiresFlag && !MissionEngine.testFlag(Object.assign({}, this.completed, this.flags), t.requiresFlag))) continue;
         setTimeout(() => {
-          if (!this.run || !this.run.m._main) game.dialogue.text(t.from, t.message);
+          if (!this.run || !(this.run.m._main || this.run.m._dlcMain)) game.dialogue.text(t.from, t.message);
         }, (t.delay || 20) * 1000);
       }
     }
@@ -2552,6 +2965,7 @@
 
     _cleanup(run, failed) {
       const game = this.game;
+      if (this._skyRing) this._skyRing.visible = false;
       if (failed) {
         // A failed job leaves nothing behind: the retry starts from a clean
         // street instead of on top of the last attempt's cars and cast.
@@ -2714,6 +3128,16 @@
       }
       const run = this.run;
       if (!run) return;
+      // A job's aircraft left flying with nobody at the controls (Jay bailed
+      // out) doesn't come down on anyone: once it's well away from him, it's gone.
+      for (const v of run.cars.values()) {
+        if (!v.flying || v.driver || v.removed || v.wrecked || !MissionEngine.isAircraft(v)) {
+          if (v._pilotless) v._pilotless = 0;
+          continue;
+        }
+        v._pilotless = (v._pilotless || 0) + dt;
+        if (v._pilotless > 2.5 && Math.hypot(v.pos.x - game.player.pos.x, v.pos.z - game.player.pos.z) > 70) game.vehicles.remove(v);
+      }
       // A moving objective: the marker, arrow and route follow it.
       if (run.track) {
         const o = run.track();
@@ -2939,6 +3363,7 @@
         }
       }
       if (g.activities && g.activities._spawnKingCar) g.activities._spawnKingCar();
+      this._dlcUnlockCheck(7); // a save already past the DLC's unlockAfter: its first text and marker
     }
 
     reset() {

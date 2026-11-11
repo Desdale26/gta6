@@ -490,7 +490,7 @@ Climbable spots (`water_tower_top`, `sheriff_roof`, `clocktower_ledge`, `clinic_
 | `estate_study` | palomaheights | mansion | Leo's study: an open French window on the east terrace, a green lamp | d20 |
 | `clinic_helipad` | palomaheights | rooftop | the H on the private clinic's roof | dsf3 |
 | `observatory_lawn` | palomaheights | park | the flat lawn beside the observatory dome | dsf3 |
-| `fort_gate` | oldpaloma | street | the fort's landward gate and the cobbled ramp up from the lanes | d27, d28, d30 |
+| `paloma_fort_gate` | oldpaloma | street | the fort's landward gate and the cobbled ramp up from the lanes | d27, d28, d30 |
 
 The airport's own registered places (`airport_apron`, `airport_gate`, `airport_hangars`, `airport_helipad`, from `js/airfield.js`) and the old city's `grand_avenue`, `harbor_point` and `the_boardwalk` are used by id directly.
 

@@ -187,6 +187,7 @@
           p = { x: s.x, z: s.z, y: s.y, yaw: s.yaw || 0, kind, district, name, roof: !!s.roof };
         }
       }
+      if (!p && district === 'airport') p = this._airport(id, kind);
       if (!p && this.v3Districts().has(district)) p = this._resolve3(h, district, kind, name);
       if (!p && FRONT_KINDS.has(kind)) p = this._front(h, district, kind, name);
       if (!p && kind === 'alley') p = this._alley(h, district);
@@ -276,6 +277,31 @@
      * shop fronts, alleys, car parks, rooftops and corners of its blocks, and
      * the special kinds at the district's own landmarks.
      */
+    /**
+     * Story places at Vicehaven International (district 'airport'): a spot
+     * whose words appear in the id (charter_stand, airport_fire_station,
+     * terminal_security ...), else one for the kind. Inside the terminal
+     * the place stands on the hall floor.
+     */
+    _airport(id, kind) {
+      if (!this.world.airfield) return null;
+      const SPOTS = [
+        { w: ['security'], x: -320, z: -1209, yaw: Math.PI }, //           landside of the arches
+        { w: ['concourse', 'airside', 'duty'], x: -250, z: -1223, yaw: -Math.PI / 2 },
+        { w: ['gate', 'lounge', 'boarding'], x: -210, z: -1236, yaw: Math.PI }, // gate lounge by the jet bridge
+        { w: ['checkin', 'check_in', 'desk', 'departures', 'hall'], x: -378, z: -1207, yaw: Math.PI },
+        { w: ['fire'], x: 307, z: -1270, yaw: 0 }, //                     the fire station's doors (north side)
+        { w: ['charter', 'remote', 'stand', 'jet'], x: -446, z: -1316, yaw: -Math.PI / 2 }, // beside the flyable Albatross's stand
+        { w: ['hangar', 'flying', 'ga_', 'private'], x: 185, z: -1285, yaw: 0 },
+        { w: ['runway', 'tower'], x: -300, z: -1420, yaw: Math.PI },
+        { w: ['car_park', 'carpark', 'parking', 'kerb', 'taxi', 'drop'], x: -255, z: -1186, yaw: Math.PI },
+      ];
+      const KIND = { storefront: 3, bar: 3, diner: 3, garage: 6, warehouse: 6, parking: 8, street: 8, corner: 8 };
+      let s = SPOTS.find((o) => o.w.some((word) => id.includes(word)));
+      if (!s) s = SPOTS[KIND[kind] !== undefined ? KIND[kind] : 8];
+      return { x: s.x, z: s.z, yaw: s.yaw };
+    }
+
     _resolve3(h, district, kind, name) {
       const free = (this.extra[district] || []).filter((s) => !s.used);
       const first = free.filter((s) => s.kinds && s.kinds[0] === kind);

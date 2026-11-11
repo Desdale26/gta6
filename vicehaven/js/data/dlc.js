@@ -15,7 +15,7 @@
 
   D.title = 'Chasing the Firecrest';
   D.tagline = 'Seven parts. Seven riddles. One lost racing car somewhere across the bay. And mind the road.';
-  D.unlockAfter = ''; // the engine agent sets this to the main story's third job
+  D.unlockAfter = 'm03_ten_and_two'; // the main story's third job (missions.js unlocks the DLC after it)
 
   D.acts = {
     1: { title: 'Lot 17' },
@@ -324,7 +324,7 @@
     old_lanes: { district: 'oldpaloma', kind: 'alley', desc: 'the narrow lanes of Old Paloma, steps and arches' },
     fort_light: { district: 'oldpaloma', kind: 'overlook', desc: "the fort lighthouse and Odie Wren's blue door" },
     powder_store: { district: 'oldpaloma', kind: 'warehouse', desc: "the powder store in the fort's wall, bricked up fifty years ago; later an open arch with the Firecrest inside" },
-    fort_gate: { district: 'oldpaloma', kind: 'street', desc: 'the Paloma fort\'s landward gate and the cobbled ramp up from the lanes into the courtyard' },
+    paloma_fort_gate: { district: 'oldpaloma', kind: 'street', desc: 'the Paloma fort\'s landward gate and the cobbled ramp up from the lanes into the courtyard' },
     // Paloma Heights
     estate_garden: { district: 'palomaheights', kind: 'mansion', desc: "Leo Castellane's back lawn: party lights, a swimming pool, a string quartet, Dash's camera crane" },
     estate_gate: { district: 'palomaheights', kind: 'street', desc: "the estate's gates and the road down the hill" },

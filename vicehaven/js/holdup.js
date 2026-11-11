@@ -512,7 +512,7 @@
       this._sfx('shopChime');
       const a = this._clerk(inside);
       const g = this.game;
-      if (!a || this.active || (g.missions && g.missions.run) || a.brain.mode !== 'idle') return;
+      if (!a || this.active || (g.missions && g.missions.run && !(g.missions.holdupAllowed && g.missions.holdupAllowed(inside))) || a.brain.mode !== 'idle') return;
       if (this._armed()) {
         this._waryTold = true;
         a.brain.mode = 'nervous';
@@ -538,7 +538,7 @@
         }
       }
       if (!this.stores._covering(a)) return;
-      if (g.missions && g.missions.run) {
+      if (g.missions && g.missions.run && !(g.missions.holdupAllowed && g.missions.holdupAllowed(s))) { // (a job's holdup step allows its shop)
         b.scare(4);
         return;
       }
@@ -614,7 +614,7 @@
       const g = this.game;
       const h = this.active;
       const p = g.player;
-      if (p.isDead || g._arresting || (g.missions && g.missions.run)) return this._end('abort');
+      if (p.isDead || g._arresting || (g.missions && g.missions.run && !(g.missions.holdupAllowed && g.missions.holdupAllowed(h.s)))) return this._end('abort');
       if (h.a.removed || h.a.dead) return this._end('clerk');
       if (inside !== h.s) return this._end('left');
       h.t += dt;
