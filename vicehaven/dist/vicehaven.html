@@ -19466,6 +19466,411 @@ void main() {
     { id: 'vicehaven_international', name: 'Vicehaven International', kind: 'airport', x: -255, z: -1222, major: true, short: 'Airport', gx: -255, gz: -1190 },
     { id: 'fort_breakwater', name: 'Fort Breakwater', kind: 'fort', x: -1300, z: 0, major: true, short: 'Army base', gx: -1092, gz: 0 },
   ];
+
+  // ===================================================================
+  // VICEHAVEN 3.0: the bigger city. Twelve new districts round the old
+  // city and on Isla Paloma across the bay. Everything below is strictly
+  // additive: the old districts, roads and blocks above stay exactly as
+  // they were. citygen.js turns this into roads, blocks (layout.blocks3)
+  // and lots; docs/WORLD.md is the plan as built.
+  // ===================================================================
+  const NEW_DISTRICTS = [
+    {
+      id: 'sandpiper', name: 'Sandpiper Beach', tagline: 'Surf, sun and sandy floor mats',
+      rect: { minX: 13, maxX: 470, minZ: 641, maxZ: 1190 },
+      lot: { min: 18, max: 30 }, alleyChance: 0.15, emptyLotChance: 0.12,
+      archetypes: [
+        { type: 'lowrise', weight: 5, floors: [1, 2] },
+        { type: 'shophouse', weight: 3, floors: [1, 2] },
+        { type: 'hotel', weight: 1, floors: [4, 7] },
+        { type: 'apartment', weight: 1, floors: [3, 5] },
+      ],
+      palette: {
+        walls: [0xf7c6c7, 0xa8e0d8, 0xf9e2a6, 0xc9d8f5, 0xffd3b0, 0xb9ead6, 0xe9c9f0, 0xfff1d6],
+        roofs: [0x8a8f94, 0x9a9da0, 0xc9b79c],
+        accents: [0xffffff, 0x1f8a8a, 0xff6f91, 0xf0a030, 0x2a7de1],
+      },
+      trees: { type: 'palmTall', spacing: 22, chance: 0.9 },
+      ambient: { crowd: 'tourist', traffic: 'medium', peds: 1.1, cars: 0.8 },
+    },
+    {
+      id: 'vistaverde', name: 'Vista Verde', tagline: 'Lawns, lunchboxes and a mall',
+      rect: { minX: -640, maxX: 12.99, minZ: 641, maxZ: 1190 },
+      lot: { min: 22, max: 32 }, alleyChance: 0, emptyLotChance: 0.03,
+      archetypes: [
+        { type: 'house', weight: 12, floors: [1, 1] },
+        { type: 'villa', weight: 2, floors: [2, 2] },
+        { type: 'apartment', weight: 1, floors: [2, 3] },
+      ],
+      palette: {
+        walls: [0xf2e6d0, 0xe6efe9, 0xf1e3b3, 0xd9e8f0, 0xcfe3d4, 0xe8d6c0, 0xd4dbe4, 0xf4d9c6],
+        roofs: [0x7a6a5a, 0x5c5f63, 0xa4553c, 0x6b5848, 0x4f5a66],
+        accents: [0xffffff, 0x2f7f86, 0xd8795e, 0x3d6b8f],
+      },
+      trees: { type: 'tree', spacing: 16, chance: 0.9 },
+      ambient: { crowd: 'residential', traffic: 'light', peds: 0.7, cars: 0.6 },
+    },
+    {
+      id: 'ironside', name: 'Ironside', tagline: 'Smoke, steel and the night shift',
+      rect: { minX: -640, maxX: 0, minZ: 1190.01, maxZ: 1800 },
+      lot: { min: 34, max: 64 }, alleyChance: 0, emptyLotChance: 0.25,
+      archetypes: [
+        { type: 'shed', weight: 8, floors: [1, 2] },
+        { type: 'office', weight: 1, floors: [2, 3] },
+      ],
+      palette: {
+        walls: [0x8a8f96, 0x9a968e, 0xa8a39a, 0x7d838a, 0xb8b6b0, 0x6e7378, 0x8f7a64],
+        roofs: [0x5a5f66, 0x5d6168, 0x4a4d50],
+        accents: [0xe06a1a, 0xd8c070, 0x2b4a6b, 0xb03a2e],
+      },
+      trees: { type: 'treeB', spacing: 40, chance: 0.5 },
+      ambient: { crowd: 'industrial', traffic: 'industrial', peds: 0.35, cars: 0.7 },
+    },
+    {
+      id: 'thebowl', name: 'The Bowl', tagline: 'Game day, every day',
+      rect: { minX: 0.01, maxX: 470, minZ: 1190.01, maxZ: 1800 },
+      lot: { min: 28, max: 44 }, alleyChance: 0, emptyLotChance: 0.35,
+      archetypes: [
+        { type: 'shophouse', weight: 3, floors: [1, 2] },
+        { type: 'lowrise', weight: 2, floors: [1, 2] },
+        { type: 'shed', weight: 1, floors: [2, 3] },
+      ],
+      palette: {
+        walls: [0xdfe3e6, 0xc9d8f5, 0xf5f0e6, 0xb9c4cc, 0xe8d6c0, 0x2a5d8f],
+        roofs: [0x777777, 0x8a8f94],
+        accents: [0x1f5fa8, 0xf2b01e, 0xffffff, 0xd93b48],
+      },
+      trees: { type: 'palm', spacing: 30, chance: 0.8 },
+      ambient: { crowd: 'tourist', traffic: 'medium', peds: 0.6, cars: 0.8 },
+    },
+    {
+      id: 'sunreel', name: 'Sunreel Studios', tagline: 'Quiet on set',
+      rect: { minX: -1080, maxX: -640.01, minZ: 55.01, maxZ: 680 },
+      lot: { min: 34, max: 60 }, alleyChance: 0, emptyLotChance: 0.18,
+      archetypes: [
+        { type: 'shed', weight: 6, floors: [2, 3] },
+        { type: 'office', weight: 2, floors: [2, 4] },
+        { type: 'lowrise', weight: 1, floors: [1, 2] },
+      ],
+      palette: {
+        walls: [0xe9e4da, 0xd8cdb8, 0xf2efe8, 0xc9b79c, 0xb9c4cc, 0xe6d4a6],
+        roofs: [0x777777, 0x8a8f94, 0x6b6e72],
+        accents: [0xc9a227, 0x7a2f2a, 0x2d3440, 0xffffff],
+      },
+      trees: { type: 'palm', spacing: 26, chance: 0.8 },
+      ambient: { crowd: 'business', traffic: 'light', peds: 0.5, cars: 0.5 },
+    },
+    {
+      id: 'cindercreek', name: 'Cinder Creek', tagline: 'Last stop for gas, films and storage',
+      rect: { minX: -1080, maxX: -640.01, minZ: -700, maxZ: -55.01 },
+      lot: { min: 28, max: 50 }, alleyChance: 0, emptyLotChance: 0.3,
+      archetypes: [
+        { type: 'shed', weight: 4, floors: [1, 1] },
+        { type: 'lowrise', weight: 3, floors: [1, 1] },
+        { type: 'shophouse', weight: 2, floors: [1, 1] },
+      ],
+      palette: {
+        walls: [0xc9b79c, 0xb8a58a, 0xd8cdb8, 0x9a968e, 0xe6d4a6, 0xa8b0a0],
+        roofs: [0x5a5f66, 0x6b5848, 0x7a6a5a],
+        accents: [0xe06a1a, 0xc9a227, 0x7a2f2a, 0x2b4a6b],
+      },
+      trees: { type: 'treeB', spacing: 36, chance: 0.6 },
+      ambient: { crowd: 'light', traffic: 'light', peds: 0.35, cars: 0.5 },
+    },
+    {
+      id: 'halcyon', name: 'Halcyon University', tagline: 'Knowledge, coffee and parking permits',
+      rect: { minX: -640, maxX: -80, minZ: -1100, maxZ: -670 },
+      lot: { min: 30, max: 48 }, alleyChance: 0, emptyLotChance: 0.08,
+      archetypes: [
+        { type: 'office', weight: 5, floors: [3, 5] },
+        { type: 'apartment', weight: 3, floors: [4, 6] },
+        { type: 'shophouse', weight: 2, floors: [2, 3] },
+      ],
+      palette: {
+        walls: [0x8a4b3a, 0x9c5a44, 0xa8704f, 0xb88a62, 0xc49a74, 0xd8cdb8, 0x7a3f33],
+        roofs: [0x4f4a45, 0x5a524a, 0x3f4a3f],
+        accents: [0xe7dcc8, 0x2f5d50, 0x7a2f2a, 0xc9a227],
+      },
+      trees: { type: 'tree', spacing: 18, chance: 0.95 },
+      ambient: { crowd: 'market', traffic: 'light', peds: 1.0, cars: 0.6 },
+    },
+    {
+      id: 'coralmarina', name: 'Coral Marina', tagline: 'Boats you can\'t afford, views you can',
+      rect: { minX: 60.01, maxX: 470, minZ: -1100, maxZ: -661 },
+      lot: { min: 26, max: 40 }, alleyChance: 0, emptyLotChance: 0.1,
+      archetypes: [
+        { type: 'apartment', weight: 5, floors: [6, 14] },
+        { type: 'hotel', weight: 2, floors: [8, 14] },
+        { type: 'shophouse', weight: 2, floors: [1, 2] },
+      ],
+      palette: {
+        walls: [0xf5f0e6, 0xe6efe9, 0xd9e8f0, 0xf2e6d0, 0xc9d8f5, 0xffffff],
+        roofs: [0x8a8f94, 0x9a9da0],
+        accents: [0x1f5fa8, 0xffffff, 0x1f8a8a, 0xc9a227],
+      },
+      trees: { type: 'palmTall', spacing: 20, chance: 0.9 },
+      ambient: { crowd: 'tourist', traffic: 'light', peds: 0.8, cars: 0.6 },
+    },
+    // Isla Paloma, across the bay.
+    {
+      id: 'neonstrand', name: 'Neon Strand', tagline: 'The lights never sleep, and neither do you',
+      rect: { minX: 700, maxX: 1300, minZ: -288, maxZ: 180 },
+      lot: { min: 30, max: 46 }, alleyChance: 0.2, emptyLotChance: 0.1,
+      archetypes: [
+        { type: 'hotel', weight: 6, floors: [10, 24] },
+        { type: 'shophouse', weight: 2, floors: [1, 3] },
+        { type: 'lowrise', weight: 1, floors: [2, 2] },
+      ],
+      palette: {
+        walls: [0xf7c6c7, 0xa8e0d8, 0xe9c9f0, 0xc9d8f5, 0xffd3b0, 0xf5f0e6, 0xb9ead6, 0x2d3440],
+        roofs: [0x8a8f94, 0x6b6e72],
+        accents: [0xff6f91, 0x16a3a3, 0x8a3fd1, 0xf0a030, 0xffffff],
+      },
+      trees: { type: 'palmTall', spacing: 16, chance: 0.95 },
+      ambient: { crowd: 'tourist', traffic: 'heavy', peds: 1.2, cars: 1.0 },
+    },
+    {
+      id: 'oldpaloma', name: 'Old Paloma', tagline: 'Bells, boats and cobbles',
+      rect: { minX: 700, maxX: 1300, minZ: 180.01, maxZ: 900 },
+      lot: { min: 14, max: 24 }, alleyChance: 0.6, emptyLotChance: 0.06,
+      archetypes: [
+        { type: 'shophouse', weight: 6, floors: [2, 4] },
+        { type: 'apartment', weight: 2, floors: [3, 4] },
+      ],
+      palette: {
+        walls: [0xf2e6d0, 0xf1e3b3, 0xe8c9a0, 0xd8795e, 0xf4d9c6, 0xe6efe9, 0xc9a26a, 0xb8d4c8],
+        roofs: [0xa4553c, 0x9a4e37, 0xb86446],
+        accents: [0xffffff, 0x2f7f86, 0x3d6b8f, 0xc9a227],
+      },
+      trees: { type: 'palm', spacing: 26, chance: 0.6 },
+      ambient: { crowd: 'market', traffic: 'light', peds: 1.0, cars: 0.5 },
+    },
+    {
+      id: 'palomaheights', name: 'Paloma Heights', tagline: 'Behind the walls, the view',
+      rect: { minX: 700, maxX: 1300, minZ: -700, maxZ: -288.01 },
+      lot: { min: 34, max: 52 }, alleyChance: 0, emptyLotChance: 0.04,
+      archetypes: [
+        { type: 'villa', weight: 6, floors: [2, 2] },
+        { type: 'house', weight: 1, floors: [1, 1] },
+      ],
+      palette: {
+        walls: [0xf4f1ea, 0xf2e6d0, 0xe6efe9, 0xffffff, 0xe8e0d0, 0xd9e8f0],
+        roofs: [0xa4553c, 0x7a6a5a, 0x5c5f63],
+        accents: [0x2f7f86, 0xffffff, 0xc9a227],
+      },
+      trees: { type: 'palm', spacing: 18, chance: 0.95 },
+      ambient: { crowd: 'residential', traffic: 'light', peds: 0.4, cars: 0.5 },
+    },
+    {
+      id: 'palomafield', name: 'Paloma Field', tagline: 'Short runway, long lunches',
+      rect: { minX: 1300.01, maxX: 1700, minZ: -700, maxZ: 900 },
+      lot: { min: 0, max: 0 }, alleyChance: 0, emptyLotChance: 1,
+      archetypes: [],
+      palette: { walls: [0xdfe3e6], roofs: [0x777777], accents: [0x1fa3a3] },
+      trees: { type: 'palm', spacing: 40, chance: 0.5 },
+      ambient: { crowd: 'none', traffic: 'light', peds: 0.2, cars: 0.3 },
+    },
+  ];
+  for (const d of NEW_DISTRICTS) d.v3 = true;
+  // Before the catch-all outskirts and bay (districtAt takes the first match).
+  {
+    const list = VH.Data.districts;
+    const at = list.findIndex((d) => d.id === 'outskirts');
+    list.splice(at, 0, ...NEW_DISTRICTS);
+  }
+
+  /**
+   * The new roads (layout.roads, flagged v3). Avenues run north-south (axis
+   * 'z', coord = x), streets east-west (axis 'x', coord = z). Every road
+   * starts and ends on another road, so there are no dead ends.
+   * spans: other names along stretches of the road ([from, to, name]).
+   * Old roads that now run further (Grand, Pelican, Coral, Seawall Drive,
+   * Anchor and Heron Streets) are extended in citygen.js.
+   */
+  VH.Data.roads3 = [
+    // The western bypass and the southern highway: the long way round, fast.
+    { id: 'westgate', axis: 'z', coord: -636, from: -1070, to: 1760, width: 22, median: 2, name: 'Westgate Parkway' },
+    { id: 'southcoast', axis: 'x', coord: 1760, from: -636, to: 330, width: 22, median: 2, name: 'South Coast Highway' },
+    { id: 'sandpiper_dr', axis: 'z', coord: 330, from: 660, to: 1760, width: 18, median: 3, name: 'Sandpiper Drive' },
+    // The south: Vista Verde, Sandpiper Beach, Ironside, The Bowl.
+    { id: 'southbay_rd', axis: 'x', coord: 660, from: -1050, to: 330, width: 18, median: 3, name: 'Southbay Road' },
+    { id: 'seabreeze', axis: 'x', coord: 790, from: -636, to: 980, width: 14, name: 'Seabreeze Street', spans: [[424, 780, 'Southbay Causeway']] },
+    { id: 'dune_st', axis: 'x', coord: 920, from: -636, to: 330, width: 14, name: 'Dune Street' },
+    { id: 'orchard_st', axis: 'x', coord: 1050, from: -636, to: 330, width: 14, name: 'Orchard Street' },
+    { id: 'mariner_way', axis: 'x', coord: 1190, from: -636, to: 330, width: 18, median: 3, name: 'Mariner Way' },
+    { id: 'foundry_rd', axis: 'x', coord: 1470, from: -636, to: 330, width: 14, name: 'Foundry Road' },
+    { id: 'linden_ave', axis: 'z', coord: -480, from: 660, to: 1190, width: 14, name: 'Linden Avenue' },
+    { id: 'birchwood', axis: 'z', coord: -320, from: 660, to: 1760, width: 14, name: 'Birchwood Avenue', spans: [[1190, 1760, 'Smelter Avenue']] },
+    { id: 'hollyhock', axis: 'z', coord: -160, from: 660, to: 1190, width: 14, name: 'Hollyhock Avenue' },
+    { id: 'surfrider', axis: 'z', coord: 160, from: 660, to: 1190, width: 14, name: 'Surfrider Avenue' },
+    // The west: Sunreel Studios and Cinder Creek.
+    { id: 'studio_rd', axis: 'x', coord: 200, from: -1050, to: -636, width: 14, name: 'Studio Road' },
+    { id: 'klieg_st', axis: 'x', coord: 440, from: -1050, to: -636, width: 14, name: 'Klieg Street' },
+    { id: 'backlot_ave', axis: 'z', coord: -1050, from: 200, to: 660, width: 14, name: 'Backlot Avenue' },
+    { id: 'premiere_ave', axis: 'z', coord: -850, from: 200, to: 660, width: 14, name: 'Premiere Avenue' },
+    { id: 'cinder_rd', axis: 'x', coord: -660, from: -1050, to: -636, width: 14, name: 'Cinder Road' },
+    { id: 'starview_rd', axis: 'x', coord: -440, from: -1050, to: -636, width: 14, name: 'Starview Road' },
+    { id: 'haulers_rd', axis: 'x', coord: -200, from: -1050, to: -636, width: 14, name: 'Haulers Road' },
+    { id: 'dustbowl_ln', axis: 'z', coord: -1050, from: -660, to: -200, width: 14, name: 'Dustbowl Lane' },
+    { id: 'juniper_ave', axis: 'z', coord: -850, from: -660, to: -200, width: 14, name: 'Juniper Avenue' },
+    // The north: Halcyon University and Coral Marina.
+    { id: 'college_rd', axis: 'x', coord: -1070, from: -636, to: -96, width: 14, name: 'College Road' },
+    { id: 'varsity_rd', axis: 'x', coord: -760, from: -636, to: -96, width: 14, name: 'Varsity Road' },
+    { id: 'chancellor', axis: 'z', coord: -360, from: -1070, to: -760, width: 14, name: 'Chancellor Avenue' },
+    { id: 'marina_blvd', axis: 'x', coord: -750, from: 0, to: 384, width: 16, name: 'Marina Boulevard' },
+    { id: 'lighthouse_rd', axis: 'x', coord: -1070, from: 288, to: 384, width: 14, name: 'Lighthouse Road' },
+    // Isla Paloma. Anchor Street crosses the Paloma Bridge to Bayfront Drive.
+    { id: 'mirador_rd', axis: 'x', coord: -470, from: 800, to: 1300, width: 14, name: 'Mirador Road' },
+    { id: 'strand', axis: 'x', coord: -60, from: 800, to: 1300, width: 18, median: 3, name: 'The Strand' },
+    { id: 'mission_st', axis: 'x', coord: 180, from: 800, to: 1300, width: 14, name: 'Mission Street' },
+    { id: 'harbour_st', axis: 'x', coord: 420, from: 800, to: 1300, width: 14, name: 'Harbour Street' },
+    { id: 'bayfront', axis: 'z', coord: 800, from: -470, to: 420, width: 14, name: 'Bayfront Drive' },
+    { id: 'paloma_way', axis: 'z', coord: 980, from: -470, to: 790, width: 14, name: 'Paloma Way' },
+    { id: 'lantana_ave', axis: 'z', coord: 1160, from: -470, to: 420, width: 14, name: 'Lantana Avenue' },
+    { id: 'airfield_rd', axis: 'z', coord: 1300, from: -470, to: 420, width: 14, name: 'Airfield Road' },
+  ];
+
+  /**
+   * Isla Paloma's land (y = 0 inside, the bay outside), the bridges onto it,
+   * and the stretch of water each crosses.
+   */
+  VH.Data.island = {
+    name: 'Isla Paloma',
+    land: [
+      { minX: 780, maxX: 1520, minZ: -580, maxZ: 580 },
+      { minX: 780, maxX: 1160, minZ: 580, maxZ: 840 }, // the old town's spur, down to the fort
+    ],
+    bridges: [
+      { id: 'paloma_bridge', name: 'Paloma Bridge', axis: 'x', coord: -288, from: 424, to: 780, width: 14, towers: [530, 674] },
+      { id: 'southbay_causeway', name: 'Southbay Causeway', axis: 'x', coord: 790, from: 424, to: 780, width: 14, towers: [] },
+    ],
+  };
+
+  /**
+   * The new blocks, as cells between road (or shore) lines: [x0, x1, z0, z1].
+   * An edge on a road line is kerbed back to the road's edge; any other edge
+   * (the shore, open ground) is pulled in 3 m. `plot` reserves the whole
+   * block for a landmark (no generic lots; a district builder builds it).
+   * `kind` 'park' makes a lawn with trees.
+   */
+  VH.Data.cells3 = [
+    // Vista Verde: 4 x 4 blocks of houses, the mall by Grand Avenue, the school.
+    ...[[-636, -480], [-480, -320], [-320, -160], [-160, 0]].flatMap(([x0, x1]) => [[660, 790], [790, 920], [920, 1050], [1050, 1190]].map(([z0, z1]) => {
+      const c = { d: 'vistaverde', r: [x0, x1, z0, z1] };
+      if (x0 === -160 && z0 === 660) c.plot = 'verde_mall';
+      if (x0 === -480 && z0 === 920) c.plot = 'vista_verde_school';
+      if (x0 === -320 && z0 === 920) c.kind = 'park';
+      return c;
+    })),
+    // Sandpiper Beach: two columns of blocks, then the beach east of Sandpiper Drive.
+    ...[[0, 160], [160, 330]].flatMap(([x0, x1]) => [[660, 790], [790, 920], [920, 1050], [1050, 1190]].map(([z0, z1]) => {
+      const c = { d: 'sandpiper', r: [x0, x1, z0, z1] };
+      if (x0 === 160 && z0 === 920) c.plot = 'skate_park';
+      return c;
+    })),
+    { d: 'sandpiper', r: [330, 424, 660, 790] },
+    { d: 'sandpiper', r: [330, 424, 790, 1190], plot: 'sandpiper_beach' },
+    // Ironside and The Bowl.
+    { d: 'ironside', r: [-636, -320, 1190, 1470], plot: 'ironside_railyard' },
+    { d: 'ironside', r: [-320, 0, 1190, 1470] },
+    { d: 'ironside', r: [-636, -320, 1470, 1760], plot: 'ironside_scrapyard' },
+    { d: 'ironside', r: [-320, 0, 1470, 1760], plot: 'ironside_power' },
+    { d: 'thebowl', r: [0, 330, 1190, 1470], plot: 'mariner_stadium' },
+    { d: 'thebowl', r: [0, 330, 1470, 1760], plot: 'southbay_speedway' },
+    { d: 'thebowl', r: [330, 424, 1190, 1470], plot: 'expo_hall' },
+    { d: 'thebowl', r: [330, 424, 1470, 1760] },
+    // Sunreel Studios.
+    { d: 'sunreel', r: [-1050, -850, 60, 200] },
+    { d: 'sunreel', r: [-850, -636, 60, 200] },
+    { d: 'sunreel', r: [-1050, -850, 200, 440], plot: 'sunreel_backlot' },
+    { d: 'sunreel', r: [-850, -636, 200, 440], plot: 'sunreel_gate' },
+    { d: 'sunreel', r: [-1050, -850, 440, 660], plot: 'sunreel_western_set' },
+    { d: 'sunreel', r: [-850, -636, 440, 660] },
+    // Cinder Creek.
+    { d: 'cindercreek', r: [-1050, -850, -660, -440], plot: 'starview_drivein' },
+    { d: 'cindercreek', r: [-850, -636, -660, -440] },
+    { d: 'cindercreek', r: [-1050, -850, -440, -200], plot: 'cinder_storage' },
+    { d: 'cindercreek', r: [-850, -636, -440, -200], plot: 'cinder_truckstop' },
+    { d: 'cindercreek', r: [-1050, -850, -200, -60] },
+    { d: 'cindercreek', r: [-850, -636, -200, -60] },
+    // Halcyon University.
+    { d: 'halcyon', r: [-636, -360, -1070, -760], plot: 'halcyon_library' },
+    { d: 'halcyon', r: [-360, -96, -1070, -760], plot: 'halcyon_quad' },
+    { d: 'halcyon', r: [-636, -360, -760, -680] },
+    { d: 'halcyon', r: [-360, -96, -760, -680] },
+    // Coral Marina (the stunt ramps' field, x 30..185, z -840..-765, stays open ground).
+    { d: 'coralmarina', r: [60, 288, -1070, -850] },
+    { d: 'coralmarina', r: [200, 288, -850, -750] },
+    { d: 'coralmarina', r: [288, 384, -1070, -750], plot: 'yacht_club' },
+    { d: 'coralmarina', r: [384, 424, -1070, -750], plot: 'coral_marina' },
+    { d: 'coralmarina', r: [60, 288, -750, -664] },
+    { d: 'coralmarina', r: [288, 384, -750, -664] },
+    // Isla Paloma: Paloma Heights, Neon Strand, Old Paloma, Paloma Field.
+    { d: 'palomaheights', r: [780, 980, -580, -470] },
+    { d: 'palomaheights', r: [980, 1160, -580, -470] },
+    { d: 'palomaheights', r: [1160, 1300, -580, -470] },
+    { d: 'palomaheights', r: [800, 980, -470, -288], plot: 'paloma_estate' },
+    { d: 'palomaheights', r: [980, 1160, -470, -288], plot: 'paloma_gardens' },
+    { d: 'palomaheights', r: [1160, 1300, -470, -288], plot: 'paloma_observatory' },
+    { d: 'neonstrand', r: [800, 980, -288, -60] },
+    { d: 'neonstrand', r: [980, 1160, -288, -60], plot: 'paloma_convention' },
+    { d: 'neonstrand', r: [1160, 1300, -288, -60] },
+    { d: 'neonstrand', r: [800, 980, -60, 180], plot: 'wonder_wharf' },
+    { d: 'neonstrand', r: [980, 1160, -60, 180] },
+    { d: 'neonstrand', r: [1160, 1300, -60, 180] },
+    { d: 'oldpaloma', r: [800, 980, 180, 420] },
+    { d: 'oldpaloma', r: [980, 1160, 180, 420], plot: 'paloma_plaza' },
+    { d: 'oldpaloma', r: [1160, 1300, 180, 420] },
+    { d: 'oldpaloma', r: [780, 980, 420, 580] },
+    { d: 'oldpaloma', r: [1160, 1300, 420, 580] },
+    { d: 'oldpaloma', r: [780, 980, 580, 790], plot: 'paloma_harbour' },
+    { d: 'oldpaloma', r: [780, 980, 790, 840] },
+    { d: 'oldpaloma', r: [980, 1160, 420, 840], plot: 'paloma_fort' },
+    { d: 'palomafield', r: [1300, 1520, -580, 580], plot: 'paloma_field' },
+  ];
+
+  /**
+   * The named places of the new districts (built-in story places, map
+   * badges). `plot` places sit on their reserved block; x, z is the spot a
+   * scene plays at, gx, gz a point on the road the GPS drives to.
+   * District builders replace the placeholder on each plot.
+   */
+  VH.Data.landmarks3 = [
+    { id: 'sandpiper_beach', name: 'Sandpiper Beach', district: 'sandpiper', plot: 'sandpiper_beach', kind: 'beach', major: true, short: 'Beach' },
+    { id: 'sandpiper_promenade', name: 'Sandpiper Promenade', district: 'sandpiper', kind: 'boardwalk', x: 346, z: 980, gx: 330, gz: 980 },
+    { id: 'skate_park', name: 'Sandpiper Skate Park', district: 'sandpiper', plot: 'skate_park', kind: 'park' },
+    { id: 'verde_mall', name: 'Verde Mall', district: 'vistaverde', plot: 'verde_mall', kind: 'mall', major: true, short: 'Mall' },
+    { id: 'vista_verde_school', name: 'Vista Verde School', district: 'vistaverde', plot: 'vista_verde_school', kind: 'school' },
+    { id: 'ironside_scrapyard', name: 'Ironside Scrapyard', district: 'ironside', plot: 'ironside_scrapyard', kind: 'scrapyard' },
+    { id: 'ironside_power', name: 'Ironside Power Station', district: 'ironside', plot: 'ironside_power', kind: 'power', major: true, short: 'Power station' },
+    { id: 'ironside_railyard', name: 'Ironside Rail Yard', district: 'ironside', plot: 'ironside_railyard', kind: 'railyard' },
+    { id: 'mariner_stadium', name: 'Mariner Stadium', district: 'thebowl', plot: 'mariner_stadium', kind: 'stadium', major: true, short: 'Stadium' },
+    { id: 'southbay_speedway', name: 'Southbay Speedway', district: 'thebowl', plot: 'southbay_speedway', kind: 'speedway', major: true, short: 'Speedway' },
+    { id: 'expo_hall', name: 'Southbay Expo Hall', district: 'thebowl', plot: 'expo_hall', kind: 'hall' },
+    { id: 'sunreel_gate', name: 'Sunreel Studios Gate', district: 'sunreel', plot: 'sunreel_gate', kind: 'gate', major: true, short: 'Film studio' },
+    { id: 'sunreel_backlot', name: 'Sunreel Backlot', district: 'sunreel', plot: 'sunreel_backlot', kind: 'backlot' },
+    { id: 'sunreel_western_set', name: 'The Western Set', district: 'sunreel', plot: 'sunreel_western_set', kind: 'set' },
+    { id: 'starview_drivein', name: 'Starview Drive-In', district: 'cindercreek', plot: 'starview_drivein', kind: 'cinema', major: true, short: 'Drive-in' },
+    { id: 'cinder_truckstop', name: 'Cinder Creek Truck Stop', district: 'cindercreek', plot: 'cinder_truckstop', kind: 'truckstop' },
+    { id: 'cinder_storage', name: 'Cinder Creek Self Storage', district: 'cindercreek', plot: 'cinder_storage', kind: 'storage' },
+    { id: 'halcyon_clocktower', name: 'Halcyon Clock Tower', district: 'halcyon', kind: 'tower', x: -228, z: -915, gx: -228, gz: -1070 },
+    { id: 'halcyon_quad', name: 'The Quad', district: 'halcyon', plot: 'halcyon_quad', kind: 'quad', major: true, short: 'University' },
+    { id: 'halcyon_library', name: 'Halcyon Library', district: 'halcyon', plot: 'halcyon_library', kind: 'library' },
+    { id: 'coral_marina', name: 'Coral Marina', district: 'coralmarina', plot: 'coral_marina', kind: 'marina', major: true, short: 'Marina' },
+    // The lighthouse stands on a breakwater out in the bay (water: the rectangle reserved for it); its place is at the shore end until the builder moves it out there.
+    { id: 'marina_lighthouse', name: 'Marina Lighthouse', district: 'coralmarina', kind: 'lighthouse', x: 400, z: -1064, gx: 384, gz: -1070, water: [430, 600, -1092, -1048] },
+    { id: 'yacht_club', name: 'Coral Yacht Club', district: 'coralmarina', plot: 'yacht_club', kind: 'club' },
+    { id: 'wonder_wharf', name: 'Wonder Wharf', district: 'neonstrand', plot: 'wonder_wharf', kind: 'funfair', major: true, short: 'Funfair' },
+    { id: 'neon_strand', name: 'The Neon Strand', district: 'neonstrand', kind: 'street', x: 1070, z: -48, gx: 1070, gz: -60 },
+    { id: 'paloma_convention', name: 'Paloma Convention Centre', district: 'neonstrand', plot: 'paloma_convention', kind: 'hall' },
+    { id: 'paloma_plaza', name: 'Plaza Paloma', district: 'oldpaloma', plot: 'paloma_plaza', kind: 'plaza' },
+    { id: 'paloma_harbour', name: 'Paloma Harbour', district: 'oldpaloma', plot: 'paloma_harbour', kind: 'harbour' },
+    { id: 'paloma_fort', name: 'Fort San Paloma', district: 'oldpaloma', plot: 'paloma_fort', kind: 'fort', major: true, short: 'Old fort' },
+    { id: 'paloma_gardens', name: 'Paloma Botanical Gardens', district: 'palomaheights', plot: 'paloma_gardens', kind: 'park' },
+    { id: 'paloma_observatory', name: 'Paloma Observatory', district: 'palomaheights', plot: 'paloma_observatory', kind: 'observatory' },
+    { id: 'paloma_estate', name: 'The Paloma Estate', district: 'palomaheights', plot: 'paloma_estate', kind: 'mansion' },
+    { id: 'paloma_field', name: 'Paloma Field', district: 'palomafield', plot: 'paloma_field', kind: 'airfield', major: true, short: 'Airfield' },
+  ];
 })();
 //# sourceURL=js/data/districts.js
 </script>
@@ -20663,8 +21068,13 @@ void main() {
     streetMedian: (z) => (z === 0 ? 3 : 0),
     seawallX: 424,
     waterLevel: -1.1,
-    // The playable world: the city, the airport to the north, Fort Breakwater to the west.
-    bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
+    // The playable world: the city, the airport to the north, Fort Breakwater
+    // to the west, the new districts south, west and north, and Isla Paloma
+    // across the bay (VICEHAVEN 3.0).
+    bounds: { minX: -1600, maxX: 1560, minZ: -1800, maxZ: 1800 },
+    // The world as it was before 3.0: the outskirts trees are drawn in it, so
+    // they stay exactly where they were.
+    v2Bounds: { minX: -1600, maxX: 424, minZ: -1800, maxZ: 640 },
     // The old city limits (its outskirts trees and road-end barriers were laid out in these).
     cityBounds: { minX: -640, maxX: 424, minZ: -640, maxZ: 640 },
     // Ground kept clear of trees for the big new places (airfield.js, skyline.js, fort.js).
@@ -20675,6 +21085,8 @@ void main() {
       // The two stunt ramps north of Northgate Heights (activities.js).
       pasture: { minX: 30, maxX: 185, minZ: -840, maxZ: -765 },
     },
+    // Isla Paloma and its bridges (data/districts.js).
+    island: null,
     pier: { x0: 424, x1: 588, z0: -7, z1: 7 },
   };
 
@@ -20753,6 +21165,13 @@ void main() {
         road.cityFrom = road.from;
         road.from = -512;
       }
+      // 3.0: Grand Avenue runs on south to the South Coast Highway; Coral
+      // and Pelican Avenues and Seawall Drive run north to Halcyon University
+      // and Coral Marina. v2From / v2To keep the old ends (the old trees and
+      // lamps are judged against those).
+      if (x === 0) extendRoad(road, road.from, 1760);
+      if (x === -96 || x === 288) extendRoad(road, -1070, road.to);
+      if (x === 384) extendRoad(road, -1070, road.to);
       layout.roads.push(road);
     }
     for (const z of LINES) {
@@ -20769,15 +21188,28 @@ void main() {
       }
       // Anchor and Heron Streets run west to Crestline Estates.
       if (z === -288 || z === 288) road.from = -620;
+      // 3.0: both carry on to Westgate Parkway, and Anchor Street crosses the
+      // Paloma Bridge to Isla Paloma.
+      if (z === -288 || z === 288) extendRoad(road, -636, road.to);
+      if (z === -288) {
+        extendRoad(road, road.from, 1300);
+        road.spans = [[391, 780, 'Paloma Bridge'], [780, 1300, 'Bridge Street']];
+      }
       layout.roads.push(road);
     }
     // Pelican Avenue carries on south into Saltmarsh Docks.
     const pelican = layout.roads.find((r) => r.axis === 'z' && r.coord === 288);
     if (pelican) pelican.to = 620;
+    if (pelican) extendRoad(pelican, pelican.from, 660); // 3.0: on to Southbay Road
     // Crestline Drive, through the estates; Harbor Road and Quay Street across the port.
     for (const extra of EXTRA_ROADS) {
       layout.roads.push(Object.assign({ median: 0 }, extra));
     }
+    // 3.0: the new districts' roads.
+    for (const r of VH.Data.roads3 || []) {
+      layout.roads.push(Object.assign({ median: 0, kind: r.axis === 'z' ? 'avenue' : 'street' }, r, { v3: true }));
+    }
+    CONFIG.island = VH.Data.island || null;
     layout.zones = CONFIG.zones;
     for (const r of layout.roads) {
       const perDir = Math.max(1, Math.floor((r.width - r.median - 1) / 2 / LANE));
@@ -20792,12 +21224,19 @@ void main() {
         if (s.coord < a.from || s.coord > a.to || a.coord < s.from || a.coord > s.to) continue;
         const corner = (a.coord === minLine || a.coord === maxLine) && (s.coord === minLine || s.coord === maxLine);
         const inGrid = a.coord >= minLine && a.coord <= maxLine && s.coord >= minLine && s.coord <= maxLine;
+        // 3.0: the new crossroads (four legs, a new road through them) get lights too.
+        const legs4 = s.coord > a.from && s.coord < a.to && a.coord > s.from && a.coord < s.to;
+        const span = (r) => [r.v2From !== undefined ? r.v2From : r.from, r.v2To !== undefined ? r.v2To : r.to];
+        const [af, at] = span(a);
+        const [sf, st] = span(s);
+        const v3 = !!(a.v3 || s.v3) || s.coord < af || s.coord > at || a.coord < sf || a.coord > st;
         layout.intersections.push({
           id: 'x' + a.coord + '_' + s.coord,
           x: a.coord, z: s.coord,
           halfX: a.width / 2, halfZ: s.width / 2,
           avenue: a, street: s,
-          signal: !corner && inGrid,
+          signal: (!corner && inGrid) || (v3 && legs4),
+          v3,
           // Cross-walks on every leg that has road beyond the junction.
           legs: {
             n: s.coord > a.from, s: s.coord < a.to,
@@ -20805,6 +21244,28 @@ void main() {
           },
         });
       }
+    }
+
+    /** A road's stretches between junctions as they were before 3.0: [from, to, startsAtJunction, endsAtJunction]. */
+    const v2Span = (q) => [q.v2From !== undefined ? q.v2From : q.from, q.v2To !== undefined ? q.v2To : q.to];
+    function v2Stops(r) {
+      if (r.v3) return [];
+      const [rf, rt] = v2Span(r);
+      const cr = (r.axis === 'z' ? streets : avenues)
+        .filter((c) => !c.v3)
+        .filter((c) => { const [cf, ct] = v2Span(c); return c.coord >= rf && c.coord <= rt && r.coord >= cf && r.coord <= ct; })
+        .sort((p, q) => p.coord - q.coord);
+      const out = [];
+      let cursor = rf;
+      let sj = false;
+      for (const c of cr) {
+        const edge0 = c.coord - c.width / 2;
+        if (edge0 > cursor + 0.01) out.push([cursor, edge0, sj, true]);
+        cursor = c.coord + c.width / 2;
+        sj = true;
+      }
+      if (rt > cursor + 0.01) out.push([cursor, rt, sj, false]);
+      return out;
     }
 
     // --------------------------------------------------------- segments
@@ -20837,6 +21298,9 @@ void main() {
         // Does this segment end at a junction (so it needs a stop line and crossing)?
         seg.startsAtJunction = crossers.some((c) => Math.abs(c.coord + c.width / 2 - a) < 0.01);
         seg.endsAtJunction = crossers.some((c) => Math.abs(c.coord - c.width / 2 - b) < 0.01);
+        // 3.0: the stretch this was before the new roads cut it (median palms keep their spots).
+        const old = v2Stops(r).find(([oa, ob]) => (a + b) / 2 > oa && (a + b) / 2 < ob);
+        if (old && (old[0] !== a || old[1] !== b)) seg.v2 = { from: old[0], to: old[1], sj: old[2], ej: old[3] };
         layout.segments.push(seg);
       }
     }
@@ -20867,6 +21331,14 @@ void main() {
       }
     }
 
+    // -------------------------------------------- 3.0: the new blocks
+    // Kept out of layout.blocks (story places, the corner-shop plan and the
+    // crowd index the old 8x8 grid there) like the roadside strips.
+    layout.blocks3 = planBlocks3(layout);
+    for (const block of layout.blocks3) for (const lot of block.lots) layout.lots.push(lot);
+    layout.plots = {};
+    for (const block of layout.blocks3) if (block.plot) layout.plots[block.plot] = block;
+
     // ------------------------------------------------------- waterfront
     const east = maxLine + CONFIG.avenueWidth(maxLine) / 2;
     layout.waterfront = {
@@ -20885,7 +21357,78 @@ void main() {
     layout.plazaBlock = plaza || null;
 
     layout.districtAt = districtAt;
+    layout.isLand = isLand;
     return layout;
+  }
+
+  /** Lengthen an old road, remembering where it used to end. */
+  function extendRoad(road, from, to) {
+    if (from !== road.from && road.v2From === undefined) road.v2From = road.from;
+    if (to !== road.to && road.v2To === undefined) road.v2To = road.to;
+    road.from = from;
+    road.to = to;
+  }
+
+  /** Is (x, z) dry land (the mainland west of the seawall, or Isla Paloma)? */
+  function isLand(x, z) {
+    if (x <= CONFIG.seawallX) return true;
+    const isl = CONFIG.island;
+    if (!isl) return false;
+    for (const r of isl.land) if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return true;
+    return false;
+  }
+
+  /**
+   * 3.0: blocks for the new districts from VH.Data.cells3. A cell edge on a
+   * road is kerbed back to that road's edge; any other edge comes in 3 m.
+   * Each block's lots come from its own RNG stream (rng.fork(block.id)),
+   * like the old grid's, so nothing here moves anything there.
+   */
+  function planBlocks3(layout) {
+    const rng = new VH.RNG('vicehaven-3');
+    const out = [];
+    const cells = VH.Data.cells3 || [];
+    const byId = new Map(VH.Data.districts.map((d) => [d.id, d]));
+    const roadAt = (axis, coord, along) => layout.roads.find((r) => r.axis === axis && r.coord === coord && along >= r.from - 0.01 && along <= r.to + 0.01);
+    const inset = (axis, coord, along) => {
+      const r = roadAt(axis, coord, along);
+      return r ? r.width / 2 : 3;
+    };
+    cells.forEach((c, i) => {
+      const [x0, x1, z0, z1] = c.r;
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      const block = {
+        id: 'n_' + c.d + '_' + i, v3: true,
+        minX: x0 + inset('z', x0, mz), maxX: x1 - inset('z', x1, mz),
+        minZ: z0 + inset('x', z0, mx), maxZ: z1 - inset('x', z1, mx),
+        district: byId.get(c.d),
+        kind: c.plot ? 'plot' : c.kind || 'buildings',
+        plot: c.plot || null,
+        landmark: null,
+        alley: null,
+        lots: [],
+      };
+      block.cx = (block.minX + block.maxX) / 2;
+      block.cz = (block.minZ + block.maxZ) / 2;
+      if (block.kind === 'buildings' && block.district.archetypes.length) planBlock(block, rng.fork(block.id));
+      out.push(block);
+    });
+    // Neighbours across each road (block.nb.E/W/N/S), for the walkers in crowd.js:
+    // the next block over whose facing edges line up within 14 m.
+    for (const a of out) {
+      a.nb = {};
+      for (const b of out) {
+        if (a === b) continue;
+        const alignZ = Math.abs(a.minZ - b.minZ) < 14 && Math.abs(a.maxZ - b.maxZ) < 14;
+        const alignX = Math.abs(a.minX - b.minX) < 14 && Math.abs(a.maxX - b.maxX) < 14;
+        if (alignZ && b.minX > a.maxX && b.minX - a.maxX < 30) a.nb.E = b;
+        if (alignZ && a.minX > b.maxX && a.minX - b.maxX < 30) a.nb.W = b;
+        if (alignX && b.minZ > a.maxZ && b.minZ - a.maxZ < 30) a.nb.S = b;
+        if (alignX && a.minZ > b.maxZ && a.minZ - b.maxZ < 30) a.nb.N = b;
+      }
+    }
+    return out;
   }
 
   /** Divide a building block into lots (and maybe a service alley). */
@@ -20950,6 +21493,12 @@ void main() {
     }
   }
 
+  /** The name a road goes by at `along` (a bridge has its own). */
+  function roadName(r, along) {
+    if (r.spans) for (const [a, b, name] of r.spans) if (along >= a && along <= b) return name;
+    return r.name;
+  }
+
   /** Name of the road at a point, or null (used by the HUD location readout). */
   function roadNameAt(layout, x, z) {
     let best = null;
@@ -20965,10 +21514,28 @@ void main() {
         best = r;
       }
     }
-    return best ? best.name : null;
+    return best ? roadName(best, best.axis === 'z' ? z : x) : null;
   }
 
-  VH.CityGen = { CONFIG, EXTRA_ROADS, generate, districtAt, roadNameAt };
+  VH.CityGen = { CONFIG, EXTRA_ROADS, generate, districtAt, roadNameAt, roadName, isLand };
+
+  /**
+   * 3.0: the district builders (js/districts/<id>.js) register here.
+   *   VH.Districts.register({ id, plots: ['plot id', ...], build(world, layout) })
+   * world.js calls each build() once the new blocks stand, and leaves out its
+   * own placeholder on every plot a builder claims. See docs/WORLD.md.
+   */
+  VH.Districts = VH.Districts || {
+    builders: [],
+    register(def) {
+      this.builders.push(def);
+      return def;
+    },
+    /** The builder that claims a plot, if any. */
+    owner(plotId) {
+      return this.builders.find((b) => (b.plots || []).includes(plotId)) || null;
+    },
+  };
 })();
 //# sourceURL=js/citygen.js
 </script>
@@ -21563,7 +22130,188 @@ void main() {
     }
   }
 
-  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa };
+  // ---------------------------------------------- 3.0: the new districts
+  /** The side of a lot that faces a street (the first, or 's'). */
+  function mainFront(lot) {
+    const f = frontFaces(lot);
+    return f.length ? f[0] : 's';
+  }
+
+  /** Single-storey suburban house: a lawn, a driveway to a garage door, a pitched roof. */
+  function house(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const front = rng.range(6, 8.5);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = front;
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 7 || r.z1 - r.z0 < 7) return courtyard(ctx, lot, rng) || 0;
+    const wall = pick(rng, pal.walls, 0.05);
+    const F = { wall, style: 1, ww: 0.5, wh: 0.55, bay: rng.range(3, 3.8), floorH: 3.1, seed };
+    const top = KERB + 3.1;
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    // Hipped-ish roof: two slopes along the longer side, gables at the ends.
+    const tile = pick(rng, pal.roofs, 0.06);
+    const o = 0.6;
+    const x0 = r.x0 - o, x1 = r.x1 + o, z0 = r.z0 - o, z1 = r.z1 + o;
+    const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+    const rise = Math.min(2.6, (alongX ? r.z1 - r.z0 : r.x1 - r.x0) * 0.28);
+    const yr = top + rise;
+    b.box(r.x0 - 0.08, top - 0.25, r.z0 - 0.08, r.x1 + 0.08, top, r.z1 + 0.08, VH.colMul(wall, 0.88), { skip: { top: true }, bottom: true });
+    if (alongX) {
+      const zm = (z0 + z1) / 2;
+      b.polygon([[x0, top, z1], [x1, top, z1], [x1, yr, zm], [x0, yr, zm]], tile);
+      b.polygon([[x1, top, z0], [x0, top, z0], [x0, yr, zm], [x1, yr, zm]], tile);
+      b.polygon([[r.x1, top, r.z1], [r.x1, top, r.z0], [r.x1, yr, zm]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x0, top, r.z0], [r.x0, top, r.z1], [r.x0, yr, zm]], wall, [0, 0, 0, seed]);
+    } else {
+      const xm = (x0 + x1) / 2;
+      b.polygon([[x1, top, z1], [x1, top, z0], [xm, yr, z0], [xm, yr, z1]], tile);
+      b.polygon([[x0, top, z0], [x0, top, z1], [xm, yr, z1], [xm, yr, z0]], tile);
+      b.polygon([[r.x0, top, r.z1], [r.x1, top, r.z1], [xm, yr, r.z1]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x1, top, r.z0], [r.x0, top, r.z0], [xm, yr, r.z0]], wall, [0, 0, 0, seed]);
+    }
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + rise * 0.6);
+    // Front lawn and a driveway from the pavement to a garage door at one end.
+    const horiz = side === 'n' || side === 's';
+    let gx0, gx1, gz0, gz1;
+    if (side === 'n') { gx0 = lot.minX; gx1 = lot.maxX; gz0 = lot.minZ; gz1 = r.z0; }
+    else if (side === 's') { gx0 = lot.minX; gx1 = lot.maxX; gz0 = r.z1; gz1 = lot.maxZ; }
+    else if (side === 'w') { gx0 = lot.minX; gx1 = r.x0; gz0 = lot.minZ; gz1 = lot.maxZ; }
+    else { gx0 = r.x1; gx1 = lot.maxX; gz0 = lot.minZ; gz1 = lot.maxZ; }
+    const dw = 3.4; // driveway width
+    const atStart = rng.chance(0.5);
+    const a0 = horiz ? r.x0 : r.z0;
+    const a1 = horiz ? r.x1 : r.z1;
+    const d0 = atStart ? a0 + 0.6 : a1 - 0.6 - dw;
+    const d1 = d0 + dw;
+    const drive = horiz ? [d0, gz0, d1, gz1] : [gx0, d0, gx1, d1];
+    ctx.asphaltTop.topRect(drive[0], drive[1], drive[2], drive[3], KERB, VH.col(0xc8c4bc), 4);
+    for (const g of horiz ? [[gx0, gz0, d0, gz1], [d1, gz0, gx1, gz1]] : [[gx0, gz0, gx1, d0], [gx0, d1, gx1, gz1]]) {
+      if (g[2] - g[0] < 0.5 || g[3] - g[1] < 0.5) continue;
+      ctx.grassTop.topRect(g[0], g[1], g[2], g[3], KERB, VH.col(0xffffff), 6);
+      if (ctx.addLawn) ctx.addLawn(g[0], g[1], g[2], g[3]);
+    }
+    // Garage door and front door on the street face.
+    const door = VH.col(rng.pick([0xe8e4dc, 0xd8cdb8, 0x9a968e, 0x6b5848]));
+    const fd = pick(rng, pal.accents, 0.05);
+    const doorAt = atStart ? a1 - 3 : a0 + 2;
+    if (side === 's') { b.box(d0 + 0.2, KERB, r.z1, d1 - 0.2, KERB + 2.3, r.z1 + 0.08, door); b.box(doorAt, KERB, r.z1, doorAt + 1, KERB + 2.1, r.z1 + 0.08, fd); }
+    else if (side === 'n') { b.box(d0 + 0.2, KERB, r.z0 - 0.08, d1 - 0.2, KERB + 2.3, r.z0, door); b.box(doorAt, KERB, r.z0 - 0.08, doorAt + 1, KERB + 2.1, r.z0, fd); }
+    else if (side === 'e') { b.box(r.x1, KERB, d0 + 0.2, r.x1 + 0.08, KERB + 2.3, d1 - 0.2, door); b.box(r.x1, KERB, doorAt, r.x1 + 0.08, KERB + 2.1, doorAt + 1, fd); }
+    else { b.box(r.x0 - 0.08, KERB, d0 + 0.2, r.x0, KERB + 2.3, d1 - 0.2, door); b.box(r.x0 - 0.08, KERB, doorAt, r.x0, KERB + 2.1, doorAt + 1, fd); }
+    // A tree or a palm in the lawn, and a low fence round the back.
+    if (rng.chance(0.7)) {
+      const tx = horiz ? (atStart ? (d1 + gx1) / 2 : (gx0 + d0) / 2) : (gx0 + gx1) / 2;
+      const tz = horiz ? (gz0 + gz1) / 2 : atStart ? (d1 + gz1) / 2 : (gz0 + d0) / 2;
+      ctx.addProp(rng.chance(0.6) ? 'tree' : 'palm', tx, tz, rng.range(0, 6.28), rng.range(0.6, 0.85), KERB);
+    }
+    return yr;
+  }
+
+  /** Industrial shed or warehouse: a big box, a shallow roof, roller doors and a yard. */
+  function shed(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = rng.range(6, 10); // a forecourt for the lorries
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 8 || r.z1 - r.z0 < 8) return parking(ctx, lot) || 0;
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const h = 4.5 + floors * 2.6;
+    const top = KERB + h;
+    const wall = pick(rng, pal.walls, 0.06);
+    const F = { wall, style: 3, ww: 0.9, wh: 0.18, bay: rng.range(5, 7), floorH: h, seed, vStart: 0.72 };
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    // Ribbed low-pitch roof.
+    const roofCol = pick(rng, pal.roofs, 0.05);
+    roof(b, r.x0, r.z0, r.x1, r.z1, top, roofCol, seed);
+    const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+    for (let p = (alongX ? r.x0 : r.z0) + 3; p < (alongX ? r.x1 : r.z1) - 1; p += 3) {
+      if (alongX) b.box(p - 0.12, top, r.z0, p + 0.12, top + 0.25, r.z1, VH.colMul(roofCol, 0.85), { bottom: false });
+      else b.box(r.x0, top, p - 0.12, r.x1, top + 0.25, p + 0.12, VH.colMul(roofCol, 0.85), { bottom: false });
+    }
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 0.3);
+    // Forecourt and roller doors on the street face.
+    const accent = pick(rng, pal.accents, 0.05);
+    const doors = VH.col(0x8a8f96);
+    alongFace(r, side, inset[side] - 0.2, (x0, z0, x1, z1) => {
+      ctx.asphaltTop.topRect(x0, z0, x1, z1, KERB, VH.col(0xc4c4c4), 6);
+    });
+    const len = side === 'n' || side === 's' ? r.x1 - r.x0 : r.z1 - r.z0;
+    const n = Math.max(1, Math.floor(len / 12));
+    for (let i = 0; i < n; i++) {
+      const c = (i + 0.5) * (len / n);
+      const w = 4.2;
+      if (side === 's') b.box(r.x0 + c - w / 2, KERB, r.z1, r.x0 + c + w / 2, KERB + 4.6, r.z1 + 0.1, doors);
+      else if (side === 'n') b.box(r.x0 + c - w / 2, KERB, r.z0 - 0.1, r.x0 + c + w / 2, KERB + 4.6, r.z0, doors);
+      else if (side === 'e') b.box(r.x1, KERB, r.z0 + c - w / 2, r.x1 + 0.1, KERB + 4.6, r.z0 + c + w / 2, doors);
+      else b.box(r.x0 - 0.1, KERB, r.z0 + c - w / 2, r.x0, KERB + 4.6, r.z0 + c + w / 2, doors);
+    }
+    // A stripe of company colour under the eaves.
+    if (side === 's') b.box(r.x0, top - 1.2, r.z1, r.x1, top - 0.4, r.z1 + 0.06, accent);
+    else if (side === 'n') b.box(r.x0, top - 1.2, r.z0 - 0.06, r.x1, top - 0.4, r.z0, accent);
+    else if (side === 'e') b.box(r.x1, top - 1.2, r.z0, r.x1 + 0.06, top - 0.4, r.z1, accent);
+    else b.box(r.x0 - 0.06, top - 1.2, r.z0, r.x0, top - 0.4, r.z1, accent);
+    if (rng.chance(0.5)) {
+      const px = rng.range(r.x0 + 2, r.x1 - 2);
+      const pz = rng.range(r.z0 + 2, r.z1 - 2);
+      ctx.addProp('dumpster', side === 'e' || side === 'w' ? (side === 'e' ? r.x1 + 1.5 : r.x0 - 1.5) : px, side === 'n' || side === 's' ? (side === 's' ? r.z1 + 1.5 : r.z0 - 1.5) : pz, side === 'e' || side === 'w' ? Math.PI / 2 : 0, 1);
+    }
+    return top + 0.3;
+  }
+
+  /**
+   * Low-rise strip (a motel, beach shops, a diner row): one or two storeys,
+   * a walkway along the front under a canopy, doors and windows in a row.
+   */
+  function lowrise(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const inset = { n: 1.5, s: 1.5, e: 1.5, w: 1.5 };
+    inset[side] = rng.range(3.5, 6);
+    for (const s of ['n', 's', 'e', 'w']) if (s !== side && lot.front[s]) inset[s] = 1;
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 6 || r.z1 - r.z0 < 6) return courtyard(ctx, lot, rng) || 0;
+    const wall = pick(rng, pal.walls, 0.06);
+    const floorH = 3.3;
+    const top = KERB + floors * floorH;
+    const F = { wall, style: 4, ww: rng.range(0.55, 0.75), wh: 0.62, bay: rng.range(3.4, 4.4), floorH, seed };
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, F);
+    const trim = pick(rng, pal.accents, 0.05);
+    cornice(b, r.x0, r.z0, r.x1, r.z1, top, 0.5, 0.25, trim);
+    roof(b, r.x0, r.z0, r.x1, r.z1, top + 0.5, pick(rng, pal.roofs), seed);
+    parapet(b, r.x0, r.z0, r.x1, r.z1, top + 0.5, 0.6, 0.25, VH.colMul(wall, 0.92));
+    if (rng.chance(0.4)) rooftopClutter(b, rng, r.x0, r.z0, r.x1, r.z1, top + 0.5, { tanks: 0.2 });
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 1.1);
+    // Canopy over the front walkway on slim posts (and a balcony walk on the upper floor).
+    const canopy = pick(rng, pal.accents, 0.05);
+    const depth = Math.min(2.6, inset[side] - 0.6);
+    alongFace(r, side, depth, (x0, z0, x1, z1, ox, oz) => {
+      b.box(x0, KERB + floorH - 0.25, z0, x1, KERB + floorH, z1, canopy, { bottom: true });
+      const alongX = oz !== 0;
+      const a0 = alongX ? x0 : z0;
+      const a1 = alongX ? x1 : z1;
+      const post = VH.colMul(canopy, 0.8);
+      for (let p = a0 + 0.3; p <= a1 - 0.2; p += Math.max(3, (a1 - a0) / Math.max(1, Math.round((a1 - a0) / 4.5)))) {
+        const px = alongX ? p : ox > 0 ? x1 - 0.2 : x0 + 0.1;
+        const pz = alongX ? (oz > 0 ? z1 - 0.2 : z0 + 0.1) : p;
+        b.box(px, KERB, pz, px + 0.12, KERB + floorH - 0.25, pz + 0.12, post);
+      }
+      if (floors > 1) b.box(x0, KERB + floorH + 0.9, z0, x1, KERB + floorH + 1.0, z1, VH.col(0xe8e4dc), { bottom: true });
+    });
+    shopSigns(ctx, lot, r, rng, KERB + floorH + 0.05);
+    return top + 1.1;
+  }
+
+  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa, house, shed, lowrise };
 
   const Buildings = {
     /** Build one lot. Returns the height of the tallest point. */
@@ -22826,16 +23574,34 @@ void main() {
     const pier = wf.pier;
     const z0 = cfg.lines[0] - 7;
     const z1 = cfg.lines[cfg.lines.length - 1] + 7;
+    // 3.0: where the Paloma Bridge and the Southbay Causeway leave the
+    // mainland, the road runs through the boardwalk and the seawall.
+    const bridgeGaps = ((cfg.island && cfg.island.bridges) || []).map((br) => [br.coord - br.width / 2 - 2.6, br.coord + br.width / 2 + 2.6, br]);
+    const onBridge = (z, pad) => bridgeGaps.some(([a, b]) => z > a - (pad || 0) && z < b + (pad || 0));
+    const cut = (pieces, gapList) => {
+      for (const [ga, gb] of gapList) {
+        const next = [];
+        for (const [pa, pb] of pieces) {
+          if (pb <= ga || pa >= gb) next.push([pa, pb]);
+          else {
+            if (pa < ga) next.push([pa, ga]);
+            if (pb > gb) next.push([gb, pb]);
+          }
+        }
+        pieces = next;
+      }
+      return pieces;
+    };
 
     for (let z = z0; z < z1; z += 48) {
-      const za = z;
-      const zb = Math.min(z1, z + 48);
-      const ctx = world.ctxAt((road + sea) / 2, (za + zb) / 2);
-      // Pavement along the road, then the timber boardwalk.
-      ctx.concrete.box(road, 0, za, road + 4, KERB, zb, VH.col(0xcfcac0), { skip: { top: true, n: za > z0, s: zb < z1 } });
-      ctx.sidewalk.topRect(road, za, road + 4, zb, KERB, VH.col(0xffffff), 3);
-      ctx.wood.box(road + 4, 0, za, sea, KERB, zb, VH.col(0xffffff), { skip: { n: za > z0, s: zb < z1, e: true }, uvScale: 2 });
-      world.physics.addBox(road, -0.5, za, sea, KERB, zb, 'boardwalk');
+      for (const [za, zb] of cut([[z, Math.min(z1, z + 48)]], bridgeGaps.map(([a, b, br]) => [br.coord - br.width / 2, br.coord + br.width / 2]))) {
+        const ctx = world.ctxAt((road + sea) / 2, (za + zb) / 2);
+        // Pavement along the road, then the timber boardwalk.
+        ctx.concrete.box(road, 0, za, road + 4, KERB, zb, VH.col(0xcfcac0), { skip: { top: true, n: za > z0 && !onBridge(za, 1), s: zb < z1 && !onBridge(zb, 1) } });
+        ctx.sidewalk.topRect(road, za, road + 4, zb, KERB, VH.col(0xffffff), 3);
+        ctx.wood.box(road + 4, 0, za, sea, KERB, zb, VH.col(0xffffff), { skip: { n: za > z0 && !onBridge(za, 1), s: zb < z1 && !onBridge(zb, 1), e: true }, uvScale: 2 });
+        world.physics.addBox(road, -0.5, za, sea, KERB, zb, 'boardwalk');
+      }
     }
 
     // Harbor Beach: a strip of sand under the seawall south of the pier, down
@@ -22847,24 +23613,19 @@ void main() {
     });
 
     // Seawall with a raised coping, and the railing along it (open where the pier and the beach steps start).
-    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]];
+    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]].concat(bridgeGaps.map(([a, b]) => [a, b]));
     for (let z = b.minZ; z < b.maxZ; z += 48) {
       const za = z;
       const zb = Math.min(b.maxZ, z + 48);
       const ctx = world.ctxAt(sea, (za + zb) / 2);
-      let pieces = [[za, zb]];
-      for (const [ga, gb] of gaps) {
-        const next = [];
-        for (const [pa, pb] of pieces) {
-          if (pb <= ga || pa >= gb) next.push([pa, pb]);
-          else {
-            if (pa < ga) next.push([pa, ga]);
-            if (pb > gb) next.push([gb, pb]);
-          }
-        }
-        pieces = next;
+      const pieces = cut([[za, zb]], gaps);
+      // The wall itself (under the bridges, only up to the road).
+      for (const [wa, wb] of cut([[za, zb]], bridgeGaps)) {
+        ctx.concrete.box(sea - 0.3, -8, wa, sea + 0.5, KERB + (pieces.length ? 0.02 : 0), wb, VH.col(0xa9a39a), { uvScale: 4 });
       }
-      ctx.concrete.box(sea - 0.3, -8, za, sea + 0.5, KERB + (pieces.length ? 0.02 : 0), zb, VH.col(0xa9a39a), { uvScale: 4 });
+      for (const [ga, gb] of bridgeGaps) {
+        if (gb > za && ga < zb) ctx.concrete.box(sea - 0.3, -8, Math.max(za, ga), sea + 0.5, -0.03, Math.min(zb, gb), VH.col(0xa9a39a), { uvScale: 4, skip: { top: true } });
+      }
       for (const [pa, pb] of pieces) {
         ctx.concrete.box(sea - 0.35, KERB, pa, sea + 0.55, KERB + 0.14, pb, VH.col(0xd8d2c6), { uvScale: 4 });
         railing(world, ctx, sea, pa, sea, pb, KERB + 0.14, { height: 1.0 });
@@ -22911,8 +23672,8 @@ void main() {
 
     // Lamps, palms and benches along the boardwalk.
     for (let z = z0 + 10; z < z1 - 6; z += 24) {
-      world.addProp('streetlight', sea - 1.4, KERB, z, -Math.PI / 2, 1);
-      if (Math.abs(z) > 12) world.addProp('bench', sea - 2.2, KERB, z + 12, Math.PI / 2, 1);
+      if (!onBridge(z, 1)) world.addProp('streetlight', sea - 1.4, KERB, z, -Math.PI / 2, 1);
+      if (Math.abs(z) > 12 && !onBridge(z + 12, 1.5)) world.addProp('bench', sea - 2.2, KERB, z + 12, Math.PI / 2, 1);
     }
     // The Velvet Tide: an open-air club on the boardwalk just north of the pier.
     const club = (wf.club = {
@@ -22929,7 +23690,7 @@ void main() {
       if (z > club.z0 - 2 && z < club.z1 + 2) continue; // the club stands here
       world.addProp('palmTall', road + 17, KERB, z, z * 0.37, 0.9 + ((z * 7) % 3) * 0.08);
     }
-    for (let z = z0 + 8; z < z1 - 7; z += 30) world.addProp('streetlight', road + 0.7, KERB, z, -Math.PI / 2, 1);
+    for (let z = z0 + 8; z < z1 - 7; z += 30) if (!onBridge(z, 1)) world.addProp('streetlight', road + 0.7, KERB, z, -Math.PI / 2, 1);
 
     // Oceanview Pier.
     const deckTop = KERB;
@@ -23126,7 +23887,7 @@ void main() {
     ctx.propMatte.box(c.x0 - 1.33, y0 + 0.82, c.doorZ1 + 2, c.x0 - 1.27, y0 + 0.88, c.doorZ1 + 3.5, VH.col(0x8b0f2e));
   }
 
-  VH.Landmarks = { buildPlaza, buildPark, buildTowerBlock, buildWaterfront };
+  VH.Landmarks = { buildPlaza, buildPark, buildTowerBlock, buildWaterfront, railing, invisibleWall, sign, solidBox };
 })();
 //# sourceURL=js/landmarks.js
 </script>
@@ -55835,7 +56596,7 @@ void main() {
       const L = this.game.layout;
       const m = pad || 0;
       const wf = L.waterfront;
-      if (wf && x > wf.seawallX - 4 - m) return false;
+      if (wf && x > wf.seawallX - 4 - m && !(L.isLand && L.isLand(x - 4 - m, z) && L.isLand(x + 4 + m, z) && L.isLand(x, z - 4 - m) && L.isLand(x, z + 4 + m))) return false; // the bay (Isla Paloma is fine)
       const fw = L.fort && L.fort.wall;
       if (fw && x > fw.x0 - 60 - m && x < fw.x1 + 60 + m && z > fw.z0 - 60 - m && z < fw.z1 + 60 + m) return false;
       const af = L.airport && L.airport.fence;
@@ -61254,6 +62015,287 @@ void main() {
 })();
 //# sourceURL=js/roadsigns.js
 </script>
+    <script data-src="js/island.js">
+/*
+ * island.js — Isla Paloma's land, its shore, and the two road links across
+ * the bay (VICEHAVEN 3.0).
+ *
+ *   land      each rectangle of VH.Data.island.land is a block of ground
+ *             (y = 0 on top) standing out of the bay: grass where no road
+ *             or block covers it, a stone seawall face down to the sea floor
+ *   shore     a coping and a railing all round, with an invisible wall just
+ *             outside it, open only where the bridges land
+ *   bridges   the Paloma Bridge (Anchor Street, z = -288) and the Southbay
+ *             Causeway (Seabreeze Street, z = 790): a deck under the road,
+ *             walkways, parapets and railings that cars can't jump, piers
+ *             down to the sea floor and, on the Paloma Bridge, two
+ *             suspension towers with cables (scenery)
+ *
+ * The roads themselves (the asphalt, its markings and the 'road' collider
+ * the cars drive on) are ordinary road segments from citygen.js, at y = 0
+ * like every other road. physics.terrain says land is at 0 here (world.js).
+ *
+ *   VH.Island.build(world, layout) -> { land, bridges, shore }
+ *   VH.Island.bridgeAt(x, z)       -> the bridge under (x, z), or null
+ */
+(function () {
+  'use strict';
+
+  const VH = window.VH;
+  const KERB = 0.15;
+  const SEA_FLOOR = -8;
+  const WALK = 2.2; // walkway on each side of a bridge's carriageway
+
+  const rectsOverlap = (a, b) => a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
+
+  /** The island's land, less the roads and blocks drawn over it (no z-fighting). */
+  function buildLand(world, layout, isl) {
+    const sub = VH.World.subtractRect;
+    const covers = [];
+    for (const s of layout.segments) covers.push(s);
+    for (const j of layout.intersections) covers.push({ minX: j.x - j.halfX, maxX: j.x + j.halfX, minZ: j.z - j.halfZ, maxZ: j.z + j.halfZ });
+    const stone = VH.col(0xa9a39a);
+    for (const land of isl.land) {
+      // Grass on top, split into 96 m tiles so each lands in its chunk.
+      let rects = [land];
+      for (const c of covers) if (rectsOverlap(c, land)) rects = sub(rects, c);
+      for (const r of rects) {
+        for (let x = r.minX; x < r.maxX; x += 96) {
+          for (let z = r.minZ; z < r.maxZ; z += 96) {
+            const x1 = Math.min(r.maxX, x + 96);
+            const z1 = Math.min(r.maxZ, z + 96);
+            const ctx = world.ctxAt((x + x1) / 2, (z + z1) / 2);
+            ctx.grass.topRect(x, z, x1, z1, 0, VH.col(0xffffff), 6);
+          }
+        }
+      }
+    }
+    // The seawall faces: one box per 96 m of shore, down to the sea floor.
+    for (const e of shoreEdges(isl)) {
+      const alongX = e.axis === 'x';
+      for (let a = e.from; a < e.to; a += 96) {
+        const b = Math.min(e.to, a + 96);
+        const cx = alongX ? (a + b) / 2 : e.coord;
+        const cz = alongX ? e.coord : (a + b) / 2;
+        const ctx = world.ctxAt(cx, cz);
+        const t = 0.6;
+        if (alongX) ctx.concrete.box(a, SEA_FLOOR, e.coord - (e.out < 0 ? t : 0), b, -0.02, e.coord + (e.out > 0 ? t : 0), stone, { uvScale: 4, skip: { top: true } });
+        else ctx.concrete.box(e.coord - (e.out < 0 ? t : 0), SEA_FLOOR, a, e.coord + (e.out > 0 ? t : 0), -0.02, b, stone, { uvScale: 4, skip: { top: true } });
+      }
+    }
+  }
+
+  /**
+   * The outline of the land as axis-aligned edges: { axis ('x' runs
+   * east-west), coord, from, to, out (+1/-1: which way the sea is) }.
+   * Edges shared by two land rectangles are left out.
+   */
+  function shoreEdges(isl) {
+    const out = [];
+    const L = isl.land;
+    const covered = (x, z) => L.some((r) => x > r.minX - 0.01 && x < r.maxX + 0.01 && z > r.minZ - 0.01 && z < r.maxZ + 0.01);
+    for (const r of L) {
+      const sides = [
+        { axis: 'x', coord: r.minZ, from: r.minX, to: r.maxX, out: -1 },
+        { axis: 'x', coord: r.maxZ, from: r.minX, to: r.maxX, out: 1 },
+        { axis: 'z', coord: r.minX, from: r.minZ, to: r.maxZ, out: -1 },
+        { axis: 'z', coord: r.maxX, from: r.minZ, to: r.maxZ, out: 1 },
+      ];
+      for (const s of sides) {
+        // Walk the side in 4 m steps, keeping the runs with sea beyond them.
+        let run = null;
+        for (let a = s.from; a <= s.to + 0.01; a += 4) {
+          const p = Math.min(a, s.to);
+          const sx = s.axis === 'x' ? p : s.coord + s.out * 1;
+          const sz = s.axis === 'x' ? s.coord + s.out * 1 : p;
+          const sea = !covered(sx, sz);
+          if (sea && !run) run = { axis: s.axis, coord: s.coord, from: p, to: p, out: s.out };
+          if (sea && run) run.to = p;
+          if ((!sea || p >= s.to) && run) {
+            if (run.to - run.from > 1) out.push(run);
+            run = null;
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Coping, railing and an invisible wall along the shore, open where roads cross it. */
+  function buildShore(world, isl, gaps) {
+    const L = VH.Landmarks;
+    for (const e of shoreEdges(isl)) {
+      const alongX = e.axis === 'x';
+      let pieces = [[e.from, e.to]];
+      for (const g of gaps) {
+        if (g.axis !== e.axis || Math.abs(g.at - e.coord) > 0.5) continue; // a gap in this edge (same axis, same line)
+        const next = [];
+        for (const [pa, pb] of pieces) {
+          if (pb <= g.a0 || pa >= g.a1) next.push([pa, pb]);
+          else {
+            if (pa < g.a0) next.push([pa, g.a0]);
+            if (pb > g.a1) next.push([g.a1, pb]);
+          }
+        }
+        pieces = next;
+      }
+      for (const [pa, pb] of pieces) {
+        for (let a = pa; a < pb - 0.01; a += 48) {
+          const b = Math.min(pb, a + 48);
+          const c = e.coord - e.out * 0.4; // just inside the edge
+          const ctx = world.ctxAt(alongX ? (a + b) / 2 : c, alongX ? c : (a + b) / 2);
+          if (alongX) {
+            ctx.concrete.box(a, 0, c - 0.45, b, KERB + 0.14, c + 0.45, VH.col(0xd8d2c6), { uvScale: 4 });
+            L.railing(world, ctx, a, c, b, c, KERB + 0.14, { height: 1.0 });
+            L.invisibleWall(world, a, e.coord + (e.out > 0 ? 0.1 : -0.8), b, e.coord + (e.out > 0 ? 0.8 : -0.1));
+          } else {
+            ctx.concrete.box(c - 0.45, 0, a, c + 0.45, KERB + 0.14, b, VH.col(0xd8d2c6), { uvScale: 4 });
+            L.railing(world, ctx, c, a, c, b, KERB + 0.14, { height: 1.0 });
+            L.invisibleWall(world, e.coord + (e.out > 0 ? 0.1 : -0.8), a, e.coord + (e.out > 0 ? 0.8 : -0.1), b);
+          }
+        }
+        // Lamps along the shore every 40 m.
+        for (let a = pa + 12; a < pb - 6; a += 40) {
+          const c = e.coord - e.out * 1.6;
+          const yaw = alongX ? (e.out > 0 ? 0 : Math.PI) : e.out > 0 ? Math.PI / 2 : -Math.PI / 2;
+          if (alongX) world.addProp('streetlight', a, 0, c, yaw + Math.PI, 1);
+          else world.addProp('streetlight', c, 0, a, yaw + Math.PI, 1);
+        }
+      }
+    }
+  }
+
+  /** A bridge (or causeway) along an x-running road between the seawall and the island. */
+  function buildBridge(world, br) {
+    const L = VH.Landmarks;
+    const half = br.width / 2;
+    const z = br.coord;
+    const deck = VH.col(0xbab4aa);
+    const walkCol = VH.col(0xcfcac0);
+    const steel = VH.col(0xe8e4dc);
+    const zIn0 = z - half - WALK;
+    const zIn1 = z + half + WALK;
+    for (let a = br.from; a < br.to - 0.01; a += 48) {
+      const b = Math.min(br.to, a + 48);
+      const ctx = world.ctxAt((a + b) / 2, z);
+      // The deck slab under the road and the walkways.
+      ctx.concrete.box(a, -1.6, zIn0 - 0.3, b, -0.02, zIn1 + 0.3, deck, { uvScale: 4, bottom: true, skip: { top: true, w: a > br.from, e: b < br.to } });
+      for (const [w0, w1] of [[zIn0, z - half], [z + half, zIn1]]) {
+        ctx.concrete.box(a, -0.02, w0, b, KERB, w1, walkCol, { uvScale: 4, skip: { w: a > br.from, e: b < br.to } });
+        world.physics.addBox(a, -1.6, w0, b, KERB, w1, 'kerb');
+      }
+      // Parapets: a low concrete wall and a railing on top, cars and Jay stay on.
+      for (const [p0, p1] of [[zIn0 - 0.3, zIn0], [zIn1, zIn1 + 0.3]]) {
+        ctx.concrete.box(a, KERB, p0, b, KERB + 0.55, p1, deck, { uvScale: 4, skip: { w: a > br.from, e: b < br.to } });
+        world.physics.addBox(a, -1.6, p0, b, 2.2, p1, 'railing', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
+      }
+      L.railing(world, ctx, a, zIn0 - 0.15, b, zIn0 - 0.15, KERB + 0.55, { height: 0.6, color: 0xe8e4dc });
+      L.railing(world, ctx, a, zIn1 + 0.15, b, zIn1 + 0.15, KERB + 0.55, { height: 0.6, color: 0xe8e4dc });
+    }
+    // Piers every 36 m.
+    for (let x = br.from + 30; x < br.to - 10; x += 36) {
+      const ctx = world.ctxAt(x, z);
+      ctx.concrete.box(x - 1.4, SEA_FLOOR, zIn0 + 1, x + 1.4, -1.6, zIn1 - 1, deck, { uvScale: 4 });
+      world.physics.addBox(x - 1.4, SEA_FLOOR, zIn0 + 1, x + 1.4, -1.6, zIn1 - 1, 'pier');
+    }
+    // Lamps on the walkways.
+    for (let x = br.from + 14; x < br.to - 8; x += 28) {
+      world.addProp('streetlight', x, KERB, zIn0 + 0.6, 0, 1);
+      world.addProp('streetlight', x + 14, KERB, zIn1 - 0.6, Math.PI, 1);
+    }
+    // Suspension towers and cables (scenery: the deck carries the cars).
+    const TOP = 52;
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    const towers = br.towers || [];
+    for (const tx of towers) {
+      const ctx = world.ctxAt(tx, z);
+      for (const zz of [zIn0 - 1.4, zIn1 + 1.4]) {
+        ctx.concrete.box(tx - 1.6, SEA_FLOOR, zz - 1.1, tx + 1.6, TOP, zz + 1.1, steel, { uvScale: 4 });
+        world.physics.addBox(tx - 1.6, SEA_FLOOR, zz - 1.1, tx + 1.6, TOP, zz + 1.1, 'pier', VH.COLLIDE.ALL);
+      }
+      // Cross beams.
+      for (const y of [TOP - 3, 24]) ctx.concrete.box(tx - 1.2, y, zIn0 - 2.5, tx + 1.2, y + 2.4, zIn1 + 2.5, steel, { uvScale: 4, bottom: true });
+      ctx.prop.box(tx - 0.4, TOP, zIn0 - 1.6, tx + 0.4, TOP + 1.2, zIn0 - 1.2, VH.col(0xd23a2a));
+      world.beacons.push({ x: tx, y: TOP + 1.5, z: zIn0 - 1.4 });
+    }
+    if (towers.length) {
+      // The main cables: a sagging chain of straight pieces from shore to tower to tower to shore,
+      // with hangers down to the deck every 12 m.
+      const anchors = [br.from + 4, ...towers, br.to - 4];
+      for (const zz of [zIn0 - 1.4, zIn1 + 1.4]) {
+        for (let i = 0; i < anchors.length - 1; i++) {
+          const x0 = anchors[i];
+          const x1 = anchors[i + 1];
+          const y0 = i === 0 ? KERB + 2 : TOP - 1;
+          const y1 = i === anchors.length - 2 ? KERB + 2 : TOP - 1;
+          const sag = i === 0 || i === anchors.length - 2 ? 0 : 22;
+          const N = 8;
+          const yAt = (t) => y0 + (y1 - y0) * t - sag * 4 * t * (1 - t) * (y0 === y1 ? 1 : 0.3);
+          for (let k = 0; k < N; k++) {
+            const ta = k / N;
+            const tb = (k + 1) / N;
+            const xa = x0 + (x1 - x0) * ta;
+            const xb = x0 + (x1 - x0) * tb;
+            const ya = yAt(ta);
+            const yb = yAt(tb);
+            const len = Math.hypot(xb - xa, yb - ya);
+            const ctx = world.ctxAt((xa + xb) / 2, z);
+            v.set((xa + xb) / 2, (ya + yb) / 2, zz);
+            q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(yb - ya, xb - xa));
+            sc.set(len + 0.1, 0.35, 0.35);
+            m.compose(v, q, sc);
+            ctx.prop.merge(box, m, steel);
+          }
+          for (let x = x0 + 6; x < x1 - 3; x += 12) {
+            const y = yAt((x - x0) / (x1 - x0));
+            if (y < KERB + 3) continue;
+            const ctx = world.ctxAt(x, z);
+            ctx.prop.box(x - 0.06, KERB + 0.55, zz - 0.06, x + 0.06, y, zz + 0.06, steel);
+          }
+        }
+      }
+    }
+    if (VH.Landmarks.sign) {
+      VH.Landmarks.sign(world, { x: br.from + 6, y: KERB + 4.6, z: zIn0 - 0.6, yaw: Math.PI, w: 7, h: 1.2, lines: [br.name.toUpperCase()], style: 'info', posts: false, twoSided: true });
+    }
+  }
+
+  const Island = {
+    build(world, layout) {
+      const isl = layout.config.island;
+      if (!isl) return null;
+      buildLand(world, layout, isl);
+      // Gaps in the shore railing where the bridges land, and in the mainland seawall where they start.
+      const gaps = [];
+      for (const br of isl.bridges) {
+        const w = br.width / 2 + WALK + 0.4;
+        gaps.push({ axis: 'z', at: br.to, a0: br.coord - w, a1: br.coord + w });
+      }
+      buildShore(world, isl, gaps);
+      for (const br of isl.bridges) buildBridge(world, br);
+      this.bridges = isl.bridges;
+      return { land: isl.land, bridges: isl.bridges };
+    },
+
+    /** The bridge at (x, z), if any. */
+    bridgeAt(x, z) {
+      for (const br of this.bridges || []) {
+        if (x >= br.from && x <= br.to && Math.abs(z - br.coord) <= br.width / 2 + WALK + 0.4) return br;
+      }
+      return null;
+    },
+
+    shoreEdges,
+  };
+
+  VH.Island = Island;
+})();
+//# sourceURL=js/island.js
+</script>
   <script data-src="js/world.js">
 /*
  * world.js — turns the city layout into things you can see and bump into.
@@ -61454,8 +62496,9 @@ void main() {
       const physics = this.physics;
       const cfg = layout.config;
 
-      // Terrain: flat city, sea floor beyond the seawall.
-      physics.terrain = (x) => (x > cfg.seawallX ? -8 : 0);
+      // Terrain: flat city, sea floor beyond the seawall (Isla Paloma is land).
+      const isLand = VH.CityGen.isLand;
+      physics.terrain = (x, z) => (x <= cfg.seawallX || isLand(x, z) ? 0 : -8);
 
       progress(0.02, 'Surveying the outskirts');
       this._buildGround(layout);
@@ -61477,7 +62520,27 @@ void main() {
       for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i];
         this._buildBlock(block);
-        progress(0.14 + 0.66 * ((i + 1) / blocks.length), 'Raising ' + block.district.name);
+        progress(0.14 + 0.5 * ((i + 1) / blocks.length), 'Raising ' + block.district.name);
+        await slicer.tick();
+      }
+      // 3.0: the new districts' blocks, then Isla Paloma's shore and the bridges.
+      const blocks3 = layout.blocks3 || [];
+      for (let i = 0; i < blocks3.length; i++) {
+        const block = blocks3[i];
+        this._buildBlock3(block);
+        progress(0.64 + 0.16 * ((i + 1) / blocks3.length), 'Raising ' + block.district.name);
+        if (i % 2 === 1) await slicer.tick();
+      }
+      if (VH.Island) this.island = VH.Island.build(this, layout);
+      await slicer.tick();
+      // The district builders (js/districts/*.js) dress the new districts and build their landmarks.
+      for (const B of (VH.Districts && VH.Districts.builders) || []) {
+        progress(0.8, 'Building ' + (B.name || B.id));
+        try {
+          B.build(this, layout);
+        } catch (e) {
+          console.error('District builder ' + B.id + ' failed', e);
+        }
         await slicer.tick();
       }
 
@@ -61557,6 +62620,8 @@ void main() {
       const lines = cfg.lines;
       const edge = lines[lines.length - 1] + 7;
       const far = 2600;
+      // Ground tiles are filed in the chunk nearest their middle, within the playable area.
+      const cb = cfg.bounds;
       let rects = [{ minX: -far, maxX: cfg.seawallX, minZ: -far, maxZ: far }];
       // The city core is fully paved.
       rects = subtractRect(rects, { minX: -edge, maxX: cfg.seawallX, minZ: -edge, maxZ: edge });
@@ -61572,7 +62637,7 @@ void main() {
             const x1 = Math.min(r.maxX, x + CHUNK);
             const z1 = Math.min(r.maxZ, z + CHUNK);
             // Tiles far outside the playable area are not worth a chunk each.
-            const ctx = this.ctxAt(VH.math.clamp((x + x1) / 2, -900, 900), VH.math.clamp((z + z1) / 2, -900, 900));
+            const ctx = this.ctxAt(VH.math.clamp((x + x1) / 2, cb.minX + 100, cfg.seawallX - 10), VH.math.clamp((z + z1) / 2, cb.minZ + 100, cb.maxZ - 100));
             ctx.grass.topRect(x, z, x1, z1, 0, white, 6);
           }
         }
@@ -61653,6 +62718,10 @@ void main() {
       if (M > 0) {
         const m0 = a + (sj ? CW + 0.4 : 0);
         const m1 = b - (ej ? CW + 0.4 : 0);
+        // 3.0: a stretch a new road cut in two plants its palms where the whole stretch had them.
+        const o = seg.v2;
+        const p0 = o ? o.from + (o.sj ? CW + 0.4 : 0) : m0;
+        const p1 = o ? o.to - (o.ej ? CW + 0.4 : 0) : m1;
         if (m1 - m0 > 2) {
           const r = World._roadRect(road, m0, m1, -M / 2, M / 2);
           ctx.concrete.box(r[0], 0, r[1], r[2], KERB, r[3], VH.col(0xc9c4b8), { skip: { top: true } });
@@ -61660,7 +62729,8 @@ void main() {
           this.addLawn(r[0], r[1], r[2], r[3]);
           this.physics.addBox(r[0], -0.5, r[1], r[2], KERB, r[3], 'kerb');
           const spacing = road.coord === 0 ? 16 : 20;
-          for (let p = m0 + spacing / 2; p < m1 - 2; p += spacing) {
+          for (let p = p0 + spacing / 2; p < p1 - 2; p += spacing) {
+            if (p < m0 + 0.5 || p > m1 - 0.5) continue;
             const px = road.axis === 'z' ? road.coord : p;
             const pz = road.axis === 'z' ? p : road.coord;
             const type = road.axis === 'z' ? 'palmTall' : (Math.round(p / spacing) % 2 ? 'tree' : 'treeB');
@@ -61697,7 +62767,7 @@ void main() {
       const ewArm = j.halfZ > 8 ? 'signal11' : 'signal6';
       // Only on real pavement (junctions on the edge of town have open ground on one side).
       const edge = this.layout.config.lines[this.layout.config.lines.length - 1] + 7;
-      const onPavement = (x, z) => x > -edge && x < this.layout.config.seawallX && z > -edge && z < edge;
+      const onPavement = (x, z) => (x > -edge && x < this.layout.config.seawallX && z > -edge && z < edge) || (j.v3 && this._onSlab3(x, z));
       const pole = (type, x, z, yaw, group) => {
         if (onPavement(x, z)) this.addProp(type, x, KERB, z, yaw, 1, group);
       };
@@ -61741,6 +62811,58 @@ void main() {
       this._streetFurniture(block);
     }
 
+    /**
+     * 3.0: a block of the new districts: the kerbed pavement slab, then its
+     * lots (the generic fill), a park, or a reserved landmark plot.
+     */
+    _buildBlock3(block) {
+      const ctx = this.ctxAt(block.cx, block.cz);
+      const { minX, maxX, minZ, maxZ } = block;
+      ctx.concrete.box(minX, 0, minZ, maxX, KERB, maxZ, VH.col(0xcfcac0), { skip: { top: true } });
+      ctx.sidewalk.topRect(minX, minZ, maxX, maxZ, KERB, VH.col(0xffffff), 3);
+      this.physics.addBox(minX, -0.5, minZ, maxX, KERB, maxZ, 'kerb');
+      if (block.kind === 'plot') {
+        if (!(VH.Districts && VH.Districts.owner(block.plot))) this._plotPlaceholder(block);
+        return; // the builder lights and plants its own frontage
+      }
+      if (block.kind === 'park') {
+        const ix0 = minX + 4, ix1 = maxX - 4, iz0 = minZ + 4, iz1 = maxZ - 4;
+        ctx.grassTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xffffff), 6);
+        this.addLawn(ix0, iz0, ix1, iz1);
+        const rng = new VH.RNG(block.id + 'park');
+        for (let i = 0; i < 14; i++) {
+          this.addProp(rng.chance(0.5) ? 'tree' : 'treeB', rng.range(ix0 + 4, ix1 - 4), KERB, rng.range(iz0 + 4, iz1 - 4), rng.range(0, 6.28), rng.range(0.9, 1.3));
+        }
+        for (let i = 0; i < 6; i++) this.addProp('bench', rng.range(ix0 + 6, ix1 - 6), KERB, rng.range(iz0 + 6, iz1 - 6), rng.range(0, 6.28), 1);
+      } else {
+        if (block.alley) this._buildAlley(ctx, block);
+        for (const lot of block.lots) {
+          const lctx = this.ctxAt(lot.cx, lot.cz);
+          const top = VH.Buildings.buildLot(lctx, lot);
+          lot.top = top || 0;
+          if (top > 0) this.stats.buildings++;
+          this.stats.tallest = Math.max(this.stats.tallest, top || 0);
+        }
+        this.stats.lots += block.lots.length;
+      }
+      this._streetFurniture(block);
+    }
+
+    /** A reserved landmark plot nobody has built yet: a lawn (sand on the beach) and a name board. */
+    _plotPlaceholder(block) {
+      const ctx = this.ctxAt(block.cx, block.cz);
+      const ix0 = block.minX + 4, ix1 = block.maxX - 4, iz0 = block.minZ + 4, iz1 = block.maxZ - 4;
+      if (block.plot === 'sandpiper_beach') ctx.plazaTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xf0dca8), 6);
+      else {
+        ctx.grassTop.topRect(ix0, iz0, ix1, iz1, KERB, VH.col(0xffffff), 6);
+        this.addLawn(ix0, iz0, ix1, iz1);
+      }
+      const lm = (VH.Data.landmarks3 || []).find((l) => l.plot === block.plot);
+      if (lm && VH.Landmarks.sign) {
+        VH.Landmarks.sign(this, { x: block.cx, y: KERB + 2.2, z: block.minZ + 6, yaw: Math.PI, w: 7, h: 1.4, lines: [lm.name.toUpperCase(), 'Coming soon'], style: 'info', posts: true });
+      }
+    }
+
     _buildAlley(ctx, block) {
       const a = block.alley;
       ctx.asphaltTop.topRect(a.minX, a.minZ, a.maxX, a.maxZ, KERB, VH.col(0xbdbdbd), 6);
@@ -61771,9 +62893,10 @@ void main() {
         { side: 'w', a0: block.minZ, a1: block.maxZ, fixed: block.minX, inward: 1, yaw: -Math.PI / 2, alongX: false },
         { side: 'e', a0: block.minZ, a1: block.maxZ, fixed: block.maxX, inward: -1, yaw: Math.PI / 2, alongX: false },
       ];
-      const treeType = d === 'palmcrescent' ? 'palm' : d === 'oldmarket' ? 'tree' : d === 'harborpoint' ? 'palmTall' : 'palm';
-      const treeSpacing = d === 'palmcrescent' ? 18 : 30;
-      const treeChance = d === 'oldmarket' ? 0.45 : d === 'downtown' ? 0.75 : 0.9;
+      const T = block.v3 ? block.district.trees || {} : {}; // 3.0 districts name their own street trees
+      const treeType = T.type || (d === 'palmcrescent' ? 'palm' : d === 'oldmarket' ? 'tree' : d === 'harborpoint' ? 'palmTall' : 'palm');
+      const treeSpacing = T.spacing || (d === 'palmcrescent' ? 18 : 30);
+      const treeChance = T.chance || (d === 'oldmarket' ? 0.45 : d === 'downtown' ? 0.75 : 0.9);
       const noTrees = block.kind === 'plaza' || block.kind === 'tower' || block.kind === 'construction';
       edges.forEach((e, ei) => {
         const pos = (along, inset) => (e.alongX ? [along, e.fixed + e.inward * inset] : [e.fixed + e.inward * inset, along]);
@@ -61809,7 +62932,7 @@ void main() {
 
     // ----------------------------------------------------- world edges
     _buildBoundary(layout) {
-      const b = layout.config.bounds;
+      const b = Object.assign({}, layout.config.bounds, { maxX: layout.config.seawallX }); // the bay is the east edge
       const hedgeH = 2.6;
       const t = 1.6;
       const green = VH.col(0x355f2c);
@@ -61844,10 +62967,18 @@ void main() {
       for (const r of this.layout.roads) {
         if (skipAxis && r.axis === skipAxis) continue;
         // cityOnly: the roads as they were inside the old city limits.
-        if (cityOnly && r.isNew) continue;
-        const from = cityOnly && r.cityFrom !== undefined ? r.cityFrom : r.from;
+        // cityOnly 'v2': the roads as they were before 3.0 (old ends, no new roads).
+        if (cityOnly && r.isNew && cityOnly !== 'v2') continue;
+        if (cityOnly && r.v3) continue;
+        let from = r.from;
+        let to = r.to;
+        if (cityOnly) {
+          if (r.v2From !== undefined) from = r.v2From;
+          if (r.v2To !== undefined) to = r.v2To;
+          if (cityOnly !== 'v2' && r.cityFrom !== undefined) from = r.cityFrom;
+        }
         const along = r.axis === 'z' ? z : x;
-        if (along < from - m || along > r.to + m) continue;
+        if (along < from - m || along > to + m) continue;
         const across = r.axis === 'z' ? x - r.coord : z - r.coord;
         if (Math.abs(across) < r.width / 2 + m) return true;
       }
@@ -61877,22 +63008,54 @@ void main() {
         const yaw = rng.range(0, 6.28);
         const scale = rng.range(0.8, 1.35);
         placed++;
-        if (inZone(x, z, 6) || this.onRoad(x, z, 3)) continue;
+        if (inZone(x, z, 6) || this.onRoad(x, z, 3) || this._inNewLand(x, z, 3)) continue;
         this.addProp(type, x, 0, z, yaw, scale);
       }
-      // The new land: north to the airport, west to the fort.
-      const all = cfg.bounds;
+      // The new land: north to the airport, west to the fort. (Drawn in the
+      // world as it was before 3.0, against the roads as they were, so the
+      // same trees come out; those now on a new road or block are left out.)
+      const all = cfg.v2Bounds || cfg.bounds;
       const rng2 = new VH.RNG('outskirts-trees-2');
       let more = 0;
       for (let i = 0; i < 4000 && more < 620; i++) {
         const x = rng2.range(all.minX + 4, all.maxX - 4);
         const z = rng2.range(all.minZ + 4, all.maxZ - 4);
         if (x > b.minX - 6 && x < b.maxX + 6 && z > b.minZ - 6 && z < b.maxZ + 6) continue;
-        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5)) continue;
+        if (x > 380 || inZone(x, z, 14) || this.onRoad(x, z, 5, null, 'v2')) continue;
         const type = rng2.chance(0.75) ? (rng2.chance(0.5) ? 'tree' : 'treeB') : 'palm';
-        this.addProp(type, x, 0, z, rng2.range(0, 6.28), rng2.range(0.8, 1.4));
+        const yaw = rng2.range(0, 6.28);
+        const scale = rng2.range(0.8, 1.4);
         more++;
+        if (this.onRoad(x, z, 5) || this._inNewLand(x, z, 6)) continue;
+        this.addProp(type, x, 0, z, yaw, scale);
       }
+      // 3.0: the countryside round the new districts.
+      const rng3 = new VH.RNG('outskirts-trees-3');
+      const v2 = cfg.v2Bounds;
+      let more3 = 0;
+      for (let i = 0; i < 6000 && more3 < 700; i++) {
+        const x = rng3.range(all.minX + 4, cfg.seawallX - 40);
+        const z = rng3.range(cfg.bounds.minZ + 4, cfg.bounds.maxZ - 4);
+        if (v2 && x > v2.minX && x < v2.maxX && z > v2.minZ && z < v2.maxZ) continue; // the old land has its trees
+        if (inZone(x, z, 14) || this.onRoad(x, z, 6) || this._inNewLand(x, z, 8)) continue;
+        const type = rng3.chance(0.7) ? (rng3.chance(0.5) ? 'tree' : 'treeB') : 'palm';
+        this.addProp(type, x, 0, z, rng3.range(0, 6.28), rng3.range(0.8, 1.4));
+        more3++;
+      }
+    }
+
+    /** 3.0: is (x, z) on (or within `pad` of) a new block, or a reserved plot? */
+    _inNewLand(x, z, pad) {
+      const p = pad || 0;
+      for (const b of this.layout.blocks3 || []) {
+        if (x > b.minX - p && x < b.maxX + p && z > b.minZ - p && z < b.maxZ + p) return true;
+      }
+      return false;
+    }
+
+    /** 3.0: is (x, z) on the pavement slab of a new block? */
+    _onSlab3(x, z) {
+      return this._inNewLand(x, z, 0);
     }
 
     // ------------------------------------------------------ signs, water
@@ -61972,12 +63135,35 @@ void main() {
       if (x >= pier.x0 && x <= pier.x1 && z >= pier.z0 - 2 && z <= pier.z1 + 2) return 'Oceanview Pier';
       const bw = this.layout.waterfront.boardwalk;
       if (x >= bw.minX && x <= bw.maxX && z >= bw.minZ && z <= bw.maxZ) return 'The Boardwalk';
+      // 3.0: the bridges and the new districts' landmark plots.
+      const br = VH.Island && VH.Island.bridgeAt(x, z);
+      if (br) return br.name;
+      for (const block of this.layout.blocks3 || []) {
+        if (block.plot && x >= block.minX && x <= block.maxX && z >= block.minZ && z <= block.maxZ) {
+          const lm = (VH.Data.landmarks3 || []).find((l) => l.plot === block.plot);
+          if (lm) return lm.name;
+        }
+      }
       return null;
     }
 
     // ------------------------------------------------------------ update
     update(dt, camPos) {
       this.props.update(dt, camPos);
+      // 3.0: the world is three times the size. Chunks wholly beyond the fog
+      // (99.5% fogged at 2.3 / density) aren't drawn; the haze already hid them.
+      this._cullT = (this._cullT || 0) - dt;
+      if (this._cullT <= 0 && camPos) {
+        this._cullT = 0.2;
+        const fog = this.scene.fog;
+        const far = fog && fog.density ? 2.3 / fog.density : Infinity;
+        const h = CHUNK / 2;
+        for (const c of this.chunks.values()) {
+          const dx = Math.max(0, Math.abs(camPos.x - c.center.x) - h);
+          const dz = Math.max(0, Math.abs(camPos.z - c.center.z) - h);
+          c.group.visible = dx * dx + dz * dz < far * far;
+        }
+      }
 
       // Traffic signals cycle (Phase 5 traffic obeys this state).
       const PHASES = [
@@ -63320,6 +64506,9 @@ void main() {
       this._resolveOut = { x: 0, z: 0, hit: false };
       this.blocks = this.layout.blocks;
       this.blockAt = (bx, bz) => (bx < 0 || bz < 0 || bx > 7 || bz > 7 ? null : this.blocks[bx * 8 + bz]);
+      // 3.0: the new districts' blocks (citygen.js links each to its neighbours across the road: block.nb).
+      this.blocks3 = this.layout.blocks3 || [];
+      this._near3 = [];
       this._bindEvents();
     }
 
@@ -63327,7 +64516,7 @@ void main() {
       const q = this.game.settings.get('graphics.quality');
       const base = q === 'low' ? 18 : q === 'medium' ? 28 : q === 'ultra' ? 60 : 42;
       const night = this.game.environment.nightFactor || 0;
-      return Math.round(base * (1 - night * 0.4));
+      return Math.round(base * (this._areaK || 1) * (1 - night * 0.4));
     }
 
     _bindEvents() {
@@ -63414,10 +64603,21 @@ void main() {
     }
 
     _spawnWalker(focus) {
+      // 3.0: the new districts' blocks near Jay join the old grid's.
+      const near3 = this._near3;
+      near3.length = 0;
+      for (const b of this.blocks3) {
+        if (b.minX - 120 < focus.x && b.maxX + 120 > focus.x && b.minZ - 120 < focus.z && b.maxZ + 120 > focus.z) near3.push(b);
+      }
+      const nearGrid = Math.abs(focus.x) < 520 && Math.abs(focus.z) < 520;
       for (let tries = 0; tries < 8; tries++) {
-        const bx = Math.floor(Math.random() * 8);
-        const bz = Math.floor(Math.random() * 8);
-        const block = this.blockAt(bx, bz);
+        let block;
+        if (near3.length && (!nearGrid || Math.random() < 0.5)) block = near3[Math.floor(Math.random() * near3.length)];
+        else {
+          const bx = Math.floor(Math.random() * 8);
+          const bz = Math.floor(Math.random() * 8);
+          block = this.blockAt(bx, bz);
+        }
         if (!block) continue;
         const c = Math.floor(Math.random() * 4);
         const dirs = Crowd.edgeDirs(c);
@@ -63534,7 +64734,7 @@ void main() {
       const options = [['turn', turnD, 0.5]];
       for (const D of [sx, sz]) {
         if (D === rev[w.D]) continue; // never straight back the way we came
-        const nb = this.blockAt(bx + step[D][0], bz + step[D][1]);
+        const nb = w.block.v3 ? w.block.nb && w.block.nb[D] : this.blockAt(bx + step[D][0], bz + step[D][1]);
         if (nb) options.push(['cross', D, D === w.D ? 0.3 : 0.2, nb]);
       }
       let total = 0;
@@ -63602,7 +64802,7 @@ void main() {
     _rejoinWalk(a) {
       let best = null;
       let bestD = Infinity;
-      for (const b of this.blocks) {
+      for (const b of this.blocks.concat(this.blocks3)) {
         for (let c = 0; c < 4; c++) {
           const p = this._corner(b, c);
           const d = Math.hypot(p.x - a.pos.x, p.z - a.pos.z);
@@ -63701,6 +64901,9 @@ void main() {
       this._spawnTimer -= dt;
       if (this._spawnTimer <= 0) {
         this._spawnTimer = 0.35;
+        // 3.0: busy streets on the Strip, few people round the rail yard.
+        const dist = game.world.districtAt(focus.x, focus.z);
+        this._areaK = dist && dist.v3 && dist.ambient && dist.ambient.peds ? dist.ambient.peds : 1;
         let walkers = 0;
         for (let i = this.agents.length - 1; i >= 0; i--) {
           const a = this.agents[i];
@@ -81874,7 +83077,7 @@ void main() {
       const q = this.settings.get('graphics.quality');
       const base = q === 'low' ? 10 : q === 'medium' ? 15 : q === 'ultra' ? 26 : 20;
       const night = this.game.environment.nightFactor || 0;
-      return Math.round(base * this.densityScale * (1 - night * 0.3));
+      return Math.round(base * this.densityScale * (this._areaK || 1) * (1 - night * 0.3));
     }
 
     /** Make a car into AI traffic at a lane position. */
@@ -81892,6 +83095,9 @@ void main() {
       this._timer -= dt;
       if (this._timer > 0) return;
       this._timer = 0.4;
+      // 3.0: the new districts set their own traffic (a quiet suburb, a busy strip).
+      const dist = this.world && this.world.districtAt(focus.x, focus.z);
+      this._areaK = dist && dist.v3 && dist.ambient && dist.ambient.cars ? dist.ambient.cars : 1;
       const list = this.vehicles.list;
       let count = 0;
       const last = this.vehicles.lastPlayerCar;
@@ -91779,6 +92985,16 @@ void main() {
 
   const FRONT_KINDS = new Set(['garage', 'storefront', 'bank', 'diner', 'bar', 'motel', 'apartment_front', 'church', 'hospital_front', 'police_station_front', 'warehouse', 'street']);
   const DISTRICT_ALIASES = { oldmarket: 'oldmarket', old_market: 'oldmarket', downtown: 'downtown', palmcrescent: 'palmcrescent', palm_crescent: 'palmcrescent', harborpoint: 'harborpoint', harbor_point: 'harborpoint', saltmarsh_docks: 'saltmarsh', saltmarsh: 'saltmarsh', docks: 'saltmarsh', crestline_estates: 'crestline', crestline: 'crestline' };
+  // 3.0: the new districts, and the obvious other ways of writing them.
+  Object.assign(DISTRICT_ALIASES, {
+    sandpiper: 'sandpiper', sandpiper_beach: 'sandpiper', vistaverde: 'vistaverde', vista_verde: 'vistaverde',
+    ironside: 'ironside', thebowl: 'thebowl', the_bowl: 'thebowl', bowl: 'thebowl',
+    sunreel: 'sunreel', sunreel_studios: 'sunreel', cindercreek: 'cindercreek', cinder_creek: 'cindercreek',
+    halcyon: 'halcyon', halcyon_university: 'halcyon', coralmarina: 'coralmarina', coral_marina: 'coralmarina',
+    neonstrand: 'neonstrand', neon_strand: 'neonstrand', isla_paloma: 'neonstrand', paloma: 'neonstrand', island: 'neonstrand',
+    oldpaloma: 'oldpaloma', old_paloma: 'oldpaloma', palomaheights: 'palomaheights', paloma_heights: 'palomaheights',
+    palomafield: 'palomafield', paloma_field: 'palomafield',
+  });
 
   function hashString(s) {
     let h = 2166136261;
@@ -91798,12 +93014,20 @@ void main() {
       this.defs = {};
       this.usedLots = new Set();
       this.extra = { saltmarsh: [], crestline: [] }; // spots registered by the docks/estates builders
+      // 3.0: and by the new districts' builders ({ x, z, y?, yaw, kinds: [...], name? }).
+      for (const d of VH.Data.districts) if (d.v3) this.extra[d.id] = [];
+      this._late = new Set();
       this._builtins();
     }
 
-    /** Story places: { id: { district, kind, desc, name? } } */
-    define(defs) {
+    /**
+     * Story places: { id: { district, kind, desc, name? } }. opts.late:
+     * resolve these after every other place (a new campaign's places then
+     * never take a spot an older story's place would have had).
+     */
+    define(defs, opts) {
       Object.assign(this.defs, defs || {});
+      if (opts && opts.late) for (const id of Object.keys(defs || {})) this._late.add(id);
       if (this._finished) this._resolveAll();
     }
 
@@ -91813,7 +93037,9 @@ void main() {
      * map depended on the order of play (and moved after loading a save).
      */
     _resolveAll() {
-      for (const id of Object.keys(this.defs).sort()) this.get(id);
+      const ids = Object.keys(this.defs).sort();
+      for (const id of ids) if (!this._late.has(id)) this.get(id);
+      for (const id of ids) if (this._late.has(id)) this.get(id);
     }
 
     add(id, p) {
@@ -91892,6 +93118,7 @@ void main() {
       this.alias('hospital', 'mercy_general');
       if (this.extra.saltmarsh.length && !this.map.has('saltmarsh_docks')) this.add('saltmarsh_docks', Object.assign({ name: 'Saltmarsh Docks' }, this.extra.saltmarsh[0]));
       if (this.extra.crestline.length && !this.map.has('crestline_estates')) this.add('crestline_estates', Object.assign({ name: 'Crestline Estates' }, this.extra.crestline[0]));
+      this._builtins3();
       if (!this.defs.vpd_central) this.defs.vpd_central = { district: 'downtown', kind: 'police_station_front', name: 'VPD Central Precinct' };
       if (!this.defs.mercy_general) this.defs.mercy_general = { district: 'palmcrescent', kind: 'hospital_front', name: 'St. Agnes Mercy General' };
       // The docks and estates spots the fixed ids above took aren't free for story places.
@@ -91923,6 +93150,7 @@ void main() {
           p = { x: s.x, z: s.z, y: s.y, yaw: s.yaw || 0, kind, district, name, roof: !!s.roof };
         }
       }
+      if (!p && this.v3Districts().has(district)) p = this._resolve3(h, district, kind, name);
       if (!p && FRONT_KINDS.has(kind)) p = this._front(h, district, kind, name);
       if (!p && kind === 'alley') p = this._alley(h, district);
       if (!p && kind === 'parking') p = this._parking(h, district);
@@ -91952,8 +93180,134 @@ void main() {
     }
 
     _districtBlocks(district) {
+      if (this.v3Districts().has(district)) {
+        return (this.layout.blocks3 || []).filter((b) => b.kind === 'buildings' && b.district.id === district);
+      }
       return this.layout.blocks.filter((b) => b.kind === 'buildings' && b.district.id === district);
     }
+
+    // ----------------------------------------------- 3.0: the new districts
+    v3Districts() {
+      if (!this._v3) this._v3 = new Set(VH.Data.districts.filter((d) => d.v3).map((d) => d.id));
+      return this._v3;
+    }
+
+    /**
+     * The landmarks of the new districts as built-in places (unless a
+     * district builder registered a better spot for the id already): on a
+     * plot, on the pavement in the middle of its side on the widest road
+     * beside it, facing in.
+     */
+    _builtins3() {
+      for (const lm of VH.Data.landmarks3 || []) {
+        if (this.map.has(lm.id)) continue;
+        let p = null;
+        const block = lm.plot && this.layout.plots && this.layout.plots[lm.plot];
+        if (block) p = this._plotFront(block);
+        else if (lm.x !== undefined) p = { x: lm.x, z: lm.z, yaw: 0 };
+        if (!p) continue;
+        this.add(lm.id, Object.assign(p, { name: lm.name, kind: lm.kind, district: lm.district, landmark: true }));
+      }
+    }
+
+    /** The pavement at the middle of a block's side on the widest road beside it, facing into the block. */
+    _plotFront(b) {
+      const roads = this.layout.roads;
+      // yaw: facing into the block.
+      const sides = [
+        { s: 'n', x: b.cx, z: b.minZ + 2.2, yaw: 0, axis: 'x', edge: b.minZ, along: b.cx, out: -1 },
+        { s: 's', x: b.cx, z: b.maxZ - 2.2, yaw: Math.PI, axis: 'x', edge: b.maxZ, along: b.cx, out: 1 },
+        { s: 'w', x: b.minX + 2.2, z: b.cz, yaw: Math.PI / 2, axis: 'z', edge: b.minX, along: b.cz, out: -1 },
+        { s: 'e', x: b.maxX - 2.2, z: b.cz, yaw: -Math.PI / 2, axis: 'z', edge: b.maxX, along: b.cz, out: 1 },
+      ];
+      let best = null;
+      let bestW = -1;
+      for (const sd of sides) {
+        const r = roads.find((q) => q.axis === sd.axis && Math.abs(q.coord - (q.width / 2) * sd.out - sd.edge) < 0.6 && sd.along > q.from && sd.along < q.to);
+        if (r && r.width > bestW) {
+          bestW = r.width;
+          best = sd;
+        }
+      }
+      best = best || sides[0];
+      return { x: best.x, z: best.z, y: KERB, yaw: best.yaw, side: best.s };
+    }
+
+    /**
+     * A story place in a new district: a spot a district builder registered
+     * for the kind (places.extra[district]) first, then the generic fill:
+     * shop fronts, alleys, car parks, rooftops and corners of its blocks, and
+     * the special kinds at the district's own landmarks.
+     */
+    _resolve3(h, district, kind, name) {
+      const free = (this.extra[district] || []).filter((s) => !s.used);
+      const first = free.filter((s) => s.kinds && s.kinds[0] === kind);
+      const list = first.length ? first : free.filter((s) => s.kinds && s.kinds.includes(kind));
+      if (list.length) {
+        const s = list[h % list.length];
+        s.used = true;
+        return { x: s.x, z: s.z, y: s.y, yaw: s.yaw || 0, roof: !!s.roof };
+      }
+      const near = (id) => {
+        const p = this.map.get(id);
+        if (!p) return null;
+        // Spread along the landmark's frontage so places of a kind don't stack.
+        const off = (((h >>> 4) % 7) - 3) * 6;
+        const sideways = Math.abs(Math.sin(p.yaw)) > 0.5; // facing east/west: spread along z
+        return { x: p.x + (sideways ? 0 : off), z: p.z + (sideways ? off : 0), y: p.y, yaw: p.yaw };
+      };
+      const special = {
+        beach: { sandpiper: 'sandpiper_beach' },
+        boardwalk: { sandpiper: 'sandpiper_promenade', coralmarina: 'coral_marina', neonstrand: 'wonder_wharf' },
+        pier: { coralmarina: 'coral_marina', oldpaloma: 'paloma_harbour', neonstrand: 'wonder_wharf', sandpiper: 'sandpiper_promenade' },
+        dock: { coralmarina: 'coral_marina', oldpaloma: 'paloma_harbour', ironside: 'ironside_railyard' },
+        warehouse: { ironside: 'ironside_railyard', cindercreek: 'cinder_storage', sunreel: 'sunreel_backlot' },
+        mansion: { palomaheights: 'paloma_estate' },
+        park: { sandpiper: 'skate_park', halcyon: 'halcyon_quad', palomaheights: 'paloma_gardens', oldpaloma: 'paloma_plaza' },
+        overlook: { oldpaloma: 'paloma_fort', palomaheights: 'paloma_observatory', coralmarina: 'marina_lighthouse', sandpiper: 'sandpiper_promenade' },
+        construction: {},
+      };
+      if (special[kind]) {
+        if (kind === 'park') {
+          const park = (this.layout.blocks3 || []).find((b) => b.kind === 'park' && b.district.id === district);
+          if (park) return { x: park.minX + 8 + ((h >>> 3) % 3) * 20, z: park.minZ + 5, y: KERB, yaw: 0 };
+        }
+        if (kind === 'mansion' || kind === 'warehouse') {
+          // A walled villa's gate, a shed's roller doors.
+          const p = this._front(h, district, kind === 'mansion' ? 'storefront' : kind, name);
+          if (p && p.lot && p.lot.archetype === (kind === 'mansion' ? 'villa' : 'shed')) return p;
+          if (p && p.lot) this.usedLots.delete(p.lot.id);
+        }
+        if (kind === 'construction') {
+          const p = this._parking(h, district); // a cleared lot (a builder may register a real site)
+          if (p) return p;
+        }
+        const id = special[kind][district];
+        if (id && this.map.get(id)) return near(id);
+      }
+      // A district with no generic blocks (the airfield): somewhere along its plots' pavements.
+      if (!this._districtBlocks(district).length) return this._edgeSpot(h, district);
+      if (FRONT_KINDS.has(kind)) return this._front(h, district, kind, name);
+      if (kind === 'alley') return this._alley(h, district);
+      if (kind === 'parking') return this._parking(h, district);
+      if (kind === 'rooftop') return this._rooftop(h, district);
+      return this._corner(h, district);
+    }
+
+    /** A spot on the pavement round one of a district's blocks, picked by the hash, facing in. */
+    _edgeSpot(h, district) {
+      const pool = (this.layout.blocks3 || []).filter((b) => b.district.id === district);
+      if (!pool.length) return null;
+      const b = pool[h % pool.length];
+      const side = (h >>> 8) % 4;
+      const t = (((h >>> 12) % 9) + 1) / 10;
+      const i = 2.2;
+      if (side === 0) return { x: b.minX + (b.maxX - b.minX) * t, z: b.minZ + i, y: KERB, yaw: 0 };
+      if (side === 1) return { x: b.minX + (b.maxX - b.minX) * t, z: b.maxZ - i, y: KERB, yaw: Math.PI };
+      if (side === 2) return { x: b.minX + i, z: b.minZ + (b.maxZ - b.minZ) * t, y: KERB, yaw: Math.PI / 2 };
+      return { x: b.maxX - i, z: b.minZ + (b.maxZ - b.minZ) * t, y: KERB, yaw: -Math.PI / 2 };
+    }
+
 
     /** A building's street front: stand on the pavement facing its door. */
     _front(h, district, kind, name) {
@@ -92001,6 +93355,7 @@ void main() {
 
     _alley(h, district) {
       const blocks = this._districtBlocks(district).filter((b) => b.alley);
+      if (!blocks.length && this.v3Districts().has(district)) return null; // a corner then
       const pool = blocks.length ? blocks : this.layout.blocks.filter((b) => b.alley);
       if (!pool.length) return null;
       const b = pool[h % pool.length];
@@ -92051,7 +93406,8 @@ void main() {
 
     _corner(h, district) {
       const blocks = this._districtBlocks(district);
-      const pool = blocks.length ? blocks : this.layout.blocks;
+      const own3 = this.v3Districts().has(district) ? (this.layout.blocks3 || []).filter((b) => b.district.id === district) : [];
+      const pool = blocks.length ? blocks : own3.length ? own3 : this.layout.blocks;
       const b = pool[h % pool.length];
       const c = (h >>> 8) % 4;
       const i = 2.2;
@@ -105400,6 +106756,290 @@ void main() {
 })();
 //# sourceURL=js/data/story-club.js
 </script>
+  <script data-src="js/data/dlc.js">
+/*
+ * dlc.js — the header of the story DLC "Chasing the Firecrest" (id dlc1).
+ *
+ * Fifty years ago Dess Marlow won the Southbay 500 in the Firecrest, took
+ * seven parts off the car, hid them round the bay with a riddle on each, and
+ * vanished. This file holds the cast, the story places and the factions; the
+ * jobs live in dlc-act1a.js … dlc-act4b.js and dlc-side-<chain>.js, which all
+ * start the same way and add to D. docs/DLC_BIBLE.md is the source of truth.
+ */
+(function () {
+  'use strict';
+
+  const S = window.VH.Data.story;
+  const D = (S.dlc = S.dlc || { id: 'dlc1', title: '', tagline: '', unlockAfter: '', acts: {}, characters: {}, places: {}, factions: {}, missions: [], side: [], texts: [] });
+
+  D.title = 'Chasing the Firecrest';
+  D.tagline = 'Seven parts. Seven riddles. One lost racing car somewhere across the bay. And mind the road.';
+  D.unlockAfter = ''; // the engine agent sets this to the main story's third job
+
+  D.acts = {
+    1: { title: 'Lot 17' },
+    2: { title: 'Hiding in Plain Sight' },
+    3: { title: 'Isla Paloma' },
+    4: { title: 'The Last Lap' },
+  };
+
+  // ------------------------------------------------------------- the cast
+  // Jay and Nana Lu (memories only) come from the main story; nobody else does.
+  Object.assign(D.characters, {
+    pip: {
+      name: 'Pip Marlow', role: 'Speedway junior champion, banned from the roads; hires Jay', age: 19,
+      look: { skin: 0xc68a5e, hair: 0xd8471f, top: 0xf2f2ee, bottom: 0x1d2e52, shoes: 0xd8262e, build: 'slim', hat: true },
+      voice: { gender: 'female', pitch: 1.18, rate: 1.12 },
+      bio: "Dess Marlow's granddaughter: mechanic's hands, a temper and no patience at all. Banned from public roads for six months for doing 92 in a 40 at three in the morning, so she needs a driver.",
+    },
+    milo: {
+      name: 'Milo Quill', role: 'The riddle-solver, twelve', age: 12,
+      look: { skin: 0x8d5a3b, hair: 0x1a1410, top: 0xf2c500, bottom: 0x3a3d42, shoes: 0x2a55d8, build: 'slim' },
+      voice: { gender: 'male', pitch: 1.38, rate: 1.12 },
+      bio: "Professor Quill's grandson, at Halcyon for the summer. Reads everything, forgets nothing, solves Dess's riddles before the grown-ups, and runs a blog called The Firecrest Files with 41 subscribers.",
+    },
+    prof_quill: {
+      name: 'Professor Ambrose Quill', role: 'Halcyon historian, expert on the drowned driver', age: 63,
+      look: { skin: 0xe0b48f, hair: 0xd8d4cc, top: 0xb59a70, bottom: 0x5c4a32, shoes: 0x3a2a1a, build: 'tall' },
+      voice: { gender: 'male', pitch: 0.82, rate: 0.92 },
+      bio: 'Professor of Local History and author of three books proving the Firecrest is at the bottom of the bay. Gets carsick in every car ever made; perfectly fine in aircraft.',
+    },
+    june: {
+      name: 'June Marlow', role: "Driving instructor, Dess's daughter, Pip's mum", age: 51,
+      look: { skin: 0xc68a5e, hair: 0x6b4a32, top: 0x78b8e8, bottom: 0xcbbd9c, shoes: 0xefefea, build: 'average' },
+      voice: { gender: 'female', pitch: 1.02, rate: 0.94 },
+      bio: "Vista Verde's driving instructor for thirty years, raised by her Aunt Win and told her mother died in a racing car. Marks everything on a clipboard and has never forgiven a racing car.",
+    },
+    toby: {
+      name: 'Toby Brask', role: 'Keeper of the Coral Marina light; built the Firecrest', age: 81,
+      look: { skin: 0xd9a37c, hair: 0xeeeeea, top: 0x1d2e52, bottom: 0x3a3d42, shoes: 0x111111, build: 'slim', hat: true },
+      voice: { gender: 'male', pitch: 0.78, rate: 0.88 },
+      bio: "Built the Firecrest with Dess Marlow fifty years ago and has kept the Coral Marina lighthouse for thirty-three. Dess gave him the tin box for her daughter's seventeenth birthday. He never delivered it.",
+    },
+    odie: {
+      name: 'Odie Wren', role: 'Keeper of the Paloma fort light', age: 79,
+      look: { skin: 0xc68a5e, hair: 0xe8e4dc, top: 0xd8471f, bottom: 0x2b2f35, shoes: 0x3a2a1a, build: 'slim' },
+      voice: { gender: 'female', pitch: 0.96, rate: 1.0 },
+      bio: 'Keeps the old lighthouse on the Paloma fort, buys twelve jam doughnuts every Tuesday and taps the counter three times when she pays. Nobody on the island knows where she came from.',
+    },
+    dess: {
+      name: 'Dess Marlow', role: 'Winner of the Southbay 500, fifty years ago', age: 79,
+      look: { skin: 0xc68a5e, hair: 0xe8e4dc, top: 0xd8471f, bottom: 0x2b2f35, shoes: 0x3a2a1a, build: 'slim' },
+      voice: { gender: 'female', pitch: 0.96, rate: 1.0 },
+      bio: 'Won the Southbay 500 in the Firecrest, hid the car and herself, and laid a trail of seven riddles for her baby daughter. Has spent nearly fifty years as Odie Wren, watching the sea.',
+    },
+    dash: {
+      name: 'Dash Lockwood', role: "Host of TV's Lockwood's Lost Legends", age: 44,
+      look: { skin: 0xe8c39e, hair: 0xd29a1c, top: 0x6b4a32, bottom: 0xcbbd9c, shoes: 0x6b4a32, build: 'average', hat: true },
+      voice: { gender: 'male', pitch: 1.0, rate: 1.08 },
+      bio: 'The bay\'s favourite TV treasure hunter: eleven legends found in eight series, every one of them the wrong thing. Castellane is paying for his Firecrest special. "Legend... FOUND!"',
+    },
+    leo: {
+      name: 'Leo Castellane', role: 'Owner of the Neon Strand, the Speedway and forty hotels', age: 58,
+      look: { skin: 0xd9a37c, hair: 0x3a3d42, top: 0xeeeae2, bottom: 0xeeeae2, shoes: 0x6b4a32, build: 'tall' },
+      voice: { gender: 'male', pitch: 0.88, rate: 0.96 },
+      bio: 'Owns most of Isla Paloma under a slogan that says his family have been "Champions Since Day One". Charming, generous, and unable to afford the slogan being a lie.',
+    },
+    ottoline: {
+      name: 'Ottoline Graves', role: 'Head of Castellane Guest Services', age: 47,
+      look: { skin: 0xf0d5be, hair: 0x111111, top: 0x13b5b1, bottom: 0x13b5b1, shoes: 0x0e0e10, build: 'tall' },
+      voice: { gender: 'female', pitch: 0.92, rate: 0.9 },
+      bio: 'Runs the polite people in teal blazers who make problems leave the island. Has never once raised her voice. Leaves a comment card wherever she has been.',
+    },
+    hob: {
+      name: 'Hob Finnegan', role: 'Paloma Flying Club instructor and doughnut smuggler', age: 67,
+      look: { skin: 0xe0b48f, hair: 0xb8bcc0, top: 0x2a6a3a, bottom: 0x6b6545, shoes: 0x3a2a1a, build: 'heavy', hat: true },
+      voice: { gender: 'male', pitch: 0.86, rate: 1.04 },
+      bio: "Chief (and only) instructor of the Paloma Flying Club, on the last bit of the island Castellane doesn't own. Flies real doughnuts past the Castellane bakery monopoly and marks every landing out of ten.",
+    },
+    chet: {
+      name: 'Chet Valiant', role: 'Film star; Jay is his stunt double', age: 58,
+      look: { skin: 0xe8c39e, hair: 0x1a1410, top: 0xa8101c, bottom: 0x111214, shoes: 0xf2f2ee, build: 'heavy' },
+      voice: { gender: 'male', pitch: 0.8, rate: 0.95 },
+      bio: 'Star of Oversteer 2: Understeer (there was no Oversteer 1), now playing Rex Castellane in Champions Since Day One. Lives in a trailer in Cinder Creek and will not drive over thirty.',
+    },
+    monty: {
+      name: 'Monty Sprake', role: 'The voice of the Southbay Speedway', age: 55,
+      look: { skin: 0xd9a37c, hair: 0x8f8a73, top: 0xf2c500, bottom: 0x2b2f35, shoes: 0x111111, build: 'heavy' },
+      voice: { gender: 'male', pitch: 0.92, rate: 1.14 },
+      bio: "Thirty years the voice of the Speedway and of every police chase on the coast road. Knows every lap record and nobody's name.",
+    },
+
+    // Minor characters
+    fenella: {
+      name: 'Fenella Moss', role: 'Director of Champions Since Day One', age: 42,
+      look: { skin: 0xe0b48f, hair: 0x6e1a1a, top: 0x2b2f35, bottom: 0x6b6545, shoes: 0x111111, build: 'slim', hat: true },
+      voice: { gender: 'female', pitch: 1.05, rate: 1.12 },
+      bio: 'Megaphone, sun visor, three phones. Hates the script, loves a good stunt, and says "It\'s for the movie" before anyone else does.',
+    },
+    kit: {
+      name: 'Kit Ambrose', role: "Dash's camera operator and researcher", age: 31,
+      look: { skin: 0xa86b4c, hair: 0x1a1410, top: 0x3b1558, bottom: 0x2b2f35, shoes: 0x111111, build: 'average', hat: true },
+      voice: { gender: 'female', pitch: 0.98, rate: 0.95 },
+      bio: 'Films everything Dash does and reads everything Dash doesn\'t, including Milo\'s blog. "We\'re rolling. We\'re always rolling."',
+    },
+    clem: {
+      name: 'Clem Ruddock', role: 'Cinder Creek Storage manager and auctioneer', age: 70,
+      look: { skin: 0xd9a37c, hair: 0xb8bcc0, top: 0x9c6d5a, bottom: 0x3a3d42, shoes: 0x3a2a1a, build: 'heavy', hat: true },
+      voice: { gender: 'male', pitch: 0.9, rate: 1.15 },
+      bio: 'The fastest mouth in Cinder Creek. Sells dead men\'s lockers on Saturdays.',
+    },
+    plum: {
+      name: 'Officer Plum', role: 'Halcyon campus security', age: 59,
+      look: { skin: 0xc48a62, hair: 0x3a3d42, top: 0x2b4a6e, bottom: 0x2b2f35, shoes: 0x111111, build: 'heavy', hat: true },
+      voice: { gender: 'male', pitch: 0.85, rate: 0.9 },
+      bio: 'Torch, bicycle, and a deep personal commitment to the Halcyon quad.',
+    },
+    benny: {
+      name: 'Benny Akande', role: 'Clerk at the Sandpiper Kwik Pik', age: 24,
+      look: { skin: 0x6b4430, hair: 0x111111, top: 0xc8202a, bottom: 0x2b2f35, shoes: 0xf2f2ee, build: 'slim', hat: true },
+      voice: { gender: 'male', pitch: 1.05, rate: 1.05 },
+      bio: 'Has worked the promenade Kwik Pik for two summers and has never been asked to open the floor safe. Until now.',
+    },
+    gully: {
+      name: 'Gully', role: 'Sandpiper lifeguard', age: 22,
+      look: { skin: 0xd9a37c, hair: 0xe0c070, top: 0xc8202a, bottom: 0xd8262e, shoes: 0xefefea, build: 'average' },
+      voice: { gender: 'male', pitch: 1.0, rate: 1.1 },
+      bio: 'A whistle, a red vest and a grudge against anyone who has fun on his beach without him.',
+    },
+    daventry: {
+      name: 'Captain Daventry', role: 'Castellane charter pilot (Guest Services)', age: 50,
+      look: { skin: 0xe8c39e, hair: 0x7a8288, top: 0xf2f2ee, bottom: 0x1d2e52, shoes: 0x111111, build: 'tall', hat: true },
+      voice: { gender: 'male', pitch: 0.86, rate: 0.95 },
+      bio: 'A Guest Services man in a pilot\'s hat. Polite to the passengers. Less so to Jay.',
+    },
+    lorna: {
+      name: 'Lorna Pike', role: 'Wonder Wharf arcade attendant', age: 66,
+      look: { skin: 0xf0d5be, hair: 0xd8d4cc, top: 0xff3d8b, bottom: 0x2b2f35, shoes: 0x111111, build: 'average' },
+      voice: { gender: 'female', pitch: 1.0, rate: 0.95 },
+      bio: 'Has watched people fail at the Golden Grabber for forty years. Has opinions about the claw.',
+    },
+    ines: {
+      name: 'Ines Duarte', role: 'Café owner on Paloma Plaza', age: 70,
+      look: { skin: 0xc48a62, hair: 0xd8d4cc, top: 0xefefea, bottom: 0x1f3a26, shoes: 0x3a2a1a, build: 'heavy' },
+      voice: { gender: 'female', pitch: 0.95, rate: 1.05 },
+      bio: "Runs the café on Paloma Plaza and is Hob's best doughnut customer. Knows everybody's order.",
+    },
+    teddy: {
+      name: 'Teddy Castellane', role: "Castellane Racing works driver, Leo's nephew", age: 21,
+      look: { skin: 0xe0b48f, hair: 0x3a2a1a, top: 0xd29a1c, bottom: 0x0e0e10, shoes: 0xf2f2ee, build: 'slim' },
+      voice: { gender: 'male', pitch: 1.05, rate: 1.05 },
+      bio: "Talented, spoilt and fast. Pip's rival on the track. Not a villain; just never been told no.",
+    },
+    rosa: {
+      name: 'Rosa Lindqvist', role: "June's most nervous pupil", age: 16,
+      look: { skin: 0xf0d5be, hair: 0xe0c070, top: 0x9fe0c4, bottom: 0x2b4a6e, shoes: 0xf2f2ee, build: 'slim' },
+      voice: { gender: 'female', pitch: 1.25, rate: 1.1 },
+      bio: 'Has failed her three-point turn eleven times. Believes in herself on alternate days.',
+    },
+    gs_staff: {
+      name: 'Guest Services', role: 'Castellane Guest Services staff', age: 35,
+      look: { skin: 0xd9a37c, hair: 0x1a1410, top: 0x13b5b1, bottom: 0x13b5b1, shoes: 0x0e0e10, build: 'average' },
+      voice: { gender: 'male', pitch: 0.92, rate: 0.95 },
+      bio: 'Teal blazer, earpiece, a smile. "Good afternoon."',
+    },
+    marshal: {
+      name: 'Marshal', role: 'Speedway marshal', age: 45,
+      look: { skin: 0xc48a62, hair: 0x3a3d42, top: 0xe0a81a, bottom: 0x2b2f35, shoes: 0x111111, build: 'average', hat: true },
+      voice: { gender: 'male', pitch: 0.95, rate: 1.0 },
+      bio: 'Orange tabard, flags, a clipboard of his own.',
+    },
+    studio_guard: {
+      name: 'Studio Guard', role: 'Sunreel gate guard', age: 52,
+      look: { skin: 0xa86b4c, hair: 0x2a1a14, top: 0x7a8288, bottom: 0x2b2f35, shoes: 0x111111, build: 'heavy', hat: true },
+      voice: { gender: 'male', pitch: 0.88, rate: 0.95 },
+      bio: 'Has let in eleven Chet Valiants this summer. Only one was real.',
+    },
+    popcorn_kid: {
+      name: 'Popcorn Kid', role: 'Starview drive-in projectionist', age: 17,
+      look: { skin: 0xe8c39e, hair: 0x6b4a32, top: 0xc8202a, bottom: 0x2b2f35, shoes: 0xf2f2ee, build: 'slim', hat: true },
+      voice: { gender: 'male', pitch: 1.15, rate: 1.1 },
+      bio: 'Runs the projector, the popcorn and the sprinklers at the Starview.',
+    },
+  });
+
+  // ------------------------------------------------------------ the places
+  // Story places only. The district landmarks (cinder_storage, starview_drivein,
+  // halcyon_clocktower, sunreel_western_set, southbay_speedway, paloma_fort …)
+  // are built in by places.js and are used by id directly.
+  Object.assign(D.places, {
+    // Cinder Creek
+    lot_17: { district: 'cindercreek', kind: 'garage', desc: 'Cinder Creek Storage, lot 17: a dented roll-up door stencilled BRASK, a bare bulb, a folding table; the hunt\'s HQ' },
+    cinder_water_tower: { district: 'cindercreek', kind: 'overlook', desc: 'the old silver water tower over the trailer park: a ladder, a catwalk, a brass valve wheel on top' },
+    chet_trailer: { district: 'cindercreek', kind: 'parking', desc: "Chet Valiant's silver trailer in the trailer park, a gold star on the door, a deckchair, a cardboard cut-out of himself" },
+    drivein_rows: { district: 'cindercreek', kind: 'parking', desc: 'the back rows of the Starview drive-in, speakers on posts, parked cars for cover' },
+    // Halcyon University
+    quill_study: { district: 'halcyon', kind: 'storefront', desc: "the steps of the History building, Professor Quill's open study window above, books piled on the sill" },
+    quill_house: { district: 'halcyon', kind: 'apartment_front', desc: "the Quills' faculty house at the edge of campus; Milo's bedroom window with a hand-drawn Firecrest poster" },
+    campus_strip: { district: 'halcyon', kind: 'street', desc: 'the student strip of cafés and bookshops beside the campus' },
+    halcyon_field: { district: 'halcyon', kind: 'park', desc: 'the university sports field and running track' },
+    // Sunreel Studios
+    sunreel_city_set: { district: 'sunreel', kind: 'street', desc: 'the fake big-city street set: shopfronts with nothing behind them, a fake bank, a fake subway entrance' },
+    sunreel_prop_yard: { district: 'sunreel', kind: 'warehouse', desc: 'the prop yard: fibreglass statues, crates, the replica Firecrest under a sheet, a tank on a low-loader' },
+    stage_nine: { district: 'sunreel', kind: 'warehouse', desc: "Sound Stage 9 with its big doors open; the film's base camp and catering truck" },
+    // Coral Marina
+    toby_breakwater: { district: 'coralmarina', kind: 'pier', desc: "the breakwater out to the Coral Marina light, Toby's old pickup parked at its root" },
+    day_one_jetty: { district: 'coralmarina', kind: 'dock', desc: "the yacht-club jetty where Leo Castellane's white yacht Day One ties up" },
+    marina_condos: { district: 'coralmarina', kind: 'apartment_front', desc: 'the luxury condos on the marina front and their car park' },
+    // Vista Verde
+    june_house: { district: 'vistaverde', kind: 'garage', desc: "June Marlow's bungalow: a perfect lawn, a learner Pipit on the drive, Aunt Win's shed at the side with the mower in it" },
+    verde_culdesac: { district: 'vistaverde', kind: 'street', desc: 'a quiet cul-de-sac of identical houses, sprinklers, a basketball hoop' },
+    verde_ballfield: { district: 'vistaverde', kind: 'park', desc: 'the ball field behind the school' },
+    // The Bowl
+    speedway_pits: { district: 'thebowl', kind: 'garage', desc: "the Speedway pit garages, Pip's borrowed bay, tyres stacked" },
+    winners_enclosure: { district: 'thebowl', kind: 'storefront', desc: 'the winners\' enclosure by the start-finish line, the old painted honours board on its back wall' },
+    speedway_tunnel: { district: 'thebowl', kind: 'street', desc: 'the vehicle tunnel under the main stand into the Speedway infield' },
+    bowl_car_park: { district: 'thebowl', kind: 'parking', desc: 'the vast stadium and Speedway car park' },
+    // Sandpiper Beach
+    lifeguard_tower_7: { district: 'sandpiper', kind: 'beach', desc: 'lifeguard tower 7, white and red, a big lamp on its rail' },
+    lifeguard_tower_8: { district: 'sandpiper', kind: 'beach', desc: 'lifeguard tower 8, its twin further along the sand, the other lamp' },
+    beach_club_fence: { district: 'sandpiper', kind: 'beach', desc: "the Castellane Beach Club's new fence across the sand, teal flags, a private party" },
+    promenade_kwikpik: { district: 'sandpiper', kind: 'storefront', desc: 'the Kwik Pik on the promenade; ghost letters above the sign read BRASK & MARLOW SPEED SHOP; an old floor safe behind the counter' },
+    coast_road: { district: 'sandpiper', kind: 'street', desc: 'the coast road along the back of the beach' },
+    causeway_south: { district: 'sandpiper', kind: 'street', desc: 'the Sandpiper end of the Southbay Causeway' },
+    // Ironside
+    crusher_belt: { district: 'ironside', kind: 'warehouse', desc: 'the scrapyard crusher, its conveyor belt and a crane with a magnet' },
+    scrapyard_gate: { district: 'ironside', kind: 'street', desc: "the scrapyard's access road and gate" },
+    ironside_pipes: { district: 'ironside', kind: 'construction', desc: 'the refinery pipe racks beside the power station, a service road beneath them' },
+    // Vicehaven International
+    charter_stand: { district: 'airport', kind: 'parking', desc: 'the remote stand west of the gates where the Castellane charter Albatross waits with its stairs down' },
+    airport_fire_station: { district: 'airport', kind: 'garage', desc: 'the airport fire station east of the hangars, crash tenders inside' },
+    // Neon Strand
+    strand_checkpoint: { district: 'neonstrand', kind: 'street', desc: 'a Guest Services "Welcome Check" on the Neon Strand: teal cones, a gazebo, smiling men' },
+    castellane_palace: { district: 'neonstrand', kind: 'storefront', desc: 'the Castellane Palace hotel, CHAMPIONS SINCE DAY ONE in gold neon, a doorman, a fountain' },
+    golden_grabber: { district: 'neonstrand', kind: 'storefront', desc: 'arcade row at Wonder Wharf beside the big wheel: the Golden Grabber claw machine, a gear stick under its glass dome' },
+    convention_dock: { district: 'neonstrand', kind: 'warehouse', desc: 'the loading dock behind the Paloma Convention Centre' },
+    bridge_island_end: { district: 'neonstrand', kind: 'street', desc: 'the island end of the Paloma Bridge, where Guest Services put their roadblock' },
+    // Old city (guest spots)
+    bridge_mainland: { district: 'harborpoint', kind: 'street', desc: 'Anchor Street, the mainland approach to the Paloma Bridge' },
+    harbor_roadblock: { district: 'harborpoint', kind: 'street', desc: 'a Guest Services roadblock on Seawall Drive, trucks across the road' },
+    // Old Paloma
+    plaza_cafe: { district: 'oldpaloma', kind: 'diner', desc: "Ines's café on Paloma Plaza: three tables outside, doughnuts under a glass cover, a counter Odie taps" },
+    bell_tower: { district: 'oldpaloma', kind: 'church', desc: 'the church on Paloma Plaza and its bell tower, the bell visible in the arch' },
+    plaza_roofs: { district: 'oldpaloma', kind: 'rooftop', desc: 'the flat roofs round the plaza, washing lines and festival bunting' },
+    old_lanes: { district: 'oldpaloma', kind: 'alley', desc: 'the narrow lanes of Old Paloma, steps and arches' },
+    fort_light: { district: 'oldpaloma', kind: 'overlook', desc: "the fort lighthouse and Odie Wren's blue door" },
+    powder_store: { district: 'oldpaloma', kind: 'warehouse', desc: "the powder store in the fort's wall, bricked up fifty years ago; later an open arch with the Firecrest inside" },
+    // Paloma Heights
+    estate_garden: { district: 'palomaheights', kind: 'mansion', desc: "Leo Castellane's back lawn: party lights, a swimming pool, a string quartet, Dash's camera crane" },
+    estate_gate: { district: 'palomaheights', kind: 'street', desc: "the estate's gates and the road down the hill" },
+    paloma_clinic: { district: 'palomaheights', kind: 'hospital_front', desc: 'the private clinic with a rooftop helipad' },
+    // Paloma Field
+    hob_hangar: { district: 'palomafield', kind: 'garage', desc: "the Paloma Flying Club hangar: doughnut boxes, a kettle, Hob's Skylark and the club's Sparrow" },
+    field_apron: { district: 'palomafield', kind: 'parking', desc: 'the apron at the end of the runway where the aircraft are parked' },
+  });
+
+  // ---------------------------------------------------------- the factions
+  Object.assign(D.factions, {
+    guest_services: { name: 'Castellane Guest Services', colors: [0x13b5b1, 0xf2f2ee], desc: "Leo Castellane's private security under Ottoline Graves: teal blazers, earpieces, polite greetings, pistols and SMGs. They say good afternoon, then they shoot, then they leave a comment card." },
+    lockwood_tv: { name: "Lockwood's Lost Legends", colors: [0x3b1558, 0xd29a1c], desc: "Dash Lockwood's TV crew: a camera, a purple van with a dish, always filming, always in the way. Never hostile." },
+    castellane_racing: { name: 'Castellane Racing', colors: [0xd29a1c, 0x0e0e10], desc: "The Speedway's works team in gold-and-black Zephyrs, led by Teddy Castellane. Rivals on the track." },
+    flying_club: { name: 'Paloma Flying Club', colors: [0x2a6a3a, 0xefefea], desc: 'Hob Finnegan and four retired members who mostly drink tea. Friendly.' },
+    firecrest_fans: { name: 'Readers of The Firecrest Files', colors: [0xe0481c, 0xf2c500], desc: "Milo's readers in home-made Firecrest T-shirts. A friendly crowd that sits in the road; never fights." },
+  });
+})();
+//# sourceURL=js/data/dlc.js
+</script>
   <script data-src="js/data/recap-act1.js">
 /*
  * data/recap-act1.js — "Story so far" recaps for ACT 1: HOMECOMING (m01 to
@@ -113418,6 +115058,36 @@ void main() {
     g.fillStyle = 'rgba(160, 225, 245, 0.45)';
     R(sea, b.minZ, sea + Math.max(px, 0.9), b.maxZ);
 
+    // 3.0: Isla Paloma (its land, a rim of shallows and the seawall round it) and the bridges' decks.
+    const isl = cfg.island;
+    if (isl) {
+      g.fillStyle = 'rgba(90, 190, 225, 0.22)';
+      for (const r of isl.land) R(r.minX - 14, r.minZ - 14, r.maxX + 14, r.maxZ + 14);
+      for (const r of isl.land) {
+        g.fillStyle = PAL.grass;
+        R(r.minX, r.minZ, r.maxX, r.maxZ);
+        if (o.noise) {
+          g.fillStyle = o.noise;
+          R(r.minX, r.minZ, r.maxX, r.maxZ);
+        }
+      }
+      g.strokeStyle = PAL.seawall;
+      g.lineWidth = Math.max(px, 0.9);
+      for (const e of VH.Island ? VH.Island.shoreEdges(isl) : []) {
+        g.beginPath();
+        if (e.axis === 'x') {
+          g.moveTo(e.from, e.coord);
+          g.lineTo(e.to, e.coord);
+        } else {
+          g.moveTo(e.coord, e.from);
+          g.lineTo(e.coord, e.to);
+        }
+        g.stroke();
+      }
+      g.fillStyle = PAL.boardwalk;
+      for (const br of isl.bridges) R(br.from, br.coord - br.width / 2 - 2.5, br.to, br.coord + br.width / 2 + 2.5);
+    }
+
     // ------------------------------------------------- the paved city
     g.fillStyle = PAL.pave;
     R(west, north, east + SW, south);
@@ -113429,7 +115099,7 @@ void main() {
     R(sea - Math.max(px, 0.7), north, sea, south);
 
     // ---------------------------------------------------------- blocks
-    for (const bl of layout.blocks) {
+    for (const bl of layout.blocks3 ? layout.blocks.concat(layout.blocks3) : layout.blocks) {
       if (!on(bl.minX - 4, bl.minZ - 4, bl.maxX + 4, bl.maxZ + 4)) continue;
       const tint = tintOf(bl.district);
       g.fillStyle = PAL.pave;
@@ -113450,7 +115120,17 @@ void main() {
       const cx = (ix0 + ix1) / 2;
       const cz = (iz0 + iz1) / 2;
 
-      if (bl.kind === 'park') {
+      if (bl.kind === 'plot') {
+        // 3.0: a landmark's plot (its builder may paint more with VH.MapPainters).
+        g.fillStyle = bl.plot === 'sandpiper_beach' ? '#bfa877' : PAL.lawn;
+        R(ix0, iz0, ix1, iz1);
+        g.strokeStyle = 'rgba(255, 207, 138, 0.35)';
+        g.lineWidth = Math.max(px, 0.6);
+        g.strokeRect(ix0, iz0, ix1 - ix0, iz1 - iz0);
+      } else if (bl.kind === 'park' && bl.v3) {
+        g.fillStyle = PAL.lawn;
+        R(ix0, iz0, ix1, iz1);
+      } else if (bl.kind === 'park') {
         g.fillStyle = PAL.lawn;
         R(ix0, iz0, ix1, iz1);
         g.fillStyle = 'rgba(255, 255, 255, 0.03)';
@@ -113936,7 +115616,7 @@ void main() {
   /** For districts without blocks (open land, the bay): the longest clear run of their cells. */
   function openDistrictSpots(layout, land, avoid) {
     const districts = VH.Data.districts || [];
-    const withBlocks = new Set(layout.blocks.map((b) => b.district && b.district.id));
+    const withBlocks = new Set(layout.blocks.concat(layout.blocks3 || []).map((b) => b.district && b.district.id));
     const wanted = districts.filter((d) => !withBlocks.has(d.id));
     if (!wanted.length || !layout.districtAt) return [];
     const step = 32;
@@ -116406,13 +118086,23 @@ void main() {
           marks.push({ name: lm.name, x: lm.x, z: lm.z, kind: lm.kind, major: true, gx: lm.gx, gz: lm.gz, tagline: dist ? dist.tagline : '' });
         } else marks.push({ name: lm.name, x: lm.x, z: lm.z });
       }
+      // 3.0: the new districts' landmarks (the big ones get a badge and their district's name under it).
+      for (const lm of VH.Data.landmarks3 || []) {
+        const bl = lm.plot && lay.plots && lay.plots[lm.plot];
+        const x = bl ? bl.cx : lm.x;
+        const z = bl ? bl.cz : lm.z;
+        if (typeof x !== 'number') continue;
+        const dist = districts.find((d) => d.id === lm.district);
+        if (lm.major) marks.push({ name: lm.name, x, z, kind: 'place', major: true, tagline: dist ? (dist.name === lm.name ? dist.tagline : dist.name) : '' });
+        else marks.push({ name: lm.name, x, z });
+      }
       this._marks = marks;
 
       // Districts with blocks: candidate spots are their plain blocks, nearest the centroid first.
       const plans = [];
       const spots = [];
       for (const d of districts) {
-        const blocks = lay.blocks.filter((b) => b.district && b.district.id === d.id);
+        const blocks = lay.blocks.concat(lay.blocks3 || []).filter((b) => b.district && b.district.id === d.id);
         if (!blocks.length) continue;
         let cx = 0;
         let cz = 0;
@@ -116423,7 +118113,7 @@ void main() {
         cx /= blocks.length;
         cz /= blocks.length;
         const cands = blocks
-          .filter((b) => !b.landmark)
+          .filter((b) => !b.landmark && !b.plot)
           .map((b) => ({ x: b.cx, z: b.cz, d: Math.hypot(b.cx - cx, b.cz - cz) }))
           .sort((p, q) => p.d - q.d);
         if (!cands.length) cands.push({ x: cx, z: cz, d: 0 });
@@ -120625,6 +122315,8 @@ void main() {
       this.places = new VH.Places(this);
       if (VH.Docks && this.world.docks) VH.Docks.registerPlaces(this.world.docks, this.places);
       if (VH.Estates && this.world.estates) VH.Estates.registerPlaces(this.world.estates, this.places);
+      // 3.0: the new districts' builders register their spots (before the landmarks fall back to plot fronts).
+      for (const B of (VH.Districts && VH.Districts.builders) || []) if (B.registerPlaces) B.registerPlaces(this.world, this.places);
       // The places beyond the old city limits, and the corner shops.
       for (const k of ['Skyline'].concat(WORLD_SYSTEMS)) if (VH[k] && VH[k].registerPlaces) VH[k].registerPlaces(this.world, this.places);
       this.places.finish();
@@ -120644,6 +122336,20 @@ void main() {
         const sys = new VH[k](this);
         this[k.charAt(0).toLowerCase() + k.slice(1)] = sys;
         this.systems.push(sys);
+      }
+      // 3.0: a district builder's moving parts (VH.Districts.register({ ..., System })): update(dt) and
+      // optionally reset/stop/blips/stats/serialize/load with saveKey, like the systems above.
+      this.districtSystems = {};
+      for (const B of (VH.Districts && VH.Districts.builders) || []) {
+        if (!B.System) continue;
+        try {
+          const sys = new B.System(this);
+          if (!sys.update) sys.update = () => {};
+          this.districtSystems[B.id] = sys;
+          this.systems.push(sys);
+        } catch (e) {
+          console.error('District system ' + B.id + ' failed', e);
+        }
       }
       if (VH.PhotoMode) this.photo = new VH.PhotoMode(this);
       if (VH.Minimap) {
@@ -121803,7 +123509,7 @@ void main() {
         const off = r.width / 2 + 2.2;
         const at = (k) => (r.axis === 'z' ? { x: r.coord + k * off, z: lane.along } : { x: lane.along, z: r.coord + k * off });
         for (const t of [at(side), at(-side), { x: lane.x, z: lane.z }]) {
-          if (wf && t.x > wf.seawallX - 0.5) continue;
+          if (wf && t.x > wf.seawallX - 0.5 && !(this.layout.isLand && this.layout.isLand(t.x, t.z))) continue;
           const y = ph.groundHeight(t.x, t.z, 3);
           if (y < -0.5) continue; // not the sea floor
           if (ph.overlaps(t.x, t.z, 0.45, y + 0.3, y + 1.7)) continue;
