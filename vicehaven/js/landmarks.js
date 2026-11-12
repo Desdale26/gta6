@@ -153,7 +153,8 @@
     // A 3.4 m wall: too tall to climb from the ground, reachable from the top crate.
     const wallX0 = px0 + heights.length * 1.9;
     solidBox(world, ctx.concrete, wallX0, base, crateZ0 - 1.2, wallX0 + 2.2, base + 3.4, crateZ1 + 1.2, VH.col(0x9a948a), { uvScale: 4 }, 'wall');
-    sign(world, { x: px0 + 3.8, y: base + 1.2, z: crateZ1 + 0.9, yaw: 0, w: 3.6, h: 1.3,
+    // The board stands beside the crates, not in front of them: it is solid, and the run-up must be clear.
+    sign(world, { x: px0 - 2.4, y: base + 1.2, z: crateZ0 + 0.9, yaw: 0, w: 3.6, h: 1.3, posts: true,
       lines: ['CLIMBING TEST', 'Run at a crate and press JUMP', 'to climb up. Top crate → big wall.'], style: 'info' });
     // Vault walls of increasing height.
     const walls = [0.6, 1.0, 1.4];

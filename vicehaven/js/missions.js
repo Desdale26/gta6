@@ -2602,12 +2602,20 @@
       // The grid is on the lanes going the race's way (two abreast where there
       // are two, else single file), behind the line: a rival put off the road
       // or on the oncoming side would never get going.
-      const lp0 = game.roadnet.nearestLane(base.x, base.z, base.yaw, 30);
+      // 3.0 (DISTRICTS-SOUTH): a race on a closed circuit (the Southbay
+      // Speedway, js/districts/thebowl.js) lines up on its grid and its racers follow its racing line.
+      const circuit = VH.Circuits && VH.Circuits.find(valid);
+      const lp0 = circuit ? null : game.roadnet.nearestLane(base.x, base.z, base.yaw, 30);
       (r.rivals || []).forEach((rv, i) => {
         let x;
         let z;
         let yaw = base.yaw;
-        if (lp0) {
+        if (circuit) {
+          const slot = circuit.gridSlot(i, base);
+          x = slot.x;
+          z = slot.z;
+          yaw = slot.yaw;
+        } else if (lp0) {
           const two = lp0.road.lanesPerDirection > 1;
           const other = lp0.lane === 0 ? 1 : 0;
           const lane = two && i % 2 === 0 ? other : lp0.lane;
@@ -2629,7 +2637,7 @@
         const v = game.vehicles.spawn(type, x, z, yaw, { color: rv.color, role: 'mission', persistent: true });
         v.driver = 'ai';
         v.noEnter = true;
-        v.controller = new RaceDriver(this, v, valid, rv.skill || 0.85 + i * 0.05);
+        v.controller = circuit ? circuit.driver(this, v, valid, rv.skill || 0.85 + i * 0.05) : new RaceDriver(this, v, valid, rv.skill || 0.85 + i * 0.05);
         v.racerName = rv.char ? (this.chars[rv.char] || {}).name || rv.char : rv.name || 'Rival';
         rivals.push(v);
         run.cars.set('rival' + i, v);
