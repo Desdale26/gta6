@@ -733,7 +733,8 @@
       p.heal(d.heal);
       this.counts[d.id] = (this.counts[d.id] || 0) + 1;
       if (this.audio) this.audio.ding();
-      this.game.hud.notify({ title: d.name.replace(/^An? /, ''), text: d.line + (p.health > before ? ' +' + Math.round(p.health - before) + ' health' : ''), icon: d.icon });
+      const t = d.name.replace(/^An? /, '');
+      this.game.hud.notify({ title: t.charAt(0).toUpperCase() + t.slice(1), text: d.line + (p.health > before ? ' +' + Math.round(p.health - before) + ' health' : ''), icon: d.icon });
     }
 
     _begin(d, opts) {
