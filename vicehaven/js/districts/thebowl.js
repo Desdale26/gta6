@@ -625,6 +625,8 @@
       this._p = {};
       this._l = {};
       circuit.drivers.add(this);
+      // Race cars are built for door-banging: a rival takes a quarter of the knocks (vehicle.damage).
+      if (!v.damageScale) v.damageScale = 1;
     }
     onBump() {}
     update(v, dt) {

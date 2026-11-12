@@ -1,0 +1,279 @@
+/*
+ * carnival.css — Wonder Wharf's own screen layer (js/carnival.js): the
+ * ticket counter under the money, and the overlay a ride or stall game
+ * draws on: a title strip, live figures, a clock, big words, captions, a
+ * power meter and the results card. Sized in rem like the rest of the HUD.
+ */
+
+/* ------------------------------------------------------- ticket counter */
+.cv-tickets {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgba(20, 12, 40, 0.55);
+  border: 1px solid rgba(255, 210, 74, 0.55);
+  color: #ffd24a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.cv-tickets.on {
+  display: flex;
+}
+
+.cv-tickets.pop {
+  animation: cv-pop 0.45s ease-out;
+}
+
+.cv-tickets-icon {
+  font-size: 1.1rem;
+}
+
+/* -------------------------------------------------------------- overlay */
+.cv-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  font-family: var(--vh-font-display);
+  color: #fff;
+}
+
+.cv-overlay.on {
+  display: block;
+}
+
+.cv-top {
+  position: absolute;
+  top: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  max-width: 80vw;
+}
+
+.cv-name {
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffd24a;
+  text-shadow: 0 0 12px rgba(255, 61, 139, 0.8), 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.cv-name:empty,
+.cv-hint:empty {
+  display: none;
+}
+
+.cv-hint {
+  margin-top: 0.3rem;
+  padding: 0.25rem 0.8rem;
+  border-radius: 0.3rem;
+  background: rgba(10, 8, 24, 0.55);
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+}
+
+.cv-stats {
+  position: absolute;
+  top: 6.4rem;
+  left: 1.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cv-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.8rem;
+  border-left: 3px solid #37e8ff;
+  background: rgba(10, 8, 24, 0.55);
+  font-size: 1rem;
+}
+
+.cv-stat.pop {
+  animation: cv-pop 0.35s ease-out;
+}
+
+.cv-stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffd24a;
+}
+
+.cv-clock {
+  position: absolute;
+  top: 6.2rem;
+  right: 1.8rem;
+  display: none;
+  padding: 0.2rem 0.8rem;
+  border-radius: 0.4rem;
+  background: rgba(10, 8, 24, 0.6);
+  font-size: 2.2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-clock.on {
+  display: block;
+}
+
+.cv-clock.urgent {
+  color: #ff5c5c;
+}
+
+.cv-big {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 5.5rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 22px rgba(255, 61, 139, 0.9), 0 4px 0 rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.cv-big.on {
+  animation: cv-big 0.9s ease-out forwards;
+}
+
+.cv-caption {
+  position: absolute;
+  bottom: 9rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70vw;
+  padding: 0.4rem 1rem;
+  border-radius: 0.4rem;
+  background: rgba(10, 8, 24, 0.65);
+  font-size: 1.15rem;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.cv-caption.on {
+  opacity: 1;
+}
+
+.cv-meter {
+  position: absolute;
+  bottom: 5rem;
+  left: 50%;
+  width: 22rem;
+  height: 1.1rem;
+  transform: translateX(-50%);
+  display: none;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 0.6rem;
+  background: rgba(10, 8, 24, 0.6);
+  overflow: hidden;
+}
+
+.cv-meter.on {
+  display: block;
+}
+
+.cv-meter-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #37e8ff, #ffd24a 60%, #ff3d8b);
+}
+
+.cv-meter-label {
+  position: absolute;
+  inset: 0;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+/* --------------------------------------------------------- results card */
+.cv-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: 20rem;
+  transform: translate(-50%, -50%);
+  display: none;
+  padding: 1.2rem 1.6rem 1rem;
+  border-radius: 0.8rem;
+  border: 2px solid #ffd24a;
+  background: rgba(24, 12, 44, 0.9);
+  box-shadow: 0 0 30px rgba(255, 61, 139, 0.45);
+}
+
+.cv-card.on {
+  display: block;
+}
+
+.cv-card-title {
+  margin-bottom: 0.7rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  text-align: center;
+  color: #ffd24a;
+}
+
+.cv-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 0.25rem 0;
+  font-size: 1.05rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cv-card-row.big b {
+  font-size: 1.8rem;
+}
+
+.cv-card-row.best b {
+  color: #7dff6a;
+}
+
+.cv-card-row.tickets b {
+  color: #ffd24a;
+}
+
+.cv-card-foot {
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@keyframes cv-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.cv-card.on {
+  animation: cv-card 0.35s ease-out;
+}
+
+@keyframes cv-card {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+@keyframes cv-big {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+}

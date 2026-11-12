@@ -941,7 +941,7 @@
         // Keep the camera out of walls: the first solid thing between the target and the camera.
         const ph = this.game.physics;
         const hit = ph.raycast ? ph.raycast(C.x, C.y, C.z, -this._dir.x, -this._dir.y, -this._dir.z, d, { flags: VH.COLLIDE.CAMERA }) : null;
-        if (hit && hit.distance !== undefined) d = Math.max(1.2, hit.distance - 0.3);
+        if (hit) d = Math.max(1.2, hit.t - 0.3);
         cam.position.set(C.x - this._dir.x * d, Math.max(C.y - this._dir.y * d, 0.6), C.z - this._dir.z * d);
         cam.lookAt(C.x, C.y, C.z);
         if (sx) cam.rotation.z += sx;
@@ -1036,7 +1036,7 @@
       for (const v of list) {
         if (!v || v.removed || !v.pos) continue;
         if (v.pos.x < x0 || v.pos.x > x1 || v.pos.z < z0 || v.pos.z > z1) continue;
-        if ((v.speed || 0) > 1.5 || v === this.game.player.vehicle) {
+        if (Math.abs(v.speed || 0) > 1.5 || v === this.game.player.vehicle) {
           this.alarm('car');
           return;
         }
