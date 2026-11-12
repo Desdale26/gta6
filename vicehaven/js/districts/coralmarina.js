@@ -169,7 +169,8 @@
       const r0 = L.r - (k * 0.9) / 5, r1 = L.r - ((k + 1) * 0.9) / 5;
       ctx.b.cylinder(L.x, ya, L.z, r0, r1, yb - ya, 16, VH.col(k % 2 ? 0xc8302c : 0xf4f2ec), false);
     }
-    world.physics.addBox(L.x - L.r * 0.8, 0, L.z - L.r * 0.8, L.x + L.r * 0.8, y0 + L.h, L.z + L.r * 0.8, 'building');
+    // An octagon of two boxes hugs the round tower (and its door).
+    for (const yaw of [0, Math.PI / 4]) world.physics.addOrientedBox(L.x, L.z, L.r + 0.25, L.r + 0.25, yaw, 0, y0 + L.h, 'building');
     const top = y0 + L.h;
     ctx.prop.cylinder(L.x, top, L.z, L.r + 0.6, L.r + 0.6, 0.35, 16, VH.col(0x2b2f35), true);
     ctx.prop.cylinder(L.x, top + 0.35, L.z, L.r + 0.55, L.r + 0.55, 1.0, 16, VH.col(0x2b2f35), false);
@@ -203,6 +204,7 @@
       ctx.screen.box(411.98, KERB + 1.2, -928.5, 412.04, KERB + 2.6, -921.5, VH.col(0xfff0c8, 0.6));
       W.gable(ctx.prop, 397.6, -930.4, 412.4, -919.6, KERB + 3.4, 1.4, 'x', 0x1f3a5a, 0xf4f2ec);
       ctx.prop.box(404.8, KERB + 4.6, -925.1, 405.2, KERB + 9, -924.9, VH.col(0xe8e8e8));
+      world.physics.addBox(404.75, 0, -925.15, 405.25, KERB + 9, -924.85, 'pole', F().SOLID | F().SHOTS);
       ctx.prop.box(405.2, KERB + 8.0, -925.05, 406.6, KERB + 8.9, -924.95, VH.col(0x1f3a5a));
       W.solid(world, ctx.prop, 398, KERB, -860, 404, KERB + 2.8, -852, 0x2f6f9f, null, 'building');
       ctx.prop.box(397.4, KERB + 2.8, -860.6, 404.6, KERB + 3.1, -851.4, VH.col(0xf4f2ec));
@@ -211,6 +213,7 @@
       for (const z of [-990, -920, -850, -780]) {
         ctx.prop.box(S.x1 - 0.1, KERB, z - 0.06, S.x1 + 0.02, KERB + 1.6, z + 0.06, VH.col(0x8f969c));
         ctx.prop.cylinder(S.x1 + 0.08, KERB + 1.1, z, 0.42, 0.42, 0.1, 10, VH.col(0xd9772b), false);
+        world.physics.addBox(S.x1 - 0.15, 0, z - 0.45, S.x1 + 0.15, KERB + 1.6, z + 0.45, 'pole', F().SOLID | F().SHOTS);
       }
     }
     W.sign(world, { x: S.x0 + 1, y: 4.2, z: -770, yaw: -Math.PI / 2, w: 9, h: 2.4, lines: ['CORAL MARINA', 'Berths · Fuel · Harbourmaster'], style: 'welcome', posts: true, colors: { bg: ['#3f8f9f', '#1f5f7a', '#1f3a5a'] } });
@@ -236,6 +239,7 @@
         ctx.prop.cylinder(x, yy, z, 0.45, 0.45, 0.72, 10, VH.col(0xf4f4ef), true);
         ctx.prop.box(x - 0.03, yy + 0.72, z - 0.03, x + 0.03, yy + 2.4, z + 0.03, VH.col(0xd8d8d8));
         ctx.prop.cylinder(x, yy + 2.1, z, 1.5, 0.05, 0.5, 8, VH.col(0x1f3a5a), false);
+        world.physics.addBox(x - 0.45, 0, z - 0.45, x + 0.45, yy + 2.4, z + 0.45, 'metal', F().SOLID | F().SHOTS);
       }
       // Flagpoles with pennants.
       for (let k = 0; k < 3; k++) {
@@ -256,6 +260,7 @@
       world.physics.addBox(Pl.x0 - 2, 0, Pl.z0 - 2, Pl.x1 + 2, KERB + 0.2, Pl.z1 + 2, 'stone', F().SOLID);
       for (let x = Pl.x0; x < Pl.x1; x += 4) {
         K().tiltBox(ctx.prop, x + 1, KERB + 0.55, Pl.z1 + 4.2, 0.7, 0.08, 1.9, 0, -0.25, 0xf4f4ef);
+        world.physics.addBox(x + 0.65, 0, Pl.z1 + 3.25, x + 1.35, KERB + 0.8, Pl.z1 + 5.15, 'plank', F().SOLID);
       }
       W.fence(world, Pl.x0 - 4, Pl.z0 - 4, Pl.x1 + 4, Pl.z0 - 4, [], 'picket', 1.1);
     }
@@ -283,10 +288,14 @@
       ctx.screen.box(P1.x0 + 1, KERB + 1.2, P1.z1 + 0.02, P1.x1 - 1, KERB + 3.6, P1.z1 + 0.06, VH.col(0xffd9a0, 0.5));
       W.deck(world, ctx.wood, P1.x0, P1.z1, P1.x1, P1.z1 + 7, KERB + 0.3, DECK, 'boardwalk', 0.3);
       W.festoon(world, P1.x0, KERB + 3.6, P1.z1 + 6.6, P1.x1, KERB + 3.6, P1.z1 + 6.6, 0.5, [0xffd24a, 0xfff4dc], 1.6);
-      for (const x of [P1.x0, P1.x1]) ctx.prop.box(x - 0.08, KERB, P1.z1 + 6.5, x + 0.08, KERB + 3.7, P1.z1 + 6.7, VH.col(0x5a4a3a));
+      for (const x of [P1.x0, P1.x1]) {
+        ctx.prop.box(x - 0.08, KERB, P1.z1 + 6.5, x + 0.08, KERB + 3.7, P1.z1 + 6.7, VH.col(0x5a4a3a));
+        world.physics.addBox(x - 0.15, 0, P1.z1 + 6.45, x + 0.15, KERB + 3.7, P1.z1 + 6.75, 'pole', F().SOLID | F().SHOTS);
+      }
       for (let x = P1.x0 + 3; x < P1.x1 - 2; x += 5) {
         ctx.wood.box(x - 0.8, KERB + 1.0, P1.z1 + 2.8, x + 0.8, KERB + 1.08, P1.z1 + 4.2, VH.col(0x8b6a45));
         ctx.wood.box(x - 0.08, KERB + 0.3, P1.z1 + 3.4, x + 0.08, KERB + 1.0, P1.z1 + 3.6, VH.col(0x5a4a3a));
+        world.physics.addBox(x - 0.8, 0, P1.z1 + 2.8, x + 0.8, KERB + 1.08, P1.z1 + 4.2, 'plank', F().SOLID | F().SHOTS);
       }
       W.sign(world, { x: (P1.x0 + P1.x1) / 2, y: KERB + P1.h + 1.6, z: P1.z1 + 0.2, yaw: 0, w: 14, h: 1.8, lines: ['THE SALTY PELICAN'], style: 'neon', oneSided: true, colors: { fg: '#7ad7ff', glow: '#2aa8ff', outline: '#ffd24a' } });
       // The crab shack: red boards, nets, a giant crab on the roof.

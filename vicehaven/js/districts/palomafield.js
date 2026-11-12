@@ -80,8 +80,9 @@
   function lamp(world, x, z, hex, mul, h) {
     const ctx = world.ctxAt(x, z);
     const top = KERB + (h || 0.35);
-    ctx.prop.box(x - 0.05, KERB, z - 0.05, x + 0.05, top - 0.08, z + 0.05, VH.col(0x5a5f66));
-    ctx.screen.box(x - 0.16, top - 0.1, z - 0.16, x + 0.16, top + 0.08, z + 0.16, VH.col(hex, mul || 2.4));
+    // Frangible, as real edge lights are: cars and aircraft roll over them, so they stay passable.
+    ctx.prop.box(x - 0.05, KERB, z - 0.05, x + 0.05, top - 0.08, z + 0.05, VH.col(0x5a5f66)); // solidity: passable
+    ctx.screen.box(x - 0.16, top - 0.1, z - 0.16, x + 0.16, top + 0.08, z + 0.16, VH.col(hex, mul || 2.4)); // solidity: passable
   }
   function solid(world, surf, x0, y0, z0, x1, y1, z1, hex, opts, tag, flags) {
     surf.box(x0, y0, z0, x1, y1, z1, VH.col(hex), opts);
@@ -281,7 +282,9 @@
     solid(world, ctx.prop, hg.x0, KERB, hg.z0, hg.x1, KERB + H, hg.z0 + 0.5, wall);
     solid(world, ctx.prop, hg.x0, KERB, hg.z1 - 0.5, hg.x1, KERB + H, hg.z1, wall);
     solid(world, ctx.prop, hg.x0, KERB, hg.z0, hg.x0 + 0.5, KERB + H, hg.z1, wall);
-    solid(world, ctx.prop, hg.x1 - 0.6, KERB + 8, hg.z0, hg.x1, KERB + H, hg.z1, wall, { bottom: true });
+    // The lintel over the doors (solid() would fill the opening down to the ground).
+    ctx.prop.box(hg.x1 - 0.6, KERB + 8, hg.z0, hg.x1, KERB + H, hg.z1, VH.col(wall), { bottom: true });
+    world.physics.addBox(hg.x1 - 0.6, KERB + 8, hg.z0, hg.x1, KERB + H, hg.z1, 'building', F().ALL);
     for (let k = 0; k < 4; k++) {
       const inset = k * 3.2;
       ctx.prop.box(hg.x0 - 0.3 + inset, KERB + H + k * 0.8, hg.z0 - 0.3, hg.x1 + 0.3 - inset, KERB + H + (k + 1) * 0.8, hg.z1 + 0.3, k % 2 ? trim : VH.col(wall), { bottom: k === 0 });
@@ -291,6 +294,7 @@
     for (let z = hg.z0 + 8; z < hg.z1 - 4; z += 12) ctx.screen.box((hg.x0 + hg.x1) / 2 - 8, KERB + H - 0.25, z - 0.4, (hg.x0 + hg.x1) / 2 + 8, KERB + H - 0.1, z + 0.4, VH.col(0xf4f7ff, 1.8));
     // Door rails and a lamp over the opening.
     ctx.prop.box(hg.x1 - 0.2, KERB, hg.z0 - 6, hg.x1 + 0.2, KERB + 8.2, hg.z0 - 5.6, trim);
+    world.physics.addBox(hg.x1 - 0.2, 0, hg.z0 - 6, hg.x1 + 0.2, KERB + 8.2, hg.z0 - 5.6, 'metal', F().SOLID | F().SHOTS);
     ctx.screen.box(hg.x1 + 0.02, KERB + 7.4, (hg.z0 + hg.z1) / 2 - 2, hg.x1 + 0.2, KERB + 7.8, (hg.z0 + hg.z1) / 2 + 2, VH.col(0xfff4dc, 1.8));
     sign(world, { x: hg.x1 + 0.1, y: KERB + 9.5, z: (hg.z0 + hg.z1) / 2, yaw: Math.PI / 2, w: 22, h: 1.8, lines: [hg.name], style: 'info', posts: false });
   }
@@ -316,6 +320,7 @@
     ctx.prop.box(hg.x0 + 3, KERB + 0.5, hg.z1 - 1.6, hg.x0 + 6, KERB + 1.2, hg.z1 - 1.2, VH.col(0x7a3b2e));
     ctx.decal.topRect(hg.x0 + 2, hg.z1 - 9, hg.x0 + 7, hg.z1 - 4, KERB + 0.03, VH.col(0x9a3f2a));
     world.physics.addBox(hg.x0 + 3, 0, hg.z1 - 5, hg.x0 + 6, KERB + 0.5, hg.z1 - 1.2, 'wall', F().SOLID);
+    world.physics.addBox(hg.x0 + 3, KERB + 0.5, hg.z1 - 1.6, hg.x0 + 6, KERB + 1.2, hg.z1 - 1.2, 'wall', F().SOLID); // the sofa's back
     // A blackboard: today's flying, and the doughnut run.
     sign(world, { x: hg.x0 + 0.56, y: KERB + 2.4, z: hg.z0 + 4, yaw: Math.PI / 2, w: 3, h: 1.6, lines: ['TODAY', 'Lessons 9-5 · Doughnuts Tuesday'], style: 'park', posts: false });
   }
@@ -348,6 +353,8 @@
       const z = C.z0 + 4 + k * 8;
       ctx.wood.box(C.x1 + 2, KERB + 0.35, z - 0.8, C.x1 + 3.6, KERB + 1.1, z + 0.8, VH.col(0xf2ead6));
       ctx.prop.cylinder(C.x1 + 2.8, KERB + 1.1, z, 0.06, 0.06, 1.6, 6, VH.col(0xdddddd), false);
+      world.physics.addBox(C.x1 + 2, 0, z - 0.8, C.x1 + 3.6, KERB + 1.1, z + 0.8, 'wall', F().SOLID | F().SHOTS); // the table
+      world.physics.addBox(C.x1 + 2.7, KERB + 1.1, z - 0.1, C.x1 + 2.9, KERB + 2.7, z + 0.1, 'pole', F().SOLID | F().SHOTS);
       ctx.prop.cylinder(C.x1 + 2.8, KERB + 2.6, z, 1.3, 0.1, 0.5, 8, VH.col(k % 2 ? 0x3f7a5a : 0xf2ead6), false);
     }
     sign(world, { x: C.x1 + 0.05, y: KERB + C.h + 1.4, z: (C.z0 + C.z1) / 2, yaw: Math.PI / 2, w: 12, h: 1.8, lines: ['PALOMA FLYING CLUB', 'Est. 1961 · Visitors welcome · Mind the props'], style: 'park', posts: false });

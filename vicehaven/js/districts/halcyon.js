@@ -67,7 +67,10 @@
     const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
     if (!o.flat) W.gable(ctx.prop, r.x0 - 0.3, r.z0 - 0.3, r.x1 + 0.3, r.z1 + 0.3, KERB + r.h, Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.32, alongX ? 'x' : 'z', SLATE, o.wall || BRICK);
     // Corner quoins.
-    for (const x of [r.x0, r.x1]) for (const z of [r.z0, r.z1]) ctx.prop.box(x - 0.5, KERB, z - 0.5, x + 0.5, KERB + r.h, z + 0.5, st);
+    for (const x of [r.x0, r.x1]) for (const z of [r.z0, r.z1]) {
+      ctx.prop.box(x - 0.5, KERB, z - 0.5, x + 0.5, KERB + r.h, z + 0.5, st);
+      K().block(world, x - 0.5, 0, z - 0.5, x + 0.5, KERB + r.h, z + 0.5, 'building');
+    }
     return ctx;
   }
 
@@ -172,6 +175,7 @@
       const ctx = world.ctxAt(gx, gz);
       for (const x of [gx - 7, gx + 7]) W.solid(world, ctx.prop, x - 1, KERB, gz - 1, x + 1, KERB + 4.5, gz + 1, STONE, null, 'wall');
       for (const x of [gx - 7, gx + 7]) ctx.screen.box(x - 0.35, KERB + 4.5, gz - 0.35, x + 0.35, KERB + 5.2, gz + 0.35, VH.col(0xfff1c8, 1.8));
+      for (const x of [gx - 7, gx + 7]) K().block(world, x - 1, KERB + 4.5, gz - 0.4, x + 1, KERB + 7.5, gz + 0.4, 'metal');
       const iron = 0x22262b;
       for (let k = 0; k <= 8; k++) {
         const a0 = (k / 8) * Math.PI, a1 = ((k + 1) / 8) * Math.PI;
@@ -199,6 +203,7 @@
       ctx.prop.box(mx - 0.3, my + 0.05, Hs.z0 - 0.15, mx + 0.25, my + 0.2, Hs.z0 - 0.12, VH.col(0xe0481c));
       W.fence(world, Hs.x0 - 2, Hs.z0 - 6, Hs.x1 + 2, Hs.z0 - 6, [[Hs.x0 + 9, Hs.x0 + 12.4]], 'picket', 1.0);
       ctx.prop.cylinder(Hs.x1 + 1, KERB, Hs.z0 - 2, 0.25, 0.25, 1.1, 8, VH.col(0x2f4f8f), true);
+      K().block(world, Hs.x1 + 0.72, 0, Hs.z0 - 2.28, Hs.x1 + 1.28, KERB + 1.1, Hs.z0 - 1.72, 'metal');
     }
     // The clock tower.
     buildTower(world);
@@ -221,7 +226,10 @@
     // Plinth, shaft (brick with stone corners), clock stage, belfry, spire.
     ctx.prop.box(T.x - h - 1, KERB, T.z - h - 1, T.x + h + 1, KERB + 1.2, T.z + h + 1, st);
     ctx.b.box(T.x - h, KERB + 1.2, T.z - h, T.x + h, KERB + T.shaft, T.z + h, VH.col(BRICK));
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) ctx.prop.box(T.x + sx * h - 0.5, KERB + 1.2, T.z + sz * h - 0.5, T.x + sx * h + 0.5, KERB + T.shaft, T.z + sz * h + 0.5, st);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      ctx.prop.box(T.x + sx * h - 0.5, KERB + 1.2, T.z + sz * h - 0.5, T.x + sx * h + 0.5, KERB + T.shaft, T.z + sz * h + 0.5, st);
+      K().block(world, T.x + sx * h - 0.5, 0, T.z + sz * h - 0.5, T.x + sx * h + 0.5, KERB + T.shaft, T.z + sz * h + 0.5, 'building');
+    }
     for (let y = 8; y < T.shaft; y += 6) ctx.prop.box(T.x - h - 0.15, KERB + y, T.z - h - 0.15, T.x + h + 0.15, KERB + y + 0.4, T.z + h + 0.15, st);
     // Tall slit windows up the shaft.
     for (const [nx, nz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -259,8 +267,12 @@
     ctx.prop.box(T.x - 0.8, topY, T.z + h - 0.02, T.x + 0.8, topY + 1.6, T.z + h + 0.06, VH.col(0x3a2416));
     ctx.screen.box(T.x - 0.1, topY + 1.8, T.z + h + 0.06, T.x + 0.1, topY + 2.0, T.z + h + 0.2, VH.col(0xffe2a0, 2.5));
     // Scaffold tubes up the tower's south face beside the frame, and boards on the ground.
-    for (const x of [sf.fx0 - 0.4, sf.fx1 + 0.4]) ctx.prop.box(x - 0.06, KERB, T.z + h + 0.4, x + 0.06, topY + 3, T.z + h + 0.52, VH.col(0x9aa0a6));
+    for (const x of [sf.fx0 - 0.4, sf.fx1 + 0.4]) {
+      ctx.prop.box(x - 0.06, KERB, T.z + h + 0.4, x + 0.06, topY + 3, T.z + h + 0.52, VH.col(0x9aa0a6));
+      K().block(world, x - 0.16, 0, T.z + h + 0.3, x + 0.16, topY + 3, T.z + h + 0.62, 'metal');
+    }
     for (let k = 0; k < 4; k++) ctx.prop.box(T.x + 7 + k * 0.05, KERB + k * 0.12, sf.fz1 + 2, T.x + 11, KERB + (k + 1) * 0.12, sf.fz1 + 2.3 + k * 0.05, VH.col(0xb8925a));
+    K().block(world, T.x + 7, 0, sf.fz1 + 2, T.x + 11, KERB + 0.48, sf.fz1 + 2.45, 'plank', F().SOLID);
     world.towerScaffold = { foot: sf.foot, topY, x: T.x, z: (T.z + h + z0) / 2 };
     // Barriers round the foot and the NO ENTRY sign.
     const bz = sf.fz1 + 1.4;
@@ -268,6 +280,7 @@
       if (Math.abs(x + 1.1 - sf.foot.x) < 1.3) continue;
       ctx.prop.box(x + 0.1, KERB + 0.4, bz - 0.04, x + 2.0, KERB + 0.9, bz + 0.04, VH.col(0xd23a3a));
       ctx.prop.box(x + 0.1, KERB, bz - 0.04, x + 0.2, KERB + 0.9, bz + 0.04, VH.col(0xd8d8d8));
+      K().block(world, x + 0.1, 0, bz - 0.12, x + 2.0, KERB + 0.95, bz + 0.12, 'metal');
     }
     W.sign(world, { x: T.x + 3, y: KERB + 1.6, z: bz + 0.1, yaw: 0, w: 1.6, h: 0.9, lines: ['NO ENTRY', 'Clock repairs'], style: 'info', oneSided: true, colors: { bg: ['#d23a3a', '#b82a2a'], fg: '#ffffff', bar: '#ffffff' } });
   }
@@ -356,6 +369,8 @@
       }
       gctx.prop.box(T.cx - 3.72, KERB + 2.38, gz - 0.06, T.cx + 3.72, KERB + 2.5, gz + 0.06, w);
       gctx.prop.box(T.cx - 3.66, KERB + 0.1, Math.min(gz, gz - s * 1.6), T.cx + 3.66, KERB + 2.4, Math.max(gz, gz - s * 1.6), VH.col(0xdcdcdc));
+      // The net: the ball (and Jay) stop in it.
+      K().block(world, T.cx - 3.72, 0, gz, T.cx + 3.72, KERB + 2.5, gz - s * 1.7, 'fence', F().SOLID | F().CAMERA);
     }
     // The stand on the west straight: stepped seating people can climb.
     {
@@ -370,7 +385,10 @@
         sctx.prop.box(xa + 0.3, top, S.z0 + 1, xa + 0.7, top + 0.12, S.z1 - 1, VH.col(i % 2 ? 0x2f4f8f : 0xd9a12b));
       }
       // A roof on posts.
-      for (let z = S.z0; z <= S.z1 + 0.1; z += 15) sctx.prop.box(S.x0 + 0.2, KERB + 3.2, z - 0.15, S.x0 + 0.5, KERB + 7.6, z + 0.15, VH.col(0x5a5f66));
+      for (let z = S.z0; z <= S.z1 + 0.1; z += 15) {
+        sctx.prop.box(S.x0 + 0.2, KERB + 3.2, z - 0.15, S.x0 + 0.5, KERB + 7.6, z + 0.15, VH.col(0x5a5f66));
+        K().block(world, S.x0 + 0.1, 0, z - 0.25, S.x0 + 0.6, KERB + 7.6, z + 0.25);
+      }
       K().tiltBox(sctx.prop, (S.x0 + S.x1) / 2 + 1, KERB + 7.2, (S.z0 + S.z1) / 2, S.x1 - S.x0 + 3, 0.2, S.z1 - S.z0 + 1, 0, 0, 0x2f4f8f);
       world.physics.addBox(S.x0 - 0.3, 0, S.z0, S.x0, KERB + 7.6, S.z1, 'wall');
     }
@@ -395,7 +413,10 @@
     // Bunting across Varsity Road between the quad's kerb and the strip's.
     for (let x = STRIP.x0 + 20; x < STRIP.x1 - 10; x += 42) {
       const ctx = world.ctxAt(x, STRIP.z - 7);
-      for (const z of [Q.z1 + 0.6, STRIP.z + 0.6]) ctx.prop.box(x - 0.08, KERB, z - 0.08, x + 0.08, KERB + 6.2, z + 0.08, VH.col(0x2f4f6f));
+      for (const z of [Q.z1 + 0.6, STRIP.z + 0.6]) {
+        ctx.prop.box(x - 0.08, KERB, z - 0.08, x + 0.08, KERB + 6.2, z + 0.08, VH.col(0x2f4f6f));
+        K().block(world, x - 0.18, 0, z - 0.18, x + 0.18, KERB + 6.2, z + 0.18);
+      }
       W.festoon(world, x, KERB + 6, Q.z1 + 0.6, x, KERB + 6, STRIP.z + 0.6, 0.8, [0xffd24a, 0xff6a5a, 0x7ad7ff, 0x8ae06a], 1.2);
     }
     // Café tables with parasols and bike racks on the strip's pavement edge.
@@ -411,6 +432,7 @@
       } else {
         for (let i = 0; i < 4; i++) W.beam(ctx.prop, x - 1.5 + i, KERB, z, x - 1.5 + i, KERB + 0.8, z, 0.05, 0x8f969c);
         W.beam(ctx.prop, x - 1.6, KERB + 0.8, z, x + 1.6, KERB + 0.8, z, 0.05, 0x8f969c);
+        K().block(world, x - 1.65, 0, z - 0.12, x + 1.65, KERB + 0.85, z + 0.12, 'metal');
       }
     }
   }

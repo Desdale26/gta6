@@ -158,6 +158,11 @@
     return ctx;
   }
 
+  /** A collider only (posts, tables, rails drawn elsewhere): solid to people, cars and shots. */
+  function block(world, x0, y0, z0, x1, y1, z1, tag, flags) {
+    world.physics.addBox(Math.min(x0, x1), y0, Math.min(z0, z1), Math.max(x0, x1), y1, Math.max(z0, z1), tag || 'pole', flags === undefined ? F().SOLID | F().SHOTS : flags);
+  }
+
   /** A small light: a stalk and a glowing head (screen surface). */
   function lamp(world, x, z, hex, mul, h, y) {
     const ctx = world.ctxAt(x, z);
@@ -258,6 +263,11 @@
     const cz = z + (dz * len) / 2;
     world.physics.addRamp(cx, cz, hw, len / 2, yaw, opts.base === undefined ? Math.min(y0, 0) : opts.base, y0, y1, opts.tag || 'stairs', F().SOLID);
     if (opts.rails !== false) {
+      // Solid rails each side (people go up the stairs, not through the rails).
+      for (const s of [-1, 1]) {
+        if (dx) block(world, x, 0, z + s * hw - 0.08, x + dx * len, Math.max(y0, y1) + 1.0, z + s * hw + 0.08, 'railing', F().SOLID | F().SHOTS);
+        else block(world, x + s * hw - 0.08, 0, z, x + s * hw + 0.08, Math.max(y0, y1) + 1.0, z + dz * len, 'railing', F().SOLID | F().SHOTS);
+      }
       const rc = VH.col(opts.railHex || 0x3f454c);
       for (const s of [-1, 1]) {
         const ox = dx ? 0 : s * (hw - 0.05);
@@ -359,7 +369,8 @@
       const east = f % 2 === 0;
       const lane = east ? fz1 - fw / 2 : fz0 + fw / 2; // first flight on the outer lane
       const startX = east ? sx - run / 2 : sx + run / 2;
-      stairs(world, ctx.prop, startX, lane, east ? 'e' : 'w', run, fw, yA, yB, 0x8f969c, { open: true, rails: false, base: yA - 0.4, tag: 'metal' });
+      // The first flight is closed underneath (its collider reaches the ground); the rest float.
+      stairs(world, ctx.prop, startX, lane, east ? 'e' : 'w', run, fw, yA, yB, 0x8f969c, { open: f > 0, rails: false, base: f > 0 ? yA - 0.4 : undefined, tag: 'metal' });
       // Landing at the top end of this flight, across both lanes.
       const lx0 = east ? sx + run / 2 : fx0;
       const lx1 = east ? fx1 : sx - run / 2;
@@ -372,6 +383,11 @@
       beam(ctx.prop, fx0, yy, fz1, fx1, yy, fz1, 0.06, legC);
       beam(ctx.prop, fx0, yy, fz0, fx0, yy, fz1, 0.06, legC);
       beam(ctx.prop, fx1, yy, fz0, fx1, yy, fz1, 0.06, legC);
+    }
+    // Guard bars on the outer side and both ends, all the way up (the colliders below are this cage).
+    for (let yy = KERB + 0.55; yy < yTop + 1.0; yy += 1.1) {
+      beam(ctx.prop, fx0, yy, fz1, fx1, yy, fz1, 0.05, legC);
+      if (yy > KERB + 0.6) for (const px of [fx0, fx1]) beam(ctx.prop, px, yy, fz0, px, yy, fz1, 0.05, legC);
     }
     world.physics.addBox(fx0 - 0.1, 0, fz1, fx1 + 0.1, yTop + 1.05, fz1 + 0.12, 'railing', F().SOLID);
     world.physics.addBox(fx0 - 0.12, KERB + 0.6, fz0, fx0, yTop + 1.05, fz1, 'railing', F().SOLID);
@@ -400,7 +416,7 @@
     for (const [lx, lz] of legs) {
       beam(ctx.prop, x + lx * 1.15, KERB, z + lz * 1.15, x + lx, H, z + lz, 0.45, legC);
       ctx.concrete.box(x + lx * 1.15 - 0.6, 0, z + lz * 1.15 - 0.6, x + lx * 1.15 + 0.6, KERB + 0.5, z + lz * 1.15 + 0.6, VH.col(0xb8b2a6));
-      world.physics.addBox(x + lx * 1.15 - 0.4, 0, z + lz * 1.15 - 0.4, x + lx * 1.15 + 0.4, H, z + lz * 1.15 + 0.4, 'metal', F().SOLID | F().SHOTS);
+      world.physics.addBox(x + lx * 1.15 - 0.85, 0, z + lz * 1.15 - 0.85, x + lx * 1.15 + 0.85, H, z + lz * 1.15 + 0.85, 'metal', F().SOLID | F().SHOTS);
     }
     // Cross-bracing on each face, two tiers.
     for (let i = 0; i < 4; i++) {
@@ -521,10 +537,12 @@
       ctx.prop.box(Math.min(m[0], bEnd[0]) - (along ? 0 : 0.18), top + 1.9, Math.min(m[2], bEnd[2]) - (along ? 0.18 : 0), Math.max(m[0], bEnd[0]) + (along ? 0 : 0.18), top + 2.3, Math.max(m[2], bEnd[2]) + (along ? 0.18 : 0), VH.col(o.sail || 0x2f5f8f));
       // Masthead light (glows at night).
       ctx.screen.box(m[0] - 0.1, top + o.mast, m[2] - 0.1, m[0] + 0.1, top + o.mast + 0.2, m[2] + 0.1, VH.col(0xfff2c8, 2));
+      block(world, m[0] - 0.15, top, m[2] - 0.15, m[0] + 0.15, top + o.mast + 0.2, m[2] + 0.15, 'pole');
     }
     // A collider so nobody walks through it from the jetty.
     const a = P(-hl, -w / 2, 0), b = P(hl, w / 2, 0);
-    world.physics.addBox(Math.min(a[0], b[0]), y0, Math.min(a[2], b[2]), Math.max(a[0], b[0]), top + (cab ? 1.2 : 0.3), Math.max(a[2], b[2]), 'metal', F().SOLID | F().SHOTS);
+    // Tall enough that nobody stands on it and walks through the cabin, mast or boom.
+    world.physics.addBox(Math.min(a[0], b[0]), y0, Math.min(a[2], b[2]), Math.max(a[0], b[0]), top + (cab || o.mast ? 3.2 : 0.3), Math.max(a[2], b[2]), 'metal', F().SOLID | F().SHOTS);
   }
 
   /** A cactus (saguaro): trunk and two arms, merged. */
@@ -540,6 +558,9 @@
       beam(ctx.prop, x, KERB + h * 0.6, z, x - 0.8 * s, KERB + h * 0.6, z, 0.36, g);
     }
     world.physics.addBox(x - 0.35, 0, z - 0.35, x + 0.35, KERB + h, z + 0.35, 'pole', F().SOLID | F().SHOTS);
+    // The arms (and the elbow up to each arm's tip).
+    block(world, Math.min(x, x + 1.15 * s), KERB + h * 0.45 - 0.25, z - 0.3, Math.max(x, x + 1.15 * s), KERB + h * 0.8, z + 0.3, 'pole');
+    if (seed % 3) block(world, Math.min(x, x - 1.05 * s), KERB + h * 0.6 - 0.25, z - 0.3, Math.max(x, x - 1.05 * s), KERB + h * 0.85, z + 0.3, 'pole');
   }
 
   /** A trailer home: a long box with a window band, a door, an awning and a little deck. */
@@ -580,7 +601,10 @@
     for (let a = aw0, k = 0; a < aw1; a += 1.0, k++) {
       tiltBox(ctx.prop, a + 0.5, y1 - 0.45, dz + s * 1.1, 1.0, 0.08, 2.2, 0, s * 0.22, k % 2 ? 0xf4efe2 : o.awning || 0x3f8f6f);
     }
-    for (const ax of [aw0 + 0.2, aw1 - 0.2]) ctx.prop.box(ax - 0.04, KERB, dz + s * 2.1 - 0.04, ax + 0.04, y1 - 0.7, dz + s * 2.1 + 0.04, VH.col(0xcfd3d6));
+    for (const ax of [aw0 + 0.2, aw1 - 0.2]) {
+      ctx.prop.box(ax - 0.04, KERB, dz + s * 2.1 - 0.04, ax + 0.04, y1 - 0.7, dz + s * 2.1 + 0.04, VH.col(0xcfd3d6));
+      block(world, ax - 0.15, 0, dz + s * 2.1 - 0.15, ax + 0.15, y1 - 0.4, dz + s * 2.1 + 0.15);
+    }
     world.physics.addBox(x0 - 0.35, 0, z0, x1 + 0.35, y1 + 0.2, z1, 'metal');
     // The door steps.
     world.physics.addBox(dx - 0.9, 0, Math.min(dz, dz + s * 1.6), dx + 0.9, KERB + 0.3, Math.max(dz, dz + s * 1.6), 'plank', F().SOLID);
@@ -599,6 +623,11 @@
   VH.WNKit = {
     KERB, tiles, pave, mark, solid, beam, tiltBox, gable, building, lamp, festoon, fence, stairs, deck, deckRails,
     waterTower, parkedSpot, addParkedSpots, boat, cactus, mapBox, trailer, ramp, stairFrame, clearSpots,
-    sign: (world, spec) => VH.Landmarks.sign(world, spec),
+    block,
+    // Signs: the board itself is solid too (world.js only gives posts colliders).
+    sign: (world, spec) => {
+      VH.Landmarks.sign(world, spec);
+      if (!spec.flat) world.physics.addOrientedBox(spec.x, spec.z, spec.w / 2 + 0.06, 0.12, spec.yaw || 0, spec.y - spec.h / 2 - 0.06, spec.y + spec.h / 2 + 0.06, 'sign', F().SOLID | F().SHOTS);
+    },
   };
 })();

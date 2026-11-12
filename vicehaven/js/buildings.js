@@ -762,6 +762,7 @@
         const px = alongX ? p : ox > 0 ? x1 - 0.2 : x0 + 0.1;
         const pz = alongX ? (oz > 0 ? z1 - 0.2 : z0 + 0.1) : p;
         b.box(px, KERB, pz, px + 0.12, KERB + floorH - 0.25, pz + 0.12, post);
+        ctx.physics.addBox(px - 0.04, 0, pz - 0.04, px + 0.16, KERB + floorH - 0.25, pz + 0.16, 'pole', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
       }
       if (floors > 1) b.box(x0, KERB + floorH + 0.9, z0, x1, KERB + floorH + 1.0, z1, VH.col(0xe8e4dc), { bottom: true });
     });

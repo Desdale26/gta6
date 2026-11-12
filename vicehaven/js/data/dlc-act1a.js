@@ -853,4 +853,338 @@
       { music: 'off' },
     ],
   });
+
+  // =====================================================================
+  // d04 — Stunt Double
+  // =====================================================================
+  /** The film's gold "Rex car": a Drifter in Castellane livery. Jay doubles for Chet in it. */
+  const STUNT = 'stunt_car';
+  /**
+   * One mark of a take: a timed leg in the stunt car. (A `timer` before a
+   * `race` is lost in the race's countdown, so each take is five timed
+   * gotos; a retry re-arms the leg's timer.)
+   */
+  const mark = (secs, place, objective, say, last) => [
+    { timer: secs },
+    { goto: place, vehicle: STUNT, stop: !!last, radius: last ? 9 : 11, objective, say },
+  ];
+
+  D.missions.push({
+    id: 'd04_stunt_double',
+    act: 1,
+    title: 'Stunt Double',
+    giver: 'pip',
+    start: 'sunreel_gate',
+    time: 9,
+    estMinutes: 11,
+    summary: "Castellane's film needs a stunt double for Chet Valiant. Jay needs the roof of the sheriff's office.",
+    reward: { money: 3000 },
+    failIf: ['wrecked:stunt_car'],
+    steps: [
+      pipCar('sunreel_gate'),
+      { music: 'off' },
+      { camera: 'sunreel_gate', seconds: 4, say: [['caption', 'Sunreel Studios. Call time: 9 a.m.']] },
+      {
+        scene: { at: 'sunreel_gate', cast: ['studio_guard', 'pip'] },
+        say: [
+          ['studio_guard', '(in a hut the size of a phone box, a clipboard, a flask, a radio playing to itself) Morning. Name?'],
+          ['jay', 'Stunt double.'],
+          ['studio_guard', "(not looking up) I've let in eleven Chet Valiants this summer. Only one was real."],
+          ['studio_guard', "(looking up; a long look) You're not him. Go on through."],
+          ['pip', "(leaning on the Drifter, which she isn't allowed to drive) I'm the stunt double's... people."],
+          ['studio_guard', "People don't come in. People wait by the barrier and look important."],
+          ['pip', "(to Jay, low) Sheriff's office. Western set. Little gold bird on the roof. Don't get famous."],
+          ['jay', "I'm not planning on it."],
+          ['pip', 'Bring me back a bird. And a sandwich.'],
+          ['jay', 'What kind of sandwich?'],
+          ['pip', "A free one. It's a film set. They're everywhere."],
+        ],
+      },
+      {
+        goto: 'stage_nine', vehicle: false, radius: 6,
+        objective: 'Find the director at Sound Stage 9',
+        say: [
+          ['caption', '(a megaphone, somewhere ahead) NOBODY touch the catering truck until the bacon has been LIT.'],
+        ],
+      },
+      {
+        scene: { at: 'stage_nine', cast: ['fenella', 'chet'] },
+        say: [
+          ['fenella', '(sun visor, megaphone, three phones in three pockets; one of them ringing) No. No. Yes. (to the phone) Not you.'],
+          ['fenella', '(seeing Jay walk up; lowering the megaphone; looking him up and down) Turn round.'],
+          ['jay', '(He doesn\'t.)'],
+          ['fenella', "Good. You walk like you've been in a crash and won. You're hired. It's for the movie."],
+          ['jay', "I haven't said anything."],
+          ['fenella', "That's why you're hired. The last one talked. He wanted to know his motivation."],
+          ['jay', "What's my motivation?"],
+          ['fenella', 'Money. Next.'],
+          ['chet', "(a big man in a red racing jacket and enormous sunglasses, rising from a deckchair with ceremony) Kid. Chet Valiant. You'll be me today."],
+          ['chet', 'Never over thirty, kid. I made that promise to my insurers and my mother, in that order.'],
+          ['jay', 'Loved the first one.'],
+          ['chet', "(a hand on his heart) Loved the first one? Thank you. Thank you. (beat) There wasn't one. But thank you."],
+          ['jay', 'I know.'],
+          ['chet', "(delighted) He knows! Fenella, he knows! Nobody knows! It's a long story, kid. It involves a lawyer and a pelican."],
+          ['fenella', 'Chet. The jacket.'],
+          ['chet', '(taking off the red jacket as if handing over a flag) Wardrobe will kill me. Wardrobe is a very small woman called Bev.'],
+          ['chet', 'Bring it back with no holes in it. Bev counts the holes.'],
+          ['jay', '(putting it on. It fits. He looks like a racing driver. He looks, briefly, a little annoyed about that.)'],
+          ['fenella', "Right. Rex Castellane's car. Gold. Fast. Insured by people who cry. Through the backlot, over the ramp at Miller's Hats, past the bus, round the western set, back here."],
+          ['fenella', 'You hit every mark, or I find a man who will. Clear?'],
+          ['jay', 'Where are the marks?'],
+          ['fenella', "(pointing in five directions at once) There. They're painted. If you can't see one, you're going too slowly."],
+        ],
+      },
+      { spawnCar: STUNT, type: 'drifter', at: 'stage_nine', color: REX_GOLD, name: "Rex's car" },
+      { spawnCar: 'fake_bus', type: 'hauler', at: { x: -944, z: 286 }, exact: true, heading: Math.PI / 2, color: BUS_CREAM, watch: false },
+      { getIn: STUNT, objective: "Get in Rex's car. It's for the movie" },
+      { music: 'action', checkpoint: true },
+      {
+        blackout: [
+          ['caption', 'Take one.'],
+          ['fenella', '(megaphone) Quiet on set! Rolling! Speed! Mark it!'],
+          ['fenella', '(a clapperboard; somebody nervous) Champions Since Day One. Scene forty, take one.'],
+          ['fenella', 'And... ACTION!'],
+        ],
+      },
+      // ---- Take one: five marks.
+      ...mark(35, 'sunreel_backlot', 'Take one: mark 1 of 5. The backlot', [
+        ['fenella', '(megaphone, from a golf buggy somewhere behind you) Faster! You\'re not Chet! Nobody\'s Chet!'],
+        ['chet', '(from the deckchair, also through a megaphone, which he has borrowed) I\'m Chet!'],
+        ['fenella', "We KNOW, Chet."],
+      ]),
+      ...mark(20, 'city_set_ramp', "Take one: mark 2 of 5. Over the ramp at Miller's Fine Hats", [
+        ['fenella', "The ramp! Through the hat shop! It's sugar glass! It's meant to break! Don't think about it!"],
+        ['jay', '(to the gold car, quietly) Nobody think about it.'],
+      ]),
+      ...mark(15, 'sunreel_city_set', 'Take one: mark 3 of 5. Past the bus', [
+        ['caption', '(a great sweet CRASH of sugar glass and a hundred flying hats)'],
+        ['fenella', 'HATS! I love it! Now the bus! Close! Closer than that!'],
+      ]),
+      ...mark(30, 'sunreel_western_set', 'Take one: mark 4 of 5. Round the western set', [
+        ['fenella', "Round the saloon! Don't touch the saloon! The art department just weathered it and they've gone very quiet about it!"],
+        ['chet', "(faint, over the megaphone) Kid, you're doing more than thirty. I can tell from here. I've come over all hot."],
+      ]),
+      ...mark(45, 'stage_nine', 'Take one: mark 5 of 5. Back to Stage 9, and stop on the mark', [
+        ['fenella', 'Home! Bring it home! Stop on the mark! The mark is a cross! It is the shape of a cross!'],
+        ['jay', "(to the gold car) She's very clear about crosses."],
+      ], true),
+      { music: 'off' },
+      {
+        scene: { at: 'stage_nine', cast: ['fenella', 'chet'] },
+        say: [
+          ['fenella', '(standing up very slowly from behind the monitor) Cut.'],
+          ['fenella', 'Lovely. Too lovely. Again, and this time miss the bus by less.'],
+          ['chet', 'By less? Fenella, he missed it by a coat of paint.'],
+          ['fenella', 'I want to see the paint LEAVE.'],
+          ['chet', '(to Jay, sitting back down, fanning himself with a call sheet) She once made me walk through a door forty times. It was an open door. I was very good at it by the end.'],
+          ['fenella', "Again! Film is cheap! (beat) It isn't. But say it with me!"],
+          ['chet', '(dutifully) Film is cheap.'],
+          ['jay', '(already back at the car) Film is cheap.'],
+        ],
+      },
+      { getIn: STUNT, objective: "Back in Rex's car for take two" },
+      { music: 'action', checkpoint: true },
+      {
+        blackout: [
+          ['caption', 'Take two.'],
+          ['fenella', 'Scene forty, take two. (a pause) Somebody tell the bus to be braver.'],
+          ['fenella', 'And... ACTION!'],
+        ],
+      },
+      // ---- Take two: the same five marks, faster.
+      ...mark(30, 'sunreel_backlot', 'Take two: mark 1 of 5. Faster, and closer to the bus', [
+        ['fenella', "Faster than that! I've seen that speed! I want a speed I haven't seen!"],
+        ['chet', '(to someone near him, quite loud) That boy is a natural. (beat) Is he looking at me? Tell him I said that.'],
+      ]),
+      ...mark(17, 'city_set_ramp', "Take two: mark 2 of 5. Over the ramp at Miller's Fine Hats", [
+        ['fenella', 'Props swept the hats back on! Hit them again! They love it! They told me!'],
+      ]),
+      ...mark(13, 'sunreel_city_set', 'Take two: mark 3 of 5. Past the bus, closer', [
+        ['caption', '(sugar glass again; hats again; a man in the prop yard saying "every time" with feeling)'],
+        ['fenella', 'The bus! The BUS! Kiss it! Not literally!'],
+      ]),
+      ...mark(26, 'sunreel_western_set', 'Take two: mark 4 of 5. Round the western set', [
+        ['fenella', "That's it! That's the shot! That's my whole career in one shot!"],
+        ['chet', '(very quietly, to himself, watching the monitor) So that\'s what it looks like.'],
+      ]),
+      ...mark(38, 'stage_nine', 'Take two: mark 5 of 5. Back to Stage 9, and stop on the mark', [
+        ['fenella', 'On the cross! On the CROSS! Somebody hold my phones!'],
+      ], true),
+      { music: 'triumph' },
+      {
+        scene: { at: 'stage_nine', cast: ['fenella', 'chet'] },
+        say: [
+          ['fenella', '(megaphone, to the whole lot) Cut! Print it! Frame it! Send it to my mother!'],
+          ['fenella', 'Lunch! One hour! And nobody touch the western set, the art department just weathered it.'],
+          ['fenella', '(already walking off between two phones) Mercer. Tomorrow. Same jacket. (to a phone) No, not you.'],
+          ['chet', '(waiting until she is gone; then, quietly, in a different voice) Kid.'],
+          ['chet', 'Seventy. You hit that ramp at seventy.'],
+          ['jay', 'Seventy-two.'],
+          ['chet', '(He sits down.)'],
+          ['chet', '(after a while) I did a film once where I jumped a canal. Oversteer 2. People still ask me about it.'],
+          ['chet', "(taking his sunglasses off, polishing them, putting them back) It wasn't the canal I was worried about. It was the car."],
+          ['jay', 'Lunch.'],
+          ['chet', "Go on. Catering's by the trailers. Avoid the quiche. It's been in four films."],
+        ],
+      },
+      { music: 'off' },
+      {
+        goto: 'sunreel_western_set', vehicle: false, radius: 12,
+        objective: 'Lunch break: go to the western set',
+        say: [
+          ['caption', '(a runner with a tray of sandwiches passes Jay at a jog; Jay takes one. A free one.)'],
+        ],
+      },
+      { camera: 'sheriff_roof', seconds: 3, say: [['caption', "The sheriff's office. On the roof, a weathervane: a little gold bird with swept-back wings, pointing out to sea."]] },
+      { spawn: [{ char: 'kit', at: 'sunreel_western_set', behavior: 'idle', offset: [-6, 4] }, { char: 'dash', at: 'sunreel_western_set', behavior: 'idle', offset: [-4, 6] }] },
+      {
+        wait: 3,
+        say: [
+          ['dash', "(down the street, to Kit's camera, arms wide) Viewers, VICEHAVEN! Behind the scenes on the film of the century!"],
+          ['dash', 'Castellane gave us a pass! A real one! Laminated!'],
+          ['kit', "(flat) We're rolling. We're always rolling."],
+        ],
+      },
+      {
+        goto: 'sheriff_roof', vehicle: false, radius: 3,
+        objective: "Climb onto the sheriff's office roof",
+        say: [
+          ['dash', "(to camera, at the saloon) This is where the cowboys drank! (off camera) Is it real whisky? Kit, ask if it's real whisky."],
+          ['kit', "It's tea."],
+          ['dash', "(to camera) Cowboys drank TEA! Legend... BUSTED! (off camera) Is 'busted' a thing we do? Can we do busted?"],
+        ],
+      },
+      {
+        collect: ['sheriff_roof'], item: 'bonnet bird',
+        objective: 'Take the bird. Leave something in its place',
+        say: [
+          ['jay', '(twisting the little gold bird off its spindle. It comes away cleanly, as if it has been waiting fifty years to be asked.)'],
+          ['jay', "(He takes a plastic chicken from catering out of the jacket and screws it on in the bird's place. It points out to sea. Approximately.)"],
+          ['jay', 'Nobody looks at weathervanes.'],
+        ],
+      },
+      { music: 'tension' },
+      {
+        scene: { at: 'sunreel_western_set', cast: ['dash', 'kit'] },
+        say: [
+          ['caption', '(Jay climbs down off the porch roof. Dash Lockwood is on the saloon porch, glowing, holding something up to the camera.)'],
+          ['dash', "(to camera, holding up a spur he has pulled off a cowboy's boot) The Firecrest's... bird's... foot. Legend... FOUND!"],
+          ['kit', "It's a spur."],
+          ['dash', "(the camera dips; his voice drops) Crap. (beat) Keep it in, it's got energy."],
+          ['dash', "(seeing Jay) Oh. You. The man from the tower. What are you doing here?"],
+          ['jay', 'Lunch.'],
+          ['dash', '(looking him up and down; genuinely moved) Is that the Rex Castellane jacket? The actual one?'],
+          ['dash', "That's a beautiful jacket. That's a jacket that's been somewhere. Kit, get the jacket."],
+          ['kit', '(not moving the camera) I got the jacket.'],
+          ['dash', "(to Jay, quieter, man to man) Where would a bird even BE, on a film set? Honestly. I've done the saloon, the church, a horse. Nothing."],
+          ['jay', '(a hand flat on the jacket, over a small gold shape) Try up.'],
+          ['dash', "(looking up at the sky, very seriously) Up. (to Kit) He means God, Kit. That's deep. Keep that in too."],
+        ],
+      },
+      { leave: ['dash', 'kit'], vanish: true },
+      {
+        scene: { at: 'sunreel_western_set', cast: ['ottoline'] },
+        say: [
+          ['ottoline', '(a teal blazer, black heels on the boardwalk, a radio earpiece, a stack of printed cards; she has come from nowhere) Good afternoon.'],
+          ['ottoline', "Mr Castellane likes to know his films are being cared for. So I care for them. Personally."],
+          ['ottoline', "(a glance at the red jacket) You're the new stunt double. Fenella speaks very highly of you, and she doesn't speak highly of anything. Not even lunch."],
+          ['jay', 'The quiche has been in four films.'],
+          ['ottoline', "(the smallest smile) Five, I'm afraid. At this time."],
+          ['ottoline', '(taking a card from the stack and holding it out) How would you rate your first day?'],
+          ['ottoline', 'One to five. Do be honest. We always find out.'],
+          ['jay', '(taking it) I always am.'],
+          ['ottoline', "(She looks up past him, at the sheriff's office roof. A plastic chicken turns in the sea breeze, pointing, approximately, out to sea. She looks at it for a long moment.)"],
+          ['ottoline', '(She says nothing at all. She walks on.)'],
+        ],
+      },
+      { music: 'off' },
+      {
+        goto: 'sunreel_gate', vehicle: false, radius: 8,
+        objective: 'Walk off the lot, calmly',
+        say: [
+          ['caption', "(somewhere behind, a megaphone) Has anybody seen the bird off the sheriff's office? (a pause) Has anybody seen a CHICKEN go up?"],
+          ['caption', '(another voice) Art department says the chicken is a choice. They stand by it.'],
+        ],
+      },
+      {
+        scene: { at: 'sunreel_gate', cast: ['studio_guard', 'pip'] },
+        say: [
+          ['studio_guard', '(holding out a brown envelope through the hut window) From Fenella. Your fee.'],
+          ['studio_guard', 'She says come back tomorrow. She says that to everybody.'],
+          ['studio_guard', '(beat) She means it about you.'],
+          ['jay', '(taking the envelope) Thanks.'],
+          ['studio_guard', 'And the jacket goes back to Bev.'],
+          ['jay', '(walking on, still wearing it) Tell Bev tomorrow.'],
+          ['pip', "(at the Drifter, not even pretending to be patient) Well? WELL? Don't do the face. You're doing the face."],
+          ['jay', "(a sandwich out of one pocket of the red jacket) Free one."],
+          ['pip', "(taking it without looking at it) Driver. I will eat you."],
+          ['jay', '(and out of the other pocket, a little gold bird with swept-back wings, warm from the sun)'],
+          ['pip', "(very quietly) Oh. (turning it over in both hands) Oh, she's lovely. That's off a bonnet. That's the front of a CAR."],
+          ['pip', '(fishing the starter key out of her pocket and holding its keyring up beside it: the same bird, smaller) Same bird. Look. Same bird.'],
+          ['pip', "(her thumb finding something under the base) There's writing. Small. Somebody's done this with a nail. A mechanic's hand."],
+        ],
+      },
+      rhyme("Engraved under the bird's base:", R3),
+      { join: ['pip'], weapon: 'fists' },
+      { getIn: 'pip_car', objective: 'Get in the Drifter' },
+      {
+        goto: 'lot_17', vehicle: true, stop: true, radius: 10,
+        objective: 'Take the bird to lot 17',
+        say: [
+          ['pip', '(the bird on her knee like something alive) I keep checking she\'s still there.'],
+          ['jay', "(He takes Ottoline's card out of the jacket, glances at it once, and drops it in the glovebox.)"],
+          ['pip', "That's three. You've got a collection."],
+          ['jay', 'I like to know who they are.'],
+          ['pip', 'So. Chet Valiant. What was he like?'],
+          ['jay', 'Kind. Never over thirty.'],
+          ['pip', "He's never driven fast? He's a racing driver in four films!"],
+          ['jay', 'Somebody else was.'],
+          ['pip', '(thinking about that) Huh.'],
+          ['pip', "(her phone buzzing; reading) The kid. In a maths test. 'TEAM FIRECREST 2 · LOCKWOOD'S LOST LEGENDS 0 (+1 rusty tap, +1 spur).'"],
+          ['pip', "'Do NOT tell me the rhyme, I'm in a maths test. Send it at 3.15. Hello Mr Mercer.'"],
+          ['jay', 'How does he know about the spur?'],
+          ['pip', "Dash posted it. With music. (scrolling) It's got six hundred likes. Kit's filmed the back of your head. Twice."],
+          ['jay', '(to the Drifter) Damn.'],
+          ['pip', "Don't worry. You can't tell it's you. It just looks like a very calm jacket."],
+          ['pip', "(going quiet; then) They're making a film where he WON. Rex. Castellane's dad. Gold car, cup, confetti."],
+          ['pip', "And my gran's car is in it as the one that came second. Painted the wrong colour. I saw the call sheet. 'Car Two. Rival. Crashes.'"],
+          ['jay', "She didn't crash."],
+          ['pip', "No. She didn't. (beat) And you drove Rex's car round a fake town for money. Twice."],
+          ['jay', "It's for the movie."],
+          ['pip', '(a laugh that surprises her) Shut up.'],
+          ['pip', "(reading it again, bird in one hand, phone in the other) 'I kept her laps and kept her pace; now I keep the scholars' place.'"],
+          ['pip', "Scholars. That's Halcyon, has to be. The university. Kept her laps. Something that... kept laps."],
+          ['pip', "'Twelve on top and six below.' Twelve what? Eggs? A bunk bed? (She gives up.) Scholars. Halcyon. That's all I've got."],
+          ['jay', "The kid's out of his test at quarter past three."],
+          ['pip', "I know. I hate that he's going to get it. I hate it so much."],
+        ],
+      },
+      {
+        scene: { at: 'lot_17', cast: ['pip'] },
+        say: [
+          ['caption', 'Lot 17. Afternoon.'],
+          ['pip', '(standing the little gold bird on the folding table under the bare bulb, the starter key on its own small bird beside it) There. Big one, little one.'],
+          ['pip', "(stepping back) A key. A wheel. A bird. She's coming together, Driver. In bits. In a shed."],
+          ['jay', "(He takes off the red jacket and hangs it on the handle of the BRASK door.)"],
+          ['pip', "You're supposed to give that back to Bev."],
+          ['jay', 'Tomorrow.'],
+          ['pip', "(looking at it hanging there, red against the dented door) It suits the door. (beat) Don't tell Bev I said that."],
+          ['pip', "(peeling the plastic off Fenella's envelope, counting, stopping) Driver. This is three thousand dollars."],
+          ['jay', 'For two takes.'],
+          ['pip', '(staring at him) I raced for four years and I never saw three thousand dollars.'],
+          ['jay', 'You never drove a hat shop.'],
+        ],
+      },
+    ],
+  });
+
+  // =====================================================================
+  // Ambient texts (bible, Appendix B)
+  // =====================================================================
+  D.texts.push(
+    { after: 'd01_lot_17', from: 'pip', message: "Lot 17 is ours. $40 a month. Don't tell my mum. Don't tell anyone. And mind the... no idea why I keep wanting to say that." },
+    { after: 'd02_the_tin_man', from: 'milo', message: "TEAM FIRECREST 1 · LOCKWOOD'S LOST LEGENDS 0 (+1 rusty tap). Subscribers: 41. Gran says well done." },
+    { after: 'd03_double_feature', from: 'prof_quill', message: "I have now watched the newsreel 201 times. She taps the wheel three times before the start. I don't know why I mention it. I simply do. A.Q." },
+    { after: 'd04_stunt_double', from: 'chet', message: 'Kid. Fenella says you hit that ramp at seventy. SEVENTY. I had to lie down in my trailer. Loved the first take.' },
+  );
 })();

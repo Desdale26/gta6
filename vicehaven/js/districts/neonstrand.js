@@ -77,6 +77,54 @@
     world.physics.addBox(x0, Math.min(y0, 0), z0, x1, y1, z1, tag || 'building', flags === undefined ? F().ALL : flags);
   }
 
+  /** Make a round thing of radius r solid: eight thin boxes fanned round its centre (within 2% of the circle). */
+  function solidRound(world, cx, cz, r, y0, y1, tag, flags) {
+    for (let k = 0; k < 8; k++) world.physics.addOrientedBox(cx, cz, r * 0.981, r * 0.195, (k * Math.PI) / 8, y0, y1, tag, flags === undefined ? F().ALL : flags);
+  }
+
+  /** Make a beam from a to b (thickness t) solid where it comes below head height: boxes along it, from the ground up. */
+  function solidBeam(world, ax, ay, az, bx, by, bz, t, top) {
+    const lowest = Math.min(ay, by);
+    if (lowest > (top || 2.3)) return;
+    const len = Math.hypot(bx - ax, bz - az);
+    const n = Math.max(1, Math.ceil(len / 2));
+    for (let i = 0; i < n; i++) {
+      const f0 = i / n, f1 = (i + 1) / n;
+      const y = Math.max(ay + (by - ay) * f0, ay + (by - ay) * f1);
+      if (Math.min(ay + (by - ay) * f0, ay + (by - ay) * f1) > (top || 2.3)) continue;
+      const x0 = ax + (bx - ax) * f0, z0 = az + (bz - az) * f0, x1 = ax + (bx - ax) * f1, z1 = az + (bz - az) * f1;
+      world.physics.addOrientedBox((x0 + x1) / 2, (z0 + z1) / 2, t / 2, Math.max(len / n / 2, t / 2), Math.atan2(x1 - x0, z1 - z0), 0, y + t / 2, 'pole', F().SOLID | F().SHOTS);
+    }
+  }
+
+  /** A railing on any heading (VH.Landmarks.railing only runs along x or z): posts, two rails, solid. */
+  function fenceLine(world, ctx, x0, z0, x1, z1, y, h, hex) {
+    const col = VH.col(hex || 0xf2efe6);
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const n = Math.max(1, Math.round(len / 2.2));
+    for (let i = 0; i <= n; i++) {
+      const px = x0 + ((x1 - x0) * i) / n, pz = z0 + ((z1 - z0) * i) / n;
+      ctx.prop.box(px - 0.04, y, pz - 0.04, px + 0.04, y + h, pz + 0.04, col);
+    }
+    beam(ctx.prop, x0, y + h - 0.03, z0, x1, y + h - 0.03, z1, 0.06, col);
+    beam(ctx.prop, x0, y + h * 0.5, z0, x1, y + h * 0.5, z1, 0.05, col);
+    world.physics.addOrientedBox((x0 + x1) / 2, (z0 + z1) / 2, 0.1, len / 2 + 0.05, Math.atan2(x1 - x0, z1 - z0), y - 0.3, y + h, 'railing', F().SOLID | F().SHOTS);
+  }
+
+  /** A ramp drawn to match physics.addRamp(cx, cz, hx, hz, yaw, 0, yLow, yHigh): top rising from local -Z to +Z. */
+  function wedge(surf, cx, cz, hx, hz, yaw, yLow, yHigh, color, base) {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const P = (lx, lz, y) => [cx + lx * c + lz * s, y, cz - lx * s + lz * c];
+    const b = base === undefined ? KERB : base;
+    const a = P(-hx, -hz, yLow), bb = P(hx, -hz, yLow), cc = P(hx, hz, yHigh), d = P(-hx, hz, yHigh);
+    const a0 = P(-hx, -hz, b), b0 = P(hx, -hz, b), c0 = P(hx, hz, b), d0 = P(-hx, hz, b);
+    surf.polygon([a, d, cc, bb], color); // the slope
+    surf.polygon([d0, c0, cc, d], color); // the high end
+    surf.polygon([b0, a0, a, bb], color); // the low lip
+    surf.polygon([a0, d0, d, a], VH.colMul(color, 0.85)); // the sides
+    surf.polygon([c0, b0, bb, cc], VH.colMul(color, 0.85));
+  }
+
   /** Call fn(x0, z0, x1, z1, ctx) for each piece of a rectangle cut on the chunk grid. */
   function tiles(world, x0, z0, x1, z1, fn) {
     const cut = (a0, a1) => {
@@ -215,6 +263,7 @@
       const ctx = world.ctxAt(x0 + 3, z);
       solid(world, ctx.prop, x0, KERB, z - 3.5, x1 - 1.2, KERB + 2.6, z + 3.5, 0xf6f1e4);
       ctx.prop.box(x1 - 1.2, KERB, z - 3.5, x1 - 1.0, KERB + 1.1, z + 3.5, VH.col(a));
+      world.physics.addBox(x1 - 1.2, 0, z - 3.5, x1 - 1.0, KERB + 1.1, z + 3.5, 'wall', F().SOLID | F().SHOTS);
       for (let k = 0; k < 7; k++) ctx.prop.box(x0 - 0.2, KERB + 2.6, z - 3.7 + k, x1 + 0.6, KERB + 2.9, z - 2.7 + k, VH.col(k % 2 ? c : a), { bottom: true });
       ctx.screen.box(x1 - 1.22, KERB + 1.3, z - 3, x1 - 1.18, KERB + 2.3, z + 3, VH.col(0xfff1c8, 1.1));
     });
@@ -232,8 +281,10 @@
       for (const foot of [-1, 1]) {
         const fx = hx + ax * side * 3 + px * foot * 15, fz = hz + az * side * 3 + pz * foot * 15;
         beam(ctx.prop, fx, KERB, fz, hx, W.hub, hz, 1.1, white);
+        solidBeam(world, fx, KERB, fz, hx, W.hub, hz, 1.1, 3);
         world.physics.addOrientedBox(fx, fz, 1.2, 1.2, W.yaw, 0, KERB + 4, 'wall');
         ctx.concrete.box(fx - 1.4, 0, fz - 1.4, fx + 1.4, KERB + 0.6, fz + 1.4, VH.col(0xbdb6aa));
+        world.physics.addBox(fx - 1.4, 0, fz - 1.4, fx + 1.4, KERB + 0.6, fz + 1.4, 'wall', F().SOLID | F().SHOTS);
       }
       // Bracing between the legs.
       beam(ctx.prop, hx + px * 9.5 + ax * side * 1.9, 11, hz + pz * 9.5 + az * side * 1.9, hx - px * 9.5 + ax * side * 1.9, 11, hz - pz * 9.5 + az * side * 1.9, 0.5, white);
@@ -243,9 +294,15 @@
     const dx = W.x, dz = W.z;
     ctx.prop.orientedBox(dx, dz, 6, 3.4, W.yaw, KERB, KERB + 0.9, VH.col(0x2fb7b0), VH.col(0xd9d2c4));
     world.physics.addOrientedBox(dx, dz, 6, 3.4, W.yaw, 0, KERB + 0.9, 'boardwalk', F().ALL);
+    // The gondolas sweep through the middle of the deck: a railed lane keeps people out of their way.
+    const at = (u, v) => [dx + px * u + ax * v, dz + pz * u + az * v];
+    for (const [u0, v0, u1, v1] of [[-5.9, -1.45, 5.9, -1.45], [-5.9, 1.45, 5.9, 1.45], [-5.9, -1.45, -5.9, 1.45], [5.9, -1.45, 5.9, 1.45]]) {
+      const [x0, z0] = at(u0, v0), [x1, z1] = at(u1, v1);
+      fenceLine(world, ctx, x0, z0, x1, z1, KERB + 0.9, 1.25, 0xffd24a); // too tall to vault
+    }
     const rx = dx + ax * 5.6, rz = dz + az * 5.6;
     world.physics.addRamp(rx, rz, 1.6, 2.2, W.yaw + Math.PI, 0, KERB, KERB + 0.9, 'boardwalk');
-    ctx.prop.orientedBox(rx, rz, 1.6, 2.2, W.yaw, KERB, KERB + 0.45, VH.col(0xd9d2c4));
+    wedge(ctx.prop, rx, rz, 1.6, 2.2, W.yaw + Math.PI, KERB, KERB + 0.9, VH.col(0xd9d2c4));
     // The ticket box.
     const tx = dx - ax * 9, tz = dz - az * 9;
     ctx.prop.orientedBox(tx, tz, 1.6, 1.6, W.yaw, KERB, KERB + 2.6, VH.col(0xe0403a));
@@ -285,6 +342,7 @@
         if (x > A.x0 + 15 && x < A.x0 + 22) continue; // the aisle
         const face = x < A.x0 + 15 ? 1 : -1;
         ctx.prop.box(x - 0.45, KERB, z - 0.5, x + 0.45, KERB + 1.9, z + 0.5, VH.col(cab[i++ % 3]));
+        world.physics.addBox(x - 0.45, 0, z - 0.5, x + 0.45, KERB + 1.9, z + 0.5, 'metal', F().SOLID | F().SHOTS);
         ctx.screen.box(x + face * 0.46 - 0.02, KERB + 1.1, z - 0.36, x + face * 0.46 + 0.02, KERB + 1.6, z + 0.36, VH.col(NEON[i % NEON.length], 1.3));
         ctx.screen.box(x - 0.45, KERB + 1.9, z - 0.5, x + 0.45, KERB + 2.15, z + 0.5, VH.col(NEON[(i + 2) % NEON.length], 1.6));
       }
@@ -317,7 +375,12 @@
     ctx.prop.cylinder(T.x, T.h + 2.4, T.z, 2.6, 0.2, 3, 10, VH.col(0xffd24a), false);
     for (let y = 6; y < T.h - 2; y += 3) for (const [dx, dz] of [[-1.36, 0], [1.36, 0], [0, -1.36], [0, 1.36]]) ctx.screen.box(T.x + dx - 0.08, y, T.z + dz - 0.08, T.x + dx + 0.08, y + 0.6, T.z + dz + 0.08, VH.col(y % 6 < 3 ? 0xff3d8b : 0x37e8ff, 2.2));
     world.physics.addBox(T.x - 1.4, 0, T.z - 1.4, T.x + 1.4, T.h + 5.4, T.z + 1.4, 'metal');
-    world.physics.addBox(T.x - 4.5, 0, T.z - 4.5, T.x + 4.5, KERB + 0.4, T.z + 4.5, 'kerb', F().SOLID);
+    solidRound(world, T.x, T.z, 6.5, 0, KERB + 0.4, 'kerb', F().SOLID);
+    // A ring of railings on the base: the seats come down to the ground here.
+    for (let k = 0; k < 8; k++) {
+      const a0 = ((k + 0.5) * Math.PI) / 4, a1 = ((k + 1.5) * Math.PI) / 4;
+      fenceLine(world, ctx, T.x + Math.cos(a0) * 5.2, T.z + Math.sin(a0) * 5.2, T.x + Math.cos(a1) * 5.2, T.z + Math.sin(a1) * 5.2, KERB + 0.4, 1.25, 0xffd24a);
+    }
     world.beacons.push({ x: T.x, y: T.h + 5.6, z: T.z });
     sign(world, { x: T.x, y: T.h - 3, z: T.z + 1.4, yaw: 0, w: 2.4, h: 9, lines: ['SKYHOOK'], style: 'neon', posts: false });
   }
@@ -344,7 +407,9 @@
       const yaw = k * 1.9;
       ctx.prop.orientedBox(cx, cz, 0.85, 1.2, yaw, KERB + 0.2, KERB + 0.75, VH.col(cols[k % cols.length]));
       ctx.prop.orientedBox(cx, cz, 0.95, 1.35, yaw, KERB + 0.25, KERB + 0.45, VH.col(0x1b1d21));
+      world.physics.addOrientedBox(cx, cz, 0.95, 1.35, yaw, 0, KERB + 0.75, 'metal', F().SOLID | F().SHOTS);
       ctx.prop.box(cx - 0.03, KERB + 0.75, cz - 0.03, cx + 0.03, KERB + 5.9, cz + 0.03, VH.col(0x9aa1a8));
+      world.physics.addBox(cx - 0.08, KERB + 0.75, cz - 0.08, cx + 0.08, KERB + 5.9, cz + 0.08, 'pole', F().SOLID | F().SHOTS);
     }
     sign(world, { x: x1 + 0.6, y: KERB + 7.6, z: (z0 + z1) / 2, yaw: Math.PI / 2, w: 10, h: 1.8, lines: ['DODGEMS'], style: 'neon', colors: CYAN, posts: false });
   }
@@ -361,7 +426,10 @@
       const t = i / n;
       const a = t * turns * Math.PI * 2;
       const p = [x + Math.cos(a) * 4.4, top - t * (top - KERB - 0.6), z + Math.sin(a) * 4.4];
-      if (pa) beam(ctx.prop, pa[0], pa[1], pa[2], p[0], p[1], p[2], 1.2, VH.col(0xffd24a));
+      if (pa) {
+        beam(ctx.prop, pa[0], pa[1], pa[2], p[0], p[1], p[2], 1.2, VH.col(0xffd24a));
+        solidBeam(world, pa[0], pa[1], pa[2], p[0], p[1], p[2], 1.2);
+      }
       pa = p;
     }
     world.physics.addBox(x - 3, 0, z - 3, x + 3, KERB + 18, z + 3, 'building');
@@ -382,11 +450,16 @@
       const ctx = world.ctxAt((a.x + b.x) / 2, (a.z + b.z) / 2);
       for (const s of [-0.6, 0.6]) beam(ctx.prop, a.x + lx * s, a.y + 0.5, a.z + lz * s, b.x + lx * s, b.y + 0.5, b.z + lz * s, 0.16, red);
       beam(ctx.prop, a.x, a.y + 0.2, a.z, b.x, b.y + 0.2, b.z, 0.32, red);
+      // Where the track runs low, fence it (track and train) so nobody stands in the train's way.
+      solidBeam(world, a.x, a.y + 0.85, a.z, b.x, b.y + 0.85, b.z, 1.7, 2.85);
       if (i % 2 === 0) beam(ctx.prop, a.x - lx * 0.7, a.y + 0.38, a.z - lz * 0.7, a.x + lx * 0.7, a.y + 0.38, a.z + lz * 0.7, 0.12, VH.col(0x5a5f66));
       if (i % 5 === 0) {
         ctx.prop.box(a.x - 0.22, KERB, a.z - 0.22, a.x + 0.22, a.y + 0.1, a.z + 0.22, white);
         world.physics.addBox(a.x - 0.3, 0, a.z - 0.3, a.x + 0.3, a.y + 0.1, a.z + 0.3, 'pole', F().SOLID | F().SHOTS);
-        if (a.y > 9) beam(ctx.prop, a.x - lx * 2.5, KERB, a.z - lz * 2.5, a.x, a.y * 0.6, a.z, 0.16, white);
+        if (a.y > 9) {
+          beam(ctx.prop, a.x - lx * 2.5, KERB, a.z - lz * 2.5, a.x, a.y * 0.6, a.z, 0.16, white);
+          solidBeam(world, a.x - lx * 2.5, KERB, a.z - lz * 2.5, a.x, a.y * 0.6, a.z, 0.3);
+        }
         // A bulb under the track every few metres: the ride reads at night.
         ctx.screen.box(a.x - 0.1, a.y - 0.05, a.z - 0.1, a.x + 0.1, a.y + 0.1, a.z + 0.1, VH.col(0xffd24a, 2));
       }
@@ -395,8 +468,9 @@
     const sx0 = 913.4, sx1 = 918, sz0 = 126, sz1 = 152;
     const ctx = world.ctxAt(916, 139);
     solid(world, ctx.prop, sx0, KERB, sz0, sx1, KERB + 1.0, sz1, 0xd9d2c4, null, 'boardwalk');
+    fenceLine(world, ctx, sx0 + 0.12, sz0 + 0.3, sx0 + 0.12, sz1 - 0.3, KERB + 1.0, 1.25, 0xffd24a); // the track side
     world.physics.addRamp(sx1 + 2, 139, 1.6, 2, -Math.PI / 2, 0, KERB, KERB + 1.0, 'boardwalk');
-    ctx.prop.orientedBox(sx1 + 2, 139, 1.6, 2, -Math.PI / 2, KERB, KERB + 0.5, VH.col(0xd9d2c4));
+    wedge(ctx.prop, sx1 + 2, 139, 1.6, 2, -Math.PI / 2, KERB, KERB + 1.0, VH.col(0xd9d2c4));
     for (const z of [sz0 + 0.5, sz1 - 0.5]) for (const x of [910, sx1 - 0.4]) {
       ctx.prop.box(x - 0.15, KERB, z - 0.15, x + 0.15, KERB + 5, z + 0.15, white);
       world.physics.addBox(x - 0.2, 0, z - 0.2, x + 0.2, KERB + 5, z + 0.2, 'pole', F().SOLID | F().SHOTS);
@@ -431,6 +505,7 @@
       ctx.prop.box(x - 0.04, KERB + 0.5, z - 0.04, x + 0.04, KERB + 6, z + 0.04, VH.col(0xd4a017));
       const y = KERB + 1.3 + (k % 3) * 0.3;
       ctx.prop.orientedBox(x, z, 0.22, 0.75, -a, y, y + 0.55, VH.col(horse[k % 4]));
+      world.physics.addOrientedBox(x, z, 0.25, 0.8, -a, KERB + 0.5, y + 1.0, 'metal', F().SOLID | F().SHOTS);
       ctx.prop.orientedBox(x + Math.cos(a + Math.PI / 2) * 0.6, z + Math.sin(a + Math.PI / 2) * 0.6, 0.15, 0.2, -a, y + 0.4, y + 1.0, VH.col(horse[k % 4]));
     }
     for (let k = 0; k < 24; k++) {
@@ -439,7 +514,7 @@
       ctx.screen.box(x - 0.12, KERB + 6.25, z - 0.12, x + 0.12, KERB + 6.55, z + 0.12, VH.col(k % 2 ? 0xffd24a : 0xfff4d6, 2));
     }
     world.physics.addBox(cx - 1.6, 0, cz - 1.6, cx + 1.6, KERB + 10, cz + 1.6, 'wall');
-    world.physics.addBox(cx - 8.2, -0.5, cz - 8.2, cx + 8.2, KERB + 0.5, cz + 8.2, 'plank', F().SOLID);
+    solidRound(world, cx, cz, 8.2, -0.5, KERB + 0.5, 'plank', F().SOLID);
     world.physics.addBox(cx - 8.8, KERB + 6, cz - 8.8, cx + 8.8, KERB + 9, cz + 8.8, 'building', F().SOLID | F().CAMERA);
   }
 
@@ -514,9 +589,9 @@
     fctx.screen.cylinder(fx, KERB + 2, fz, 0.5, 0.15, 3.4, 8, VH.col(0xcfefff, 1.1), true);
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
-      fctx.screen.cylinder(fx + Math.cos(a) * 4.5, KERB + 0.6, fz + Math.sin(a) * 4.5, 0.12, 0.05, 1.6, 6, VH.col(0xcfefff, 1.1), true);
+      fctx.screen.cylinder(fx + Math.cos(a) * 4.5, KERB + 0.6, fz + Math.sin(a) * 4.5, 0.12, 0.05, 1.6, 6, VH.col(0xcfefff, 1.1), true); // solidity: passable (water jets)
     }
-    world.physics.addBox(fx - 6.5, 0, fz - 6.5, fx + 6.5, KERB + 0.6, fz + 6.5, 'wall', F().SOLID | F().SHOTS);
+    solidRound(world, fx, fz, 7, 0, KERB + 0.6, 'wall', F().SOLID | F().SHOTS);
     world.physics.addBox(fx - 1.6, 0, fz - 1.6, fx + 1.6, KERB + 5.4, fz + 1.6, 'wall');
     const flags = [0x2fb7b0, 0xffd24a, 0xff5c95, 0x37b8ff, 0xf6f1e4, 0xe0403a, 0x7dcf6a];
     flags.forEach((c, i) => {
@@ -745,15 +820,16 @@
     fctx.screen.cylinder(qx, KERB + 0.45, qz, 4.2, 4.2, 0.2, 18, VH.col(0x3fa8c8, 0.8), true);
     fctx.prop.cylinder(qx, KERB + 0.6, qz, 0.5, 0.35, 1.6, 8, VH.col(0xd4a017), false);
     fctx.prop.cylinder(qx, KERB + 2.2, qz, 1.9, 1.6, 0.25, 14, VH.col(0xd4a017), true);
+    solidRound(world, qx, qz, 1.9, KERB + 2.2, KERB + 2.45, 'metal', F().SOLID | F().SHOTS);
     fctx.prop.cylinder(qx, KERB + 2.45, qz, 0.25, 0.2, 1.2, 8, VH.col(0xd4a017), false);
     fctx.prop.cylinder(qx, KERB + 3.65, qz, 1.0, 0.8, 0.2, 12, VH.col(0xd4a017), true);
     fctx.screen.cylinder(qx, KERB + 3.85, qz, 0.18, 0.04, 1.6, 6, VH.col(0xcfefff, 1.3), true);
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2;
-      fctx.screen.cylinder(qx + Math.cos(a) * 3.3, KERB + 0.6, qz + Math.sin(a) * 3.3, 0.1, 0.04, 1.3, 5, VH.col(0xcfefff, 1.2), true);
+      fctx.screen.cylinder(qx + Math.cos(a) * 3.3, KERB + 0.6, qz + Math.sin(a) * 3.3, 0.1, 0.04, 1.3, 5, VH.col(0xcfefff, 1.2), true); // solidity: passable (water jets)
       fctx.screen.box(qx + Math.cos(a) * 4.45 - 0.12, KERB + 0.6, qz + Math.sin(a) * 4.45 - 0.12, qx + Math.cos(a) * 4.45 + 0.12, KERB + 0.75, qz + Math.sin(a) * 4.45 + 0.12, gold);
     }
-    world.physics.addBox(qx - 4.4, 0, qz - 4.4, qx + 4.4, KERB + 0.6, qz + 4.4, 'wall', F().SOLID | F().SHOTS);
+    solidRound(world, qx, qz, 4.6, 0, KERB + 0.6, 'wall', F().SOLID | F().SHOTS);
     world.physics.addBox(qx - 0.6, 0, qz - 0.6, qx + 0.6, KERB + 5.4, qz + 0.6, 'wall');
     if (court) {
       for (const [x, z] of [[court.minX + 1.2, court.minZ + 1.2], [court.maxX - 1.2, court.minZ + 1.2], [court.minX + 1.2, court.maxZ - 6], [court.maxX - 1.2, court.maxZ - 6]]) world.addProp('streetlight', x, KERB, z, 0, 1);

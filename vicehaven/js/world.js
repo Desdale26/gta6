@@ -796,6 +796,9 @@
         // Backing board, and posts for free-standing signs.
         const frame = VH.col(spec.frame || 0x2b2f35);
         ctx.prop.orientedBox(spec.x, spec.z, spec.w / 2 + 0.06, depth / 2, spec.yaw, spec.y - spec.h / 2 - 0.06, spec.y + spec.h / 2 + 0.06, frame);
+        // A board low enough to walk into is solid (Jay is 1.8 m tall; a little margin).
+        const boardLow = spec.y - spec.h / 2 - 0.06;
+        if (boardLow < 2.1) this.physics.addOrientedBox(spec.x, spec.z, spec.w / 2 + 0.06, 0.1, spec.yaw, boardLow, spec.y + spec.h / 2 + 0.06, 'sign', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
         if (spec.posts) {
           const bottom = 0;
           for (const s of [-1, 1]) {

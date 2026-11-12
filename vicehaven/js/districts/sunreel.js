@@ -125,22 +125,41 @@
     if (o.lit) ctx.screen.box(Math.min(x - s * 0.15, x - s * 0.12), KERB + 0.6, z0 + 1, Math.max(x - s * 0.15, x - s * 0.12), KERB + gf - 1.3, z1 - 1, VH.col(o.lit, 0.55));
     // Plywood behind and the scaffold that holds it up.
     const back = x - s * 0.4;
-    ctx.wood.box(Math.min(back, back - s * 0.1), KERB, z0, Math.max(back, back - s * 0.1), KERB + h, z1, VH.col(0xc8b48a));
+    // (The breakaway holes go through the plywood too: a car goes right through.)
+    const holes = (o.holes || []).slice().sort((p, q) => p[0] - q[0]);
+    const inHole = (z, m) => holes.some(([a, b]) => z > a - m && z < b + m);
+    {
+      let cur = z0;
+      const ply = (a, b, y0) => ctx.wood.box(Math.min(back, back - s * 0.1), y0, a, Math.max(back, back - s * 0.1), KERB + h, b, VH.col(0xc8b48a));
+      for (const [a, b] of holes) {
+        if (a > cur) ply(cur, a, KERB);
+        ply(a, b, KERB + gf);
+        cur = Math.max(cur, b);
+      }
+      if (cur < z1) ply(cur, z1, KERB);
+    }
     const steel = VH.col(0x6e747a);
     for (let z = z0 + 1; z < z1; z += 6) {
+      if (inHole(z, 2.5)) continue;
       K().beam(ctx.prop, back, KERB + h - 1, z, back - s * 4.5, KERB, z, 0.18, steel);
       K().beam(ctx.prop, back, KERB + h * 0.45, z, back - s * 4.5, KERB, z, 0.14, steel);
       ctx.concrete.box(Math.min(back - s * 4.5, back - s * 5.3), 0, z - 0.4, Math.max(back - s * 4.5, back - s * 5.3), KERB + 0.4, z + 0.4, VH.col(0xa8a49a));
+      K().block(world, back - s * 4.5, 0, z - 0.4, back - s * 5.3, KERB + 0.4, z + 0.4, 'stone', F().SOLID);
+      // The raking braces are solid: a stack of boxes under their slope.
+      for (let k = 0; k < 6; k++) {
+        const xa = back - s * 4.5 * (k / 6), xb = back - s * 4.5 * ((k + 1) / 6);
+        K().block(world, xa, 0, z - 0.2, xb, KERB + (h - 1) * (1 - k / 6) + 0.2, z + 0.2, 'metal');
+      }
     }
-    // Colliders: the whole front, minus the sugar-glass holes on the ground floor.
-    const cx0 = Math.min(x, back - s * 0.1), cx1 = Math.max(x, back - s * 0.1);
-    world.physics.addBox(cx0, KERB + gf, z0, cx1, KERB + h, z1, 'building');
-    let cur = z0;
+    // Colliders: the whole front (pilasters too), minus the sugar-glass holes on the ground floor.
+    const cx0 = Math.min(x + s * 0.35, back - s * 0.1), cx1 = Math.max(x + s * 0.35, back - s * 0.1);
+    world.physics.addBox(cx0, KERB + gf, z0 - 0.3, cx1, KERB + h, z1 + 0.3, 'building');
+    let cur = z0 - 0.3;
     for (const [a, b] of (o.holes || []).slice().sort((p, q) => p[0] - q[0])) {
       if (a > cur) world.physics.addBox(cx0, 0, cur, cx1, KERB + gf, a, 'building');
       cur = Math.max(cur, b);
     }
-    if (cur < z1) world.physics.addBox(cx0, 0, cur, cx1, KERB + gf, z1, 'building');
+    if (cur < z1) world.physics.addBox(cx0, 0, cur, cx1, KERB + gf, z1 + 0.3, 'building');
     return ctx;
   }
 
@@ -188,10 +207,13 @@
       ctx.wood.box(sx - 10, KERB, sz, sx + 10, KERB + 0.5, sz + 14, VH.col(0x9a7650));
       ctx.b.box(sx - 10, KERB + 0.5, sz + 13.6, sx + 10, KERB + 6, sz + 14, VH.col(0x7ab0a0));
       ctx.prop.box(sx - 6, KERB + 0.5, sz + 6, sx + 6, KERB + 1.6, sz + 8, VH.col(0xc8302c));
+      K().block(world, sx - 6, 0, sz + 6, sx + 6, KERB + 1.6, sz + 8, 'plank');
+      K().block(world, sx - 10, 0, sz + 13.6, sx + 10, KERB + 6, sz + 14, 'wall');
       world.physics.addBox(sx - 10, 0, sz, sx + 10, KERB + 0.5, sz + 14, 'plank', F().SOLID);
       for (const [lx, lz] of [[sx - 13, sz - 4], [sx + 13, sz - 4], [sx, sz - 9]]) {
         ctx.prop.box(lx - 0.05, KERB, lz - 0.05, lx + 0.05, KERB + 3.2, lz + 0.05, VH.col(0x2b2f35));
         ctx.screen.box(lx - 0.5, KERB + 3.0, lz - 0.4, lx + 0.5, KERB + 3.8, lz + 0.4, VH.col(0xfff8e8, 2));
+        K().block(world, lx - 0.25, 0, lz - 0.25, lx + 0.25, KERB + 3.8, lz + 0.25);
       }
     }
     // A painted band and the big number by the door; a red light over the door.
@@ -203,6 +225,8 @@
       const dx0 = st.x0 + 8, dx1 = st.x0 + 26;
       ctx.prop.box(dx0, KERB, Math.min(doorZ, doorZ + ds * 0.3), dx1, KERB + 11, Math.max(doorZ, doorZ + ds * 0.3), VH.col(0x8f969c));
       for (let x = dx0 + 2; x < dx1; x += 2) ctx.prop.box(x, KERB, Math.min(doorZ, doorZ + ds * 0.36), x + 0.15, KERB + 11, Math.max(doorZ, doorZ + ds * 0.36), VH.col(0x7d838a));
+      K().block(world, dx0, 0, doorZ, dx1, KERB + 11, doorZ + ds * 0.4, 'metal');
+      K().block(world, st.x1 - 14, 0, doorZ, st.x1 - 12.8, KERB + 2.2, doorZ + ds * 0.12, 'metal');
       // A person door and its lamp.
       ctx.prop.box(st.x1 - 14, KERB, Math.min(doorZ, doorZ + ds * 0.1), st.x1 - 12.8, KERB + 2.2, Math.max(doorZ, doorZ + ds * 0.1), VH.col(0x3a6f9a));
       W.lamp(world, st.x1 - 13.4, doorZ + ds * 0.3, 0xfff1c8, 2.2, 0.2, KERB + 2.6);
@@ -232,7 +256,10 @@
       const A = G.admin;
       const ctx = W.building(world, A.x0, A.z0, A.x1, A.z1, A.h, { wall: 0xe8dcc0, roof: 0x8d8a84, style: 3, ww: 0.7, wh: 0.5, bay: 3.2, floorH: 4.2 });
       ctx.prop.box(A.x0 + 10, KERB + 3.6, A.z1, A.x1 - 10, KERB + 3.9, A.z1 + 4, VH.col(0x3a6f9a), { bottom: true });
-      for (const x of [A.x0 + 11, A.x1 - 11]) ctx.prop.box(x - 0.1, KERB, A.z1 + 3.8, x + 0.1, KERB + 3.6, A.z1 + 4, VH.col(0xd8dde2));
+      for (const x of [A.x0 + 11, A.x1 - 11]) {
+        ctx.prop.box(x - 0.1, KERB, A.z1 + 3.8, x + 0.1, KERB + 3.6, A.z1 + 4, VH.col(0xd8dde2));
+        K().block(world, x - 0.18, 0, A.z1 + 3.72, x + 0.18, KERB + 3.6, A.z1 + 4.08);
+      }
       for (let x = A.x0 + 6; x < A.x1 - 4; x += 8) world.addProp('palm', x, KERB, A.z1 + 9, 0, 1);
     }
     // The gate: two pylons, an arch with the studio's name, a guard hut, barriers.
@@ -249,8 +276,12 @@
       ctx.screen.box(gx - 9.05, KERB + 1.3, hz - 0.9, gx - 4.95, KERB + 2.4, hz + 0.9, VH.col(0xfff0c8, 0.6));
       ctx.prop.box(gx - 9.5, KERB + 3.0, hz - 1.5, gx - 4.5, KERB + 3.3, hz + 1.5, VH.col(0x1d2a44));
       world.physics.addBox(gx - 12, 0, hz - 1.2, gx + 3, KERB + 0.25, hz + 1.2, 'kerb', F().SOLID);
-      ctx.prop.box(gx - 4.5, KERB + 1.0, hz + 1.2, gx - 4.2, KERB + 1.12, S.z1, VH.col(0xf4f4ef));
-      ctx.prop.box(gx - 4.5, KERB + 1.0, S.z0, gx - 4.2, KERB + 1.12, hz - 1.2, VH.col(0xf4f4ef));
+      // The barrier arms stand raised by the hut (the studio street stays open).
+      for (const bz of [hz + 1.0, hz - 1.0]) {
+        ctx.prop.box(gx - 4.55, KERB + 0.25, bz - 0.2, gx - 4.15, KERB + 1.2, bz + 0.2, VH.col(0x1d2a44));
+        ctx.prop.box(gx - 4.42, KERB + 1.2, bz - 0.06, gx - 4.28, KERB + 7.0, bz + 0.06, VH.col(0xf4f4ef));
+        K().block(world, gx - 4.6, 0, bz - 0.25, gx - 4.1, KERB + 7.0, bz + 0.25);
+      }
       for (const z of [S.z0 - 6, S.z1 + 6]) world.addProp('streetlight', gx + 2, KERB, z, -Math.PI / 2, 1);
     }
     // The water tower with the studio's name.
@@ -276,7 +307,9 @@
         ctx.prop.box(x - 0.3, KERB + 0.45, z - 0.25, x + 0.3, KERB + 0.5, z + 0.25, VH.col(0x1b1d20));
         ctx.prop.box(x - 0.3, KERB + 0.5, z + 0.2, x + 0.3, KERB + 1.0, z + 0.25, VH.col(0x1b1d20));
         for (const dx of [-0.28, 0.28]) ctx.prop.box(x + dx - 0.03, KERB, z - 0.25, x + dx + 0.03, KERB + 0.75, z + 0.25, VH.col(0x8b6a45));
+        K().block(world, x - 0.32, 0, z - 0.27, x + 0.32, KERB + 1.0, z + 0.27, 'plank');
       }
+      K().block(world, -726.3, 0, 341.7, -725.7, KERB + 4.3, 342.3);
       ctx.prop.box(-726 - 0.05, KERB, 342 - 0.05, -726 + 0.05, KERB + 3.5, 342 + 0.05, VH.col(0x2b2f35));
       ctx.screen.box(-726.6, KERB + 3.3, 341.5, -725.4, KERB + 4.3, 342.4, VH.col(0xfff8e8, 2.2));
     }
@@ -368,9 +401,10 @@
       VH.Landmarks.railing(world, ctx, S.x0, S.z0, S.x0, S.z1, Y, { color: rc });
       VH.Landmarks.railing(world, ctx, S.x1, S.z0, S.x1, S.z1, Y, { color: rc });
       // Walking into the hole: it's a painted floor; keep people out of it anyway.
-      world.physics.addBox(S.x0, 0, S.z1 - 0.1, S.x1, Y + 1.05, S.z1 + 0.1, 'railing', F().SOLID);
+      VH.Landmarks.railing(world, ctx, S.x0, S.z1, S.x1, S.z1, Y, { color: rc });
       for (const x of [S.x0, S.x1]) {
         ctx.prop.box(x - 0.08, Y, S.z1 - 0.08, x + 0.08, Y + 2.6, S.z1 + 0.08, VH.col(rc));
+        K().block(world, x - 0.35, 0, S.z1 - 0.35, x + 0.35, Y + 3.1, S.z1 + 0.35);
         ctx.screen.cylinder(x, Y + 2.6, S.z1, 0.32, 0.32, 0.5, 10, VH.col(0xfff4dc, 1.6), true);
       }
       W.sign(world, { x: (S.x0 + S.x1) / 2, y: Y + 3.0, z: S.z1 + 0.15, yaw: 0, w: 5, h: 0.8, lines: ['METRO  ·  5TH STREET'], style: 'info', twoSided: true, colors: { bg: ['#2f5f3a', '#24502f'], fg: '#ffffff', bar: '#f2c500' } });
@@ -403,6 +437,8 @@
       W.solid(world, ctx.prop, C.x - 1.5, KERB, C.z - 2, C.x + 1.5, KERB + 1.2, C.z + 2, 0x2b2f35, null, 'metal');
       for (const [dx, dz] of [[-1.4, -1.8], [1.4, -1.8], [-1.4, 1.8], [1.4, 1.8]]) ctx.prop.cylinder(C.x + dx, KERB, C.z + dz, 0.4, 0.4, 0.3, 10, VH.col(0x1b1d20), true);
       ctx.prop.cylinder(C.x, KERB + 1.2, C.z, 0.35, 0.3, 2.2, 8, VH.col(0x5a5f66), true);
+      K().block(world, C.x - 0.4, 0, C.z - 0.4, C.x + 0.4, KERB + 3.4, C.z + 0.4, 'metal');
+      K().block(world, C.x + 2.4, KERB + 2.3, C.z + 0.1, C.x + 3.7, KERB + 3.2, C.z + 1.3, 'metal');
       W.beam(ctx.prop, C.x + 3, KERB + 3.0, C.z + 0.6, C.x - 8, KERB + 5.5, C.z - 4, 0.3, 0x5a5f66);
       ctx.prop.box(C.x + 2.5, KERB + 2.4, C.z + 0.2, C.x + 3.6, KERB + 3.2, C.z + 1.2, VH.col(0x8f969c));
       ctx.prop.box(C.x - 8.5, KERB + 5.0, C.z - 4.5, C.x - 7.5, KERB + 5.8, C.z - 3.6, VH.col(0x1b1d20));
@@ -415,6 +451,8 @@
       K().tiltBox(ctx.prop, dx, KERB + 0.3, dz - 0.4, 0.6, 0.05, 0.8, Math.PI, 0.2, 0xf4efe2);
       ctx.prop.box(dx + 1.2, KERB, dz - 0.04, dx + 1.26, KERB + 2.3, dz + 0.04, VH.col(0xe8e8e8));
       ctx.prop.cylinder(dx + 1.23, KERB + 2.3, dz, 1.4, 0.05, 0.6, 10, VH.col(0xf2c500), false);
+      K().block(world, dx - 0.35, 0, dz - 0.9, dx + 0.35, KERB + 1.0, dz + 0.5, 'plank', F().SOLID);
+      K().block(world, dx + 1.08, 0, dz - 0.15, dx + 1.38, KERB + 2.3, dz + 0.15);
       W.sign(world, { x: M.x + 9, y: KERB + 1.0, z: L.cross.z1 + 1.2, yaw: Math.PI, w: 1.2, h: 0.5, lines: ['C. VALIANT'], style: 'info', oneSided: true, colors: { bg: ['#1b1d20', '#1b1d20'], fg: '#ffffff', bar: '#f2c500' } });
     }
     // The prop yard: fibreglass statues, crates, a replica car under a sheet, a tank on a low-loader.
@@ -426,6 +464,7 @@
       ctx.prop.cylinder(-1026, KERB + 1.2, 232, 3.2, 2.6, 5.5, 12, VH.col(0xd8c8a8), true);
       ctx.prop.box(-1028.5, KERB + 4.2, 228.8, -1023.5, KERB + 5.0, 229.2, VH.col(0x6a5a4a));
       ctx.prop.box(-1026.4, KERB + 2.8, 228.6, -1025.6, KERB + 4.0, 229.4, VH.col(0xc8b898));
+      world.physics.addBox(-1030, 0, 228, -1022, KERB + 1.2, 236, 'stone');
       world.physics.addBox(-1029.5, 0, 228.5, -1022.5, KERB + 6.7, 235.5, 'building');
       for (const z of [250, 262, 274]) {
         ctx.prop.cylinder(-1032, KERB, z, 0.9, 0.8, 7, 12, VH.col(0xeae4d6), true);
@@ -437,8 +476,9 @@
       for (const a of [0, 1, 2]) {
         const ang = (a / 3) * Math.PI * 2;
         ctx.prop.orientedBox(-1000 + Math.sin(ang) * 2.0, 240 + Math.cos(ang) * 2.0, 0.12, 1.0, ang, KERB, KERB + 3, VH.col(0xc8302c));
+        world.physics.addOrientedBox(-1000 + Math.sin(ang) * 2.0, 240 + Math.cos(ang) * 2.0, 0.2, 1.05, ang, 0, KERB + 3, 'metal', F().SOLID | F().SHOTS);
       }
-      world.physics.addBox(-1002, 0, 238, -998, KERB + 16, 242, 'metal');
+      for (const yaw of [0, Math.PI / 4]) world.physics.addOrientedBox(-1000, 240, 1.5, 1.5, yaw, 0, KERB + 16, 'metal', F().ALL);
       ctx.prop.box(-1012, KERB, 270, -1008, KERB + 3.5, 274, VH.col(0xf2c500));
       ctx.prop.box(-1011.2, KERB + 3.5, 271.2, -1009.6, KERB + 6.5, 272.8, VH.col(0xf2c500));
       world.physics.addBox(-1012, 0, 270, -1008, KERB + 6.5, 274, 'building');
@@ -460,6 +500,16 @@
         K().beam(ctx.prop, dx, KERB + 3.8, dz + 3.8, dx, KERB + 1.2, dz + 11, 0.9, g);
         for (let k = 0; k < 5; k++) ctx.prop.box(dx - 0.1, KERB + 5.2, dz - 3 + k * 1.5, dx + 0.1, KERB + 6.2, dz - 2.4 + k * 1.5, VH.col(0xd9772b));
         world.physics.addBox(dx - 2.2, 0, dz - 4, dx + 2.2, KERB + 5.2, dz + 4, 'building');
+        // The tail sweeps down to the ground and the neck up to the head: both solid.
+        for (let k = 0; k < 6; k++) {
+          const za = dz + 3.8 + (k / 6) * 7.2, zb = dz + 3.8 + ((k + 1) / 6) * 7.2;
+          K().block(world, dx - 0.7, 0, za, dx + 0.7, KERB + 3.8 - (k / 6) * 2.6 + 0.6, zb + 0.3, 'building');
+        }
+        for (let k = 0; k < 5; k++) {
+          const za = dz - 3.5 - (k / 5) * 4.5, zb = dz - 3.5 - ((k + 1) / 5) * 4.5;
+          K().block(world, dx - 0.8, KERB + 4.0 + (k / 5) * 5.9, Math.min(za, zb), dx + 0.8, KERB + 5.4 + ((k + 1) / 5) * 5.9, Math.max(za, zb), 'building');
+        }
+        K().block(world, dx - 0.9, KERB + 10, dz - 9.8, dx + 0.9, KERB + 11.2, dz - 7.4, 'building');
       }
       for (let i = 0; i < 8; i++) {
         const x = -1036 + (i % 4) * 4.5, z = 418 + Math.floor(i / 4) * 0.01;
@@ -480,6 +530,8 @@
       ctx.prop.box(lx - 1.0, KERB + 2.4, lz - 3.5, lx + 1.0, KERB + 3.1, lz + 0.5, VH.col(0x4f5a3a));
       ctx.prop.cylinder(lx, KERB + 2.75, lz - 3.5, 0.14, 0.12, 4.5, 8, VH.col(0x3f4a2a), true);
       K().beam(ctx.prop, lx, KERB + 2.75, lz - 3.5, lx, KERB + 2.9, lz - 8, 0.24, 0x3f4a2a);
+      K().block(world, lx - 0.25, KERB + 2.4, lz - 8.1, lx + 0.25, KERB + 3.2, lz - 3.5, 'metal');
+      K().block(world, lx - 0.2, KERB + 2.4, lz - 3.7, lx + 0.2, KERB + 7.3, lz - 3.3, 'metal');
       world.physics.addBox(lx - 1.4, 0, lz - 8, lx + 1.4, KERB + 3.1, lz + 6, 'metal');
       // The yard's fence (west, north) with a gate onto Studio Road.
       W.fence(world, Y0.x0, L.z0 + 1, Y0.x0, L.z1 - 1, [], 'chain', 2.4);
@@ -532,6 +584,7 @@
     world.physics.addBox(x0, 0, pz0, x1, KERB + 0.35, pz1, 'boardwalk', F().SOLID);
     for (let x = x0 + 0.2; x <= x1; x += (x1 - x0 - 0.4) / Math.max(1, Math.round((x1 - x0) / 4))) {
       ctx.wood.box(x - 0.1, KERB + 0.35, zf + s * (P - 0.25) - 0.1, x + 0.1, KERB + 3.4, zf + s * (P - 0.25) + 0.1, VH.col(0x6b4e33));
+      K().block(world, x - 0.18, 0, zf + s * (P - 0.25) - 0.18, x + 0.18, KERB + 3.4, zf + s * (P - 0.25) + 0.18, 'pole');
     }
     K().tiltBox(ctx.wood, mx, KERB + 3.45, zf + s * P / 2, x1 - x0 + 0.2, 0.15, P + 0.4, 0, s * 0.12, 0x7a5a3a);
     if (o.balcony) {
@@ -542,6 +595,7 @@
     const hz = zf + s * (P + 1.2);
     ctx.wood.box(mx - 2.5, KERB + 0.9, hz - 0.06, mx + 2.5, KERB + 1.0, hz + 0.06, VH.col(0x6b4e33));
     for (const x of [mx - 2.4, mx + 2.4]) ctx.wood.box(x - 0.08, KERB, hz - 0.08, x + 0.08, KERB + 1.0, hz + 0.08, VH.col(0x6b4e33));
+    K().block(world, mx - 2.55, 0, hz - 0.12, mx + 2.55, KERB + 1.0, hz + 0.12, 'plank');
     return { ctx, zf, s };
   }
 
@@ -617,6 +671,7 @@
       ctx.prop.box(vx + 0.1, roofY + 2.85, vz - 0.04, vx + 0.4, roofY + 3.2, vz + 0.04, VH.col(0x2b2f35));
       for (const [ax, az] of [[0, -0.6], [0, 0.6], [-0.6, 0], [0.6, 0]]) ctx.prop.box(vx + ax - 0.04, roofY + 1.8, vz + az - 0.04, vx + ax + 0.04, roofY + 1.9, vz + az + 0.04, VH.col(0x2b2f35));
       world.westernVane = { x: vx, z: vz, y: roofY + 0.15 };
+      K().block(world, vx - 0.2, roofY, vz - 0.2, vx + 0.2, roofY + 3.2, vz + 0.2);
       W.deckRails(world, S.x0, S.z0, S.x1, Wt.nFront - 0.3, roofY + 0.15, [{ side: 'e', a0: S.z0 - 1, a1: Wt.nFront - 9.5 }], 0x6b4e33);
     }
     // Set dressing: wagons, barrels, a water trough, cacti, a windmill pump.
@@ -663,6 +718,7 @@
       for (const z of [Wt.nFront + Wt.porch + 0.3, Wt.sFront - Wt.porch - 0.3]) {
         const ctx = world.ctxAt(x, z);
         ctx.wood.box(x - 0.08, KERB, z - 0.08, x + 0.08, KERB + 3.0, z + 0.08, VH.col(0x5a3a20));
+        K().block(world, x - 0.2, 0, z - 0.2, x + 0.2, KERB + 3.5, z + 0.2);
         ctx.screen.box(x - 0.2, KERB + 3.0, z - 0.2, x + 0.2, KERB + 3.5, z + 0.2, VH.col(0xffb050, 2.4));
       }
     }

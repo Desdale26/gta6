@@ -580,6 +580,8 @@
         door.position.set(x - fx * 0.03, 1.7, z - fz * 0.03);
         door.rotation.y = spec.yaw;
         this.game.scene.add(door);
+        // Solid, in case the wall behind it is set back (a forecourt in the newer districts).
+        if (this.world.physics) this.world.physics.addOrientedBox(x + fx * 0.07, z + fz * 0.07, 2.3, 0.1, spec.yaw, 0, 3.25, 'wall', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
       }
       p.sign = mesh;
     }
