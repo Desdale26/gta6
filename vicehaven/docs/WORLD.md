@@ -373,3 +373,52 @@ Boot headless with the helper in the scratchpad (`boot()`), teleport
 stills. Check: no errors in the console, `renderer.stats().calls` at your
 landmark from the ground and from 300 m up, the story places you
 registered (`VH.game.places.get(id)`), and that a car can drive in and out.
+
+### Collision audit (`tools/solidity.mjs`)
+
+Nothing Jay can see should be walk-through, and nothing he can't see should
+stop him on a street. Run the audit on your district before you call it done
+(about a minute per district; one browser, so not while the smoke test runs):
+
+```
+cd /home/user/gta6
+node vicehaven/tools/solidity.mjs sunreel               # one or more district ids
+node vicehaven/tools/solidity.mjs 800,-60,980,150       # a rectangle x0,z0,x1,z1
+node vicehaven/tools/solidity.mjs new                   # all twelve districts and both bridges
+  --step 1.5  grid spacing (m)      --range 2.6  ray length (m)
+  --min 3     smallest cluster worth listing (hits)
+  --only ghost|invisible            --file sunreel.js (clusters from that file only)
+  --json out.json                   the same report as data
+```
+
+It boots the game headless, records which source line drew every triangle
+and added every collider, and from a grid of points Jay can reach on foot
+from a road (at 0.4, 1.0 and 1.6 m above the ground) casts rays in eight
+directions against the drawn scene and against `physics.raycast`. Places
+behind a fence too tall to vault are not tested (so a fenced ride's
+machinery may be scenery). Output, per area:
+
+```
+== sunreel  x -1080..-640, z 55..680  (163835 points, 0 out of reach, ...): 2 ghost, 0 invisible
+  GHOST     at -962.9, 319.9  size 0.5 x 12.8  y 0.55..1.9  hits 213  levels 0.4/1/1.6
+       116  districts/sunreel.js:121 < districts/sunreel.js:360 < districts/sunreel.js:796
+```
+
+- `GHOST`: something drawn with nothing solid behind it (walk-through).
+  `INVISIBLE`: something solid on a road, pavement or plaza where nothing is
+  drawn (an invisible wall; the `boundary` walls are left out).
+- `at` is the centre, `size` the extent in x by z, `y` the heights it was
+  hit at, `hits` how many rays saw it. Under it, the source lines that drew
+  it, most hits first: `file:line < caller < caller`. A mesh you added
+  yourself shows as `mesh "<name>" added at file:line`; a prop as
+  `props.js (<type>)`.
+- Never tested: foliage, decals and road paint, water, glows, anything wholly
+  above 2.3 m, vehicles, people, effects, collectibles.
+- Fix a ghost with a collider of the same shape (`addBox`, `addOrientedBox`,
+  `addRamp` for slopes; a round thing wants a round-ish collider, not its
+  bounding square). Low things (benches, kerbs, rails up to ~1.1 m) get a
+  collider too: Jay vaults them. If something really is meant to be walked
+  through (a bead curtain, spray, frangible runway edge lights), put
+  `// solidity: passable` at the end of the line that draws it and the audit
+  skips it (the summary counts those as "marked passable").
+- Re-run until your district says `0 ghost, 0 invisible`.
