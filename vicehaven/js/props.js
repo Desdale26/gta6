@@ -295,7 +295,7 @@
       },
       bench: {
         parts: [{ geo: benchGeometry(), mat: M.propMatte, shadow: true }],
-        collider: { hx: 0.95, hz: 0.28, h: 0.5 }, maxDistance: 160,
+        collider: { hx: 0.95, hz: 0.28, h: 0.88 }, maxDistance: 160, // up to the backrest: vaulted, not walked through
       },
       bin: {
         parts: [{ geo: binGeometry(), mat: M.propMatte, shadow: true }],

@@ -246,7 +246,7 @@ function audit(a) {
   if (W.props && W.props.batches) {
     for (const [k, list] of W.props.batches) for (const m of [].concat(list)) propType.set(m, k.split('|')[1]);
   }
-  const SKIP_NAME = /^(car-|bike-|boat-|plane-|heli|stash-|crowd|humanoid|fx |sky|mission|lamp pools|car light|floodlight pools|skid|blood|tracers|bullet|club beam|airliner bullet)/;
+  const SKIP_NAME = /^(car-|bike-|boat-|plane-|heli|stash-|crowd|humanoid|fx |sky|mission|lamp pools|car light|floodlight pools|skid|blood|tracers|bullet|club beam|airliner bullet|lantern )/; // lanterns are collectibles, walked into on purpose
   const meshes = [];
   const vehicleRoots = new Set();
   for (const veh of (g.vehicles && g.vehicles.list) || []) if (veh.model && veh.model.root) vehicleRoots.add(veh.model.root);
