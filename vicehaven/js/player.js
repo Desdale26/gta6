@@ -645,6 +645,8 @@
       if (this.state === 'dead' || this.noclip) return;
       this.state = 'knocked';
       this._knockT = 0;
+      this._thrown = !!this.throwNext; // off a bike (bikes.js): a ragdoll tumble
+      this.throwNext = false;
       this.grounded = false;
       this.climb = null;
       this.damage(damage, source);
@@ -652,6 +654,19 @@
 
     _knockStep(dt) {
       this._knockT += dt;
+      const r = this._thrown && this._ragdoll;
+      if (r) {
+        // Tumbling off a bike: he is where the ragdoll is; once it lies still, up he gets
+        // (the last half second of an ordinary knock-down: from lying on his back).
+        this.pos.x = r.pelvis.x;
+        this.pos.z = r.pelvis.z;
+        this.vel.x = this.vel.z = 0;
+        if (r.settled || r.t > 3) {
+          this._clearRagdoll();
+          this._thrown = false;
+          this._knockT = Math.max(this._knockT, 1.6);
+        } else this._knockT = Math.min(this._knockT, 1.2);
+      }
       if (!this.grounded) this.vel.y = Math.max(-40, this.vel.y - P.gravity * dt);
       const next = this._next;
       next.x = this.pos.x + this.vel.x * dt;
@@ -748,10 +763,22 @@
       const root = this.model.root;
       // Alive again by any route (a job retry, a checkpoint, bail, a teleport),
       // not only the hospital: stand up straight, don't keep the ragdoll's pose.
-      if (this._ragdoll && this.state !== 'dead') this._clearRagdoll();
+      if (this._ragdoll && this.state !== 'dead' && !(this.state === 'knocked' && this._thrown)) this._clearRagdoll();
       root.position.set(rp.x, rp.y + this._stepOffset, rp.z);
       if (this.state === 'vehicle') {
-        root.visible = false;
+        // Astride a bike (vehicles/bikes.js) he's on show; in a car, he's out of sight.
+        if (this.vehicle && this.vehicle.poseRider) this.vehicle.poseRider(this, dt, lookPitch);
+        else root.visible = false;
+        return rp;
+      }
+      if (this.state === 'knocked' && this._thrown && VH.Ragdoll) {
+        // Thrown off a bike: a tumble as a ragdoll (_knockStep follows it), then he gets up.
+        if (!this._ragdoll) {
+          root.rotation.set(0, this.heading, 0);
+          this._ragdoll = new VH.Ragdoll(this.model, this.physics, { vx: this.vel.x, vy: this.vel.y, vz: this.vel.z, hit: this.throwHit || null });
+        }
+        this._ragdoll.step(dt);
+        this._ragdoll.apply(this.model);
         return rp;
       }
       if (this.state === 'knocked') {

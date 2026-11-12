@@ -398,7 +398,8 @@
     });
 
     // Seawall with a raised coping, and the railing along it (open where the pier and the beach steps start).
-    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]].concat(bridgeGaps.map(([a, b]) => [a, b]));
+    const gaps = [[pier.z0, pier.z1], [beach.stairZ0, beach.stairZ1]].concat(bridgeGaps.map(([a, b]) => [a, b]))
+      .concat(world.seawallGaps || []); // 3.0 (DISTRICTS-WESTNORTH): openings district builders ask for (marina jetties), [[z0, z1], ...]
     for (let z = b.minZ; z < b.maxZ; z += 48) {
       const za = z;
       const zb = Math.min(b.maxZ, z + 48);

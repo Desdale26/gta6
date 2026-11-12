@@ -156,6 +156,11 @@
       if (this.extra.saltmarsh.length && !this.map.has('saltmarsh_docks')) this.add('saltmarsh_docks', Object.assign({ name: 'Saltmarsh Docks' }, this.extra.saltmarsh[0]));
       if (this.extra.crestline.length && !this.map.has('crestline_estates')) this.add('crestline_estates', Object.assign({ name: 'Crestline Estates' }, this.extra.crestline[0]));
       this._builtins3();
+      // The big places outside the old grid (vicehaven_international, fort_breakwater ...):
+      // their road "go" point, so a job can drive there or fly a ring over them.
+      for (const lm of VH.Data.landmarks || []) {
+        if (lm.major && lm.x !== undefined && !this.map.has(lm.id)) this.add(lm.id, { name: lm.name, x: lm.gx !== undefined ? lm.gx : lm.x, z: lm.gz !== undefined ? lm.gz : lm.z, yaw: 0, kind: lm.kind, landmark: true });
+      }
       if (!this.defs.vpd_central) this.defs.vpd_central = { district: 'downtown', kind: 'police_station_front', name: 'VPD Central Precinct' };
       if (!this.defs.mercy_general) this.defs.mercy_general = { district: 'palmcrescent', kind: 'hospital_front', name: 'St. Agnes Mercy General' };
       // The docks and estates spots the fixed ids above took aren't free for story places.

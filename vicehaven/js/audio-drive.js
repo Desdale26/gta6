@@ -372,7 +372,7 @@
     constructor(engine, o) {
       super(engine);
       this.kind = KINDS[o.kind] ? o.kind : 'sedan';
-      this.cfg = KINDS[this.kind];
+      this.cfg = o.cfg || KINDS[this.kind]; // (a vehicle may bring its own: the bikes, vehicles/bikes.js)
       this.player = !!o.player;
       this._thr = 0;
       this._popAt = 0;

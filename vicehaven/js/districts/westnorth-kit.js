@@ -216,7 +216,7 @@
         for (let a = Math.ceil(p0 / step) * step; a <= p1; a += step) ctx.prop.box(...R(a - 0.06, a + 0.06, c - 0.06, c + 0.06, KERB, KERB + H + 0.1), post);
         if (kind === 'chain') {
           for (const y of [0.3, H - 0.1]) ctx.prop.box(...R(p0, p1, c - 0.03, c + 0.03, KERB + y, KERB + y + 0.05), post);
-          ctx.propMatte.box(...R(p0, p1, c - 0.01, c + 0.01, KERB + 0.3, KERB + H - 0.1), fill);
+          ctx.prop.box(...R(p0, p1, c - 0.01, c + 0.01, KERB + 0.3, KERB + H - 0.1), fill);
         } else if (kind === 'picket') {
           ctx.prop.box(...R(p0, p1, c - 0.03, c + 0.03, KERB + 0.65, KERB + 0.75), post);
           for (let a = p0 + 0.1; a < p1; a += 0.22) ctx.prop.box(...R(a, a + 0.1, c - 0.02, c + 0.02, KERB + 0.1, KERB + H), fill);
@@ -274,6 +274,38 @@
     }
   }
 
+  /**
+   * A drivable ramp: a sloped slab on trestles from its low end (x, z) at
+   * height y0 running `len` metres along `heading` up to height y1, `w` wide.
+   * Returns the high end.
+   */
+  function ramp(world, surf, x, z, heading, w, len, y0, y1, hex, tag) {
+    const sx = Math.sin(heading), sz = Math.cos(heading);
+    const cx = x + (sx * len) / 2, cz = z + (sz * len) / 2;
+    const rise = y1 - y0;
+    const ang = Math.atan2(rise, len);
+    const slope = Math.hypot(rise, len);
+    const col = Array.isArray(hex) ? hex : VH.col(hex);
+    // The deck (tilted about its own X so its far end is the high one).
+    _q.setFromAxisAngle(Y1, heading);
+    _q.multiply(new THREE.Quaternion().setFromAxisAngle(X1, -ang));
+    _v.set(cx, (y0 + y1) / 2 - 0.1, cz);
+    _s.set(w, 0.2, slope);
+    _m.compose(_v, _q, _s);
+    surf.merge(unit(), _m, col);
+    // Trestles under it.
+    const leg = VH.colMul(col, 0.7);
+    for (let k = 1; k <= 3; k++) {
+      const t = k / 3.2;
+      const px = x + sx * len * t, pz = z + sz * len * t;
+      const py = y0 + rise * t - 0.2;
+      if (py < 0.3) continue;
+      surf.orientedBox(px, pz, w / 2 - 0.1, 0.12, heading, 0, py, leg);
+    }
+    world.physics.addRamp(cx, cz, w / 2, len / 2, heading, 0, y0, y1, tag || 'plank', F().SOLID);
+    return { x: x + sx * len, z: z + sz * len, y: y1 };
+  }
+
   /** A flat walkable deck (a landing, a catwalk floor). */
   function deck(world, surf, x0, z0, x1, z1, y, hex, tag, t) {
     surf.box(x0, y - (t || 0.2), z0, x1, y, z1, Array.isArray(hex) ? hex : VH.col(hex), { bottom: true });
@@ -306,6 +338,48 @@
         else VH.Landmarks.railing(world, ctx, ax, p0, ax, p1, y, { color: hex || 0x3f454c });
       }
     }
+  }
+
+  /**
+   * A zig-zag stair in a steel frame (flights of about 4.4 m rise), its
+   * north edge on z = sz0, centred on x = sx, from the ground up to yTop.
+   * Returns { foot, fx0, fx1, fz0, fz1 }.
+   */
+  function stairFrame(world, ctx, sx, sz0, yTop, legHex) {
+    const legC = VH.col(legHex || 0x8f969c);
+    const fw = 1.6;
+    const flights = Math.ceil((yTop - KERB) / 4.4);
+    const rise = (yTop - KERB) / flights;
+    const run = rise * 1.9;
+    const fx0 = sx - run / 2 - 1.8, fx1 = sx + run / 2 + 1.8;
+    const fz0 = sz0, fz1 = sz0 + fw * 2 + 0.2;
+    for (let f = 0; f < flights; f++) {
+      const yA = KERB + f * rise;
+      const yB = yA + rise;
+      const east = f % 2 === 0;
+      const lane = east ? fz1 - fw / 2 : fz0 + fw / 2; // first flight on the outer lane
+      const startX = east ? sx - run / 2 : sx + run / 2;
+      stairs(world, ctx.prop, startX, lane, east ? 'e' : 'w', run, fw, yA, yB, 0x8f969c, { open: true, rails: false, base: yA - 0.4, tag: 'metal' });
+      // Landing at the top end of this flight, across both lanes.
+      const lx0 = east ? sx + run / 2 : fx0;
+      const lx1 = east ? fx1 : sx - run / 2;
+      deck(world, ctx.prop, lx0, fz0, lx1, fz1, yB, 0x8f969c, 'metal', 0.15);
+    }
+    // The frame: corner posts and an outer rail per storey.
+    for (const px of [fx0, fx1]) for (const pz of [fz0, fz1]) ctx.prop.box(px - 0.08, KERB, pz - 0.08, px + 0.08, yTop + 1.05, pz + 0.08, legC);
+    for (let f = 1; f <= flights; f++) {
+      const yy = KERB + f * rise + 1.0;
+      beam(ctx.prop, fx0, yy, fz1, fx1, yy, fz1, 0.06, legC);
+      beam(ctx.prop, fx0, yy, fz0, fx0, yy, fz1, 0.06, legC);
+      beam(ctx.prop, fx1, yy, fz0, fx1, yy, fz1, 0.06, legC);
+    }
+    world.physics.addBox(fx0 - 0.1, 0, fz1, fx1 + 0.1, yTop + 1.05, fz1 + 0.12, 'railing', F().SOLID);
+    world.physics.addBox(fx0 - 0.12, KERB + 0.6, fz0, fx0, yTop + 1.05, fz1, 'railing', F().SOLID);
+    world.physics.addBox(fx1, KERB + 0.6, fz0, fx1 + 0.12, yTop + 1.05, fz1, 'railing', F().SOLID);
+    // The last landing (the top of the stair) is at the east end when the flight count is odd.
+    const eastTop = flights % 2 === 1;
+    const top = eastTop ? { x0: sx + run / 2, x1: fx1 } : { x0: fx0, x1: sx - run / 2 };
+    return { foot: { x: sx - run / 2 - 1, z: fz1 - fw / 2 }, fx0, fx1, fz0, fz1, top, run, flights, rise };
   }
 
   /**
@@ -351,7 +425,7 @@
       const a = (i / 16) * Math.PI * 2;
       const rx = x + Math.cos(a) * (cw - 0.1);
       const rz = z + Math.sin(a) * (cw - 0.1);
-      if (o.stair && i === 4) continue; // the opening onto the stair (south side)
+      if (o.stair && rz > z + cw * 0.45 && Math.abs(rx - x) > cw * 0.25 && Math.abs(rx - x) < cw * 0.95 && (rx > x) === (Math.ceil((H - KERB) / 4.4) % 2 === 1)) continue; // the opening onto the stair's bridge
       world.physics.addBox(rx - 0.5, H, rz - 0.5, rx + 0.5, H + 1.05, rz + 0.5, 'railing', F().SOLID);
     }
     // Tank, cap, finial.
@@ -364,41 +438,14 @@
     world.beacons.push({ x, y: H + th + R * 0.55 + 1.5, z });
     const out = { catwalkY: H, stairFoot: null };
     if (o.stair) {
-      // A zig-zag stair in a steel frame on the south side: flights of 4 m rise.
-      const sx = x;
-      const sz0 = z + cw + 0.2; // frame's north edge
-      const fw = 1.6;
-      const flights = Math.ceil((H - KERB) / 4.4);
-      const rise = (H - KERB) / flights;
-      const run = rise * 1.9;
-      const fx0 = sx - run / 2 - 1.8, fx1 = sx + run / 2 + 1.8;
-      const fz0 = sz0, fz1 = sz0 + fw * 2 + 0.2;
-      for (let f = 0; f < flights; f++) {
-        const yA = KERB + f * rise;
-        const yB = yA + rise;
-        const east = f % 2 === 0;
-        const lane = east ? fz1 - fw / 2 : fz0 + fw / 2; // first flight on the outer lane
-        const startX = east ? sx - run / 2 : sx + run / 2;
-        stairs(world, ctx.prop, startX, lane, east ? 'e' : 'w', run, fw, yA, yB, 0x8f969c, { open: true, rails: false, base: yA - 0.4, tag: 'metal' });
-        // Landing at the top end of this flight, across both lanes.
-        const lx0 = east ? sx + run / 2 : fx0;
-        const lx1 = east ? fx1 : sx - run / 2;
-        deck(world, ctx.prop, lx0, fz0, lx1, fz1, yB, 0x8f969c, 'metal', 0.15);
-      }
-      // The frame: corner posts and an outer rail per storey.
-      for (const px of [fx0, fx1]) for (const pz of [fz0, fz1]) ctx.prop.box(px - 0.08, KERB, pz - 0.08, px + 0.08, H + 1.05, pz + 0.08, legC);
-      for (let f = 1; f <= flights; f++) {
-        const yy = KERB + f * rise + 1.0;
-        beam(ctx.prop, fx0, yy, fz1, fx1, yy, fz1, 0.06, legC);
-        beam(ctx.prop, fx0, yy, fz0, fx0, yy, fz1, 0.06, legC);
-        beam(ctx.prop, fx1, yy, fz0, fx1, yy, fz1, 0.06, legC);
-      }
-      world.physics.addBox(fx0 - 0.1, 0, fz1, fx1 + 0.1, H + 1.05, fz1 + 0.12, 'railing', F().SOLID);
-      world.physics.addBox(fx0 - 0.12, KERB + 0.6, fz0, fx0, H + 1.05, fz1, 'railing', F().SOLID);
-      world.physics.addBox(fx1, KERB + 0.6, fz0, fx1 + 0.12, H + 1.05, fz1, 'railing', F().SOLID);
-      // The top landing joins the catwalk.
-      deck(world, ctx.prop, sx - 1, z + cw - 0.6, sx + 1, fz0 + 0.2, H, 0x8f969c, 'metal', 0.15);
-      out.stairFoot = { x: sx - run / 2 - 1, z: fz1 - fw / 2 };
+      const sf = stairFrame(world, ctx, x, z + cw + 0.2, H, o.leg || 0x8f969c);
+      // A bridge from the top landing to the catwalk ring.
+      const bx0 = sf.top.x0, bx1 = sf.top.x1;
+      const near = Math.max(Math.abs(bx0 - x), 0);
+      const zr = Math.sqrt(Math.max(1, cw * cw - near * near));
+      deck(world, ctx.prop, bx0, z + zr - 1.0, bx1, sf.fz0 + 0.2, H, 0x8f969c, 'metal', 0.15);
+      out.stairFoot = sf.foot;
+      out.bridge = { x: (bx0 + bx1) / 2, z: (z + zr - 1 + sf.fz0) / 2 };
     }
     return out;
   }
@@ -414,6 +461,15 @@
     const V = game && game.vehicles;
     if (!V || !V.spots || !list) return;
     for (const s of list) V.spots.push(s);
+  }
+
+  /** Keep kerbside parked cars out of driveways and gates: rects [[x0, z0, x1, z1], ...]. */
+  function clearSpots(game, rects) {
+    const V = game && game.vehicles;
+    if (!V || !V.spots) return;
+    for (const s of V.spots) {
+      if (s.road && rects.some((r) => s.x > r[0] && s.x < r[2] && s.z > r[1] && s.z < r[3])) s.used = true;
+    }
   }
 
   /** A simple moored boat (hull, cabin, maybe a mast) merged into surfaces. dir: +1 bow east, -1 west; along 'x' or 'z'. */
@@ -462,7 +518,7 @@
       ctx.prop.cylinder(m[0], top, m[2], 0.09, 0.06, o.mast, 6, VH.col(0xd8d8d8), true);
       const bEnd = P(-hl * 0.7, 0, top + 1.8);
       beam(ctx.prop, m[0], top + 1.8, m[2], bEnd[0], bEnd[1], bEnd[2], 0.1, VH.col(0xd8d8d8));
-      ctx.propMatte.box(Math.min(m[0], bEnd[0]) - (along ? 0 : 0.18), top + 1.9, Math.min(m[2], bEnd[2]) - (along ? 0.18 : 0), Math.max(m[0], bEnd[0]) + (along ? 0 : 0.18), top + 2.3, Math.max(m[2], bEnd[2]) + (along ? 0.18 : 0), VH.col(o.sail || 0x2f5f8f));
+      ctx.prop.box(Math.min(m[0], bEnd[0]) - (along ? 0 : 0.18), top + 1.9, Math.min(m[2], bEnd[2]) - (along ? 0.18 : 0), Math.max(m[0], bEnd[0]) + (along ? 0 : 0.18), top + 2.3, Math.max(m[2], bEnd[2]) + (along ? 0.18 : 0), VH.col(o.sail || 0x2f5f8f));
       // Masthead light (glows at night).
       ctx.screen.box(m[0] - 0.1, top + o.mast, m[2] - 0.1, m[0] + 0.1, top + o.mast + 0.2, m[2] + 0.1, VH.col(0xfff2c8, 2));
     }
@@ -475,15 +531,59 @@
   function cactus(world, x, z, h, seed) {
     const ctx = world.ctxAt(x, z);
     const g = VH.col(0x4f7a3a);
-    ctx.propMatte.cylinder(x, KERB, z, 0.35, 0.3, h, 8, g, true);
+    ctx.prop.cylinder(x, KERB, z, 0.35, 0.3, h, 8, g, true);
     const s = seed % 2 ? 1 : -1;
-    ctx.propMatte.cylinder(x + 0.9 * s, KERB + h * 0.45, z, 0.22, 0.2, h * 0.35, 8, g, true);
-    beam(ctx.propMatte, x, KERB + h * 0.45, z, x + 0.9 * s, KERB + h * 0.45, z, 0.4, g);
+    ctx.prop.cylinder(x + 0.9 * s, KERB + h * 0.45, z, 0.22, 0.2, h * 0.35, 8, g, true);
+    beam(ctx.prop, x, KERB + h * 0.45, z, x + 0.9 * s, KERB + h * 0.45, z, 0.4, g);
     if (seed % 3) {
-      ctx.propMatte.cylinder(x - 0.8 * s, KERB + h * 0.6, z, 0.2, 0.18, h * 0.25, 8, g, true);
-      beam(ctx.propMatte, x, KERB + h * 0.6, z, x - 0.8 * s, KERB + h * 0.6, z, 0.36, g);
+      ctx.prop.cylinder(x - 0.8 * s, KERB + h * 0.6, z, 0.2, 0.18, h * 0.25, 8, g, true);
+      beam(ctx.prop, x, KERB + h * 0.6, z, x - 0.8 * s, KERB + h * 0.6, z, 0.36, g);
     }
     world.physics.addBox(x - 0.35, 0, z - 0.35, x + 0.35, KERB + h, z + 0.35, 'pole', F().SOLID | F().SHOTS);
+  }
+
+  /** A trailer home: a long box with a window band, a door, an awning and a little deck. */
+  function trailer(world, x, z, len, hex, o) {
+    o = o || {};
+    const ctx = world.ctxAt(x, z);
+    const w = 3.8;
+    const x0 = x - len / 2, x1 = x + len / 2;
+    const z0 = z - w / 2, z1 = z + w / 2;
+    const y0 = KERB + 0.6, y1 = y0 + 3.0;
+    const body = VH.col(hex);
+    ctx.prop.box(x0, y0, z0, x1, y1, z1, body);
+    // Rounded-ish ends: a narrower cap at each end.
+    ctx.prop.box(x0 - 0.35, y0 + 0.25, z0 + 0.35, x0, y1 - 0.25, z1 - 0.35, body);
+    ctx.prop.box(x1, y0 + 0.25, z0 + 0.35, x1 + 0.35, y1 - 0.25, z1 - 0.35, body);
+    // Skirt, roof strip, trim band.
+    ctx.prop.box(x0 + 0.2, KERB, z0 + 0.2, x1 - 0.2, y0, z1 - 0.2, VH.col(0x7d7466));
+    ctx.prop.box(x0 + 0.3, y1, z0 + 0.4, x1 - 0.3, y1 + 0.18, z1 - 0.4, VH.colMul(body, 0.85));
+    ctx.prop.box(x0 - 0.02, y0 + 0.75, z0 - 0.02, x1 + 0.02, y0 + 0.95, z1 + 0.02, VH.col(o.trim || 0x2f4f6f));
+    // Windows (both long sides), one of them lit at night.
+    const glass = VH.col(0x26323e);
+    for (let a = x0 + 1.2; a < x1 - 1.6; a += 2.6) {
+      const lit = o.lit && Math.abs(a - x) < 2;
+      for (const s of [-1, 1]) {
+        const zz = s < 0 ? z0 - 0.04 : z1 + 0.04;
+        (lit ? ctx.screen : ctx.prop).box(a, y0 + 1.25, Math.min(zz, zz + s * 0.02), a + 1.4, y0 + 2.25, Math.max(zz, zz + s * 0.02), lit ? VH.col(0xffd9a0, 0.9) : glass);
+      }
+    }
+    // Door on the lane side (dz: which side faces the lane) with steps.
+    const s = o.side || 1;
+    const dz = s > 0 ? z1 : z0;
+    const dx = x + len * 0.2;
+    ctx.prop.box(dx - 0.5, y0, dz - 0.06, dx + 0.5, y0 + 2.1, dz + 0.06, VH.col(o.door || 0xe9e4d8));
+    ctx.wood.box(dx - 0.9, KERB, Math.min(dz, dz + s * 1.6), dx + 0.9, KERB + 0.3, Math.max(dz, dz + s * 1.6), VH.col(0x8b6a45));
+    ctx.wood.box(dx - 0.9, KERB, Math.min(dz + s * 1.6, dz + s * 2.3), dx + 0.9, KERB + 0.15, Math.max(dz + s * 1.6, dz + s * 2.3), VH.col(0x8b6a45));
+    // Striped awning over the door side.
+    const aw0 = x - len * 0.35, aw1 = x + len * 0.42;
+    for (let a = aw0, k = 0; a < aw1; a += 1.0, k++) {
+      tiltBox(ctx.prop, a + 0.5, y1 - 0.45, dz + s * 1.1, 1.0, 0.08, 2.2, 0, s * 0.22, k % 2 ? 0xf4efe2 : o.awning || 0x3f8f6f);
+    }
+    for (const ax of [aw0 + 0.2, aw1 - 0.2]) ctx.prop.box(ax - 0.04, KERB, dz + s * 2.1 - 0.04, ax + 0.04, y1 - 0.7, dz + s * 2.1 + 0.04, VH.col(0xcfd3d6));
+    world.physics.addBox(x0 - 0.35, 0, z0, x1 + 0.35, y1 + 0.2, z1, 'metal');
+    // The door steps.
+    world.physics.addBox(dx - 0.9, 0, Math.min(dz, dz + s * 1.6), dx + 0.9, KERB + 0.3, Math.max(dz, dz + s * 1.6), 'plank', F().SOLID);
   }
 
   /** Paint a building or yard onto the minimap and the full map. */
@@ -498,7 +598,7 @@
 
   VH.WNKit = {
     KERB, tiles, pave, mark, solid, beam, tiltBox, gable, building, lamp, festoon, fence, stairs, deck, deckRails,
-    waterTower, parkedSpot, addParkedSpots, boat, cactus, mapBox,
+    waterTower, parkedSpot, addParkedSpots, boat, cactus, mapBox, trailer, ramp, stairFrame, clearSpots,
     sign: (world, spec) => VH.Landmarks.sign(world, spec),
   };
 })();

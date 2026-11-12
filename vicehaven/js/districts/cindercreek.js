@@ -71,55 +71,11 @@
   };
 
   // --------------------------------------------------------------- pieces
-  /** A trailer home: a long box with a window band, a door, an awning and a little deck. */
-  function trailer(world, x, z, len, hex, o) {
-    o = o || {};
-    const ctx = world.ctxAt(x, z);
-    const w = 3.8;
-    const x0 = x - len / 2, x1 = x + len / 2;
-    const z0 = z - w / 2, z1 = z + w / 2;
-    const y0 = KERB + 0.6, y1 = y0 + 3.0;
-    const body = VH.col(hex);
-    ctx.prop.box(x0, y0, z0, x1, y1, z1, body);
-    // Rounded-ish ends: a narrower cap at each end.
-    ctx.prop.box(x0 - 0.35, y0 + 0.25, z0 + 0.35, x0, y1 - 0.25, z1 - 0.35, body);
-    ctx.prop.box(x1, y0 + 0.25, z0 + 0.35, x1 + 0.35, y1 - 0.25, z1 - 0.35, body);
-    // Skirt, roof strip, trim band.
-    ctx.propMatte.box(x0 + 0.2, KERB, z0 + 0.2, x1 - 0.2, y0, z1 - 0.2, VH.col(0x7d7466));
-    ctx.prop.box(x0 + 0.3, y1, z0 + 0.4, x1 - 0.3, y1 + 0.18, z1 - 0.4, VH.colMul(body, 0.85));
-    ctx.prop.box(x0 - 0.02, y0 + 0.75, z0 - 0.02, x1 + 0.02, y0 + 0.95, z1 + 0.02, VH.col(o.trim || 0x2f4f6f));
-    // Windows (both long sides), one of them lit at night.
-    const glass = VH.col(0x26323e);
-    for (let a = x0 + 1.2; a < x1 - 1.6; a += 2.6) {
-      const lit = o.lit && Math.abs(a - x) < 2;
-      for (const s of [-1, 1]) {
-        const zz = s < 0 ? z0 - 0.04 : z1 + 0.04;
-        (lit ? ctx.screen : ctx.prop).box(a, y0 + 1.25, Math.min(zz, zz + s * 0.02), a + 1.4, y0 + 2.25, Math.max(zz, zz + s * 0.02), lit ? VH.col(0xffd9a0, 0.9) : glass);
-      }
-    }
-    // Door on the lane side (dz: which side faces the lane) with steps.
-    const s = o.side || 1;
-    const dz = s > 0 ? z1 : z0;
-    const dx = x + len * 0.2;
-    ctx.prop.box(dx - 0.5, y0, dz - 0.06, dx + 0.5, y0 + 2.1, dz + 0.06, VH.col(o.door || 0xe9e4d8));
-    ctx.wood.box(dx - 0.9, KERB, Math.min(dz, dz + s * 1.6), dx + 0.9, KERB + 0.3, Math.max(dz, dz + s * 1.6), VH.col(0x8b6a45));
-    ctx.wood.box(dx - 0.9, KERB, Math.min(dz + s * 1.6, dz + s * 2.3), dx + 0.9, KERB + 0.15, Math.max(dz + s * 1.6, dz + s * 2.3), VH.col(0x8b6a45));
-    // Striped awning over the door side.
-    const aw0 = x - len * 0.35, aw1 = x + len * 0.42;
-    for (let a = aw0, k = 0; a < aw1; a += 1.0, k++) {
-      K().tiltBox(ctx.propMatte, a + 0.5, y1 - 0.45, dz + s * 1.1, 1.0, 0.08, 2.2, 0, s * 0.22, k % 2 ? 0xf4efe2 : o.awning || 0x3f8f6f);
-    }
-    for (const ax of [aw0 + 0.2, aw1 - 0.2]) ctx.prop.box(ax - 0.04, KERB, dz + s * 2.1 - 0.04, ax + 0.04, y1 - 0.7, dz + s * 2.1 + 0.04, VH.col(0xcfd3d6));
-    world.physics.addBox(x0 - 0.35, 0, z0, x1 + 0.35, y1 + 0.2, z1, 'metal');
-    // The door steps.
-    world.physics.addBox(dx - 0.9, 0, Math.min(dz, dz + s * 1.6), dx + 0.9, KERB + 0.3, Math.max(dz, dz + s * 1.6), 'plank', F().SOLID);
-  }
-
   /** A wrecked car body (a squashed box with a cabin), for stacks in the junk yard. */
   function wreck(ctx, x, y, z, yaw, hex) {
     const c = VH.col(hex);
-    ctx.propMatte.orientedBox(x, z, 2.1, 0.95, yaw, y, y + 0.75, c);
-    ctx.propMatte.orientedBox(x - Math.cos(yaw) * 0.2, z + Math.sin(yaw) * 0.2, 1.0, 0.85, yaw, y + 0.75, y + 1.15, VH.colMul(c, 0.8));
+    ctx.prop.orientedBox(x, z, 2.1, 0.95, yaw, y, y + 0.75, c);
+    ctx.prop.orientedBox(x - Math.cos(yaw) * 0.2, z + Math.sin(yaw) * 0.2, 1.0, 0.85, yaw, y + 0.75, y + 1.15, VH.colMul(c, 0.8));
   }
 
   /** A roll-up door (painted box) on a unit face. side: 'n' or 's'. */
@@ -135,9 +91,9 @@
   function buildDriveIn(world) {
     const W = K();
     const c = DI;
-    W.pave(world, c.x0, c.z0, c.x1, c.z1, 0x8c8577);
+    W.pave(world, c.x0, c.z0, c.x1, c.z1, 0xc9b896, 'plazaTop');
     // The entry lane, darker tarmac from the gate to the first row.
-    W.pave(world, c.gate.x0, c.z0, c.gate.x1, c.rows[0] - 4, 0x55524c, 'asphaltTop', KERB + 0.016);
+    W.pave(world, c.gate.x0, c.z0, c.gate.x1, c.rows[0] - 4, 0xb4b4b4, 'asphaltTop', KERB + 0.016);
     W.mark(world, -950.15, c.z0 + 2, -949.85, c.rows[0] - 6, 0xf2d34a);
     // Ticket hut on an island between the in and out lanes.
     {
@@ -192,7 +148,7 @@
         W.beam(ctx.prop, x + dx, KERB, -469, x + dx, KERB + 2.6, -470, 0.1, 0xd84a3a);
       }
       ctx.prop.box(x - 2.3, KERB + 2.55, -470.08, x + 2.3, KERB + 2.7, -469.92, VH.col(0xd84a3a));
-      for (const dx of [-1, 1]) ctx.propMatte.box(x + dx - 0.3, KERB + 0.5, -470.15, x + dx + 0.3, KERB + 0.56, -469.85, VH.col(0x2b2f35));
+      for (const dx of [-1, 1]) ctx.prop.box(x + dx - 0.3, KERB + 0.5, -470.15, x + dx + 0.3, KERB + 0.56, -469.85, VH.col(0x2b2f35));
     }
 
     // The rows: a painted line, speaker posts (glowing heads after dark) and
@@ -223,7 +179,7 @@
       // Snack counter on the north side (facing the cars coming in).
       ctx.screen.box(B.x0 + 4, KERB + 1.1, B.z0 - 0.08, B.x1 - 4, KERB + 2.5, B.z0 - 0.02, VH.col(0xfff0c8, 0.85));
       ctx.prop.box(B.x0 + 3.6, KERB + 0.95, B.z0 - 0.7, B.x1 - 3.6, KERB + 1.1, B.z0, VH.col(0xb02b2b));
-      for (let x = B.x0 + 3, k = 0; x < B.x1 - 3; x += 1.2, k++) W.tiltBox(ctx.propMatte, x + 0.6, KERB + 3.2, B.z0 - 1.2, 1.2, 0.08, 2.6, 0, 0.3, k % 2 ? 0xf4efe2 : 0xc8302c);
+      for (let x = B.x0 + 3, k = 0; x < B.x1 - 3; x += 1.2, k++) W.tiltBox(ctx.prop, x + 0.6, KERB + 3.2, B.z0 - 1.2, 1.2, 0.08, 2.6, 0, 0.3, k % 2 ? 0xf4efe2 : 0xc8302c);
       W.festoon(world, B.x0 - 6, KERB + 4, B.z0 - 6, B.x1 + 6, KERB + 4, B.z0 - 6, 0.6, [0xffd24a, 0xff6a5a, 0x7ad7ff], 1.8);
       for (const x of [B.x0 - 6, B.x1 + 6]) ctx.prop.box(x - 0.08, KERB, B.z0 - 6.08, x + 0.08, KERB + 4.1, B.z0 - 5.92, VH.col(0x6e747a));
       // Picnic tables.
@@ -243,7 +199,7 @@
   function buildStorage(world) {
     const W = K();
     const s = ST;
-    W.pave(world, s.x0, s.z0, s.x1, s.z1, 0x77746e);
+    W.pave(world, s.x0, s.z0, s.x1, s.z1, 0xc4c4c4);
     W.fence(world, s.x0 + 1, s.z0 + 2, s.x1 - 22, s.z0 + 2, [[s.gate.x0, s.gate.x1]], 'chain', 2.4);
     W.fence(world, s.x0 + 1, s.z1, s.x1 - 1, s.z1, [], 'chain', 2.4);
     W.fence(world, s.x0 + 1, s.z0 + 2, s.x0 + 1, s.z1, [], 'chain', 2.4);
@@ -294,10 +250,10 @@
     {
       const L = s.lot17;
       const ctx = world.ctxAt(L.x0, L.z0);
-      ctx.interior.topRect(L.x0, L.z0, L.x1, L.z1, KERB + 0.01, VH.col(0x8c8880));
-      ctx.interior.box(L.x0, KERB, L.z0, L.x0 + 0.15, KERB + 3.2, L.z1, VH.col(0xcfc8ba));
-      ctx.interior.box(L.x1 - 0.15, KERB, L.z0, L.x1, KERB + 3.2, L.z1, VH.col(0xcfc8ba));
-      ctx.interior.box(L.x0, KERB + 3.1, L.z0, L.x1, KERB + 3.2, L.z1, VH.col(0xbfb8aa), { bottom: true });
+      ctx.prop.topRect(L.x0, L.z0, L.x1, L.z1, KERB + 0.01, VH.col(0x8c8880));
+      ctx.prop.box(L.x0, KERB, L.z0, L.x0 + 0.15, KERB + 3.2, L.z1, VH.col(0xcfc8ba));
+      ctx.prop.box(L.x1 - 0.15, KERB, L.z0, L.x1, KERB + 3.2, L.z1, VH.col(0xcfc8ba));
+      ctx.prop.box(L.x0, KERB + 3.1, L.z0, L.x1, KERB + 3.2, L.z1, VH.col(0xbfb8aa), { bottom: true });
       // The door, rolled up, its dent, the stencil.
       ctx.prop.box(L.x0 + 0.5, KERB + 2.55, L.z1 - 0.4, L.x1 - 0.5, KERB + 2.95, L.z1, VH.col(0xd9772b));
       ctx.prop.box(L.x0 + 0.2, KERB + 2.95, L.z1 - 0.05, L.x1 - 0.2, KERB + 3.2, L.z1 + 0.05, VH.col(0x9aa0a6));
@@ -309,20 +265,20 @@
         ctx.prop.box(tx + dx - 0.22, KERB + 0.45, tz + 0.75, tx + dx + 0.22, KERB + 0.5, tz + 1.15, VH.col(0x3a5f8a));
         ctx.prop.box(tx + dx - 0.22, KERB + 0.5, tz + 1.1, tx + dx + 0.22, KERB + 0.95, tz + 1.15, VH.col(0x3a5f8a));
       }
-      ctx.propMatte.box(L.x0 + 0.16, KERB + 1.2, L.z0 + 1.2, L.x0 + 0.2, KERB + 2.3, L.z0 + 3.4, VH.col(0xb88a5a));
-      for (const [y, z0] of [[1.5, 1.5], [1.9, 2.4], [1.4, 2.8]]) ctx.propMatte.box(L.x0 + 0.2, KERB + y, L.z0 + z0, L.x0 + 0.22, KERB + y + 0.3, L.z0 + z0 + 0.25, VH.col(0xf4f0e6));
+      ctx.prop.box(L.x0 + 0.16, KERB + 1.2, L.z0 + 1.2, L.x0 + 0.2, KERB + 2.3, L.z0 + 3.4, VH.col(0xb88a5a));
+      for (const [y, z0] of [[1.5, 1.5], [1.9, 2.4], [1.4, 2.8]]) ctx.prop.box(L.x0 + 0.2, KERB + y, L.z0 + z0, L.x0 + 0.22, KERB + y + 0.3, L.z0 + z0 + 0.25, VH.col(0xf4f0e6));
       // Boxes stacked at the back.
-      for (const [bx, by, h] of [[L.x0 + 0.9, 0, 0.6], [L.x0 + 0.9, 0.6, 0.5], [L.x1 - 1.1, 0, 0.7]]) ctx.propMatte.box(bx - 0.4, KERB + by, L.z0 + 0.3, bx + 0.4, KERB + by + h, L.z0 + 1.0, VH.col(0xb88a5a));
+      for (const [bx, by, h] of [[L.x0 + 0.9, 0, 0.6], [L.x0 + 0.9, 0.6, 0.5], [L.x1 - 1.1, 0, 0.7]]) ctx.prop.box(bx - 0.4, KERB + by, L.z0 + 0.3, bx + 0.4, KERB + by + h, L.z0 + 1.0, VH.col(0xb88a5a));
       W.sign(world, { x: (L.x0 + L.x1) / 2, y: KERB + 3.6, z: L.z1 + 0.42, yaw: 0, w: 2.6, h: 0.7, lines: ['17  BRASK'], style: 'info', oneSided: true, colors: { bg: ['#9aa0a6', '#8a9096'], fg: '#1a1a1a', bar: '#d9772b' } });
     }
     // The auction yard: an open corner with a trestle table, crates and a gazebo.
     {
       const A = s.auction;
       const ctx = world.ctxAt((A.x0 + A.x1) / 2, (A.z0 + A.z1) / 2);
-      W.pave(world, A.x0, A.z0, A.x1, A.z1, 0x9a9282, 'asphaltTop', KERB + 0.016);
+      W.pave(world, A.x0, A.z0, A.x1, A.z1, 0xcdbf9e, 'plazaTop', KERB + 0.016);
       const gx = A.x0 + 10, gz = (A.z0 + A.z1) / 2;
       for (const [dx, dz] of [[-3, -3], [3, -3], [3, 3], [-3, 3]]) ctx.prop.box(gx + dx - 0.05, KERB, gz + dz - 0.05, gx + dx + 0.05, KERB + 2.5, gz + dz + 0.05, VH.col(0xcfd3d6));
-      W.gable(ctx.propMatte, gx - 3.3, gz - 3.3, gx + 3.3, gz + 3.3, KERB + 2.5, 0.9, 'x', 0x2f6f9f);
+      W.gable(ctx.prop, gx - 3.3, gz - 3.3, gx + 3.3, gz + 3.3, KERB + 2.5, 0.9, 'x', 0x2f6f9f);
       ctx.wood.box(gx - 2, KERB + 0.8, gz - 0.5, gx + 2, KERB + 0.86, gz + 0.5, VH.col(0x9a7650));
       for (let i = 0; i < 9; i++) {
         const cx = A.x0 + 20 + (i % 5) * 5.5, cz = A.z0 + 2 + Math.floor(i / 5) * 5;
@@ -338,10 +294,10 @@
   function buildTrailerPark(world) {
     const W = K();
     const t = TP;
-    W.pave(world, t.x0, t.z0, t.x1, t.z1, 0xb3a68c, 'asphaltTop', KERB + 0.01);
+    W.pave(world, t.x0, t.z0, t.x1, t.z1, 0xd8c9a6, 'plazaTop', KERB + 0.01);
     // The lanes (tarmac) and little lawns.
-    W.pave(world, t.x0 + 2, t.laneZ - 4, t.x1 - 2, t.laneZ + 4, 0x5a5751, 'asphaltTop', KERB + 0.016);
-    W.pave(world, t.laneX - 4, t.laneZ, t.laneX + 4, t.z1, 0x5a5751, 'asphaltTop', KERB + 0.016);
+    W.pave(world, t.x0 + 2, t.laneZ - 4, t.x1 - 2, t.laneZ + 4, 0xb0b0b0, 'asphaltTop', KERB + 0.016);
+    W.pave(world, t.laneX - 4, t.laneZ, t.laneX + 4, t.z1, 0xb0b0b0, 'asphaltTop', KERB + 0.016);
     W.fence(world, t.x0 + 1, t.z1 - 1, t.x1 - 1, t.z1 - 1, [[t.laneX - 6, t.laneX + 6]], 'picket', 1.1);
     W.fence(world, t.x0 + 1, t.z0, t.x0 + 1, t.z1 - 1, [], 'picket', 1.1);
     W.fence(world, t.x1 - 1, t.z0, t.x1 - 1, t.z1 - 1, [], 'picket', 1.1);
@@ -352,18 +308,18 @@
     // North row (door side south, facing the lane) and south row (door side north).
     for (let x = t.x0 + 34; x < t.x1 - 10; x += 19) {
       if (Math.abs(x - t.laneX) < 9) continue;
-      trailer(world, x, t.laneZ - 12, 13, cols[k % cols.length], { side: 1, awning: awn[k % 4], lit: k % 3 === 0 });
+      K().trailer(world, x, t.laneZ - 12, 13, cols[k % cols.length], { side: 1, awning: awn[k % 4], lit: k % 3 === 0 });
       k++;
     }
     for (let x = t.x0 + 12; x < t.x1 - 10; x += 19) {
       if (Math.abs(x - t.laneX) < 9 || Math.abs(x - t.chet.x) < 12) continue;
-      trailer(world, x, t.laneZ + 14, 13, cols[k % cols.length], { side: -1, awning: awn[k % 4], lit: k % 2 === 0 });
+      K().trailer(world, x, t.laneZ + 14, 13, cols[k % cols.length], { side: -1, awning: awn[k % 4], lit: k % 2 === 0 });
       k++;
     }
     // Chet Valiant's silver trailer: a gold star on the door, a deckchair, his cardboard self.
     {
       const C = t.chet;
-      trailer(world, C.x, C.z, C.len, 0xc9ced3, { side: -1, trim: 0xb8962e, awning: 0xb8962e, lit: true, door: 0xc9ced3 });
+      K().trailer(world, C.x, C.z, C.len, 0xc9ced3, { side: -1, trim: 0xb8962e, awning: 0xb8962e, lit: true, door: 0xc9ced3 });
       const ctx = world.ctxAt(C.x, C.z);
       const dx = C.x + C.len * 0.2, dz = C.z - 1.9 - 0.07;
       // The star: two crossed diamonds.
@@ -372,20 +328,20 @@
       }
       // Deckchair.
       const cx = C.x - 2, cz = C.z - 5;
-      W.tiltBox(ctx.propMatte, cx, KERB + 0.55, cz, 0.6, 0.05, 1.1, 0, -0.9, 0xc8302c);
-      W.tiltBox(ctx.propMatte, cx, KERB + 0.3, cz + 0.4, 0.6, 0.05, 0.8, 0, 0.2, 0xf4efe2);
+      W.tiltBox(ctx.prop, cx, KERB + 0.55, cz, 0.6, 0.05, 1.1, 0, -0.9, 0xc8302c);
+      W.tiltBox(ctx.prop, cx, KERB + 0.3, cz + 0.4, 0.6, 0.05, 0.8, 0, 0.2, 0xf4efe2);
       // The cut-out: a flat painted man with a big grin.
       const ox = C.x + 4.5, oz = C.z - 4.6;
-      ctx.propMatte.box(ox - 0.3, KERB, oz - 0.02, ox + 0.3, KERB + 1.2, oz + 0.02, VH.col(0x2b3b5a));
-      ctx.propMatte.box(ox - 0.35, KERB + 1.2, oz - 0.02, ox + 0.35, KERB + 1.65, oz + 0.02, VH.col(0xf2f0ea));
-      ctx.propMatte.box(ox - 0.17, KERB + 1.65, oz - 0.02, ox + 0.17, KERB + 2.0, oz + 0.02, VH.col(0xe0b090));
-      ctx.propMatte.box(ox - 0.2, KERB + 2.0, oz - 0.02, ox + 0.2, KERB + 2.12, oz + 0.02, VH.col(0x5a3a1a));
-      ctx.propMatte.box(ox - 0.12, KERB, oz + 0.02, ox + 0.12, KERB + 1.0, oz + 0.25, VH.col(0x8a6a48));
+      ctx.prop.box(ox - 0.3, KERB, oz - 0.02, ox + 0.3, KERB + 1.2, oz + 0.02, VH.col(0x2b3b5a));
+      ctx.prop.box(ox - 0.35, KERB + 1.2, oz - 0.02, ox + 0.35, KERB + 1.65, oz + 0.02, VH.col(0xf2f0ea));
+      ctx.prop.box(ox - 0.17, KERB + 1.65, oz - 0.02, ox + 0.17, KERB + 2.0, oz + 0.02, VH.col(0xe0b090));
+      ctx.prop.box(ox - 0.2, KERB + 2.0, oz - 0.02, ox + 0.2, KERB + 2.12, oz + 0.02, VH.col(0x5a3a1a));
+      ctx.prop.box(ox - 0.12, KERB, oz + 0.02, ox + 0.12, KERB + 1.0, oz + 0.25, VH.col(0x8a6a48));
       // A barbecue and a flamingo.
       ctx.prop.cylinder(C.x - 4.5, KERB + 0.7, cz, 0.4, 0.35, 0.35, 10, VH.col(0x1b1d20), true);
       for (const [a, b] of [[-0.25, -0.2], [0.25, -0.2], [0, 0.25]]) ctx.prop.box(C.x - 4.5 + a - 0.02, KERB, cz + b - 0.02, C.x - 4.5 + a + 0.02, KERB + 0.72, cz + b + 0.02, VH.col(0x1b1d20));
-      ctx.propMatte.box(C.x + 7, KERB, C.z - 4.02, C.x + 7.04, KERB + 0.7, C.z - 3.98, VH.col(0xff7fae));
-      ctx.propMatte.box(C.x + 6.8, KERB + 0.7, C.z - 4.1, C.x + 7.2, KERB + 0.95, C.z - 3.9, VH.col(0xff7fae));
+      ctx.prop.box(C.x + 7, KERB, C.z - 4.02, C.x + 7.04, KERB + 0.7, C.z - 3.98, VH.col(0xff7fae));
+      ctx.prop.box(C.x + 6.8, KERB + 0.7, C.z - 4.1, C.x + 7.2, KERB + 0.95, C.z - 3.9, VH.col(0xff7fae));
     }
     // Washing lines, bins and a few lamps along the lane.
     for (let x = t.x0 + 20; x < t.x1 - 10; x += 38) {
@@ -411,7 +367,7 @@
         ctx.prop.box(vx - 0.42, y + 0.92, vz + 0.4, vx + 0.42, y + 0.98, vz + 0.46, VH.col(hex));
       }
       // The town's name painted on the tank (a band of letters is one sign).
-      W.sign(world, { x: T.x, y: y + 4.6, z: T.z + 5.62, yaw: 0, w: 8, h: 1.6, lines: ['CINDER CREEK'], style: 'info', oneSided: true, colors: { bg: ['#c9ced3', '#c9ced3'], fg: '#2f4f6f', bar: '#c9ced3' } });
+      W.sign(world, { x: T.x, y: y + 4.6, z: T.z + 5.62, yaw: 0, w: 8, h: 1.6, lines: ['CINDER CREEK'], style: 'info', oneSided: true, frame: 0xc9ced3, colors: { bg: ['#c9ced3', '#c9ced3'], fg: '#2f4f6f', bar: '#c9ced3' } });
     }
   }
 
@@ -425,7 +381,7 @@
   function buildTruckStop(world) {
     const W = K();
     const P = { x0: -843, x1: -647, z0: -433, z1: -207 };
-    W.pave(world, P.x0, P.z0, P.x1, P.z1, 0x5c5a55);
+    W.pave(world, P.x0, P.z0, P.x1, P.z1, 0xbcbcbc);
     // Fuel canopy over three islands of diesel pumps.
     const C = TS.canopy;
     {
@@ -499,11 +455,11 @@
         world.physics.addBox(a, 0, L.z0, b, KERB + 3.4, L.z1, 'building');
       }
       // The open one: walls, a roof, a gold car on axle stands inside.
-      ctx.interior.box(ox0, KERB, L.z0, ox1, KERB + 3.4, L.z0 + 0.2, VH.col(0x8a5040));
+      ctx.prop.box(ox0, KERB, L.z0, ox1, KERB + 3.4, L.z0 + 0.2, VH.col(0x8a5040));
       ctx.b.box(ox0, KERB + 3.2, L.z0, ox1, KERB + 3.4, L.z1, VH.col(0x9a5a44), { bottom: true });
       world.physics.addBox(ox0, 0, L.z0, ox1, KERB + 3.4, L.z0 + 0.2, 'building');
       world.physics.addBox(ox0, KERB + 3.2, L.z0, ox1, KERB + 3.4, L.z1, 'building');
-      ctx.interior.topRect(ox0, L.z0, ox1, L.z1, KERB + 0.01, VH.col(0x6e6a64));
+      ctx.prop.topRect(ox0, L.z0, ox1, L.z1, KERB + 0.01, VH.col(0x6e6a64));
       ctx.prop.box(ox0 + 0.4, KERB + 1.6, L.z1 - 0.1, ox1 - 0.4, KERB + 3.2, L.z1, VH.col(0x8f969c));
       ctx.screen.box((ox0 + ox1) / 2 - 0.1, KERB + 2.9, L.z0 + 3, (ox0 + ox1) / 2 + 0.1, KERB + 3.15, L.z0 + 3.2, VH.col(0xffe2a0, 3));
       for (const s of [-1, 1]) for (const dz of [1.6, 6]) ctx.prop.box((ox0 + ox1) / 2 + s * 0.8 - 0.1, KERB, L.z0 + dz - 0.1, (ox0 + ox1) / 2 + s * 0.8 + 0.1, KERB + 0.5, L.z0 + dz + 0.1, VH.col(0xc8302c));
@@ -525,16 +481,16 @@
     W.fence(world, J.x1, J.z0 + 1, J.x1, J.z1 - 1, [], 'wood', 2.8);
     W.fence(world, J.x0 + 1, J.z1 - 1, J.x1, J.z1 - 1, [], 'wood', 2.8);
     W.fence(world, J.x0 + 1, J.z0 + 1, J.x0 + 1, J.z1 - 1, [], 'wood', 2.8);
-    W.pave(world, J.x0 + 1, J.z0 + 1, J.x1, J.z1 - 1, 0x7a6a55, 'asphaltTop', KERB + 0.016);
+    W.pave(world, J.x0 + 1, J.z0 + 1, J.x1, J.z1 - 1, 0xa89474, 'plazaTop', KERB + 0.016);
     W.sign(world, { x: J.x1 - 14, y: 5, z: J.z0 - 0.2, yaw: Math.PI, w: 10, h: 1.8, lines: ['CREEKSIDE SALVAGE', 'We buy wrecks · Parts sold'], style: 'brand', posts: true, colors: { bg: ['#d9a12b', '#b8801c'], fg: '#1a1a1a' } });
     const rust = [0x8a4a2a, 0x6e5a48, 0x4f6a7a, 0x9a3a2a, 0x7a7a6a, 0x5a6a3a, 0xa86a3a];
     let n = 0;
-    for (let x = J.x0 + 8; x < J.x1 - 24; x += 7) {
-      for (let z = J.z0 + 10; z < J.z1 - 6; z += 14) {
+    for (let z = J.z0 + 8; z < J.z1 - 6; z += 13) {
+      for (let x = J.x0 + 6; x < J.x1 - 26; x += 4.8) {
         const ctx = world.ctxAt(x, z);
         const h = 1 + ((n * 5) % 3);
-        for (let k = 0; k < h; k++) wreck(ctx, x + (k % 2) * 0.3, KERB + k * 1.15, z, Math.PI / 2 + ((n + k) % 3 - 1) * 0.08, rust[(n + k) % rust.length]);
-        world.physics.addBox(x - 1.2, 0, z - 2.3, x + 1.2, KERB + h * 1.15, z + 2.3, 'metal');
+        for (let k = 0; k < h; k++) wreck(ctx, x, KERB + k * 1.15, z + (k % 2) * 0.3, ((n + k) % 3 - 1) * 0.06, rust[(n + k) % rust.length]);
+        world.physics.addBox(x - 2.3, 0, z - 1.2, x + 2.3, KERB + h * 1.15, z + 1.2, 'metal');
         n++;
       }
     }
@@ -542,7 +498,7 @@
       // Tyre piles and the crane by the gate.
       const ctx = world.ctxAt(J.x1 - 14, J.z1 - 30);
       for (const [x, z] of [[J.x1 - 10, J.z0 + 30], [J.x1 - 16, J.z0 + 50], [J.x1 - 9, J.z1 - 14]]) {
-        for (let k = 0; k < 6; k++) ctx.propMatte.cylinder(x + (k % 2) * 0.3, KERB + k * 0.32, z, 0.6, 0.6, 0.3, 10, VH.col(0x1b1d20), true);
+        for (let k = 0; k < 6; k++) ctx.prop.cylinder(x + (k % 2) * 0.3, KERB + k * 0.32, z, 0.6, 0.6, 0.3, 10, VH.col(0x1b1d20), true);
         world.physics.addBox(x - 0.7, 0, z - 0.7, x + 0.7, KERB + 1.9, z + 0.7, 'metal', F().SOLID | F().SHOTS);
       }
       const cx = J.x1 - 16, cz = J.z1 - 32;
@@ -603,6 +559,8 @@
       for (let x = TS.diner.x0 + 3.6; x < TS.diner.x1 - 2; x += 3.2) if ((seed++ * 7) % 3) list.push(W.parkedSpot(x, TS.diner.z1 + 7, Math.PI, seed));
       for (let x = TP.x0 + 26; x < TP.x1 - 10; x += 19) if ((seed++ * 11) % 3 === 0 && Math.abs(x - TP.laneX) > 9) list.push(W.parkedSpot(x + 8, TP.laneZ - 6.5, Math.PI / 2, seed));
       W.addParkedSpots(game, list);
+      // No kerbside cars across the gates.
+      W.clearSpots(game, [[DI.gate.x0 - 4, -670, DI.gate.x1 + 4, -650], [ST.gate.x0 - 4, -450, ST.gate.x1 + 4, -430], [TP.laneX - 10, -212, TP.laneX + 10, -190], [TS.junk.x1 - 24, -315, TS.junk.x1, -300]]);
     }
     update() {}
     stop() {}

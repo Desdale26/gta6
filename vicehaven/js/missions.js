@@ -1992,6 +1992,9 @@
       }
       // Jay's out of it: crashed (wrecked) is a fail; bailed out or on the ground, he gets back in.
       if (run.lastAir && run.lastAir.wrecked && !want) throw new MissionFailed(carRef(run.lastAir, true) + ' was wrecked.');
+      // Left flying with nobody at the controls, it's gone (update()): so is the job.
+      const gone = want || (run.lastAir && this._carIdOf(run.lastAir) ? run.lastAir : null);
+      if (gone && gone.removed) throw new MissionFailed('You abandoned ' + carRef(gone) + '.');
       this._objective(want ? 'Get back in ' + carRef(want) : 'Get in a plane or a helicopter');
       if (want && run.airMk !== want) this._setMarker(want.pos, { r: 3, noRing: true });
       run.airMk = want || run.airMk;
@@ -3128,6 +3131,8 @@
       }
       const run = this.run;
       if (!run) return;
+      // The aircraft Jay last flew on this job (its wreck fails a fly or land step).
+      if (MissionEngine.isAircraft(game.player.vehicle)) run.lastAir = game.player.vehicle;
       // A job's aircraft left flying with nobody at the controls (Jay bailed
       // out) doesn't come down on anyone: once it's well away from him, it's gone.
       for (const v of run.cars.values()) {

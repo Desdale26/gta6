@@ -136,7 +136,7 @@
   /** A door panel for one side: a pivot at the hinge, the panel hanging off it. */
   function buildDoor(v, side, pr) {
     const m = v.model;
-    if (!m || !m.root || pr.door === 'none') return null;
+    if (!m || !m.root || pr.door === 'none' || pr.door === 'astride') return null;
     const L = layout(v, side, pr);
     const pivot = new THREE.Group();
     pivot.name = 'door';
@@ -864,6 +864,8 @@
       const T = pr.inT;
       const k = clamp(e.t / T, 0, 1);
       const s = e.side;
+      // A motorbike: a leg swung over the seat (vehicles/bikes.js), and he stays in sight.
+      if (pr.door === 'astride' && VH.Bikes) return VH.Bikes.mount(this, e, face);
       const high = pr.door === 'hatch' || pr.door === 'canopy';
       let lx, lz;
       if (high) {

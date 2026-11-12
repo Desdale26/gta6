@@ -66,6 +66,8 @@
   // What a car fetches, undamaged: by class, with a few models priced on their own.
   const CLASS_VALUE = { compact: 400, sedan: 600, taxi: 550, suv: 700, van: 700, pickup: 700, muscle: 900, sports: 1500, police: 1200 };
   const MODEL_VALUE = { beater: 250, sovereign: 850, lowrider: 1000, hauler: 850, bulwark: 1200, scout: 1000, vireo: 2500, zephyr: 2500 };
+  // The bikes (vehicles/bikes.js): parts, not panels.
+  Object.assign(MODEL_VALUE, { nippy: 200, gravelrat: 550, mudpup: 650, roadhog: 900, kestrel: 1400 });
   const WRECK = 0.3; //    what a wreck still fetches
   const HOT = 2.5; //      the hot list multiplier (the first of each model, each day)
   const GLUT = 5; //       cars of one model a day before the price halves
@@ -73,8 +75,8 @@
   const HEAT = 2; //       stars for a police car
   // The hot list: one easy car, one harder one, one prize, each day.
   const HOT_POOLS = [
-    ['halcyon', 'pipit', 'cab', 'mesa', 'porter', 'tern', 'beater'],
-    ['ironclad', 'sovereign', 'lowrider', 'hauler', 'drifter'],
+    ['halcyon', 'pipit', 'cab', 'mesa', 'porter', 'tern', 'beater', 'nippy'],
+    ['ironclad', 'sovereign', 'lowrider', 'hauler', 'drifter', 'roadhog', 'gravelrat'],
     ['vireo', 'zephyr', 'interceptor'],
   ];
   const DAWN = 6; //       the hot list changes at 06:00
