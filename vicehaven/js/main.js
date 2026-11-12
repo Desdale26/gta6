@@ -24,7 +24,7 @@
   // World systems constructed after the club, in this order (each optional):
   // stores.js, airfield.js, fort.js, ambient.js.
   // The Hustle update (v2.0): Rep and Dailies first (others report to them), the Phone last.
-  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Cabin', 'AirportHavoc', 'PlaneSteal', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Phone'];
+  const WORLD_SYSTEMS = ['Stores', 'SprayShops', 'GunShops', 'ChopShops', 'Airfield', 'Airside', 'Terminal', 'AirportLife', 'Cabin', 'AirportHavoc', 'PlaneSteal', 'Fort', 'Ambient', 'Weather', 'Properties', 'WorldPickups', 'Rep', 'Dailies', 'OddJobs', 'Encounters', 'Stashes', 'Achievements', 'StoryLog', 'Carnival', 'Phone'];
   const SEEN_KEY = 'vicehaven.seen.map-v1.1'; // set once the player has opened the new map
   const NEWS_KEY = 'vicehaven.seen.news-v2.3'; // set once the v2.3 notice has been shown
   const NIGHT_TIP_KEY = 'vicehaven.seen.night-tip';
@@ -400,6 +400,7 @@
           this.input.exitLock();
           return;
         }
+        if (!e.locked && this.state === 'playing' && this.carnival && this.carnival.escape()) return; // Esc on a ride: off at the next stop, no pause menu
         if (!e.locked && this.state === 'playing' && !this.debug.inputEl.matches(':focus') && !(this.dialogue && this.dialogue._choice) && !(this.minimap && this.minimap.isFullOpen) && !(this.phone && this.phone.isOpen)) this.pause(); // a choice, the map and the phone free the mouse on purpose
       });
       VH.events.on('input:lockerror', () => {
@@ -923,7 +924,9 @@
         const recent = performance.now() - this._statePausedAt < 400;
         if (this.phone && this.phone.isOpen) this.phone.close(); // the pad's Menu button (Esc is the phone's own key)
         else if (this.minimap && this.minimap.isFullOpen && (this.state === 'playing' || this.state === 'dialog')) this.closeMap();
-        else if ((this.state === 'playing' || this.state === 'dialog') && !recent) this.pause();
+        else if (this.state === 'playing' && this.carnival && this.carnival.escape()) {
+          // On a ride or at a stall: Esc gets off at the next stop (carnival.js).
+        } else if ((this.state === 'playing' || this.state === 'dialog') && !recent) this.pause();
       }
 
       const env = this.environment;

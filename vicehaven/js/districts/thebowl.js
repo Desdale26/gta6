@@ -250,6 +250,13 @@
     // --- floodlights, the plaza, signs
     const masts = [[40, 1528], [294, 1528], [32, 1700], [302, 1700], [167, 1712], [90, 1600], [244, 1600]];
     for (const [x, z] of masts) floodMast(world, x, z, 26, SP.lineX, SP.cz);
+    // The masts light the track at night (fx.js floodlight pools: one instanced mesh for the lot).
+    const pools = world.floodlights || (world.floodlights = []);
+    for (let s = 0; s < LEN; s += 20) {
+      trackAt(s, 0, _a);
+      pools.push({ x: _a.x, z: _a.z, r: 18, y: KERB + 0.03, strength: 0.7, tint: [1.15, 1.08, 0.95] });
+    }
+    for (const x of [130, 167, 204]) pools.push({ x, z: (SP.pits.z0 + SP.garages.z1) / 2, r: 16, y: KERB + 0.03, strength: 0.6 });
     // The plaza along Foundry Road: turnstile booths either side of the tunnel mouth.
     const S = SP.stand;
     W.pave(world, S.x0, SP.z0 + 1, S.x1, S.zb, 0xd8d2c4, 'plazaTop');

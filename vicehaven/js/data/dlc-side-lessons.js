@@ -231,7 +231,7 @@
           ['june', "(pointing with her pencil at a yellow van) The school van. Eleven players, their kit, one cake. The final kicks off at three. If they're late, they forfeit."],
           ['jay', 'One cake.'],
           ['june', "Mrs Pell made it. It's a cake. It's a cup. It's a cake cup."],
-          ['caption', "(It is a sponge cake the size of a car tyre, iced gold, in the shape of the Southbay Schools Cup, with handles. It sits on a tray on the middle seat. It wobbles when anybody breathes.)"],
+          ['caption', "(It is a sponge cake the size of a car tyre, iced gold, shaped like the Southbay Schools Cup, with handles. It wobbles when anybody breathes.)"],
           ['caption', '(Beside it, a boy in a full white-and-yellow pelican costume is flapping. He does not stop flapping.)'],
           ['dougie', "(flapping) I'm the Pelican. I have to stay in character."],
           ['june', 'Douglas, wings in.'],
@@ -342,5 +342,197 @@
     ],
   };
 
-  D.side.push({ id: 'dside_lessons', title: 'Dual Control', giver: 'june', unlockAfter: 'd09_minor_fault', missions: [dsl1, dsl2] });
+  // =====================================================================
+  // dsl3 — Test Day
+  // =====================================================================
+  const dsl3 = {
+    id: 'dsl3_test_day',
+    title: 'Test Day',
+    giver: 'june',
+    start: 'verde_mall',
+    requires: ['dsl2_school_run'],
+    time: 11,
+    estMinutes: 10,
+    summary: "The Marlow Test. Nobody drives June's daughter about who hasn't passed it.",
+    reward: { money: 2000 },
+    failIf: ['heat:1', 'wrecked:learner'],
+    steps: [
+      learner('verde_mall'),
+      { music: 'off' },
+      {
+        camera: 'verde_mall', seconds: 4,
+        say: [
+          ['caption', 'Verde Mall car park. Sunday, 11 a.m. The Marlow Test.'],
+          ['caption', '(In a far corner of the car park: a line of orange cones, a trolley shelter, and two parked cars with exactly one car\'s length and a bit between them. None of it is an accident.)'],
+        ],
+      },
+      { camera: 'mall_cone_slalom', seconds: 3, say: [['caption', '(The cones have been laid out with a tape measure. The tape measure is still there, in case of disputes.)']] },
+      {
+        scene: { at: 'verde_mall', cast: ['june', 'rosa'] },
+        say: [
+          ['june', '(clipboard, pencil, a fresh sheet with MERCER, J. at the top) The Marlow Test.'],
+          ['june', 'Nobody drives my daughter about who hasn\'t passed it. That includes her.'],
+          ['jay', "Pip's passed it?"],
+          ['june', 'Ninety-one. She argued with the cones.'],
+          ['caption', "(In the next bay, Rosa Lindqvist sits behind the wheel of her mum's car with a silent examiner beside her. She is as white as the paper on his clipboard. She waves.)"],
+          ['rosa', "(through the window) Mrs Marlow! It's today! It's my real one!"],
+          ['june', 'I know, Rosa. I booked it. Breathe, Rosa. Mirror, signal, breathe.'],
+          ['rosa', 'Which comes first?'],
+          ['june', 'Breathe. Always breathe first.'],
+          ['rosa', '(breathing in, and not out) Okay.'],
+          ['june', 'Out as well, Rosa.'],
+          ['rosa', '(out) Okay.'],
+          ['caption', '(The examiner writes something down. Nobody has ever heard him speak. Rosa believes he can\'t.)'],
+          ['june', '(to Jay, quietly) Third time. She knows how. She just doesn\'t know that she knows.'],
+          ['jay', 'And me?'],
+          ['june', '(a look over the top of the clipboard) You know that you know, Mr Mercer. That\'s a different problem.'],
+        ],
+      },
+      { join: ['june'], weapon: 'fists' },
+      {
+        getIn: 'learner', checkpoint: true,
+        objective: 'Get in. June\'s in the passenger seat, with the other brake',
+        say: [
+          ['june', '(settling in, both feet over her own pedals) Hands.'],
+          ['caption', '(Jay puts his hands at ten and two without thinking. June notices.)'],
+          ['june', 'Who taught you that?'],
+          ['jay', 'My grandmother. In a car park.'],
+          ['june', '(a beat) Sensible woman.'],
+          ['june', '(turning back a page) Last time: mounting a verge. Let\'s see.'],
+        ],
+      },
+      {
+        goto: 'mall_cone_slalom', vehicle: 'learner', stop: false, radius: 5,
+        objective: 'Slalom through the cones',
+        say: [
+          ['june', 'Indicate, Mr Mercer. Even when nobody\'s shooting.'],
+          ['jay', "Nobody's shooting."],
+          ['june', "Not yet. You're the sort of driver people shoot at. I can tell from your mirrors."],
+          ['jay', "What's wrong with my mirrors?"],
+          ['june', "Nothing. You check them like somebody's behind you. Somebody usually is, I expect."],
+          ['caption', '(Left of the first cone. Right of the second. Left. Right. Left. The car rocks gently, like a boat on a pond.)'],
+          ['june', "(writing) Smooth. Don't let it go to your head. Heads are where accidents start."],
+        ],
+      },
+      {
+        goto: 'mall_reverse_corner', vehicle: 'learner', stop: true, radius: 4,
+        objective: 'Reverse round the corner and stop by the kerb',
+        say: [
+          ['june', 'Round the corner, in reverse, and stop by the kerb. Not on it. By it.'],
+          ['june', 'Mirror. Mirror. Other mirror.'],
+          ['june', "That's three mirrors. Good."],
+          ['jay', 'There are only two mirrors.'],
+          ['june', "There's the one inside, Mr Mercer. Always three. Some people count the one in their head. I don't encourage that."],
+        ],
+      },
+      {
+        goto: 'mall_trolley_lane', vehicle: 'learner', stop: false, radius: 8,
+        objective: 'Drive down the lane at walking pace',
+        say: [
+          ['june', '(conversationally, looking out of the window) Lovely day for it.'],
+          ['jay', 'It is.'],
+          ['june', 'They\'re doing a two-for-one on hanging baskets at the garden centre. I might get one for the porch.'],
+          ['caption', '(A shopping trolley. Out of nowhere. With a pot plant in it.)'],
+        ],
+      },
+      {
+        goto: 'mall_trolley_stop', vehicle: 'learner', stop: true, radius: 3,
+        objective: 'EMERGENCY STOP!',
+        say: [
+          ['june', '(not raising her voice even slightly) Stop.'],
+        ],
+      },
+      {
+        wait: 2,
+        say: [
+          ['caption', '(The learner car rocks to a halt. The trolley rolls on across the lane, past the bonnet, and comes to rest against a bollard. The pot plant does not lose a leaf.)'],
+          ['june', 'Good.'],
+          ['caption', '(She writes for a long time.)'],
+          ['june', 'Good.'],
+          ['jay', 'Did you push that trolley?'],
+          ['june', "A trolley rolls out in this car park every eleven minutes, Mr Mercer. I've timed them. I don't need to push anything."],
+        ],
+      },
+      {
+        deliver: 'learner', to: 'mall_parallel_bay', maxDamage: 0.05, radius: 2.5,
+        objective: 'Parallel park between the two cars. Don\'t touch either',
+        say: [
+          ['caption', '(June says nothing at all. Not a word. Not a mirror. The pencil hovers. It is much worse than talking.)'],
+          ['rosa', '(from the next bay, loudly, through two windows) I\'M DOING IT TOO.'],
+          ['caption', '(Somewhere behind them, the silent examiner writes something down.)'],
+        ],
+      },
+      { music: 'triumph' },
+      { leave: ['june'] },
+      {
+        scene: { at: 'verde_mall', cast: ['june', 'rosa'] },
+        say: [
+          ['caption', '(Rosa runs over across six empty bays, holding her test sheet above her head like a cup.)'],
+          ['rosa', 'I PASSED! I did a three-point turn in THREE POINTS!'],
+          ['june', '(marking Rosa\'s sheet, with a smile she doesn\'t let reach her voice) Three points. I always said twelve was lucky.'],
+          ['rosa', 'He said "pass"! He spoke! He has a really deep voice!'],
+          ['june', "He saves it. Well done, Rosa. Go and show your mother. Walk. Don't run in a car park."],
+          ['caption', '(Rosa runs. June lets it go.)'],
+          ['caption', "(Then June turns to Jay's sheet, adds up a column of small, neat numbers, checks it, and adds it up again.)"],
+        ],
+      },
+      {
+        if: 'd25_junebug',
+        then: [{
+          scene: { at: 'verde_mall', cast: ['june'] },
+          say: [
+            ['june', "Ninety-four. Again. That's either very good or very boring."],
+            ['jay', 'What were the six?'],
+            ['june', "Hesitation, at the van. And your face when I said 'emergency'."],
+            ['jay', "I didn't make a face."],
+            ['june', "You made a small face, Mr Mercer. I mark small faces."],
+          ],
+        }],
+        else: [{
+          scene: { at: 'verde_mall', cast: ['june'] },
+          say: [
+            ['june', 'Ninety-four per cent. Nobody gets a hundred. I didn\'t.'],
+            ['jay', 'What were the six?'],
+            ['june', "Hesitation, at the van. And your face when I said 'emergency'."],
+            ['jay', "I didn't make a face."],
+            ['june', "You made a small face, Mr Mercer. I mark small faces."],
+          ],
+        }],
+      },
+      {
+        scene: { at: 'verde_mall', cast: ['june'] },
+        say: [
+          ['caption', '(June takes a certificate from the back of the clipboard. MARLOW SCHOOL OF MOTORING across the top in blue, MERCER, J. underneath. It has been typed in advance.)'],
+          ['jay', 'You typed this before I took the test.'],
+          ['june', "I type them all before. It saves time. I've only had to throw away four hundred."],
+          ['caption', '(She hands him the certificate. She keeps the marked sheet, folds it once, and slides it into her blouse pocket.)'],
+          ['june', "I'll keep this. For reference."],
+        ],
+      },
+      {
+        if: 'dlc_june_told',
+        then: [{
+          scene: { at: 'verde_mall', cast: ['june'] },
+          say: [
+            ['june', '(quietly, one hand on the pocket) Somebody I know might need a lesson.'],
+            ['june', 'Somebody old. And very sure of herself.'],
+            ['jay', "She'll hate it."],
+            ['june', '(and for a second it isn\'t the instructor voice at all) Good.'],
+          ],
+        }],
+        else: [{
+          scene: { at: 'verde_mall', cast: ['june'] },
+          say: [
+            ['june', 'Now drive my daughter wherever she\'s going. Carefully.'],
+            ['june', '(not looking at him) And bring her back.'],
+            ['jay', 'I always bring her back.'],
+            ['june', "I know. I've been marking that too."],
+          ],
+        }],
+      },
+      { music: 'off' },
+    ],
+  };
+
+  D.side.push({ id: 'dside_lessons', title: 'Dual Control', giver: 'june', unlockAfter: 'd09_minor_fault', missions: [dsl1, dsl2, dsl3] });
 })();
