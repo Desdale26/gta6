@@ -261,7 +261,11 @@
     const yaw = dir === 's' ? 0 : dir === 'n' ? Math.PI : dir === 'e' ? Math.PI / 2 : -Math.PI / 2;
     const cx = x + (dx * len) / 2;
     const cz = z + (dz * len) / 2;
-    world.physics.addRamp(cx, cz, hw, len / 2, yaw, opts.base === undefined ? Math.min(y0, 0) : opts.base, y0, y1, opts.tag || 'stairs', F().SOLID);
+    // The ramp runs along the step noses (first nose at y0 + rise) so no drawn
+    // step pokes out of the collider; it overshoots y1 by a few cm at the top.
+    const rise = (y1 - y0) / steps;
+    const ry1 = y1 + ((y1 - y0 - rise) * run) / Math.max(1e-6, len - run);
+    world.physics.addRamp(cx, cz, hw, len / 2, yaw, opts.base === undefined ? Math.min(y0, 0) : opts.base, y0 + rise, ry1, opts.tag || 'stairs', F().SOLID);
     if (opts.rails !== false) {
       // Solid rails each side (people go up the stairs, not through the rails).
       for (const s of [-1, 1]) {
