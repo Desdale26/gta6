@@ -206,6 +206,14 @@
       const s = this._screen('title', 'screen-title');
       const logo = el('div', 'logo logo-title');
       logo.append(el('span', 'logo-word', 'VICEHAVEN'), el('span', 'logo-sub', 'Ten and Two'));
+      // The story DLC: its name under the logo, with its tagline (it opens after the main story's third job).
+      const D = VH.Data && VH.Data.story && VH.Data.story.dlc;
+      if (D && D.id && D.title) {
+        const dlc = el('div', 'title-dlc');
+        dlc.append(el('span', 'title-dlc-kicker', 'Plus a new story'), el('span', 'title-dlc-name', D.title));
+        if (D.tagline) dlc.append(el('span', 'title-dlc-line', D.tagline));
+        logo.append(dlc);
+      }
       const menu = el('nav', 'menu title-menu');
       this.continueBtn = this._button('Continue', () => this.actions.continueGame(), { primary: true });
       this.continueInfo = el('span', 'continue-info');
@@ -553,7 +561,7 @@
       head.append(this.storyMeta);
       const tabs = el('div', 'tabs story-tabs');
       this.storyTabs = {};
-      for (const [id, label] of STORY_TABS) {
+      for (const [id, label] of this._storyTabList()) {
         const t = el('button', 'tab');
         t.type = 'button';
         t.append(el('span', '', label), el('small', 'story-tab-n'));
@@ -618,16 +626,20 @@
         this._storyHints();
         return;
       }
-      const done = m.acts.reduce((a, x) => a + x.done, 0);
-      const total = m.acts.reduce((a, x) => a + x.total, 0);
-      const act = m.acts.find((a) => a.state === 'current');
-      this.storyMeta.textContent = (act ? 'Act ' + act.n + (act.title ? ' · ' + act.title : '') + ' · ' : m.ending !== null ? 'The end · ' : '') + done + ' of ' + total + ' story jobs';
+      // The meta line follows the story on show: the DLC's on its own tab.
+      const shown = this._storyTabId === 'dlc' && m.dlc ? m.dlc : m;
+      const done = shown.acts.reduce((a, x) => a + x.done, 0);
+      const total = shown.acts.reduce((a, x) => a + x.total, 0);
+      const act = shown.acts.find((a) => a.state === 'current');
+      const ended = shown === m ? m.ending !== null : shown.state === 'done';
+      this.storyMeta.textContent = shown === m.dlc && shown.state === 'locked' ? 'Not open yet' : (act ? 'Act ' + act.n + (act.title ? ' · ' + act.title : '') + ' · ' : ended ? 'The end · ' : '') + done + ' of ' + total + ' story jobs';
       const started = m.side.filter((c) => c.state !== 'locked').length;
       const n = { story: '', side: started ? String(started) : '', who: m.who.length ? String(m.who.length) : '', choices: m.choices.length ? String(m.choices.length) : '' };
+      if (m.dlc && m.dlc.state !== 'locked') n.dlc = m.dlc.done + '/' + m.dlc.total;
       for (const [id, t] of Object.entries(this.storyTabs)) t.querySelector('.story-tab-n').textContent = n[id] || '';
       const pane = el('div', 'story-pane story-pane-' + this._storyTabId);
       try {
-        ({ story: () => this._storyPaneStory(m, pane), side: () => this._storyPaneSide(m, pane), who: () => this._storyPaneWho(m, pane), choices: () => this._storyPaneChoices(m, pane) })[this._storyTabId]();
+        ({ story: () => this._storyPaneStory(m, pane), dlc: () => this._storyPaneDlc(m, pane), side: () => this._storyPaneSide(m, pane), who: () => this._storyPaneWho(m, pane), choices: () => this._storyPaneChoices(m, pane) })[this._storyTabId]();
       } catch (err) {
         console.warn('[ui] story so far: ' + this._storyTabId, err);
         pane.textContent = '';
@@ -648,8 +660,15 @@
       if (onTab || !this._storySel) this.storyTabs[id].focus({ preventScroll: true });
     }
 
+    /** The tabs: the story DLC (when there is one) gets its own, after the main story's. */
+    _storyTabList() {
+      const D = VH.Data && VH.Data.story && VH.Data.story.dlc;
+      if (!D || !D.id || !(D.missions || []).length) return STORY_TABS;
+      return [STORY_TABS[0], ['dlc', D.title || 'New story']].concat(STORY_TABS.slice(1));
+    }
+
     _storyTabStep(dir) {
-      const ids = STORY_TABS.map((t) => t[0]);
+      const ids = this._storyTabList().map((t) => t[0]);
       const i = ids.indexOf(this._storyTabId);
       this._storyTab(ids[(i + dir + ids.length) % ids.length]);
       VH.events.emit('ui:click', {});
@@ -684,10 +703,11 @@
     }
 
     // The Story tab.
-    _storyPaneStory(m, box) {
-      box.append(this._storyNow(m));
+    _storyPaneStory(m, box, pre) {
+      pre = pre || '';
+      box.append(this._storyNow(m, pre));
       const anyDone = m.acts.some((a) => a.done > 0);
-      if (m.prologue) box.append(this._storyChapter('prologue', 'Before it all', 'Prologue', '', [el('p', 'story-prose', m.prologue)], !anyDone));
+      if (m.prologue) box.append(this._storyChapter(pre + 'prologue', 'Before it all', 'Prologue', '', [el('p', 'story-prose', m.prologue)], !anyDone));
       for (const a of m.acts) {
         if (a.state === 'locked') {
           const c = el('section', 'story-chapter is-locked');
@@ -711,12 +731,41 @@
           o.append(el('div', 'story-act-outro-label', 'End of Act ' + a.n), el('p', '', a.outro));
           kids.push(o);
         }
-        box.append(this._storyChapter('act' + a.n, a.title || 'Act ' + a.n, a.title ? 'Act ' + a.n : '', a.state === 'done' ? '✓ ' + a.total + ' jobs' : a.done + ' of ' + a.total, kids, a.state === 'current'));
+        box.append(this._storyChapter(pre + 'act' + a.n, a.title || 'Act ' + a.n, a.title ? 'Act ' + a.n : '', a.state === 'done' ? '✓ ' + a.total + ' jobs' : a.done + ' of ' + a.total, kids, a.state === 'current'));
       }
     }
 
+    /**
+     * The story DLC's tab: not open yet (what it is and when it opens), or
+     * its own Where things stand, prologue, acts and side stories.
+     */
+    _storyPaneDlc(m, box) {
+      const d = m.dlc;
+      if (!d) return box.append(this._storyEmpty('Nothing here yet', 'This story is not available right now.'));
+      if (d.state === 'locked') {
+        const c = el('section', 'story-now is-locked story-dlc-locked');
+        const head = el('div', 'story-now-head');
+        head.append(el('span', 'story-now-label', 'A new story'), el('span', 'story-now-kicker', 'Not open yet'));
+        c.append(head, el('h3', 'story-now-title', d.title));
+        if (d.tagline) c.append(el('p', 'story-now-text', d.tagline));
+        c.append(el('p', 'story-now-foot', d.opensAfter ? 'It opens after the main story\'s job “' + d.opensAfter + '”. Someone will text Jay.' : 'It opens as the main story goes on. Someone will text Jay.'));
+        this._storyNav(c, 'dlc:now');
+        box.append(c);
+        return;
+      }
+      if (d.tagline) box.append(el('p', 'story-dlc-tagline', d.tagline));
+      this._storyPaneStory(d, box, 'dlc:');
+      const open = d.side.filter((c) => c.state !== 'locked');
+      if (open.length) {
+        box.append(el('h3', 'story-dlc-head', 'Side stories'));
+        this._storySideCards(open, box);
+      }
+      const later = d.side.length - open.length;
+      if (later) box.append(el('p', 'story-note', later === 1 ? 'One side story opens up as this story goes on.' : later + ' side stories open up as this story goes on.'));
+    }
+
     /** Where things stand: the job under way, the next one (with Set GPS), or the ending. */
-    _storyNow(m) {
+    _storyNow(m, pre) {
       const n = m.now || { kind: 'done', title: 'The end', text: '' };
       const c = el('section', 'story-now is-' + n.kind);
       const head = el('div', 'story-now-head');
@@ -743,9 +792,9 @@
         if (n.place) row.append((gps = this._storyGpsButton(n.place)));
         c.append(row);
       }
-      if (n.kind === 'done') c.append(el('p', 'story-now-foot', 'The races, fares, bounties and side stories are still out there.'));
+      if (n.kind === 'done') c.append(el('p', 'story-now-foot', n.dlc ? 'The bay is still out there: races, flying lessons and side stories.' : 'The races, fares, bounties and side stories are still out there.'));
       // With a GPS button, that's what the arrows stop on; otherwise the card itself (to read it).
-      if (!gps) this._storyNav(c, 'now');
+      if (!gps) this._storyNav(c, (pre || '') + 'now');
       return c;
     }
 
@@ -815,6 +864,12 @@
       const open = m.side.filter((c) => c.state !== 'locked');
       const later = m.side.length - open.length;
       if (!open.length) box.append(this._storyEmpty('No side stories yet', 'As the story goes on, people round Vicehaven will need a hand. Their jobs show up on the map as blue markers.'));
+      this._storySideCards(open, box);
+      if (later && open.length) box.append(el('p', 'story-note', later === 1 ? 'One more side story opens up as the story goes on.' : later + ' more side stories open up as the story goes on.'));
+    }
+
+    /** A card per side story: its done jobs with recaps, the next with where to go. */
+    _storySideCards(open, box) {
       for (const c of open) {
         const card = el('section', 'story-side is-' + c.state);
         const head = el('div', 'story-side-head');
@@ -835,7 +890,6 @@
         if (c.state !== 'done' && !c.jobs.some((j) => j.state === 'current' || j.state === 'next')) card.append(el('p', 'story-side-later', 'More of this story later on.'));
         box.append(card);
       }
-      if (later && open.length) box.append(el('p', 'story-note', later === 1 ? 'One more side story opens up as the story goes on.' : later + ' more side stories open up as the story goes on.'));
     }
 
     // Who's who: the people Jay has met.
@@ -844,8 +898,18 @@
         box.append(this._storyEmpty('Nobody yet', 'The people Jay meets are written down here as the story goes on.'));
         return;
       }
+      // The DLC's people in a group of their own, under its title.
+      const groups = [m.who.filter((w) => !w.dlc), m.who.filter((w) => w.dlc)];
+      groups.forEach((list, gi) => {
+        if (!list.length) return;
+        if (gi === 1) box.append(el('h3', 'story-dlc-head', (m.dlc && m.dlc.title) || 'The new story'));
+        box.append(this._storyWhoGrid(list));
+      });
+    }
+
+    _storyWhoGrid(list) {
       const grid = el('div', 'story-who');
-      for (const w of m.who) {
+      for (const w of list) {
         const card = el('article', 'story-person');
         this._storyNav(card, 'who:' + w.id);
         const av = el('div', 'story-avatar', w.initial);
@@ -864,7 +928,7 @@
         card.append(av, main);
         grid.append(card);
       }
-      box.append(grid);
+      return grid;
     }
 
     // Choices: each decision Jay made, and what it meant.
@@ -876,7 +940,8 @@
       for (const c of m.choices) {
         const card = el('article', 'story-choice');
         this._storyNav(card, 'choice:' + c.mission + ':' + c.title);
-        card.append(el('div', 'story-choice-kicker', (c.side || 'Act ' + c.act) + ' · ' + c.missionTitle));
+        const where = c.side || 'Act ' + c.act;
+        card.append(el('div', 'story-choice-kicker', (c.dlc && m.dlc ? m.dlc.title + ' · ' : '') + where + ' · ' + c.missionTitle));
         card.append(el('h4', 'story-choice-title', c.title));
         const pick = el('div', 'story-choice-pick');
         const said = String(c.picked || '').replace(/^[“"]+|[”"]+$/g, '');
@@ -1288,8 +1353,9 @@
         inner.append(e);
         return e;
       };
-      add('credits-title', 'VICEHAVEN');
-      add('credits-sub', 'Ten and Two');
+      // The story DLC's credits (main.js dlcCredits) bring their own title, sub, line and last words.
+      add('credits-title', info.title || 'VICEHAVEN');
+      add('credits-sub', info.sub || 'Ten and Two');
       if (info.ending) add('credits-ending', info.ending);
       add('credits-gap');
       add('credits-head', 'Starring');
@@ -1306,9 +1372,9 @@
         inner.append(r);
       }
       add('credits-gap');
-      add('credits-line', 'In memory of everyone who got left in the lot.');
+      add('credits-line', info.line || 'In memory of everyone who got left in the lot.');
       add('credits-gap');
-      add('credits-last', 'Thanks for driving.');
+      add('credits-last', info.last || 'Thanks for driving.');
       add('credits-hint', 'The city is still out there. Press E to keep driving.');
       root.append(inner);
       document.body.append(root);

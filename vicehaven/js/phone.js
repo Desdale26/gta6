@@ -1280,10 +1280,10 @@
           const pl = mk.place;
           if (!m || !pl) continue;
           const race = m.giver === 'race' || /^race_/.test(m.id);
-          const story = !!m._main;
+          const story = !!(m._main || m._dlcMain); // the story DLC's main jobs list with the story
           const pay = m.reward && m.reward.money ? money(m.reward.money) : '';
           add({ id: 'm:' + m.id, kind: story ? 'story' : race ? 'race' : 'side', cat: story ? 'story' : 'jobs', icon: story ? 'mission' : race ? 'race' : 'challenge',
-            title: m.title, tag: story ? 'ACT ' + (m.act || 1) : race ? 'RACE' : m._chain ? 'SIDE STORY' : 'SIDE JOB', tone: story ? 'story' : '',
+            title: m.title, tag: story ? (m._dlcMain ? 'NEW STORY · ' : '') + 'ACT ' + (m.act || 1) : race ? 'RACE' : m._chain ? 'SIDE STORY' : 'SIDE JOB', tone: story ? 'story' : '',
             how: (race ? 'Drive into the marker to start. ' : 'Walk into the marker to start. ') + (m.summary || ''), pay, x: pl.x, z: pl.z });
         }
       }
@@ -1521,7 +1521,7 @@
         const m = (run && run.m) || this._lastJob;
         if (!m) return 'story';
         if (m.giver === 'race' || /^race_/.test(m.id || '')) return 'races';
-        return m._main ? 'story' : 'side';
+        return m._main || m._dlcMain ? 'story' : 'side';
       }
       if (REASONS[reason]) return REASONS[reason];
       return 'other';
@@ -1785,9 +1785,11 @@
         s.append(this._soon('The story log', 'Where Jay is in the story, and what has happened so far.'));
         return;
       }
-      s.append(this._storyCard(m.now, 'now'));
+      // On a job in the story DLC, that job comes first.
+      const dlcRun = !!(m.dlc && m.dlc.now && m.dlc.now.kind === 'mission');
+      s.append(this._storyCard(dlcRun ? m.dlc.now : m.now, 'now'));
       // On a side job: the main story's next job as well.
-      if (m.now && m.now.kind === 'mission' && m.now.side && m.next) s.append(this._storyCard({ kind: 'next', id: m.next.id, title: m.next.title, text: m.next.setup, place: m.next.place, giver: m.next.giver, act: m.next.act, n: m.next.n, auto: m.next.auto }, 'next'));
+      if (!dlcRun && m.now && m.now.kind === 'mission' && m.now.side && m.next) s.append(this._storyCard({ kind: 'next', id: m.next.id, title: m.next.title, text: m.next.setup, place: m.next.place, giver: m.next.giver, act: m.next.act, n: m.next.n, auto: m.next.auto }, 'next'));
 
       // Previously: the last three jobs, a line each (or where it all starts).
       const done = [];
@@ -1811,30 +1813,23 @@
       }
 
       // The acts and their jobs (choose one for its recap). Nothing past the next job.
-      for (const a of m.acts) {
-        if (a.state === 'locked') {
-          const l = el('div', 'ph-section ph-slocked');
-          l.append(svg('lock'), el('span', '', 'Act ' + a.n + ' · ???'));
-          s.append(l);
-          continue;
+      this._storyActs(s, m.acts, '');
+
+      // The story DLC: its own Up next (or what it is and when it opens), then its acts.
+      const d = m.dlc;
+      if (d) {
+        const head = el('div', 'ph-section ph-sdlc');
+        head.append(el('span', '', d.title), el('small', '', d.state === 'locked' ? 'Not open yet' : d.done + '/' + d.total));
+        s.append(head);
+        if (d.state === 'locked') {
+          const c = el('div', 'ph-card ph-sprologue');
+          this._nav(c, 'dlc:locked');
+          c.append(el('p', '', (d.tagline ? d.tagline + ' ' : '') + (d.opensAfter ? 'Opens after “' + d.opensAfter + '”.' : 'Opens as the story goes on.')));
+          s.append(c);
+        } else {
+          if (!dlcRun && d.now) s.append(this._storyCard(d.now, 'dlc'));
+          this._storyActs(s, d.acts, d.title + ' · ');
         }
-        const sec = el('div', 'ph-section ph-sact');
-        sec.append(el('span', '', 'Act ' + a.n + (a.title ? ' · ' + a.title : '')), el('small', '', a.done + '/' + a.total));
-        s.append(sec);
-        const list = el('div', 'ph-list ph-sjobs');
-        for (const j of a.jobs) {
-          if (j.state === 'locked') continue;
-          const r = el('div', 'ph-sjob is-' + j.state);
-          this._nav(r, 'sjob:' + j.id, () => this._openStoryJob(j.id));
-          const n = el('span', 'ph-sjob-n');
-          if (j.state === 'done') n.append(svg('check'));
-          else n.textContent = String(j.n);
-          const main = el('div', 'ph-sjob-main');
-          main.append(el('b', '', j.title), el('span', '', j.state === 'done' ? j.line : j.state === 'current' ? 'On the job now' : 'Up next'));
-          r.append(n, main);
-          list.append(r);
-        }
-        s.append(list);
       }
 
       // Who's who: highlight someone for more.
@@ -1863,6 +1858,35 @@
       const f = el('div', 'ph-foot');
       f.append(el('span', '', 'Side stories and choices: '), el('b', '', 'Pause → Story so far'));
       s.append(f);
+    }
+
+    /** A story's acts, a row per job (`pre` goes before 'Act n' in the headings). */
+    _storyActs(s, acts, pre) {
+      for (const a of acts) {
+        if (a.state === 'locked') {
+          const l = el('div', 'ph-section ph-slocked');
+          l.append(svg('lock'), el('span', '', pre + 'Act ' + a.n + ' · ???'));
+          s.append(l);
+          continue;
+        }
+        const sec = el('div', 'ph-section ph-sact');
+        sec.append(el('span', '', pre + 'Act ' + a.n + (a.title ? ' · ' + a.title : '')), el('small', '', a.done + '/' + a.total));
+        s.append(sec);
+        const list = el('div', 'ph-list ph-sjobs');
+        for (const j of a.jobs) {
+          if (j.state === 'locked') continue;
+          const r = el('div', 'ph-sjob is-' + j.state);
+          this._nav(r, 'sjob:' + j.id, () => this._openStoryJob(j.id));
+          const n = el('span', 'ph-sjob-n');
+          if (j.state === 'done') n.append(svg('check'));
+          else n.textContent = String(j.n);
+          const main = el('div', 'ph-sjob-main');
+          main.append(el('b', '', j.title), el('span', '', j.state === 'done' ? j.line : j.state === 'current' ? 'On the job now' : 'Up next'));
+          r.append(n, main);
+          list.append(r);
+        }
+        s.append(list);
+      }
     }
 
     /** Where things stand (or the main story's Up next): Set GPS when there's somewhere to go (`bare`: no heading, under a job's own). */
@@ -1924,7 +1948,8 @@
       const m = this._storyModel();
       const id = this._storyJobId;
       let j = null;
-      for (const a of m ? m.acts : []) for (const x of a.jobs) if (x.id === id) j = x;
+      const dlc = !!(m && m.dlc && m.dlc.acts.some((a) => a.jobs.some((x) => x.id === id)));
+      for (const a of m ? (dlc ? m.dlc.acts : m.acts) : []) for (const x of a.jobs) if (x.id === id) j = x;
       this._storyGpsOn = false;
       box.append(this._head(j ? j.title : 'Story so far'));
       const s = el('div', 'ph-scroll ph-sread');
@@ -1933,12 +1958,13 @@
         s.append(this._soon('This part of the story', 'It hasn\'t happened yet.'));
         return;
       }
-      s.append(el('div', 'ph-kicker', 'Act ' + j.act + ' · Job ' + j.n + (j.state === 'done' ? '' : j.state === 'current' ? ' · On it now' : ' · Up next')));
+      s.append(el('div', 'ph-kicker', (dlc ? m.dlc.title + ' · ' : '') + 'Act ' + j.act + ' · Job ' + j.n + (j.state === 'done' ? '' : j.state === 'current' ? ' · On it now' : ' · Up next')));
       if (j.state === 'done') {
         if (j.line) s.append(el('p', 'ph-sread-line', j.line));
         if (j.recap && j.recap !== j.line) s.append(el('p', 'ph-sread-text', j.recap));
       } else {
-        const next = m.next && m.next.id === j.id ? m.next : j;
+        const nx = dlc ? m.dlc.next : m.next;
+        const next = nx && nx.id === j.id ? nx : j;
         if (next.setup) s.append(el('p', 'ph-sread-text', next.setup));
         if (next.place && j.state === 'next') {
           this._storyGpsOn = true;

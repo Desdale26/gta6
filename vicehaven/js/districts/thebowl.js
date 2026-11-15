@@ -341,11 +341,24 @@
       }
     }
     const yBack = KERB + 1.4 + tiers * rise; // the back walkway
+    // The back walkway behind the top row: solid to its floor (over the tunnel only above the tunnel roof).
+    for (const [x0, x1] of halves) {
+      const ctx = world.ctxAt((x0 + x1) / 2, S.zb + 2);
+      ctx.concrete.box(x0, KERB, S.zb, x1, yBack, S.zb + 4.05, col(0xd9d4c8), { skip: { n: true, s: true } });
+      world.physics.addBox(x0, 0, S.zb, x1, yBack, S.zb + 4.05, 'building', F().ALL);
+    }
+    {
+      const ctx = world.ctxAt((T.x0 + T.x1) / 2, S.zb + 2);
+      ctx.concrete.box(T.x0, KERB + T.h, S.zb, T.x1, yBack, S.zb + 4.05, col(0xd9d4c8), { skip: { n: true, s: true } });
+      world.physics.addBox(T.x0, KERB + T.h, S.zb, T.x1, yBack, S.zb + 4.05, 'building', F().ALL);
+    }
     // The front wall the tiers sit on (the outer wall carries on below it).
     for (const [x0, x1] of halves) W.solid(world, world.ctxAt((x0 + x1) / 2, S.zf).concrete, x0, 0, S.zf - 0.4, x1, KERB + 1.4, S.zf, 0xd9d4c8, null, 'building');
     // Over the tunnel: a lintel from its roof up to the first tier above it.
     const ctxT = world.ctxAt((T.x0 + T.x1) / 2, S.zf);
-    W.solid(world, ctxT.concrete, T.x0, KERB + T.h, S.zf - 4, T.x1, KERB + T.h + 1.2, S.zf, 0xd9d4c8, null, 'building');
+    // (Not W.solid: its collider always reaches the ground and would shut the tunnel.)
+    ctxT.concrete.box(T.x0, KERB + T.h, S.zf - 4, T.x1, KERB + T.h + 1.2, S.zf, col(0xd9d4c8));
+    world.physics.addBox(T.x0, KERB + T.h, S.zf - 4, T.x1, KERB + T.h + 1.2, S.zf, 'building', F().ALL);
     for (let k = 0; k < tiers; k++) {
       const zf = S.zf - k * depth;
       const yTop = KERB + 1.4 + (k + 1) * rise;
@@ -358,7 +371,10 @@
     W.pave(world, T.x0, S.zb, T.x1, S.zf + 2, 0xa8a8aa, 'asphaltTop');
     ctxT.concrete.box(T.x0, KERB + T.h - 0.3, S.zb, T.x1, KERB + T.h, S.zf, col(0xbdb8ac), { bottom: true, skip: { top: true } });
     world.physics.addBox(T.x0, KERB + T.h - 0.3, S.zb, T.x1, KERB + T.h + 0.1, S.zf, 'building', F().SOLID | F().SHOTS | F().CAMERA);
-    for (const x of [T.x0 + 0.05, T.x1 - 0.05]) ctxT.prop.box(x - 0.05, KERB + 0.1, S.zb, x + 0.05, KERB + 1.0, S.zf, col(0xf2c230));
+    for (const x of [T.x0 + 0.05, T.x1 - 0.05]) {
+      ctxT.prop.box(x - 0.05, KERB + 0.1, S.zb, x + 0.05, KERB + 1.0, S.zf, col(0xf2c230));
+      world.physics.addBox(x - 0.05, 0, S.zb, x + 0.05, KERB + 1.0, S.zf, 'wall', F().ALL);
+    }
     for (let z = S.zb + 4; z < S.zf - 2; z += 8) ctxT.screen.box((T.x0 + T.x1) / 2 - 1.5, KERB + T.h - 0.36, z - 0.25, (T.x0 + T.x1) / 2 + 1.5, KERB + T.h - 0.3, z + 0.25, VH.col(0xfff2d0, 2.4));
     // The back wall on Foundry Road (windows: offices and the bar), a walkway, the roof.
     for (let x = S.x0; x < S.x1 - 1e-6; x += 46) {
@@ -377,6 +393,8 @@
     }
     for (const [x0, x1] of halves) world.physics.addBox(x0, 0, S.zb - 2, x1, yBack + 3, S.zb + 0.01, 'building', F().ALL);
     world.physics.addBox(T.x0, KERB + T.h, S.zb - 2, T.x1, yBack + 3, S.zb, 'building', F().ALL);
+    // The wall's ends at the tunnel mouth (b.wall draws only the street face).
+    for (const x of [T.x0 - 0.2, T.x1]) ctxT.concrete.box(x, 0, S.zb - 2, x + 0.2, KERB + T.h, S.zb, col(0xe4dfd2));
     // End walls.
     for (const x of [S.x0, S.x1]) {
       const ctx = world.ctxAt(x, (S.zb + S.zf) / 2);
@@ -508,6 +526,479 @@
       ctx.prop.box(x - 0.2, KERB, B.z1 + 0.5, x + 0.2, KERB + 10.8, B.z1 + 0.9, col(0x3a3f45));
       world.physics.addBox(x - 0.2, 0, B.z1 + 0.5, x + 0.2, KERB + 10.8, B.z1 + 0.9, 'pole', F().ALL);
     }
+  }
+
+  // ------------------------------------------------------- Mariner Stadium
+  // Plot 13..321 x 1199..1463. An elliptical bowl in the east of the plot
+  // with a marathon gate at each end (drive in from the apron road, across
+  // the running track and the pitch, out the other side), the apron road
+  // round it, the vast car park to the west and the stunt crew's bus jump
+  // along the south.
+  const ST = {
+    cx: 232, cz: 1312, a: 76, b: 58, N: 64,
+    tiers: 8, tierD: 2.3, rise: 1.3, base: 2.2, wallH: 16, roofY: 18.4,
+    gateHW: 6, gateTop: 5.6,
+    track: 5.2,
+  };
+  ST.dF = ST.tiers * ST.tierD; // the front of the lowest tier, in from the outer wall
+  const BJ = { z: 1425, hw: 3.2, x0: 124.3, lip: 135.7, h: 4.6, bus0: 136.5, busW: 2.6, gap: 0.7, land0: 156.4, land1: 186 };
+  BJ.bus1 = BJ.bus0 + 6 * BJ.busW + 5 * BJ.gap;
+
+  /** Point on the stadium ellipse at angle t, d metres in from the outer wall. */
+  function ell(t, d, out) {
+    out = out || {};
+    out.x = ST.cx + (ST.a - d) * Math.cos(t);
+    out.z = ST.cz + (ST.b - d) * Math.sin(t);
+    return out;
+  }
+  const _e0 = {}, _e1 = {};
+  /**
+   * A ring piece between angles t0 and t1, from d0 to d1 in from the wall,
+   * y0..y1: drawn into surf and (unless noCol) solid. Pieces inside the
+   * marathon gates' corridors (|z - cz| < gateHW at either end) are cut so
+   * the corridor stays open below gateTop.
+   */
+  function ringPiece(world, surfName, t0, t1, d0, d1, y0, y1, hex, tag, flags, noCol) {
+    const dm = (d0 + d1) / 2;
+    ell(t0, dm, _e0);
+    ell(t1, dm, _e1);
+    const pieces = [[_e0.x, _e0.z, _e1.x, _e1.z]];
+    const inGate = (z) => Math.abs(z - ST.cz) < ST.gateHW;
+    // The gates are where the ellipse crosses z = cz (t = 0 and t = PI).
+    if (inGate(_e0.z) || inGate(_e1.z)) {
+      if (y0 >= KERB + ST.gateTop - 1e-6) {
+        // Above the gate: keep it whole.
+      } else if (inGate(_e0.z) && inGate(_e1.z)) {
+        // Inside the corridor: only the part above the gate.
+        if (y1 > KERB + ST.gateTop) ringPiece(world, surfName, t0, t1, d0, d1, KERB + ST.gateTop, y1, hex, tag, flags, noCol);
+        return;
+      } else {
+        // Straddling: cut at the corridor's edge, keep the outer part, and the bit above the gate.
+        const zIn = inGate(_e0.z) ? _e0.z : _e1.z;
+        const edge = ST.cz + Math.sign(zIn === _e0.z ? _e1.z - ST.cz : _e0.z - ST.cz) * ST.gateHW;
+        const [ax, az, bx, bz] = pieces[0];
+        const u = (edge - az) / (bz - az);
+        const ex = ax + (bx - ax) * u;
+        if (inGate(az)) pieces[0] = [ex, edge, bx, bz];
+        else pieces[0] = [ax, az, ex, edge];
+        if (y1 > KERB + ST.gateTop) {
+          const q = inGate(az) ? [ax, az, ex, edge] : [ex, edge, bx, bz];
+          box4(world, surfName, q, d1 - d0, KERB + ST.gateTop, y1, hex, tag, flags, noCol);
+        }
+      }
+    }
+    for (const q of pieces) box4(world, surfName, q, d1 - d0, y0, y1, hex, tag, flags, noCol);
+  }
+  function box4(world, surfName, q, thick, y0, y1, hex, tag, flags, noCol) {
+    const [ax, az, bx, bz] = q;
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 0.05) return;
+    const cx = (ax + bx) / 2, cz = (az + bz) / 2;
+    const yaw = Math.atan2(bx - ax, bz - az);
+    world.ctxAt(cx, cz)[surfName].orientedBox(cx, cz, thick / 2, len / 2 + 0.12, yaw, y0, y1, col(hex));
+    if (!noCol) world.physics.addOrientedBox(cx, cz, thick / 2, len / 2 + 0.12, yaw, y0 <= KERB + 0.01 ? 0 : y0, y1, tag || 'building', flags === undefined ? F().ALL : flags);
+  }
+
+  function buildStadium(world) {
+    const W = K();
+    const N = ST.N;
+    const yT = KERB + 0.012;
+    // --- the ground: asphalt over the whole plot (apron road and car parks), the bowl's floor
+    W.pave(world, 13, 1199, 321, 1463, 0xc8c8ca, 'asphaltTop', yT);
+    // The pitch (a fan of grass in stripes) and the red running track round it.
+    const pa = ST.a - ST.dF - ST.track, pb = ST.b - ST.dF - ST.track;
+    for (let i = 0; i < N; i++) {
+      const t0 = (i / N) * 2 * PI, t1 = ((i + 1) / N) * 2 * PI;
+      const p0 = [ST.cx, KERB + 0.02, ST.cz];
+      const p1 = [ST.cx + pa * Math.cos(t0), KERB + 0.02, ST.cz + pb * Math.sin(t0)];
+      const p2 = [ST.cx + pa * Math.cos(t1), KERB + 0.02, ST.cz + pb * Math.sin(t1)];
+      const gs = world.ctxAt((p1[0] + p2[0] + ST.cx) / 3, (p1[2] + p2[2] + ST.cz) / 3).grassTop;
+      const ny = (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]);
+      gs.polygon(ny >= 0 ? [p0, p1, p2] : [p2, p1, p0], col(0xffffff));
+      // The track: a ring of quads between the pitch and the front wall.
+      const ta = ST.a - ST.dF, tb = ST.b - ST.dF;
+      const q0 = [ST.cx + ta * Math.cos(t0), KERB + 0.022, ST.cz + tb * Math.sin(t0)];
+      const q1 = [ST.cx + ta * Math.cos(t1), KERB + 0.022, ST.cz + tb * Math.sin(t1)];
+      const r0 = [p1[0], KERB + 0.022, p1[2]], r1 = [p2[0], KERB + 0.022, p2[2]];
+      quadUp(world.ctxAt((q0[0] + r1[0]) / 2, (q0[2] + r1[2]) / 2).marks, r0, q0, q1, r1, col(0xb5523a));
+    }
+    world.addLawn(ST.cx - pa * 0.7, ST.cz - pb * 0.7, ST.cx + pa * 0.7, ST.cz + pb * 0.7);
+    // Mown stripes and the pitch markings (a 76 x 44 field, halfway line, centre circle, goals).
+    const fx0 = ST.cx - 38, fx1 = ST.cx + 38, fz0 = ST.cz - 22, fz1 = ST.cz + 22;
+    for (let x = fx0; x < fx1 - 1e-6; x += 7.6) if (Math.round((x - fx0) / 7.6) % 2) W.pave(world, x, fz0, x + 7.6, fz1, 0x7fb257, 'marks', KERB + 0.026);
+    const line = (x0, z0, x1, z1) => W.mark(world, x0, z0, x1, z1, 0xf4f4ef, KERB + 0.03);
+    line(fx0, fz0, fx1, fz0 + 0.2); line(fx0, fz1 - 0.2, fx1, fz1); line(fx0, fz0, fx0 + 0.2, fz1); line(fx1 - 0.2, fz0, fx1, fz1);
+    line(ST.cx - 0.1, fz0, ST.cx + 0.1, fz1);
+    for (const [x0, x1] of [[fx0, fx0 + 12], [fx1 - 12, fx1]]) {
+      line(x0, ST.cz - 12, x1, ST.cz - 11.8); line(x0, ST.cz + 11.8, x1, ST.cz + 12);
+      const xi = x0 === fx0 ? x1 : x0;
+      line(xi - 0.1, ST.cz - 12, xi + 0.1, ST.cz + 12);
+    }
+    for (let k = 0; k < 24; k++) {
+      const t = (k / 24) * 2 * PI;
+      const x = ST.cx + 7 * Math.cos(t), z = ST.cz + 7 * Math.sin(t);
+      world.ctxAt(x, z).marks.topRect(x - 0.35, z - 0.35, x + 0.35, z + 0.35, KERB + 0.03, col(0xf4f4ef));
+    }
+    // Goals: white frames, solid posts (the net is drawn, a car bumps it).
+    for (const gx of [fx0, fx1]) {
+      const ctx = world.ctxAt(gx, ST.cz);
+      const back = gx === fx0 ? -2 : 2;
+      for (const z of [ST.cz - 3.7, ST.cz + 3.7]) {
+        ctx.prop.box(gx - 0.08, KERB, z - 0.08, gx + 0.08, KERB + 2.44, z + 0.08, col(0xffffff));
+        world.physics.addBox(gx - 0.1, 0, z - 0.1, gx + 0.1, KERB + 2.44, z + 0.1, 'pole', F().ALL);
+      }
+      ctx.prop.box(gx - 0.08, KERB + 2.36, ST.cz - 3.7, gx + 0.08, KERB + 2.52, ST.cz + 3.7, col(0xffffff));
+      const nx0 = Math.min(gx, gx + back), nx1 = Math.max(gx, gx + back);
+      ctx.propMatte.box(nx0, KERB, ST.cz - 3.7, nx1, KERB + 2.4, ST.cz + 3.7, col(0xdfe3e6), { skip: { [gx === fx0 ? 'e' : 'w']: true } });
+      // The net: back and sides solid, the mouth open (you can walk, or drive, into the goal).
+      const bxn = gx + back;
+      world.physics.addBox(bxn - 0.08, 0, ST.cz - 3.75, bxn + 0.08, KERB + 2.4, ST.cz + 3.75, 'fence', F().SOLID | F().CAMERA);
+      for (const z of [ST.cz - 3.75, ST.cz + 3.65]) world.physics.addBox(nx0, 0, z, nx1, KERB + 2.4, z + 0.1, 'fence', F().SOLID | F().CAMERA);
+    }
+
+    // --- the bowl: stepped tiers in a ring, the podium wall in front, the outer wall, the roof
+    const seatA = 0x1f4f7a, seatB = 0xf2f2ee, seatC = 0x2f8fb8;
+    for (let i = 0; i < N; i++) {
+      const t0 = (i / N) * 2 * PI, t1 = ((i + 1) / N) * 2 * PI;
+      for (let k = 0; k < ST.tiers; k++) {
+        const d1 = ST.dF - k * ST.tierD, d0 = d1 - ST.tierD; // k = 0 is the front (lowest) tier
+        const yTop = KERB + ST.base + k * ST.rise;
+        ringPiece(world, 'concrete', t0, t1, d0, d1, 0, yTop, 0xd6d1c4, 'building');
+        // A row of seats along the front of each tier (coloured blocks spell the club's stripes).
+        const c = (Math.floor(i / 4) + (k > 4 ? 1 : 0)) % 3 === 0 ? seatC : (i + k) % 2 ? seatA : seatB;
+        ringPiece(world, 'prop', t0, t1, d1 - 1.0, d1 - 0.4, yTop, yTop + 0.45, c, 'building', F().SOLID, true);
+      }
+      // The podium wall in front of the lowest tier (a rail on it).
+      ringPiece(world, 'concrete', t0, t1, ST.dF, ST.dF + 0.4, 0, KERB + ST.base + 0.9, 0xf2f2ee, 'wall');
+      // The outer wall: a sand-coloured shell with ribs, a teal band and a lit band under the roof.
+      const yW = KERB + ST.wallH;
+      ringPiece(world, 'concrete', t0, t1, -0.6, 0, 0, yW, i % 2 ? 0xe2d6bd : 0xd9ccb0, 'building');
+      ringPiece(world, 'prop', t0, t1, -0.75, -0.55, KERB + 3.2, KERB + 4.0, 0x1f6f8a, 'building', F().SOLID, true);
+      ringPiece(world, 'screen', t0, t1, -0.7, -0.55, yW - 2.0, yW - 1.5, VH.col(0xfff2d0, 2.0), 'building', F().SOLID, true);
+      if (i % 2 === 0) {
+        ell(t0, -0.9, _a);
+        if (Math.abs(_a.z - ST.cz) > ST.gateHW + 1) {
+          world.ctxAt(_a.x, _a.z).prop.box(_a.x - 0.35, 0, _a.z - 0.35, _a.x + 0.35, ST.roofY + 0.4, _a.z + 0.35, col(0xeef0f2));
+          world.physics.addBox(_a.x - 0.35, 0, _a.z - 0.35, _a.x + 0.35, ST.roofY + 0.4, _a.z + 0.35, 'pole', F().ALL);
+        }
+      }
+      // The roof: a white ring over the upper tiers, its leading edge in club blue.
+      ringPiece(world, 'prop', t0, t1, -1.0, 11, ST.roofY, ST.roofY + 0.5, 0xeef0f2, 'building');
+      ringPiece(world, 'prop', t0, t1, 10.6, 11.2, ST.roofY - 0.6, ST.roofY + 0.6, 0x1f4f7a, 'building', F().SOLID, true);
+      // Lights under the roof's edge (glow at night, light the pitch).
+      if (i % 4 === 0) ringPiece(world, 'screen', t0, t1, 9.8, 10.6, ST.roofY - 0.25, ST.roofY - 0.05, VH.col(0xfff4d8, 1.6), 'building', F().SOLID, true);
+    }
+    // The marathon gates: a lit ceiling, yellow kerb rails, steel gates folded back, big lettering over the west one.
+    for (const side of [-1, 1]) {
+      const xo = ST.cx + side * (ST.a + 0.8), xi = ST.cx + side * (ST.a - ST.dF - 0.4);
+      const x0 = Math.min(xo, xi), x1 = Math.max(xo, xi);
+      const ctx = world.ctxAt((x0 + x1) / 2, ST.cz);
+      ctx.concrete.box(x0, KERB + ST.gateTop - 0.4, ST.cz - ST.gateHW, x1, KERB + ST.gateTop, ST.cz + ST.gateHW, col(0xbdb8ac), { bottom: true, skip: { top: true } });
+      world.physics.addBox(x0, KERB + ST.gateTop - 0.4, ST.cz - ST.gateHW, x1, KERB + ST.gateTop + 0.1, ST.cz + ST.gateHW, 'building', F().ALL);
+      for (let x = x0 + 3; x < x1 - 2; x += 5) ctx.screen.box(x - 0.8, KERB + ST.gateTop - 0.46, ST.cz - 0.3, x + 0.8, KERB + ST.gateTop - 0.4, ST.cz + 0.3, VH.col(0xfff2d0, 2.4));
+      for (const z of [ST.cz - ST.gateHW + 0.08, ST.cz + ST.gateHW - 0.08]) {
+        ctx.prop.box(x0, KERB + 0.1, z - 0.08, x1, KERB + 0.9, z + 0.08, col(0xf2c230));
+        world.physics.addBox(x0, 0, z - 0.08, x1, KERB + 0.9, z + 0.08, 'wall', F().ALL);
+        // A folded-back steel gate leaf against the wall outside.
+        const sz = Math.sign(z - ST.cz);
+        const lx = ST.cx + side * (ST.a + 1.6);
+        const lz0 = Math.min(z + sz * 0.6, z + sz * 6.1), lz1 = Math.max(z + sz * 0.6, z + sz * 6.1);
+        world.ctxAt(lx, (lz0 + lz1) / 2).prop.box(lx - 0.08, KERB, lz0, lx + 0.08, KERB + 4.4, lz1, col(0x3a3f45));
+        world.physics.addBox(lx - 0.1, 0, lz0, lx + 0.1, KERB + 4.4, lz1, 'metal', F().ALL);
+      }
+      // Gate frame lettering.
+      ctx.prop.box(xo - 0.3, KERB + ST.gateTop, ST.cz - ST.gateHW - 0.8, xo + 0.3, KERB + ST.gateTop + 1.2, ST.cz + ST.gateHW + 0.8, col(0x1f4f7a));
+    }
+    W.sign(world, { x: ST.cx - ST.a - 1.2, y: KERB + 10.5, z: ST.cz, yaw: -PI / 2, w: 30, h: 4.2, lines: ['MARINER STADIUM', 'HOME OF THE SOUTHBAY MARINERS'], style: 'neon', oneSided: true, flat: false, colors: { bg: ['#0e2a44', '#1f4f7a'], fg: '#ffffff', glow: '#7fd0ff', outline: '#7fd0ff' } });
+    W.sign(world, { x: ST.cx - ST.a - 1.0, y: KERB + ST.gateTop + 0.6, z: ST.cz, yaw: -PI / 2, w: 11, h: 0.9, lines: ['MARATHON GATE'], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#1f4f7a'], fg: '#f2c230', border: '#f2c230' } });
+
+    // --- the players' entrance on the south side: a canopy, glass doors, a plaque
+    {
+      const t = PI / 2;
+      ell(t, -0.6, _a);
+      const z = _a.z, x = ST.cx;
+      const ctx = world.ctxAt(x, z);
+      ctx.screen.box(x - 3.2, KERB, z + 0.02, x + 3.2, KERB + 2.8, z + 0.12, VH.col(0x9fc8dc, 1.2));
+      for (const dx of [-3.25, -0.05, 3.15]) ctx.prop.box(x + dx, KERB, z + 0.02, x + dx + 0.1, KERB + 2.9, z + 0.2, col(0x3a3f45));
+      ctx.prop.box(x - 4.5, KERB + 3.4, z, x + 4.5, KERB + 3.7, z + 4.5, col(0x1f4f7a), { bottom: true });
+      for (const dx of [-4.2, 4.2]) {
+        ctx.prop.box(x + dx - 0.1, KERB, z + 4.2, x + dx + 0.1, KERB + 3.4, z + 4.4, col(0xc8ccd0));
+        world.physics.addBox(x + dx - 0.12, 0, z + 4.18, x + dx + 0.12, KERB + 3.4, z + 4.42, 'pole', F().ALL);
+      }
+      world.physics.addBox(x - 4.5, KERB + 3.4, z, x + 4.5, KERB + 3.7, z + 4.5, 'building', F().SOLID | F().SHOTS);
+      W.sign(world, { x, y: KERB + 4.3, z: z + 0.25, yaw: 0, w: 7, h: 0.9, lines: ["PLAYERS' ENTRANCE"], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#1f4f7a'], fg: '#ffffff', border: '#f2c230' } });
+    }
+
+    // --- the apron road: a dashed centre line round the bowl, ticket booths by the west gate, lamps
+    for (let i = 0; i < 96; i += 2) {
+      const t0 = (i / 96) * 2 * PI, t1 = ((i + 1) / 96) * 2 * PI;
+      ell(t0, -6.5, _a); ell(t1, -6.5, _b);
+      const cx = (_a.x + _b.x) / 2, cz = (_a.z + _b.z) / 2;
+      world.ctxAt(cx, cz).marks.orientedBox(cx, cz, 0.08, Math.hypot(_b.x - _a.x, _b.z - _a.z) / 2, Math.atan2(_b.x - _a.x, _b.z - _a.z), KERB + 0.018, KERB + 0.024, col(0xf4f4ef));
+    }
+    for (let i = 0; i < 24; i++) {
+      const t = ((i + 0.5) / 24) * 2 * PI;
+      ell(t, -12.5, _a);
+      if (Math.abs(_a.z - ST.cz) < 10 || _a.x > 318 || _a.z < 1201 || _a.z > 1461) continue;
+      world.addProp('streetlight', _a.x, KERB, _a.z, Math.atan2(ST.cx - _a.x, ST.cz - _a.z), 1);
+    }
+    // Ticket booths against the wall either side of the west gate (clear of the apron road).
+    for (const dz of [-14.5, -9.5, 9.5, 14.5]) booth(world, ST.cx - ST.a - 1.2, ST.cz + dz, 0x1f4f7a);
+    // Floodlight pools on the pitch and the apron, from the roof lights.
+    const pools = world.floodlights || (world.floodlights = []);
+    for (const [dx, dz] of [[0, 0], [-30, -12], [30, -12], [-30, 12], [30, 12], [-55, 0], [55, 0], [0, -32], [0, 32]]) pools.push({ x: ST.cx + dx, z: ST.cz + dz, r: 22, y: KERB + 0.04, strength: 0.7, tint: [1.1, 1.1, 1.0] });
+  }
+
+  /** The car parks: bays, islands with palms and lamps, and the stunt crew's bus jump along the south. */
+  function buildStadiumParks(world) {
+    const W = K();
+    const white = 0xf4f4ef;
+    // West car park: four double rows of bays running north-south, a cross aisle in the middle (by the gate).
+    const rows = [30, 58, 86, 114];
+    const zA = [[1206, 1300], [1324, 1408]];
+    for (const rx of rows) {
+      for (const [z0, z1] of zA) {
+        W.mark(world, rx - 0.08, z0, rx + 0.08, z1, white);
+        for (let z = z0; z <= z1 + 1e-6; z += 3) {
+          W.mark(world, rx - 5.5, z - 0.06, rx - 0.08, z + 0.06, white);
+          W.mark(world, rx + 0.08, z - 0.06, rx + 5.5, z + 0.06, white);
+        }
+        // Island at each end of the row: a kerbed planter with a palm and a lamp.
+        for (const z of [z0 - 2.5, z1 + 2.5]) {
+          const ctx = world.ctxAt(rx, z);
+          ctx.concrete.box(rx - 1.6, KERB, z - 1.6, rx + 1.6, KERB + 0.3, z + 1.6, col(0xd9d4c8));
+          ctx.grassTop.topRect(rx - 1.45, z - 1.45, rx + 1.45, z + 1.45, KERB + 0.31, col(0xffffff));
+          world.physics.addBox(rx - 1.6, 0, z - 1.6, rx + 1.6, KERB + 0.3, z + 1.6, 'kerb', F().SOLID);
+          world.addProp('palm', rx, KERB + 0.3, z, (rx * 7 + z) % 6.28, 1);
+        }
+      }
+      for (const z of [1250, 1370]) world.addProp('streetlight', rx, KERB, z, PI / 2, 1);
+    }
+    // Arrows and a sign at the cross aisle.
+    for (const x of [44, 72, 100]) W.mark(world, x - 2, ST.cz - 0.12, x + 2, ST.cz + 0.12, white);
+    W.sign(world, { x: 15.5, y: KERB + 3.2, z: ST.cz - 8, yaw: -PI / 2, w: 6, h: 2.2, lines: ['MARINER STADIUM', 'CAR PARKS A–D · COACHES NORTH'], style: 'info', posts: true });
+    // North strip: coach bays along Mariner Way.
+    for (let x = 150; x < 300; x += 6) W.mark(world, x - 0.06, 1205, x + 0.06, 1222, white);
+    W.mark(world, 150, 1205, 300, 1205.15, white);
+    for (const x of [170, 230, 290]) world.addProp('streetlight', x, KERB, 1203, 0, 1);
+
+    // --- the bus jump: run-up lane, take-off ramp, six buses side by side, landing ramp, run-out
+    const z = BJ.z;
+    for (const zz of [z - BJ.hw - 0.3, z + BJ.hw + 0.1]) W.mark(world, 20, zz, 310, zz + 0.2, 0xf2c230);
+    for (let x = 30; x < BJ.x0 - 4; x += 12) W.mark(world, x, z - 0.12, x + 5, z + 0.12, white);
+    W.ramp(world, world.ctxAt(BJ.x0 + 7, z).prop, BJ.x0, z, PI / 2, BJ.hw * 2, BJ.lip - BJ.x0, KERB, KERB + BJ.h, 0xf2c230, 'metal');
+    // Chevrons on the ramp face (decals on the deck would z-fight: use the lip board instead).
+    const ctxR = world.ctxAt(BJ.lip, z);
+    ctxR.prop.box(BJ.lip - 0.3, 0, z - BJ.hw, BJ.lip, KERB + BJ.h - 0.05, z + BJ.hw, col(0x1c1c1e));
+    W.ramp(world, world.ctxAt(BJ.land1 - 8, z).prop, BJ.land1, z, -PI / 2, BJ.hw * 2 + 1, BJ.land1 - BJ.land0, KERB, KERB + BJ.h, 0xf2c230, 'metal');
+    const ctxL = world.ctxAt(BJ.land0, z);
+    ctxL.prop.box(BJ.land0, 0, z - BJ.hw - 0.5, BJ.land0 + 0.3, KERB + BJ.h - 0.05, z + BJ.hw + 0.5, col(0x1c1c1e));
+    for (let k = 0; k < 6; k++) bus(world, BJ.bus0 + k * (BJ.busW + BJ.gap) + BJ.busW / 2, z, k);
+    // Barriers along the run-out and a scoreboard sign.
+    for (let x = BJ.land1 + 6; x < 300; x += 6) {
+      world.addProp('barrier', x, KERB, z - BJ.hw - 2, 0, 1);
+      world.addProp('barrier', x, KERB, z + BJ.hw + 2, 0, 1);
+    }
+    W.sign(world, { x: BJ.lip - 6, y: KERB + 3.0, z: z - BJ.hw - 4, yaw: PI, w: 7, h: 2.2, lines: ['THE BIG JUMP', 'SIX BUSES · STUNT CREW ONLY'], style: 'info', posts: true });
+  }
+
+  /** A parked bus (stunt prop), solid: long side across the jump. */
+  function bus(world, x, z, k) {
+    const ctx = world.ctxAt(x, z);
+    const hw = BJ.busW / 2, hl = 5.6;
+    const body = [0xf2c230, 0x2f8fb8, 0xf2c230, 0x2f8fb8, 0xf2c230, 0x2f8fb8][k];
+    ctx.prop.box(x - hw, KERB + 0.5, z - hl, x + hw, KERB + 3.0, z + hl, col(body));
+    ctx.prop.box(x - hw - 0.02, KERB + 1.7, z - hl + 0.6, x + hw + 0.02, KERB + 2.6, z + hl - 1.2, col(0x1c2a33));
+    ctx.prop.box(x - hw + 0.1, KERB + 3.0, z - hl + 0.3, x + hw - 0.1, KERB + 3.2, z + hl - 0.3, col(0xf2f2ee));
+    for (const zz of [z - hl + 1.6, z + hl - 2.0]) for (const sx of [-1, 1]) ctx.propMatte.box(x + sx * hw - 0.14, KERB, zz - 0.5, x + sx * hw + 0.14, KERB + 1.0, zz + 0.5, col(0x1c1c1e));
+    world.physics.addBox(x - hw, 0, z - hl, x + hw, KERB + 3.2, z + hl, 'metal', F().ALL);
+  }
+
+  // ------------------------------------------------------ Southbay Expo Hall
+  // Plot 339..421 x 1193..1467, on Sandpiper Drive with the bay behind it.
+  // A long hall you can walk (or drive) into: a glass foyer with its doors
+  // open on the forecourt, a loading door at the south end onto the service
+  // yard, and inside the current show, CASTELLANE: 50 YEARS OF CHAMPIONS,
+  // classic racing cars on plinths (they are real cars: take one).
+  const EX = {
+    x0: 350, x1: 416, z0: 1222, z1: 1438, h: 13, t: 0.6,
+    foyer: { z0: 1312, z1: 1348, h: 7 }, door: { z0: 1323, z1: 1337 },
+    load: { x0: 375, x1: 391, h: 6 },
+    cars: [
+      { type: 'ironclad', z: 1252, color: 0xa8101c },
+      { type: 'vireo', z: 1282, color: 0xd4a017 },
+      { type: 'lowrider', z: 1300, color: 0x0a6f7a },
+      { type: 'zephyr', z: 1362, color: 0xe8e6e0 },
+      { type: 'drifter', z: 1388, color: 0xf2c500 },
+      { type: 'vireo', z: 1416, color: 0x121314 },
+    ],
+    plinthX: 383, plinthH: 0.3,
+  };
+
+  /** A box drawn in pieces no longer than 50 m along z (each in its own chunk), and solid. */
+  function longBox(world, surf, x0, y0, z0, x1, y1, z1, hex, opts, tag, flags) {
+    for (let z = z0; z < z1 - 1e-6; z += 50) {
+      const zb = Math.min(z1, z + 50);
+      world.ctxAt((x0 + x1) / 2, (z + zb) / 2)[surf].box(x0, y0, z, x1, y1, zb, col(hex), opts);
+    }
+    if (tag !== false) world.physics.addBox(x0, y0 <= KERB + 0.01 ? 0 : y0, z0, x1, y1, z1, tag || 'building', flags === undefined ? F().ALL : flags);
+  }
+  /** A window-grid facade (b.wall) along z in pieces, facing west (dir +1) or east (dir -1). */
+  function facadeZ(world, x, z0, z1, h, dir, hex) {
+    for (let z = z0; z < z1 - 1e-6; z += 48) {
+      const zb = Math.min(z1, z + 48);
+      const len = zb - z;
+      const ctx = world.ctxAt(x, (z + zb) / 2);
+      if (dir > 0) ctx.b.wall([x, 0, z], 0, 1, len, h, col(hex), null, [0, Math.max(1, Math.round(len / 6)), 0, 2], [0.4, 0.35, 1, 0.3]);
+      else ctx.b.wall([x, 0, zb], 0, -1, len, h, col(hex), null, [0, Math.max(1, Math.round(len / 6)), 0, 2], [0.4, 0.35, 1, 0.3]);
+    }
+  }
+
+  function buildExpo(world) {
+    const W = K();
+    const E = EX;
+    const wallC = 0xe9e4d8, trim = 0x10324a;
+    const H = KERB + E.h;
+    // --- ground: the forecourt plaza, the floor inside, the service yard and the north car park
+    W.pave(world, 339, 1193, E.x0, 1467, 0xe2dccd, 'plazaTop');
+    W.pave(world, E.x0, E.z0, E.x1, E.z1, 0xd9dcdf, 'plazaTop', KERB + 0.014, 3);
+    W.pave(world, E.x0, E.z1, 421, 1467, 0xb8b8ba, 'asphaltTop');
+    W.pave(world, E.x0, 1193, 421, E.z0, 0xb8b8ba, 'asphaltTop');
+    for (let x = 354; x < 414; x += 3) W.mark(world, x - 0.06, 1197, x + 0.06, 1209, 0xf4f4ef);
+    // --- the shell: four walls (window-grid facades outside, plain inside), the roof
+    const t = E.t;
+    // West wall, either side of the foyer.
+    for (const [z0, z1] of [[E.z0, E.foyer.z0], [E.foyer.z1, E.z1]]) {
+      longBox(world, 'concrete', E.x0, 0, z0, E.x0 + t, H, z1, wallC);
+      facadeZ(world, E.x0 - 0.02, z0, z1, H, 1, wallC);
+    }
+    // East wall (the bay side) and the two ends.
+    longBox(world, 'concrete', E.x1 - t, 0, E.z0, E.x1, H, E.z1, wallC);
+    facadeZ(world, E.x1 + 0.02, E.z0, E.z1, H, -1, wallC);
+    const ctxN = world.ctxAt((E.x0 + E.x1) / 2, E.z0);
+    W.solid(world, ctxN.concrete, E.x0, 0, E.z0, E.x1, H, E.z0 + t, wallC, null, 'building');
+    ctxN.b.wall([E.x1, 0, E.z0 - 0.02], -1, 0, E.x1 - E.x0, H, col(wallC), null, [0, 11, 0, 2], [0.4, 0.35, 1, 0.3]);
+    // South end: the loading door, open (a roller shutter rolled up under its lintel).
+    const ctxS = world.ctxAt((E.x0 + E.x1) / 2, E.z1);
+    const L = E.load;
+    for (const [x0, x1] of [[E.x0, L.x0], [L.x1, E.x1]]) W.solid(world, ctxS.concrete, x0, 0, E.z1 - t, x1, H, E.z1, wallC, null, 'building');
+    ctxS.concrete.box(L.x0, KERB + L.h, E.z1 - t, L.x1, H, E.z1, col(wallC));
+    world.physics.addBox(L.x0, KERB + L.h, E.z1 - t, L.x1, H, E.z1, 'building', F().ALL);
+    ctxS.prop.box(L.x0, KERB + L.h - 0.6, E.z1 - t - 0.4, L.x1, KERB + L.h, E.z1 - t, col(0x8a9097), { bottom: true });
+    for (const x of [L.x0, L.x1]) {
+      ctxS.prop.box(x - 0.3, 0, E.z1 - 0.05, x + 0.3, KERB + L.h + 0.3, E.z1 + 0.25, col(0xf2c230));
+      world.physics.addBox(x - 0.3, 0, E.z1 - 0.05, x + 0.3, KERB + L.h + 0.3, E.z1 + 0.25, 'metal', F().ALL);
+    }
+    W.sign(world, { x: (L.x0 + L.x1) / 2, y: KERB + L.h + 1.2, z: E.z1 + 0.06, yaw: 0, w: 9, h: 1.0, lines: ['LOADING BAY 1 · KEEP CLEAR'], style: 'plaque', oneSided: true, colors: { bg: ['#f2c230', '#f2c230'], fg: '#1c1c1e', border: '#1c1c1e' } });
+    // The roof: a slab (its underside is the ceiling), a parapet in club blue, roof lights.
+    longBox(world, 'concrete', E.x0, H, E.z0, E.x1, H + 0.6, E.z1, 0xcfd3d6, { bottom: true }, 'building');
+    longBox(world, 'prop', E.x0 - 0.1, H + 0.6, E.z0 - 0.1, E.x0 + 0.4, H + 1.6, E.z1 + 0.1, trim, null, false);
+    longBox(world, 'prop', E.x1 - 0.4, H + 0.6, E.z0 - 0.1, E.x1 + 0.1, H + 1.6, E.z1 + 0.1, trim, null, false);
+    // Ceiling lights in three long rows (they glow; the hall reads lit at night through the foyer).
+    for (const x of [365, 383, 401]) {
+      for (let z = E.z0 + 6; z < E.z1 - 6; z += 12) world.ctxAt(x, z).screen.box(x - 0.4, H - 0.12, z - 3, x + 0.4, H - 0.02, z + 3, VH.col(0xf6f8ff, 2.0));
+    }
+    // Pillars in two rows.
+    for (const x of [368, 398]) {
+      for (let z = E.z0 + 36; z < E.z1 - 20; z += 36) {
+        const ctx = world.ctxAt(x, z);
+        ctx.concrete.box(x - 0.45, KERB, z - 0.45, x + 0.45, H, z + 0.45, col(0xe2e4e6));
+        world.physics.addBox(x - 0.45, 0, z - 0.45, x + 0.45, H, z + 0.45, 'building', F().ALL);
+      }
+    }
+
+    // --- the foyer: a glass box on the forecourt, doors wide open, a canopy
+    const Fy = E.foyer;
+    const fx0 = E.x0 - 7; // the foyer stands out onto the forecourt
+    const ctxF = world.ctxAt(E.x0 - 3, (Fy.z0 + Fy.z1) / 2);
+    const glass = VH.col(0x9fd0e8, 1.15);
+    const mull = col(0x3a3f45);
+    const DR = E.door;
+    // Front glass either side of the doors, side walls of glass, a solid band above.
+    for (const [z0, z1] of [[Fy.z0, DR.z0], [DR.z1, Fy.z1]]) {
+      ctxF.screen.box(fx0, KERB, z0, fx0 + 0.12, KERB + Fy.h, z1, glass);
+      world.physics.addBox(fx0, 0, z0, fx0 + 0.12, KERB + Fy.h, z1, 'glass', F().ALL);
+      for (let z = z0; z <= z1 + 1e-6; z += (z1 - z0) / Math.max(1, Math.round((z1 - z0) / 3))) ctxF.prop.box(fx0 - 0.06, KERB, z - 0.06, fx0 + 0.18, KERB + Fy.h, z + 0.06, mull);
+    }
+    for (const z of [Fy.z0, Fy.z1 - 0.12]) {
+      ctxF.screen.box(fx0, KERB, z, E.x0, KERB + Fy.h, z + 0.12, glass);
+      world.physics.addBox(fx0, 0, z, E.x0, KERB + Fy.h, z + 0.12, 'glass', F().ALL);
+    }
+    ctxF.concrete.box(fx0 - 0.1, KERB + Fy.h, Fy.z0 - 0.1, E.x0, KERB + Fy.h + 1.4, Fy.z1 + 0.1, col(trim), { bottom: true });
+    world.physics.addBox(fx0 - 0.1, KERB + Fy.h, Fy.z0 - 0.1, E.x0, KERB + Fy.h + 1.4, Fy.z1 + 0.1, 'building', F().ALL);
+    // Inside the west wall above the foyer: the wall carries on above the foyer roof.
+    longBox(world, 'concrete', E.x0, KERB + Fy.h, Fy.z0, E.x0 + t, H, Fy.z1, wallC);
+    // The doors themselves: two pairs of glass leaves folded back against the front.
+    for (const z of [DR.z0 + 0.1, DR.z1 - 0.1]) {
+      const s = z < (DR.z0 + DR.z1) / 2 ? 1 : -1;
+      ctxF.screen.box(fx0 - 1.6, KERB, z - 0.05, fx0 - 0.1, KERB + 2.6, z + 0.05, glass);
+      ctxF.prop.box(fx0 - 1.65, KERB, z - 0.07, fx0 - 0.05, KERB + 0.12, z + 0.07, mull);
+      world.physics.addBox(fx0 - 1.6, 0, z - 0.06, fx0 - 0.1, KERB + 2.6, z + 0.06, 'glass', F().ALL);
+      void s;
+    }
+    // The door opening in the foyer front (a frame).
+    ctxF.prop.box(fx0 - 0.1, KERB + 3.2, DR.z0, fx0 + 0.2, KERB + Fy.h, DR.z1, col(trim));
+    world.physics.addBox(fx0 - 0.1, KERB + 3.2, DR.z0, fx0 + 0.2, KERB + Fy.h, DR.z1, 'building', F().ALL);
+    // A doormat, the welcome desk inside.
+    world.ctxAt(fx0 + 2, 1330).decal.topRect(fx0 + 0.3, DR.z0 + 1, fx0 + 4, DR.z1 - 1, KERB + 0.02, col(0x2a2d33));
+    W.solid(world, ctxF.prop, E.x0 - 3.2, KERB, Fy.z0 + 3, E.x0 - 1.4, KERB + 1.1, Fy.z0 + 9, 0xeef0f2, null, 'building');
+    // Cardboard Rex Castellane in the doorway, waving (a flat cut-out on a stand).
+    {
+      const rx = fx0 - 2.2, rz = DR.z0 + 1.6;
+      const ctx = world.ctxAt(rx, rz);
+      ctx.prop.box(rx - 0.03, KERB, rz - 0.25, rx + 0.03, KERB + 0.95, rz + 0.25, col(0x23262b)); // trousers
+      ctx.prop.box(rx - 0.03, KERB + 0.95, rz - 0.32, rx + 0.03, KERB + 1.6, rz + 0.32, col(0xf2f2ee)); // white racing jacket
+      ctx.prop.box(rx - 0.035, KERB + 1.2, rz - 0.33, rx + 0.035, KERB + 1.32, rz + 0.33, col(0xd4a017)); // gold stripe
+      ctx.prop.box(rx - 0.03, KERB + 1.62, rz - 0.13, rx + 0.03, KERB + 1.92, rz + 0.13, col(0xe0b090)); // face
+      ctx.prop.box(rx - 0.03, KERB + 1.88, rz - 0.15, rx + 0.03, KERB + 1.98, rz + 0.15, col(0xb8b8b4)); // silver hair
+      W.tiltBox(ctx.prop, rx, KERB + 1.82, rz + 0.48, 0.06, 0.62, 0.13, 0, -0.5, col(0xf2f2ee)); // the waving arm
+      ctx.prop.box(rx + 0.03, KERB, rz - 0.3, rx + 0.4, KERB + 0.04, rz + 0.3, col(0x5a4636)); // the stand
+      world.physics.addBox(rx - 0.06, 0, rz - 0.34, rx + 0.4, KERB + 1.98, rz + 0.34, 'plank', F().SOLID | F().CAMERA);
+    }
+
+    // --- outside: signs, flags, lamps, benches
+    W.sign(world, { x: E.x0 - 0.15, y: H - 2.4, z: 1270, yaw: -PI / 2, w: 44, h: 3.4, lines: ['SOUTHBAY EXPO HALL'], style: 'neon', oneSided: true, flat: false, colors: { bg: ['#10324a', '#1f6f8a'], fg: '#ffffff', glow: '#7fd0ff', outline: '#7fd0ff' } });
+    W.sign(world, { x: E.x0 - 0.15, y: KERB + 6.8, z: 1390, yaw: -PI / 2, w: 14, h: 11, lines: ['CASTELLANE', '50 YEARS', 'OF CHAMPIONS', 'NOW SHOWING'], style: 'plaque', oneSided: true, colors: { bg: ['#0f5f5a', '#0a3f3c'], fg: '#e8d080', border: '#d4a017' } });
+    for (let z = 1205; z < 1462; z += 22) {
+      if (z > Fy.z0 - 4 && z < Fy.z1 + 4) continue;
+      const ctx = world.ctxAt(341.5, z);
+      ctx.prop.cylinder(341.5, KERB, z, 0.09, 0.07, 9, 8, col(0xd0d4d8), true);
+      world.physics.addBox(341.4, 0, z - 0.1, 341.6, KERB + 9, z + 0.1, 'pole', F().ALL);
+      ctx.prop.box(341.45, KERB + 7.2, z + 0.1, 341.55, KERB + 8.8, z + 2.5, col([0x0f5f5a, 0xd4a017, 0x1f6f8a][Math.round(z / 22) % 3]));
+    }
+    for (const z of [1240, 1290, 1370, 1420]) world.addProp('streetlight', 340.6, KERB, z, -PI / 2, 1);
+    for (const z of [1300, 1360]) world.addProp('bench', 345, KERB, z, -PI / 2, 1);
+    world.addProp('streetlight', 400, KERB, E.z1 + 12, PI, 1);
+    // A pool of light on the forecourt and in the doorway; the hall's own light inside.
+    const pools = world.floodlights || (world.floodlights = []);
+    pools.push({ x: fx0 - 2, z: 1330, r: 10, y: KERB + 0.03, strength: 0.6, tint: [1.2, 1.1, 0.9] });
+    for (let z = E.z0 + 24; z < E.z1; z += 40) pools.push({ x: 383, z, r: 22, y: KERB + 0.03, strength: 0.45, tint: [1, 1.05, 1.1] });
+
+    // --- inside: plinths for the cars, a trophy island in the middle, display boards
+    for (const c of E.cars) {
+      const ctx = world.ctxAt(E.plinthX, c.z);
+      const x0 = E.plinthX - 3.6, x1 = E.plinthX + 3.6, z0 = c.z - 2.4, z1 = c.z + 2.4;
+      ctx.prop.box(x0, KERB, z0, x1, KERB + E.plinthH, z1, col(0x23262b));
+      ctx.prop.box(x0 - 0.02, KERB + E.plinthH - 0.06, z0 - 0.02, x1 + 0.02, KERB + E.plinthH, z1 + 0.02, col(0xd4a017));
+      world.physics.addBox(x0, 0, z0, x1, KERB + E.plinthH, z1, 'stone', F().ALL);
+      // A display board beside each car: a lit photo panel on two legs.
+      const bx = E.plinthX + 7.5;
+      ctx.prop.box(bx - 0.1, KERB, c.z - 1.6, bx + 0.1, KERB + 2.4, c.z + 1.6, col(0x10324a));
+      ctx.screen.box(bx - 0.13, KERB + 0.9, c.z - 1.4, bx + 0.13, KERB + 2.2, c.z + 1.4, VH.col(0xf2e8c8, 1.3));
+      world.physics.addBox(bx - 0.12, 0, c.z - 1.6, bx + 0.12, KERB + 2.4, c.z + 1.6, 'wall', F().ALL);
+    }
+    // The trophy island opposite the doors: a round dais and a big gold cup.
+    {
+      const tx = 386, tz = 1330;
+      const ctx = world.ctxAt(tx, tz);
+      ctx.prop.cylinder(tx, KERB, tz, 4, 4, 0.5, 20, col(0x23262b), true);
+      ctx.prop.cylinder(tx, KERB + 0.5, tz, 1.0, 0.8, 1.0, 12, col(0xeef0f2), true);
+      ctx.prop.cylinder(tx, KERB + 1.5, tz, 0.25, 0.5, 0.9, 12, col(0xd4a017), true);
+      ctx.prop.cylinder(tx, KERB + 2.4, tz, 0.5, 0.75, 0.9, 12, col(0xd4a017), true);
+      world.physics.addBox(tx - 2.9, 0, tz - 2.9, tx + 2.9, KERB + 0.5, tz + 2.9, 'stone', F().ALL);
+      world.physics.addBox(tx - 1.0, 0, tz - 1.0, tx + 1.0, KERB + 3.3, tz + 1.0, 'stone', F().ALL);
+    }
+    W.sign(world, { x: E.x1 - t - 0.1, y: KERB + 6.5, z: 1330, yaw: -PI / 2, w: 24, h: 3.6, lines: ['CASTELLANE · 50 YEARS OF CHAMPIONS', 'SOUTHBAY 500 · WINNERS 1961 – TODAY'], style: 'plaque', oneSided: true, colors: { bg: ['#0f5f5a', '#0a3f3c'], fg: '#e8d080', border: '#d4a017' } });
   }
 
   // ------------------------------------------------------------ the grid
@@ -796,6 +1287,22 @@
       box(SP.backStand.x0, SP.backStand.z0, SP.backStand.x1, SP.backStand.z1, '#e8762a');
       g.fillStyle = '#ffffff';
       R(SP.lineX - 1, SP.zn - 9, SP.lineX + 1, SP.zn + 9);
+      if (layout.plots.mariner_stadium) {
+        box(13, 1199, 321, 1463, '#a9a9ad', false);
+        // The bowl: rings of rectangles (the stands), the pitch inside.
+        for (let i = 0; i < 72; i++) {
+          const t = (i / 72) * 2 * PI;
+          for (const [d, c, r] of [[3, '#d9ccb0', 4], [12, '#1f4f7a', 6], [ST.dF + 2.6, '#b5523a', 3]]) {
+            g.fillStyle = c;
+            const x = ST.cx + (ST.a - d) * Math.cos(t), z = ST.cz + (ST.b - d) * Math.sin(t);
+            R(x - r, z - r, x + r, z + r);
+          }
+        }
+        g.fillStyle = '#6aa84f';
+        R(ST.cx - 40, ST.cz - 24, ST.cx + 40, ST.cz + 24);
+        g.fillStyle = '#f2c230';
+        R(BJ.bus0, BJ.z - 6, BJ.bus1, BJ.z + 6);
+      }
     });
   }
 
@@ -803,6 +1310,26 @@
   class BowlLife {
     constructor(game) {
       this.game = game;
+      const W = K();
+      if (!W || !game.world || !game.world.theBowlStadium) return;
+      // Parked cars in the stadium car park (about one bay in three).
+      const list = [];
+      let seed = 4111;
+      for (const rx of [30, 58, 86, 114]) {
+        for (const [z0, z1] of [[1206, 1300], [1324, 1408]]) {
+          for (let z = z0 + 1.5; z < z1; z += 3) {
+            seed++;
+            if (VH.math.hash2(seed, 5) < 0.62) continue;
+            const west = VH.math.hash2(seed, 9) < 0.5;
+            list.push(W.parkedSpot(rx + (west ? -2.8 : 2.8), z, west ? PI / 2 : -PI / 2, seed));
+          }
+        }
+      }
+      W.addParkedSpots(game, list);
+      // The classic cars at the Expo Hall's show wait on their plinths (take one; another is wheeled in).
+      if (game.world.theBowlExpo && game.vehicles && game.vehicles.addFixedSpot) {
+        for (const c of EX.cars) game.vehicles.addFixedSpot({ type: c.type, x: EX.plinthX, z: c.z, yaw: -PI / 2, y: KERB + EX.plinthH, color: c.color, r: 4 });
+      }
     }
     update() {}
     stop() {}
@@ -813,11 +1340,20 @@
   VH.Districts.register({
     id: D,
     name: 'The Bowl',
-    plots: ['southbay_speedway'],
+    plots: ['southbay_speedway', 'mariner_stadium', 'expo_hall'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.southbay_speedway || !VH.WNKit) return;
       buildSpeedway(world);
+      if (layout.plots.mariner_stadium) {
+        buildStadium(world);
+        buildStadiumParks(world);
+        world.theBowlStadium = true;
+      }
+      if (layout.plots.expo_hall) {
+        buildExpo(world);
+        world.theBowlExpo = true;
+      }
       VH.Circuits.add(new Circuit({
         id: 'southbay_speedway',
         name: 'Southbay Speedway',
@@ -851,6 +1387,18 @@
       add('speedway_tunnel', { name: 'The tunnel under the main stand', x: (SP.tunnel.x0 + SP.tunnel.x1) / 2, z: (SP.stand.zb + SP.stand.zf) / 2, yaw: 0, kind: 'street' });
       add('commentary_box', { name: 'The commentary box', x: SP.lineX, z: SP.stand.zb + 3, y: SP.yBack + 0.6, yaw: 0, kind: 'storefront' });
       add('speedway_back_gate', { name: 'The service gate, Southbay Speedway', x: (SP.backGate.x0 + SP.backGate.x1) / 2, z: SP.zs + SP.HW + 6, yaw: 0, kind: 'street' });
+      if (world.theBowlStadium) {
+        const gx = ST.cx - ST.a;
+        add('mariner_stadium', { name: 'Mariner Stadium', x: gx - 16, z: ST.cz, yaw: PI / 2, kind: 'street', landmark: true });
+        add('stadium_gate', { name: 'The marathon gate, Mariner Stadium', x: gx - 6, z: ST.cz, yaw: PI / 2, kind: 'street' });
+        add('stadium_apron_north', { name: 'The apron road, north of the stadium', x: ST.cx, z: ST.cz - ST.b - 6.5, yaw: PI / 2, kind: 'street' });
+        add('stadium_apron_south', { name: "The apron road by the players' entrance", x: ST.cx + 14, z: ST.cz + ST.b + 6.5, yaw: -PI / 2, kind: 'street' });
+        add('bowl_car_park', { name: 'The stadium car park', x: 72, z: ST.cz, yaw: PI / 2, kind: 'parking' });
+        add('stadium_bus_ramp', { name: 'The bus jump, stadium car park', x: BJ.x0 - 2, z: BJ.z, yaw: PI / 2, kind: 'parking' });
+      }
+      if (world.theBowlExpo) {
+        add('expo_hall', { name: 'Southbay Expo Hall', x: EX.x0 - 10, z: (EX.door.z0 + EX.door.z1) / 2, yaw: PI / 2, kind: 'storefront', landmark: true });
+      }
       const extra = places.extra[D];
       if (extra) {
         extra.push(
@@ -858,6 +1406,22 @@
           { x: 167, z: SP.garages.z1 + 2, yaw: 0, kinds: ['street', 'alley', 'parking'], name: 'The paddock road' },
           { x: 70, z: SP.z0 + 5, yaw: 0, kinds: ['street', 'corner', 'parking'], name: 'The Speedway plaza' },
         );
+        if (world.theBowlStadium) {
+          extra.push(
+            { x: 44, z: 1250, yaw: 0, kinds: ['parking', 'street'], name: 'Car park A, Mariner Stadium' },
+            { x: 100, z: 1380, yaw: PI, kinds: ['parking', 'corner'], name: 'Car park D, Mariner Stadium' },
+            { x: 225, z: 1214, yaw: PI / 2, kinds: ['parking', 'street'], name: 'The coach bays, Mariner Way' },
+            { x: ST.cx + ST.a + 6, z: ST.cz + 20, yaw: PI, kinds: ['street', 'alley', 'corner'], name: 'The apron road, east side' },
+            { x: ST.cx, z: ST.cz, yaw: PI / 2, kinds: ['park', 'overlook'], name: 'The pitch, Mariner Stadium' },
+          );
+        }
+        if (world.theBowlExpo) {
+          extra.push(
+            { x: (EX.load.x0 + EX.load.x1) / 2, z: EX.z1 + 10, yaw: PI, kinds: ['warehouse', 'garage', 'parking'], name: 'The Expo Hall loading yard' },
+            { x: EX.x0 + 12, z: 1330, yaw: PI / 2, kinds: ['storefront', 'warehouse'], name: 'Inside the Expo Hall' },
+            { x: 384, z: 1203, yaw: 0, kinds: ['parking', 'street'], name: 'The Expo Hall car park' },
+          );
+        }
       }
     },
     System: BowlLife,

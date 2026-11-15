@@ -780,6 +780,24 @@
       }
     },
 
+    /** Story jobs passed: the main story and the story DLC counted apart. */
+    _storyStats() {
+      const m = this.missions;
+      if (!m || !m.all) return [];
+      const n = (f) => Array.from(m.all.values()).filter((x) => f(x) && m.completed[x.id]).length;
+      const t = (f) => Array.from(m.all.values()).filter(f).length;
+      const rows = [
+        ['Story jobs', n((x) => x._main) + ' / ' + t((x) => x._main)],
+        ['Side story jobs', n((x) => x._chain && !x._dlc) + ' / ' + t((x) => x._chain && !x._dlc)],
+      ];
+      if (m.dlc && m.dlcMain && m.dlcMain.length) {
+        const title = m.dlc.title || 'Story DLC';
+        rows.push([title + ': story jobs', n((x) => x._dlcMain) + ' / ' + m.dlcMain.length]);
+        rows.push([title + ': side jobs', n((x) => x._dlc && x._chain) + ' / ' + t((x) => x._dlc && x._chain)]);
+      }
+      return rows;
+    },
+
     statsList() {
       const s = this.player.stats;
       const km = (m) => (m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m');
@@ -795,7 +813,7 @@
         ['Longest fall', s.longestFall.toFixed(1) + ' m'],
         ['Times knocked out', String(s.deaths)],
         ['Challenges finished', String(s.challengesCompleted || 0)],
-      ].concat(this.activities ? (() => {
+      ].concat(this._storyStats()).concat(this.activities ? (() => {
         const c = this.activities.completion;
         return [
           ['Stunt jumps', c.jumps + ' / ' + c.jumpsTotal],
@@ -1081,13 +1099,13 @@
       const ids = ['jay', 'dex', 'mae', 'augie', 'noor', 'ansel', 'calder', 'teo', 'rhea', 'birdie', 'lourdes', 'horne', 'rourke', 'voss', 'nana_lu', 'tommy'];
       const cast = ids.filter((id) => chars[id]).map((id) => ({ name: chars[id].name, role: chars[id].role || '' }));
       const done = Object.keys(m.completed).filter((id) => m.all.has(id));
-      const side = done.filter((id) => (m.all.get(id) || {})._chain).length;
+      const side = done.filter((id) => (m.all.get(id) || {})._chain && !m.all.get(id)._dlc).length;
       const jobs = done.filter((id) => (m.all.get(id) || {}).activity).length;
       const mins = Math.round((this.playTime || 0) / 60);
       const stats = [
         ['Time on the road', Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min'],
         ['Story jobs', String(done.filter((id) => (m.all.get(id) || {})._main).length) + ' / ' + m.main.length],
-        ['Side stories', side + ' / ' + Array.from(m.all.values()).filter((x) => x._chain).length + ' jobs'],
+        ['Side stories', side + ' / ' + Array.from(m.all.values()).filter((x) => x._chain && !x._dlc).length + ' jobs'],
         ['Jobs between jobs', String(jobs)],
         ['Taxi fares', String(this.activities ? this.activities.taxi.done : 0)],
         ['Money in your pocket', VH.util.formatMoney(this.player.money)],
@@ -1100,6 +1118,42 @@
         this.player.frozen = false;
         if (this.audio.moodPad) this.audio.moodPad(null);
         this.hud.notify({ title: 'Vicehaven', text: 'The races, fares, bounties and side stories are still out there.', icon: '☀', duration: 7000 });
+      });
+    },
+
+    /**
+     * After the story DLC's last job (missions.js, on dlc:complete): its own
+     * credits (its title, the ending's name, its cast, the player's numbers
+     * for it), then free roam. Its endings' flags are dlc_end_*.
+     */
+    dlcCredits() {
+      const m = this.missions;
+      const D = m.dlc;
+      if (!D) return;
+      const f = m.flags;
+      const ending = f.dlc_end_hers ? 'Ending: Hers' : f.dlc_end_everybody ? 'Ending: Everybody\'s' : f.dlc_end_gone ? 'Ending: Gone Again' : '';
+      const chars = Object.assign({}, (VH.Data.story && VH.Data.story.characters) || {}, D.characters || {});
+      // Jay, then the DLC's named cast in the header's order (the walk-ons, with no surname or a job for a name, stay out).
+      const ids = ['jay'].concat(Object.keys(D.characters || {}).filter((id) => {
+        const c = D.characters[id];
+        return c && c.name && /\s/.test(c.name) && !/^(Guest Services|Police|Vicehaven|Castellane|Studio|Popcorn)\b/.test(c.name);
+      }));
+      const cast = ids.filter((id) => chars[id]).map((id) => ({ name: chars[id].name, role: chars[id].role || '' }));
+      const pr = m.dlcProgress;
+      const lessons = (m.dlcSide || []).length;
+      const stats = [
+        ['Story jobs', pr.main[0] + ' / ' + pr.main[1]],
+        ['Side stories', pr.side[0] + ' / ' + pr.side[1] + ' jobs' + (lessons ? ' in ' + lessons + ' stories' : '')],
+        ['Money in your pocket', VH.util.formatMoney(this.player.money)],
+      ];
+      if (this.audio.moodPad) this.audio.moodPad('hope');
+      this.frozenControls = true;
+      this.player.frozen = true;
+      this.ui.showCredits({ title: D.title || 'VICEHAVEN', sub: 'A Vicehaven story', ending, cast, stats, line: 'For everyone who ever hid something for somebody to find.', last: 'And mind the road.' }, () => {
+        this.frozenControls = false;
+        this.player.frozen = false;
+        if (this.audio.moodPad) this.audio.moodPad(null);
+        this.hud.notify({ title: D.title || 'Vicehaven', text: 'The bay is still out there: races, flying lessons and side stories.', icon: '☀', duration: 7000 });
       });
     },
 

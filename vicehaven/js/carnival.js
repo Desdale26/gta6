@@ -51,7 +51,8 @@
  *   s.eye(x, y, z, yaw, o)       first-person camera at an eye point, facing yaw, free look
  *                                (mouse / right stick); o: { yawLimit, pitchMin, pitchMax,
  *                                fov, shake (0..1), roll, pitch (base pitch) }
- *   s.chase(x, y, z, yaw, dist, o)  camera orbiting a point (free look), o: { height, fov }
+ *   s.chase(x, y, z, yaw, dist, o)  camera orbiting a point (free look), o: { height, fov,
+ *                                recentre: true (the look drifts back behind when left alone) }
  *   s.shot(px, py, pz, tx, ty, tz, fov)  a fixed camera looking at a point (a stall game)
  *   s.view                       'eye' or 'chase': V (or RB) swaps it; rides choose which
  *                                camera to call from it
@@ -83,8 +84,19 @@
  *   carnival.closedFor           seconds the rides stay shut after an alarm
  *   carnival.figures             instanced riders: begin() / add(kind, x, y, z, yaw, tint) /
  *                                end(); kinds 'sit', 'up' (arms up), 'stand'
- *   carnival.life                the Neon Strand's moving parts (the wheel, the train, the
- *                                Skyhook), from districts/neonstrand.js
+ *   carnival.life                the Neon Strand's moving parts (WharfLife in
+ *                                districts/neonstrand.js): the wheel (angle, wheelDriven,
+ *                                gondola(i, out)), the Riptide's train (s, v, trainState,
+ *                                trainHold, carPos[], carQ[]), the Skyhook (dropT, towerY,
+ *                                towerHold, towerDriven), the carousel (carAngle, carSpeed,
+ *                                carouselDriven, horse(k, out)) and the rides' gates
+ *                                (gateById[id].target = 1 opens one). Stepped by this system
+ *                                before any attraction runs, so what they read is this frame's.
+ *   carnival.gate(id, open)      swing a ride's gate open (true) or shut
+ *   carnival.movable(x0, z0, x1, z1, hx, hz, y0, y1, tag, flags)
+ *                                a solid box that moves within the rectangle x0..x1, z0..z1
+ *                                (a dodgem car, a stall's target): returns { move(cx, cz, yaw),
+ *                                enable(on) }; half sizes hx (across) and hz (along yaw)
  *   Events: 'carnival:start' { id }, 'carnival:end' { id, score, tickets, completed, why },
  *   'carnival:tickets' { tickets, delta }.
  *
@@ -455,7 +467,7 @@
     walk(x, z, y, seconds) {
       const p = this.game.player;
       if (!this._walk || this._walk.x !== x || this._walk.z !== z) {
-        this._walk = { x, z, y: y === undefined ? null : y, fx: p.pos.x, fz: p.pos.z, fy: p.pos.y, t: 0, T: Math.max(0.3, seconds || Math.hypot(x - p.pos.x, z - p.pos.z) / 1.6) };
+        this._walk = { x, z, y: y === undefined ? null : y, fx: p.pos.x, fz: p.pos.z, fy: p.pos.y, t: 0, T: Math.max(0.3, seconds || Math.hypot(x - p.pos.x, z - p.pos.z) / 2.1) };
       }
       const W = this._walk;
       W.t += this.carnival._dt;
@@ -482,17 +494,22 @@
     }
 
     // ---- cameras
-    _freeLook(limit) {
+    _freeLook(limit, recentre) {
       const rig = this.game.cameraRig;
-      this._look = clamp(this._look + wrap(rig.yaw - this._rigPrev), -limit, limit);
+      const d = wrap(rig.yaw - this._rigPrev);
+      this._look = clamp(this._look + d, -limit, limit);
       this._rigPrev = rig.yaw;
+      if (recentre) {
+        this._still = d ? 0 : (this._still || 0) + this.carnival._dt;
+        if (this._still > 1.2) this._look *= Math.max(0, 1 - this.carnival._dt * 1.8);
+      }
       return this._look;
     }
 
     eye(x, y, z, yaw, o) {
       o = o || NONE;
       const rig = this.game.cameraRig;
-      const look = this._freeLook(o.yawLimit === undefined ? 2.9 : o.yawLimit);
+      const look = this._freeLook(o.yawLimit === undefined ? 2.9 : o.yawLimit, o.recentre);
       rig.pitch = clamp(rig.pitch, o.pitchMin === undefined ? -1.3 : o.pitchMin, o.pitchMax === undefined ? 1.2 : o.pitchMax);
       const C = this._camState();
       C.mode = 'eye';
@@ -502,6 +519,7 @@
       C.roll = o.roll || 0;
       C.fov = o.fov || this.carnival._baseFov;
       C.shake = o.shake || 0;
+      this.game.player.model.setVisible(true);
       this.game.player.model.setHeadVisible(false);
       this.carnival._applyCam();
     }
@@ -509,7 +527,7 @@
     chase(x, y, z, yaw, dist, o) {
       o = o || NONE;
       const rig = this.game.cameraRig;
-      const look = this._freeLook(Math.PI);
+      const look = this._freeLook(Math.PI, o.recentre);
       rig.pitch = clamp(rig.pitch, -1.2, 0.6);
       const C = this._camState();
       C.mode = 'chase';
@@ -520,6 +538,7 @@
       C.roll = 0;
       C.fov = o.fov || this.carnival._baseFov;
       C.shake = o.shake || 0;
+      this.game.player.model.setVisible(true);
       this.game.player.model.setHeadVisible(true);
       this.carnival._applyCam();
     }
@@ -531,6 +550,7 @@
       C.tx = tx; C.ty = ty; C.tz = tz;
       C.fov = fov || this.carnival._baseFov;
       C.shake = 0;
+      this.game.player.model.setVisible(true);
       this.game.player.model.setHeadVisible(true);
       this.carnival._applyCam();
     }
@@ -648,6 +668,46 @@
 
     get life() {
       return this.game.districtSystems ? this.game.districtSystems.neonstrand : null;
+    }
+
+    /** Swing a ride's gate (neonstrand.js builds them: 'wheel', 'coaster', 'tower', 'carousel', 'helter'). */
+    gate(id, open) {
+      const L = this.life;
+      const g = L && L.gateById && L.gateById[id];
+      if (g) g.target = open ? 1 : 0;
+    }
+
+    /**
+     * A solid box that moves about inside the rectangle x0..x1, z0..z1: it is
+     * filed in the physics grid over the whole rectangle once, then only its
+     * numbers change. Half sizes hx (across) and hz (along its yaw).
+     */
+    movable(x0, z0, x1, z1, hx, hz, y0, y1, tag, flags) {
+      const col = this.game.physics.addBox(x0, y0, z0, x1, y1, z1, tag || 'metal', flags === undefined ? VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS : flags);
+      const on = col.flags;
+      col.hx = hx;
+      col.hz = hz;
+      const m = {
+        col,
+        move(cx, cz, yaw) {
+          const c = Math.cos(yaw), s = Math.sin(yaw);
+          const ex = Math.abs(hx * c) + Math.abs(hz * s), ez = Math.abs(hx * s) + Math.abs(hz * c);
+          col.cx = clamp(cx, x0 + ex, x1 - ex);
+          col.cz = clamp(cz, z0 + ez, z1 - ez);
+          col.yaw = yaw;
+          col.cos = c;
+          col.sin = s;
+          col.minX = col.cx - ex;
+          col.maxX = col.cx + ex;
+          col.minZ = col.cz - ez;
+          col.maxZ = col.cz + ez;
+        },
+        enable(b) {
+          col.flags = b ? on : 0;
+        },
+      };
+      m.move((x0 + x1) / 2, (z0 + z1) / 2, 0);
+      return m;
     }
 
     _defineFood() {
@@ -991,6 +1051,12 @@
         this._alarmCheck = 0.5;
         this._checkCars();
         this._prompts();
+      }
+      // The rides' machinery moves on first, so riders and cameras see this frame's positions.
+      const life = this.life;
+      if (life && life.ok) {
+        life.step(dt);
+        life.stepped = true;
       }
       // Fair life: each attraction near Jay, then the riders drawn in one go.
       this.figures.begin();

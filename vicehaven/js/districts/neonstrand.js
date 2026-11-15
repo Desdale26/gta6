@@ -47,6 +47,10 @@
   const MIDWAY = { x0: 880, x1: 900 };
   const CONV = { x0: 1000, x1: 1140, z0: -242, z1: -140, h: 18 };
   const TOWER = { x: 832, z: -18, h: 54 }; // the Skyhook drop tower
+  const CAROUSEL = { x: 935, z: -20, r: 8.2, fence: 9.8 };
+  // The helter-skelter: tower, the slide's spiral, the stair inside (door west, out at the top east onto the slide).
+  const HELTER = { x: 957, z: -33, R: 3, h: 16, r: 4.4, turns: 3.25, top: KERB + 12.6, bottom: KERB + 0.6, floor: KERB + 12.8, door: Math.PI + Math.PI / 16, exit: Math.PI / 16 };
+  const DODGEMS = { x0: 830, z0: 126, x1: 872, z1: 162 };
   const NEON = [0xff3d8b, 0x37e8ff, 0xb45cff, 0xffb92e, 0x7dff6a, 0xff6a2e];
 
   // ------------------------------------------------------------- helpers
@@ -109,6 +113,14 @@
     beam(ctx.prop, x0, y + h - 0.03, z0, x1, y + h - 0.03, z1, 0.06, col);
     beam(ctx.prop, x0, y + h * 0.5, z0, x1, y + h * 0.5, z1, 0.05, col);
     world.physics.addOrientedBox((x0 + x1) / 2, (z0 + z1) / 2, 0.1, len / 2 + 0.05, Math.atan2(x1 - x0, z1 - z0), y - 0.3, y + h, 'railing', F().SOLID | F().SHOTS);
+  }
+
+  /** A ride's gate: solid while shut (riders are walked through it by carnival-rides.js); WharfLife draws and swings it. */
+  function gate(world, id, x0, z0, x1, z1, y, h, swing) {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const yaw = Math.atan2(x1 - x0, z1 - z0);
+    world.physics.addOrientedBox((x0 + x1) / 2, (z0 + z1) / 2, 0.1, len / 2 + 0.05, yaw, y - 0.3, y + h, 'railing', F().SOLID | F().SHOTS);
+    (world.wharfGates || (world.wharfGates = [])).push({ id, x: x0, z: z0, y, h, len, yaw, swing: swing || 1, open: 0, target: 0 });
   }
 
   /** A ramp drawn to match physics.addRamp(cx, cz, hx, hz, yaw, 0, yLow, yHigh): top rising from local -Z to +Z. */
@@ -296,10 +308,13 @@
     world.physics.addOrientedBox(dx, dz, 6, 3.4, W.yaw, 0, KERB + 0.9, 'boardwalk', F().ALL);
     // The gondolas sweep through the middle of the deck: a railed lane keeps people out of their way.
     const at = (u, v) => [dx + px * u + ax * v, dz + pz * u + az * v];
-    for (const [u0, v0, u1, v1] of [[-5.9, -1.45, 5.9, -1.45], [-5.9, 1.45, 5.9, 1.45], [-5.9, -1.45, -5.9, 1.45], [5.9, -1.45, 5.9, 1.45]]) {
+    for (const [u0, v0, u1, v1] of [[-5.9, -1.45, 5.9, -1.45], [-5.9, 1.45, -0.8, 1.45], [0.8, 1.45, 5.9, 1.45], [-5.9, -1.45, -5.9, 1.45], [5.9, -1.45, 5.9, 1.45]]) {
       const [x0, z0] = at(u0, v0), [x1, z1] = at(u1, v1);
       fenceLine(world, ctx, x0, z0, x1, z1, KERB + 0.9, 1.25, 0xffd24a); // too tall to vault
     }
+    // The boarding gate, opposite the bottom gondola, on the ramp side.
+    const [g0x, g0z] = at(-0.8, 1.45), [g1x, g1z] = at(0.8, 1.45);
+    gate(world, 'wheel', g0x, g0z, g1x, g1z, KERB + 0.9, 1.25, 1);
     const rx = dx + ax * 5.6, rz = dz + az * 5.6;
     world.physics.addRamp(rx, rz, 1.6, 2.2, W.yaw + Math.PI, 0, KERB, KERB + 0.9, 'boardwalk');
     wedge(ctx.prop, rx, rz, 1.6, 2.2, W.yaw + Math.PI, KERB, KERB + 0.9, VH.col(0xd9d2c4));
@@ -377,9 +392,18 @@
     world.physics.addBox(T.x - 1.4, 0, T.z - 1.4, T.x + 1.4, T.h + 5.4, T.z + 1.4, 'metal');
     solidRound(world, T.x, T.z, 6.5, 0, KERB + 0.4, 'kerb', F().SOLID);
     // A ring of railings on the base: the seats come down to the ground here.
+    const ring = (a) => [T.x + Math.cos(a) * 5.2, T.z + Math.sin(a) * 5.2];
     for (let k = 0; k < 8; k++) {
       const a0 = ((k + 0.5) * Math.PI) / 4, a1 = ((k + 1.5) * Math.PI) / 4;
-      fenceLine(world, ctx, T.x + Math.cos(a0) * 5.2, T.z + Math.sin(a0) * 5.2, T.x + Math.cos(a1) * 5.2, T.z + Math.sin(a1) * 5.2, KERB + 0.4, 1.25, 0xffd24a);
+      if (k === 7) {
+        // The gate, facing the midway.
+        const g = 0.14;
+        fenceLine(world, ctx, ...ring(a0), ...ring(2 * Math.PI - g), KERB + 0.4, 1.25, 0xffd24a);
+        fenceLine(world, ctx, ...ring(g), ...ring(a1), KERB + 0.4, 1.25, 0xffd24a);
+        gate(world, 'tower', ...ring(-g), ...ring(g), KERB + 0.4, 1.25, -1);
+        continue;
+      }
+      fenceLine(world, ctx, ...ring(a0), ...ring(a1), KERB + 0.4, 1.25, 0xffd24a);
     }
     world.beacons.push({ x: T.x, y: T.h + 5.6, z: T.z });
     sign(world, { x: T.x, y: T.h - 3, z: T.z + 1.4, yaw: 0, w: 2.4, h: 9, lines: ['SKYHOOK'], style: 'neon', posts: false });
@@ -389,6 +413,7 @@
   function buildDodgems(world, x0, z0, x1, z1) {
     const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
     ctx.prop.box(x0, KERB, z0, x1, KERB + 0.2, z1, VH.col(0x3a3d44), { top: VH.col(0x2a2c31) });
+    world.physics.addBox(x0, 0, z0, x1, KERB + 0.2, z1, 'plank', F().SOLID | F().SHOTS);
     for (const [a0, b0, a1, b1] of [[x0, z0, x1, z0 + 0.4], [x0, z1 - 0.4, x1, z1], [x0, z0, x0 + 0.4, z1], [x1 - 0.4, z0, x1, z1 - 8]]) {
       ctx.prop.box(a0, KERB + 0.2, b0, a1, KERB + 0.8, b1, VH.col(0xffd24a));
       world.physics.addBox(a0, 0, b0, a1, KERB + 0.8, b1, 'railing', F().SOLID | F().SHOTS);
@@ -401,38 +426,111 @@
     ctx.propMatte.box(x0 + 1, KERB + 5.9, z0 + 1, x1 - 1, KERB + 6.0, z1 - 1, VH.col(0x5a5f66), { bottom: true });
     world.physics.addBox(x0 - 0.5, KERB + 6, z0 - 0.5, x1 + 0.5, KERB + 6.6, z1 + 0.5, 'building', F().SOLID | F().CAMERA);
     for (let x = x0; x <= x1; x += 1.4) for (const z of [z0 - 0.55, z1 + 0.55]) ctx.screen.box(x - 0.1, KERB + 6.05, z - 0.05, x + 0.1, KERB + 6.4, z + 0.05, VH.col(Math.round(x) % 2 ? 0xffd24a : 0xff5c95, 2));
-    const cols = [0xe0403a, 0x37b8ff, 0xffd24a, 0x7dcf6a, 0xff5c95, 0xb45cff];
-    for (let k = 0; k < 9; k++) {
-      const cx = x0 + 5 + ((k * 13.7) % (x1 - x0 - 10)), cz = z0 + 5 + ((k * 7.3) % (z1 - z0 - 10));
-      const yaw = k * 1.9;
-      ctx.prop.orientedBox(cx, cz, 0.85, 1.2, yaw, KERB + 0.2, KERB + 0.75, VH.col(cols[k % cols.length]));
-      ctx.prop.orientedBox(cx, cz, 0.95, 1.35, yaw, KERB + 0.25, KERB + 0.45, VH.col(0x1b1d21));
-      world.physics.addOrientedBox(cx, cz, 0.95, 1.35, yaw, 0, KERB + 0.75, 'metal', F().SOLID | F().SHOTS);
-      ctx.prop.box(cx - 0.03, KERB + 0.75, cz - 0.03, cx + 0.03, KERB + 5.9, cz + 0.03, VH.col(0x9aa1a8));
-      world.physics.addBox(cx - 0.08, KERB + 0.75, cz - 0.08, cx + 0.08, KERB + 5.9, cz + 0.08, 'pole', F().SOLID | F().SHOTS);
-    }
+    // (The cars are js/carnival-rides.js's: they drive, so they are drawn and made solid there.)
     sign(world, { x: x1 + 0.6, y: KERB + 7.6, z: (z0 + z1) / 2, yaw: Math.PI / 2, w: 10, h: 1.8, lines: ['DODGEMS'], style: 'neon', colors: CYAN, posts: false });
   }
 
-  /** A helter-skelter: a striped tower and a slide spiralling round it. */
+  /** The helter-skelter's slide: the centre line of the mat's path at t (0 top .. 1 bottom), into out [x, y, z, angle]. */
+  function helterAt(t, out) {
+    const H = HELTER;
+    const a = H.exit + t * H.turns * Math.PI * 2;
+    out[0] = H.x + Math.cos(a) * H.r;
+    out[1] = H.top - t * (H.top - H.bottom);
+    out[2] = H.z + Math.sin(a) * H.r;
+    out[3] = a;
+    return out;
+  }
+
+  /**
+   * A helter-skelter: a striped tower with a door on the midway side, a
+   * spiral stair inside up to a landing, out at the top onto a little
+   * platform where the slide starts and spirals down round the outside.
+   */
   function buildHelter(world, x, z) {
+    const H = HELTER;
     const ctx = world.ctxAt(x, z);
-    for (let k = 0; k < 7; k++) ctx.prop.cylinder(x, KERB + k * 2, z, 3, 2.7, 2, 12, VH.col(k % 2 ? 0xf6f1e4 : 0xe0403a), false);
-    ctx.prop.cylinder(x, KERB + 14, z, 3.6, 0, 4, 12, VH.col(0x2fb7b0), false);
-    ctx.prop.cylinder(x, KERB + 18, z, 0.05, 0.05, 1.6, 4, VH.col(0xdddddd), false);
-    const turns = 3.25, top = KERB + 13, n = 52;
-    let pa = null;
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const a = t * turns * Math.PI * 2;
-      const p = [x + Math.cos(a) * 4.4, top - t * (top - KERB - 0.6), z + Math.sin(a) * 4.4];
-      if (pa) {
-        beam(ctx.prop, pa[0], pa[1], pa[2], p[0], p[1], p[2], 1.2, VH.col(0xffd24a));
-        solidBeam(world, pa[0], pa[1], pa[2], p[0], p[1], p[2], 1.2);
+    const N = 16, T = 0.3, rw = H.R - T / 2, half = H.R * Math.sin(Math.PI / N) + 0.03;
+    const red = 0xe0403a, white = 0xf6f1e4;
+    const near = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.01;
+    // The wall: sixteen panels, striped every 2 m; holes for the door and the way out at the top.
+    for (let i = 0; i < N; i++) {
+      const a = ((i + 0.5) / N) * Math.PI * 2;
+      const holes = [];
+      if (near(a, H.door)) holes.push([KERB - 1, KERB + 2.2]);
+      if (near(a, H.exit)) holes.push([H.floor, H.floor + 2.25]);
+      const px = x + Math.cos(a) * rw, pz = z + Math.sin(a) * rw;
+      for (let k = 0; k < H.h / 2; k++) {
+        let spans = [[KERB + k * 2, KERB + (k + 1) * 2]];
+        for (const [h0, h1] of holes) spans = spans.flatMap(([y0, y1]) => (h1 <= y0 || h0 >= y1 ? [[y0, y1]] : [[y0, Math.max(y0, h0)], [Math.min(y1, h1), y1]].filter(([u, v]) => v - u > 0.01)));
+        for (const [y0, y1] of spans) {
+          ctx.prop.orientedBox(px, pz, T / 2, half, -a, y0, y1, VH.col(k % 2 ? white : red));
+          world.physics.addOrientedBox(px, pz, T / 2, half, -a, y0 === KERB ? 0 : y0, y1, 'wall');
+        }
       }
-      pa = p;
     }
-    world.physics.addBox(x - 3, 0, z - 3, x + 3, KERB + 18, z + 3, 'building');
+    // Lintels' worth of trim round the door and the way out, and a lamp over each.
+    for (const [a, y] of [[H.door, KERB + 2.2], [H.exit, H.floor + 2.25]]) {
+      const px = x + Math.cos(a) * (H.R + 0.05), pz = z + Math.sin(a) * (H.R + 0.05);
+      ctx.prop.orientedBox(px, pz, 0.08, half + 0.05, -a, y, y + 0.18, VH.col(0xffd24a));
+      ctx.screen.box(px - 0.12, y + 0.3, pz - 0.12, px + 0.12, y + 0.55, pz + 0.12, VH.col(0xfff1c8, 2));
+    }
+    // The roof: a cone with a ceiling under it, and a flag.
+    ctx.prop.cylinder(x, KERB + H.h, z, H.R + 0.6, 0, 4, 12, VH.col(0x2fb7b0), false);
+    ctx.interior.box(x - 2.05, KERB + H.h - 0.15, z - 2.05, x + 2.05, KERB + H.h, z + 2.05, VH.col(0xf6f1e4), { bottom: true });
+    ctx.prop.cylinder(x, KERB + H.h + 4, z, 0.05, 0.05, 1.6, 4, VH.col(0xdddddd), false);
+    // The newel post, and the stair round it: treads 0.25 m apart, about four turns up to the landing.
+    ctx.prop.cylinder(x, KERB, z, 0.3, 0.3, H.h, 8, VH.col(0xd4a017), false);
+    world.physics.addBox(x - 0.3, 0, z - 0.3, x + 0.3, KERB + H.h, z + 0.3, 'pole', F().SOLID | F().SHOTS);
+    const rise = 0.25;
+    const steps = Math.round((H.floor - KERB) / rise);
+    const a0 = H.door + 0.55;
+    const aEnd = H.exit - 0.15 + Math.PI * 2 * 4; // the last step just short of the way out, four turns on
+    const dA = (aEnd - a0) / steps;
+    const rm = 1.5, hr = 1.2, ht = Math.max(rm * Math.tan(dA / 2), 2.7 * Math.tan(dA / 2)) + 0.03;
+    const tread = (a, top, hex) => {
+      const cx = x + Math.cos(a) * rm, cz = z + Math.sin(a) * rm;
+      ctx.prop.orientedBox(cx, cz, hr, ht, -a, top - 0.12, top, VH.col(hex), VH.col(0xc9a477));
+      world.physics.addOrientedBox(cx, cz, hr, ht, -a, top - 0.25, top, 'plank', F().SOLID | F().SHOTS);
+    };
+    for (let i = 0; i < steps; i++) tread(a0 + dA * (i + 0.5), KERB + rise * (i + 1), i % 2 ? 0xb07a4a : 0xa06a3a);
+    // The landing at the top: level treads on round to the way out and a little past it.
+    for (let a = aEnd + dA * 0.5; a < aEnd + 1.1; a += dA) tread(a, H.floor, 0xb07a4a);
+    // A lamp on the wall every turn, so the stair isn't dark.
+    for (let y = KERB + 2.6; y < H.floor; y += 3.2) {
+      const a = H.door + (y - KERB) * 1.7;
+      ctx.screen.box(x + Math.cos(a) * 2.68 - 0.1, y, z + Math.sin(a) * 2.68 - 0.1, x + Math.cos(a) * 2.68 + 0.1, y + 0.3, z + Math.sin(a) * 2.68 + 0.1, VH.col(0xfff1c8, 1.6));
+    }
+    // Outside the way out: a platform with rails, the slide starting from its south edge.
+    const pa = H.exit - 0.22, pr = (H.R + H.r + 0.3) / 2;
+    const ppx = x + Math.cos(pa) * pr, ppz = z + Math.sin(pa) * pr;
+    const phx = (H.r + 0.3 - H.R) / 2 + 0.1, phz = 0.9;
+    ctx.prop.orientedBox(ppx, ppz, phx, phz, -pa, H.floor - 0.2, H.floor, VH.col(0xd9d2c4), VH.col(0xc9a477));
+    world.physics.addOrientedBox(ppx, ppz, phx, phz, -pa, H.floor - 0.4, H.floor, 'plank', F().SOLID | F().SHOTS);
+    // Rails: the outer edge, the north edge, and a bar across the top of the slide (the attendant lifts it).
+    const P = (u, v) => [ppx + Math.cos(pa) * u - Math.sin(pa) * v, ppz + Math.sin(pa) * u + Math.cos(pa) * v];
+    fenceLine(world, ctx, ...P(phx, -phz), ...P(phx, phz), H.floor, 1.1, 0xffd24a);
+    fenceLine(world, ctx, ...P(-phx, -phz), ...P(phx, -phz), H.floor, 1.1, 0xffd24a);
+    gate(world, 'helter', ...P(-phx + 0.3, phz), ...P(phx, phz), H.floor, 1.1, -1);
+    // The slide: a broad yellow chute spiralling down from the platform.
+    const n = 64, pt = [0, 0, 0, 0];
+    let pa2 = null;
+    for (let i = 0; i <= n; i++) {
+      helterAt(i / n, pt);
+      const p = [pt[0], pt[1], pt[2]];
+      if (pa2) {
+        beam(ctx.prop, pa2[0], pa2[1], pa2[2], p[0], p[1], p[2], 1.2, VH.col(0xffd24a));
+        solidBeam(world, pa2[0], pa2[1], pa2[2], p[0], p[1], p[2], 1.2);
+        // A lip on the outer edge.
+        const ao = pt[3], ro = 0.62;
+        const qx = Math.cos(ao) * ro, qz = Math.sin(ao) * ro;
+        beam(ctx.prop, pa2[0] + qx, pa2[1] + 0.75, pa2[2] + qz, p[0] + qx, p[1] + 0.75, p[2] + qz, 0.12, VH.col(0xe0403a));
+      }
+      pa2 = p;
+    }
+    // A mat pile and its sign at the door.
+    const dx = x + Math.cos(H.door) * (H.R + 1.2), dz = z + Math.sin(H.door) * (H.R + 1.2);
+    solid(world, ctx.prop, dx - 0.35, KERB, dz + 1.0, dx + 0.35, KERB + 0.6, dz + 1.7, 0x6a3fa0);
+    sign(world, { x: x + Math.cos(H.door) * (H.R + 0.12), y: KERB + 3.1, z: z + Math.sin(H.door) * (H.R + 0.12), yaw: H.door - Math.PI / 2 + Math.PI, w: 3.4, h: 0.8, lines: ['HELTER-SKELTER'], style: 'neon', colors: CYAN, posts: false });
   }
 
   /** The Riptide's track, supports and station (the train runs in WharfLife). */
@@ -468,7 +566,9 @@
     const sx0 = 913.4, sx1 = 918, sz0 = 126, sz1 = 152;
     const ctx = world.ctxAt(916, 139);
     solid(world, ctx.prop, sx0, KERB, sz0, sx1, KERB + 1.0, sz1, 0xd9d2c4, null, 'boardwalk');
-    fenceLine(world, ctx, sx0 + 0.12, sz0 + 0.3, sx0 + 0.12, sz1 - 0.3, KERB + 1.0, 1.25, 0xffd24a); // the track side
+    fenceLine(world, ctx, sx0 + 0.12, sz0 + 0.3, sx0 + 0.12, 139.2, KERB + 1.0, 1.25, 0xffd24a); // the track side
+    fenceLine(world, ctx, sx0 + 0.12, 140.8, sx0 + 0.12, sz1 - 0.3, KERB + 1.0, 1.25, 0xffd24a);
+    gate(world, 'coaster', sx0 + 0.12, 139.2, sx0 + 0.12, 140.8, KERB + 1.0, 1.25, -1);
     world.physics.addRamp(sx1 + 2, 139, 1.6, 2, -Math.PI / 2, 0, KERB, KERB + 1.0, 'boardwalk');
     wedge(ctx.prop, sx1 + 2, 139, 1.6, 2, -Math.PI / 2, KERB, KERB + 1.0, VH.col(0xd9d2c4));
     for (const z of [sz0 + 0.5, sz1 - 0.5]) for (const x of [910, sx1 - 0.4]) {
@@ -497,17 +597,16 @@
     ctx.prop.cylinder(cx, KERB + 6, cz, 8.8, 8.8, 0.8, 16, VH.col(0xffd24a), false);
     ctx.prop.cylinder(cx, KERB + 6.8, cz, 8.8, 0.6, 3, 16, VH.col(0xf6f1e4), false);
     ctx.prop.cylinder(cx, KERB + 9.8, cz, 0.4, 0.05, 1.2, 6, VH.col(0xffd24a), false);
-    const horse = [0xf6f1e4, 0x37b8ff, 0xff5c95, 0xffd24a];
-    for (let k = 0; k < 12; k++) {
-      const a = (k / 12) * Math.PI * 2;
-      const r = k % 2 ? 6.4 : 4.6;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      ctx.prop.box(x - 0.04, KERB + 0.5, z - 0.04, x + 0.04, KERB + 6, z + 0.04, VH.col(0xd4a017));
-      const y = KERB + 1.3 + (k % 3) * 0.3;
-      ctx.prop.orientedBox(x, z, 0.22, 0.75, -a, y, y + 0.55, VH.col(horse[k % 4]));
-      world.physics.addOrientedBox(x, z, 0.25, 0.8, -a, KERB + 0.5, y + 1.0, 'metal', F().SOLID | F().SHOTS);
-      ctx.prop.orientedBox(x + Math.cos(a + Math.PI / 2) * 0.6, z + Math.sin(a + Math.PI / 2) * 0.6, 0.15, 0.2, -a, y + 0.4, y + 1.0, VH.col(horse[k % 4]));
+    // (The horses and their poles turn: WharfLife draws them.) A fence round it, the gate facing the midway.
+    const F16 = 16, R = CAROUSEL.fence, gA = Math.PI, gw = 0.09;
+    const at = (a) => [cx + Math.cos(a) * R, cz + Math.sin(a) * R];
+    for (let k = 0; k < F16; k++) {
+      let a0 = gA + (k / F16) * Math.PI * 2, a1 = gA + ((k + 1) / F16) * Math.PI * 2;
+      if (k === 0) a0 += gw;
+      if (k === F16 - 1) a1 -= gw;
+      fenceLine(world, ctx, ...at(a0), ...at(a1), KERB, 1.25, 0xffd24a);
     }
+    gate(world, 'carousel', ...at(gA - gw), ...at(gA + gw), KERB, 1.25, 1);
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
       const x = cx + Math.cos(a) * 8.85, z = cz + Math.sin(a) * 8.85;
@@ -1013,45 +1112,182 @@
       this.train.frustumCulled = false;
       for (let i = 0; i < 4; i++) this.train.setColorAt(i, tc.set(i % 2 ? 0xffd24a : 0x2fb7b0));
       game.scene.add(this.train);
-      // The Skyhook's ring of seats.
+      // The Skyhook's ring of seats: twelve, backs to the tower, facing out over the fair.
       const rb = new VH.GeometryBuilder({});
       for (let k = 0; k < 12; k++) {
         const a = (k / 12) * Math.PI * 2;
-        const cx = Math.cos(a) * 2.6, cz = Math.sin(a) * 2.6;
-        rb.box(cx - 0.45, 0, cz - 0.45, cx + 0.45, 0.5, cz + 0.45, VH.col(k % 2 ? 0xffd24a : 0x2fb7b0));
-        rb.box(cx * 1.25 - 0.4, 0.5, cz * 1.25 - 0.4, cx * 1.25 + 0.4, 1.6, cz * 1.25 + 0.4, VH.col(0x2a2d33));
+        const c = Math.cos(a), sn = Math.sin(a);
+        rb.orientedBox(c * 2.6, sn * 2.6, 0.42, 0.4, -a, 0, 0.5, VH.col(k % 2 ? 0xffd24a : 0x2fb7b0));
+        rb.orientedBox(c * 2.08, sn * 2.08, 0.12, 0.4, -a, 0.3, 1.75, VH.col(0x2a2d33));
+        rb.orientedBox(c * 2.3, sn * 2.3, 0.2, 0.32, -a, 1.45, 1.6, VH.col(0x2a2d33)); // the shoulder bar
       }
       rb.box(-1.6, -0.2, -1.6, 1.6, 0.6, 1.6, VH.col(0x9aa1a8));
       this.ring = new THREE.Mesh(rb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }));
       this.ring.position.set(TOWER.x, KERB + 1, TOWER.z);
       game.scene.add(this.ring);
-      this.dropT = 0;
-      this.s = 0;
-      this.v = 3;
+      // The carousel's turning part: the poles in one mesh, the horses (each bobbing) instanced.
+      const C = CAROUSEL;
+      const pg = new VH.GeometryBuilder({});
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2, r = k % 2 ? 6.4 : 4.6;
+        pg.cylinder(Math.cos(a) * r, 0.5, Math.sin(a) * r, 0.05, 0.05, 5.5, 6, VH.col(0xd4a017), false);
+      }
+      for (let k = 0; k < 24; k++) {
+        // Mirror panels round the centre drum, and a fringe under the canopy.
+        const a = (k / 24) * Math.PI * 2;
+        pg.orientedBox(Math.cos(a) * 1.62, Math.sin(a) * 1.62, 0.03, 0.2, -a, 1.2, 5.2, VH.col(k % 2 ? 0xffd24a : 0xe8f4ff));
+        pg.orientedBox(Math.cos(a) * 8.3, Math.sin(a) * 8.3, 0.04, 1.1, -a, 5.55, 6.0, VH.col(k % 2 ? 0xe0403a : 0xf6f1e4));
+      }
+      this.carousel = new THREE.Mesh(pg.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.3 }));
+      this.carousel.position.set(C.x, KERB, C.z);
+      game.scene.add(this.carousel);
+      const hg = new VH.GeometryBuilder({});
+      const hw = VH.col(0xffffff), dark = VH.col(0x3a2a20), gold = VH.col(0xd4a017), sad = VH.col(0xc0283a);
+      hg.box(-0.2, -0.45, -0.7, 0.2, 0.0, 0.62, hw); //     body (the saddle is at the origin)
+      hg.box(-0.13, -0.05, 0.45, 0.13, 0.55, 0.72, hw); //  neck
+      hg.box(-0.13, 0.32, 0.6, 0.13, 0.58, 1.08, hw); //    head
+      hg.box(-0.15, 0.3, 0.45, 0.15, 0.62, 0.55, dark); //  mane
+      for (const [lx, lz, f] of [[-0.12, 0.45, 1], [0.12, 0.45, 1], [-0.12, -0.5, -1], [0.12, -0.5, -1]]) hg.box(lx - 0.05, -1.0, lz - 0.05 + f * 0.12, lx + 0.05, -0.42, lz + 0.05 + f * 0.12, hw);
+      hg.box(-0.05, -0.4, -0.95, 0.05, -0.05, -0.68, dark); // tail
+      hg.box(-0.22, 0.0, -0.3, 0.22, 0.08, 0.2, sad); //    saddle
+      hg.box(-0.22, -0.3, 0.1, 0.22, -0.2, 0.2, gold); //   girth
+      this.horses = new THREE.InstancedMesh(hg.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 }), 12);
+      this.horses.frustumCulled = false;
+      const hc = [0xf6f1e4, 0x9fd8ff, 0xffa8c8, 0xffe08a];
+      for (let k = 0; k < 12; k++) this.horses.setColorAt(k, tc.set(hc[k % 4]));
+      game.scene.add(this.horses);
+      // The rides' gates (built with the fair), swung open by carnival-rides.js.
+      this.gates = (game.world.wharfGates || []).slice();
+      this.gateById = {};
+      for (const gt of this.gates) this.gateById[gt.id] = gt;
+      const gg = new VH.GeometryBuilder({});
+      const gy = VH.col(0xffd24a);
+      gg.box(-0.04, 0.93, 0, 0.04, 1.0, 1, gy);
+      gg.box(-0.035, 0.47, 0, 0.035, 0.53, 1, gy);
+      gg.box(-0.05, 0, 0.94, 0.05, 1.0, 1, gy);
+      gg.box(-0.05, 0, 0, 0.05, 1.0, 0.06, gy);
+      gg.box(-0.02, 0.53, 0.06, 0.02, 0.93, 0.94, VH.col(0xe0403a));
+      this.gateMesh = new THREE.InstancedMesh(gg.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), Math.max(1, this.gates.length));
+      this.gateMesh.count = this.gates.length;
+      this.gateMesh.frustumCulled = false;
+      game.scene.add(this.gateMesh);
+      // The Riptide's station: where the train stops (its second car by the platform gate).
+      let best = 0, bd = 1e9;
+      for (let i = 0; i < 30; i++) {
+        const d = Math.abs(this.pz[i] - 140) + Math.abs(this.px[i] - 912) * 2;
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      }
+      const dz = this.pz[best] - this.pz[best + 1] || 1;
+      this.stationS = best + 3 + (this.pz[best] - 140) / dz;
+      // State. Each part runs on its own unless a ride drives it (the *Driven flags: the ride sets the numbers).
+      this.dropT = 20;
+      this.towerY = KERB + 1;
+      this.towerDriven = false;
+      this.towerHold = false; //  keep the Skyhook at the bottom, loading
+      this.s = this.stationS;
+      this.v = 0;
+      this.trainState = 'station';
+      this.trainDwell = 6;
+      this.trainHold = false; //  keep the Riptide's train in the station
+      this.laps = 0;
       this.angle = 0;
+      this.wheelDriven = false;
+      this.carAngle = 0;
+      this.carSpeed = 0;
+      this.carT = 0;
+      this.carouselDriven = false;
+      this.stepped = false;
+      this.carPos = [0, 1, 2, 3].map(() => new THREE.Vector3());
+      this.carQ = [0, 1, 2, 3].map(() => new THREE.Quaternion());
+      this.trainPos = this.carPos[0];
       this._m = new THREE.Matrix4();
       this._p = new THREE.Vector3();
       this._t = new THREE.Vector3();
       this._q = new THREE.Quaternion();
       this._e = new THREE.Euler(0, W.yaw, 0);
       this._one = new THREE.Vector3(1, 1, 1);
+      this._s3 = new THREE.Vector3();
+      this._q2 = new THREE.Quaternion();
       this._up = new THREE.Vector3(0, 1, 0);
       this._q.setFromEuler(this._e);
       this.visible = true;
       this.update(0);
     }
 
+    /** The game's per-frame call. carnival.js steps the fair first when Jay is near (so a ride and its camera see this frame's positions) and sets `stepped`. */
     update(dt) {
+      if (!this.ok) return;
+      if (this.stepped) {
+        this.stepped = false;
+        return;
+      }
+      this.step(dt);
+    }
+
+    /** Move everything on by dt (what isn't being driven by a ride) and place the meshes. */
+    step(dt) {
       if (!this.ok) return;
       const cam = this.game.renderer.camera.position;
       const far = Math.hypot(cam.x - WHEEL.x, cam.z - WHEEL.z) > 1500;
       if (far === this.visible) {
         this.visible = !far;
-        this.group.visible = this.cars.visible = this.train.visible = this.ring.visible = this.visible;
+        this.group.visible = this.cars.visible = this.train.visible = this.ring.visible = this.carousel.visible = this.horses.visible = this.gateMesh.visible = this.visible;
       }
       if (!this.visible) return;
+      if (!this.wheelDriven) this.angle = (this.angle + dt * WHEEL.speed) % (Math.PI * 2);
+      this._runTrain(dt);
+      if (!this.towerDriven) {
+        // The Skyhook's own cycle; held at the bottom while a rider gets on.
+        if (!(this.towerHold && this.dropT >= DROP.end - DROP.load)) this.dropT = (this.dropT + dt) % DROP.end;
+        this.towerY = towerAt(this.dropT);
+      }
+      if (!this.carouselDriven) {
+        // Two minutes' turns, then a stop to change riders.
+        this.carT = (this.carT + dt) % 52;
+        const want = this.carT < 40 ? 0.42 : 0;
+        this.carSpeed += Math.max(-dt * 0.12, Math.min(dt * 0.12, want - this.carSpeed));
+        this.carAngle = (this.carAngle + this.carSpeed * dt) % (Math.PI * 2);
+      }
+      for (const gt of this.gates) gt.open += Math.max(-dt * 1.6, Math.min(dt * 1.6, gt.target - gt.open));
+      this.place();
+    }
+
+    /** The train: off from the station, up the lift hill, round on what height it has left, braked into the station, a wait while people get on. */
+    _runTrain(dt) {
+      const n = this.n;
+      if (this.trainState === 'station') {
+        this.v = 0;
+        this.s = this.stationS;
+        if ((this.trainDwell -= dt) <= 0 && !this.trainHold) {
+          this.trainState = 'run';
+          this.laps++;
+        }
+        return;
+      }
+      const i0 = Math.floor(this.s) % n;
+      const lift = i0 >= this.stationS && i0 < this.topIndex;
+      let target = lift ? 3.2 : Math.max(4, Math.sqrt(2 * 9.8 * Math.max(0, this.top + 1.5 - this.py[i0])));
+      const dist = (this.stationS - this.s + n) % n;
+      const braking = dist < 70 && !lift;
+      this.v += (target - this.v) * Math.min(1, dt * 2.5);
+      if (braking) this.v = Math.min(this.v, 0.6 + Math.sqrt(2 * 4.5 * dist));
+      this.lift = lift;
+      const next = this.s + this.v * dt;
+      if (braking && this.v * dt >= dist - 0.02) {
+        this.s = this.stationS;
+        this.trainState = 'station';
+        this.trainDwell = 9;
+        return;
+      }
+      this.s = next % n;
+    }
+
+    /** Put the meshes where the numbers say. */
+    place() {
       const W = WHEEL;
-      this.angle = (this.angle + dt * W.speed) % (Math.PI * 2);
       this.spin.rotation.z = this.angle;
       const ca = Math.cos(W.yaw), sa = Math.sin(W.yaw);
       for (let i = 0; i < W.cars; i++) {
@@ -1062,13 +1298,7 @@
         this.cars.setMatrixAt(i, this._m);
       }
       this.cars.instanceMatrix.needsUpdate = true;
-      // The train: slow up the lift hill, then it runs on what height it has left.
       const n = this.n;
-      const i0 = Math.floor(this.s) % n;
-      const lift = i0 > 12 && i0 < this.topIndex;
-      const target = lift ? 3.2 : Math.max(4, Math.sqrt(2 * 9.8 * Math.max(0, this.top + 1.5 - this.py[i0])));
-      this.v += (target - this.v) * Math.min(1, dt * 2.5);
-      this.s = (this.s + this.v * dt) % n;
       for (let c = 0; c < 4; c++) {
         let s = this.s - c * 3;
         if (s < 0) s += n;
@@ -1079,20 +1309,81 @@
         this._m.lookAt(this._t, this._p, this._up);
         this._m.setPosition(this._p);
         this.train.setMatrixAt(c, this._m);
+        this.carPos[c].copy(this._p);
+        this.carQ[c].setFromRotationMatrix(this._m);
       }
       this.train.instanceMatrix.needsUpdate = true;
-      // The Skyhook: 14 s up, 3 s at the top, a 2 s fall, 5 s to load.
-      this.dropT = (this.dropT + dt) % 24;
-      const t = this.dropT, lo = KERB + 1, hi = TOWER.h - 7;
-      let y = lo;
-      if (t < 14) y = lo + (hi - lo) * (0.5 - 0.5 * Math.cos((t / 14) * Math.PI));
-      else if (t < 17) y = hi;
-      else if (t < 19) y = Math.max(lo, hi - 0.5 * 26 * (t - 17) * (t - 17));
-      this.ring.position.y = y;
+      this.ring.position.y = this.towerY;
+      // The carousel: the poles turn as one; each horse rides up and down its pole as it goes round.
+      const C = CAROUSEL;
+      this.carousel.rotation.y = -this.carAngle;
+      for (let k = 0; k < 12; k++) {
+        this.horse(k, this._p);
+        this._e.set(0, this._p.w, 0);
+        this._q2.setFromEuler(this._e);
+        this._m.compose(this._p, this._q2, this._one);
+        this.horses.setMatrixAt(k, this._m);
+      }
+      this.horses.instanceMatrix.needsUpdate = true;
+      for (let k = 0; k < this.gates.length; k++) {
+        const gt = this.gates[k];
+        this._p.set(gt.x, gt.y, gt.z);
+        this._e.set(0, gt.yaw + gt.swing * gt.open * 1.45, 0);
+        this._q2.setFromEuler(this._e);
+        this._s3.set(1, gt.h, gt.len);
+        this._m.compose(this._p, this._q2, this._s3);
+        this.gateMesh.setMatrixAt(k, this._m);
+      }
+      this.gateMesh.instanceMatrix.needsUpdate = true;
+      this._e.set(0, WHEEL.yaw, 0);
+    }
+
+    // ------------------------------------------------ for carnival-rides.js
+    /** Gondola i's hanging point (the top of its hanger) into out. */
+    gondola(i, out) {
+      const W = WHEEL;
+      const a = this.angle + (i / W.cars) * Math.PI * 2;
+      const lx = Math.cos(a) * W.r;
+      return out.set(W.x + lx * Math.cos(W.yaw), W.hub + Math.sin(a) * W.r, W.z - lx * Math.sin(W.yaw));
+    }
+
+    /** Horse k's saddle into out (x, y, z) and the way it faces into out.w. */
+    horse(k, out) {
+      const C = CAROUSEL;
+      const a = this.carAngle + (k / 12) * Math.PI * 2, r = k % 2 ? 6.4 : 4.6;
+      out.x = C.x + Math.cos(a) * r;
+      out.z = C.z + Math.sin(a) * r;
+      out.y = KERB + 1.75 + 0.3 * Math.sin(this.carAngle * 5 + k * 2.1);
+      out.w = -a;
+      return out;
     }
 
     stop() {}
     reset() {}
+  }
+
+  // The Skyhook's cycle (seconds): a slow climb, a pause at the top, a free fall, the brakes, loading.
+  const DROP = { climb: 16, top: 3.5, brake: 15, load: 7 };
+  (function () {
+    const lo = KERB + 1, hi = TOWER.h - 7;
+    DROP.lo = lo;
+    DROP.hi = hi;
+    DROP.fall = Math.sqrt((2 * (hi - lo - DROP.brake)) / 9.8);
+    DROP.v = 9.8 * DROP.fall;
+    DROP.decel = (DROP.v * DROP.v) / (2 * DROP.brake);
+    DROP.stop = DROP.v / DROP.decel;
+    DROP.end = DROP.climb + DROP.top + DROP.fall + DROP.stop + DROP.load;
+  })();
+  function towerAt(t) {
+    const D = DROP;
+    if (t < D.climb) return D.lo + (D.hi - D.lo) * (0.5 - 0.5 * Math.cos((t / D.climb) * Math.PI));
+    t -= D.climb;
+    if (t < D.top) return D.hi;
+    t -= D.top;
+    if (t < D.fall) return D.hi - 0.5 * 9.8 * t * t;
+    t -= D.fall;
+    if (t < D.stop) return D.lo + D.brake - (D.v * t - 0.5 * D.decel * t * t);
+    return D.lo;
   }
 
   // -------------------------------------------------------------- register
@@ -1105,7 +1396,7 @@
       const P = layout.plots || {};
       if (P.wonder_wharf) {
         buildWharf(world, P.wonder_wharf);
-        world.wonderWharf = { wheel: WHEEL, grabber: GRABBER };
+        world.wonderWharf = { wheel: WHEEL, grabber: GRABBER, tower: TOWER, carousel: CAROUSEL, helter: HELTER, dodgems: DODGEMS, drop: DROP, towerAt, helterAt, coasterPath, gates: world.wharfGates || [] };
       }
       if (P.paloma_convention) buildConvention(world, P.paloma_convention);
       buildStrand(world, layout);

@@ -21,7 +21,14 @@
  *   game.storyLog.text(parts)   recap parts → a string, for the flags as they stand
  *   game.storyLog.model()       { prologue, now, next, acts, side, who, choices, ending }
  *                               (see model() for the shape)
- *   game.storyLog.previously()  { line, next, place } for the Previously card
+ *   game.storyLog.previously()  { line, next, place, dlc } for the Previously card
+ *
+ * The story DLC (VH.Data.story.dlc, missions.dlcMain / dlcSide) is a story of
+ * its own: model().dlc holds its acts, side stories, where it stands and its
+ * ending, from the same recap maps (R.jobs, R.who, R.updates, R.choices) plus
+ * R.dlc = { prologue, acts: { 1: { title, intro, outro }, … } }. Who's who and
+ * the choices list both stories (each entry says which: dlc true or false).
+ * The Previously card follows whichever story Jay played last.
  *   game.storyLog.cardUp        true while the Previously card is on screen
  *
  * Saved under 'storylog': { picked: { jobId: [labels] }, order: [jobIds], hint }.
@@ -36,6 +43,7 @@
   const el = (tag, cls, text) => VH.util.el(tag, cls, text);
 
   const ENDINGS = [['ending_a', 'Taillights'], ['ending_b', 'The Long Way Home'], ['ending_c', 'Wheelman']];
+  const DLC_ENDINGS = [['dlc_end_hers', 'Hers'], ['dlc_end_everybody', 'Everybody\'s'], ['dlc_end_gone', 'Gone Again']];
   const CARD_SECONDS = 10; //  the Previously card stays this long (playing time)
   const CARD_DELAY = 2.5; //   ...and comes this long after play starts (the intro card has gone)
   const SKIP_SHARE = 0.6; //   a scene counts as skipped with this share of its lines skipped
@@ -68,6 +76,23 @@
   function recap() {
     const R = story().recap;
     return R && typeof R === 'object' ? R : {};
+  }
+
+  /** The story DLC's header (title, cast, acts) or null. */
+  function dlcData() {
+    const D = story().dlc;
+    return D && D.id ? D : null;
+  }
+
+  /** The DLC's recap: R.dlc = { prologue, acts } (missing while the recap files are stubs). */
+  function dlcRecap() {
+    const d = recap().dlc;
+    return d && typeof d === 'object' ? d : {};
+  }
+
+  /** A story job (main, DLC main, or either's side chains): the ones the log records. */
+  function storyJob(m) {
+    return !!(m && (m._main || m._dlcMain || m._chain));
   }
 
   /** Every choice step in a job: [{ prompt, options: [{ label, flag }], top }] (top: not inside a branch). */
@@ -152,7 +177,7 @@
         else delete this.picked[m.id];
       }
       this._run = null;
-      if (!(m._main || m._chain)) return;
+      if (!storyJob(m)) return;
       const i = this.order.indexOf(m.id);
       if (i >= 0) this.order.splice(i, 1);
       this.order.push(m.id);
@@ -192,7 +217,7 @@
       const skipped = job._skipped || 0;
       if (skipped < SKIP_MIN || skipped / n < SKIP_SHARE) return;
       const run = this.game.missions && this.game.missions.run;
-      if (run && run.m && (run.m._main || run.m._chain)) this._skim = run.m.id;
+      if (run && storyJob(run.m)) this._skim = run.m.id;
       if (!this.hintShown && !this._queue.some((q) => q.kind === 'hint')) this._queue.unshift({ kind: 'hint', wait: 1.2 });
     }
 
@@ -228,8 +253,14 @@
 
     _name(id) {
       if (!id) return '';
-      const c = (story().characters || {})[id];
+      const c = this._char(id);
       return c && c.name ? c.name : '';
+    }
+
+    /** A character from the main cast or the DLC's. */
+    _char(id) {
+      const D = dlcData();
+      return (story().characters || {})[id] || (D && D.characters && D.characters[id]) || null;
     }
 
     /** Where a job starts: { x, z, name } or null (a job that starts by itself waits at its resumeAt). */
@@ -240,7 +271,8 @@
       if (!id || !g.places) return null;
       const p = safe(() => g.places.get(id), null);
       if (!p || typeof p.x !== 'number' || typeof p.z !== 'number') return null;
-      const def = (story().places || {})[id];
+      const D = dlcData();
+      const def = (story().places || {})[id] || (D && D.places && D.places[id]);
       return { x: p.x, z: p.z, name: p.name || (def && def.name) || 'the job marker' };
     }
 
@@ -255,11 +287,13 @@
       const ms = this.game.missions;
       const m = ms && ms.all && ms.all.get(id);
       if (!m) return 999;
-      if (m._main) return m._index || 0;
+      // The DLC after the main story (a save from before the log has no order to go by).
+      const base = (x) => (x && x._main ? x._index || 0 : x && x._dlcMain ? 200 + (x._index || 0) : 0);
+      if (m._main || m._dlcMain) return base(m);
       if (m._chain) {
         const at = ms.all.get(m._chain.unlockAfter);
         const k = m._chain.missions.indexOf(m);
-        return (at && at._main ? at._index || 0 : 0) + 0.5 + k * 0.01;
+        return (at ? base(at) : m._dlc ? 200 : 0) + 0.5 + k * 0.01;
       }
       return 999;
     }
@@ -295,10 +329,12 @@
      *                 jobs: [{ id, title, act, n, state: 'done'|'current'|'next'|'locked',
      *                          recap, setup, line, giver, place: { x, z, name } | null }] }]
      *   side       [{ id, title, giver, state: 'done'|'current'|'available'|'locked', done, total, jobs }]
-     *   who        [{ id, name, role, bio, news: [string] (newest first), colour, light, initial }]
-     *              (colour: their shirt, for a round avatar; light: it's pale, so dark ink on it)
-     *   choices    [{ mission, missionTitle, act, side, title, picked, text }]
+     *   who        [{ id, name, role, bio, news: [string] (newest first), colour, light, initial, dlc }]
+     *              (colour: their shirt, for a round avatar; light: it's pale, so dark ink on it;
+     *              dlc: one of the DLC's cast)
+     *   choices    [{ mission, missionTitle, act, side, title, picked, text, dlc }]
      *   ending     string (the game is finished) or null
+     *   dlc        the story DLC, the same way (see _dlcModel), or null
      * Locked jobs carry no text (nothing past the next job can leak).
      */
     model() {
@@ -312,58 +348,21 @@
       const run = ms.run && ms.run.m ? ms.run : null;
       const runId = run ? run.m.id : null;
 
-      // The main story, act by act.
+      // The main story, act by act, and its side stories.
       const main = ms.main || [];
-      const nextMain = main.find((m) => !done[m.id]) || null;
-      const byAct = new Map();
-      main.forEach((m, i) => {
-        const state = done[m.id] ? 'done' : m.id === runId ? 'current' : m === nextMain ? 'next' : 'locked';
-        const j = this._job(m, state, flags, i + 1);
-        const a = m.act || 1;
-        if (!byAct.has(a)) byAct.set(a, []);
-        byAct.get(a).push(j);
-        if (m === nextMain) out.next = state === 'current' ? this._job(m, 'next', flags, i + 1) : j;
-      });
-      for (const n of Array.from(byAct.keys()).sort((a, b) => a - b)) {
-        const jobs = byAct.get(n);
-        const nDone = jobs.filter((j) => j.state === 'done').length;
-        const state = nDone === jobs.length ? 'done' : jobs.some((j) => j.state === 'current' || j.state === 'next') ? 'current' : 'locked';
-        const a = (R.acts || {})[n] || {};
-        out.acts.push({
-          n, state, done: nDone, total: jobs.length,
-          title: state === 'locked' ? '' : (typeof a.title === 'string' && a.title) || '',
-          intro: state === 'locked' ? '' : this.text(a.intro, flags),
-          outro: state === 'done' ? this.text(a.outro, flags) : '',
-          jobs,
-        });
-      }
+      const story1 = this._acts(main, R.acts, flags, done, runId);
+      out.acts = story1.acts;
+      out.next = story1.next;
+      const nextMain = story1.nextJob;
       if (!nextMain && main.length) {
         const last = main[main.length - 1];
         const lastAct = out.acts[out.acts.length - 1];
         out.ending = (lastAct && lastAct.outro) || this.text(((R.jobs || {})[last.id] || {}).recap, flags) || last.summary || '';
       }
-
-      // Side stories.
-      for (const chain of ms.side || []) {
-        const list = chain.missions || [];
-        let nextFound = false;
-        const jobs = list.map((m, i) => {
-          let state = 'locked';
-          if (done[m.id]) state = 'done';
-          else if (m.id === runId) state = 'current';
-          else if (!nextFound && ms.isAvailable(m)) state = 'next';
-          if (!done[m.id]) nextFound = true;
-          return this._job(m, state, flags, i + 1);
-        });
-        const nDone = jobs.filter((j) => j.state === 'done').length;
-        const live = jobs.some((j) => j.state === 'current');
-        const avail = jobs.some((j) => j.state === 'next');
-        const state = list.length && nDone === list.length ? 'done' : nDone || live ? 'current' : avail ? 'available' : 'locked';
-        out.side.push({ id: chain.id, title: chain.title || chain.id, giver: this._name(chain.giver), state, done: nDone, total: list.length, jobs });
-      }
+      out.side = this._sides(ms.side || [], flags, done, runId);
 
       // Where things stand.
-      const job = run && (run.m._main || run.m._chain) ? run.m : null;
+      const job = run && (run.m._main || run.m._chain) && !run.m._dlc ? run.m : null;
       if (job) {
         const r = (R.jobs || {})[job.id] || {};
         out.now = {
@@ -381,6 +380,7 @@
 
       // Who's who: the people Jay has met, in the order he met them.
       const C = story().characters || {};
+      const D = dlcData();
       const met = (intro) => intro === null || intro === undefined || [].concat(intro).some((id) => done[id]);
       const firstMet = (intro) => (intro === null || intro === undefined ? -1 : Math.min(...[].concat(intro).filter((id) => done[id]).map((id) => this._rank(id))));
       const who = [];
@@ -388,7 +388,7 @@
       Object.keys(W).forEach((id, i) => {
         const w = W[id] || {};
         if (!met(w.intro)) return;
-        const c = C[id] || {};
+        const c = C[id] || (D && D.characters && D.characters[id]) || {};
         const name = c.name || w.name || id;
         const news = (Array.isArray(R.updates) ? R.updates : [])
           .filter((u) => u && u.who === id && u.after && [].concat(u.after).some((a) => done[a]) && (u.if === undefined || testFlag(flags, u.if)))
@@ -399,6 +399,7 @@
         who.push({
           id, name, role: c.role || w.role || '', bio: this.text(w.bio, flags), news,
           colour: hex(c.look && c.look.top) || '#ff4f8b', light: pale(c.look && c.look.top), initial: (name.replace(/^[^A-Za-z]*/, '').charAt(0) || '?').toUpperCase(),
+          dlc: !C[id] && !!(D && D.characters && D.characters[id]),
           _met: firstMet(w.intro), _i: i,
         });
       });
@@ -431,27 +432,172 @@
           let label = pick;
           for (const s of steps) for (const o of s.options) if (o.flag === pick || o.label === pick) label = o.label;
           out.choices.push({
-            mission: id, missionTitle: m.title || id, act: m._main ? m.act || 1 : 0, side: m._chain ? m._chain.title : null,
+            mission: id, missionTitle: m.title || id, act: m._main || m._dlcMain ? m.act || 1 : 0, side: m._chain ? m._chain.title : null, dlc: !!m._dlc,
             title: (typeof e.title === 'string' && e.title) || (steps[0] && steps[0].prompt) || m.title, picked: label, text: this.text(e.options[pick], flags),
           });
         }
       }
+      out.dlc = this._dlcModel(flags, done, run);
       return out;
     }
 
-    /** The Previously card: the last main job's one-liner (or the prologue) and what's next. */
+    /** One story's main jobs, act by act: { acts, next (a job, as in acts[].jobs), nextJob (the mission) }. */
+    _acts(list, recapActs, flags, done, runId) {
+      const out = { acts: [], next: null, nextJob: null };
+      const nextJob = list.find((m) => !done[m.id]) || null;
+      out.nextJob = nextJob;
+      const byAct = new Map();
+      list.forEach((m, i) => {
+        const state = done[m.id] ? 'done' : m.id === runId ? 'current' : m === nextJob ? 'next' : 'locked';
+        const j = this._job(m, state, flags, i + 1);
+        const a = m.act || 1;
+        if (!byAct.has(a)) byAct.set(a, []);
+        byAct.get(a).push(j);
+        if (m === nextJob) out.next = state === 'current' ? this._job(m, 'next', flags, i + 1) : j;
+      });
+      for (const n of Array.from(byAct.keys()).sort((a, b) => a - b)) {
+        const jobs = byAct.get(n);
+        const nDone = jobs.filter((j) => j.state === 'done').length;
+        const state = nDone === jobs.length ? 'done' : jobs.some((j) => j.state === 'current' || j.state === 'next') ? 'current' : 'locked';
+        const a = (recapActs || {})[n] || {};
+        out.acts.push({
+          n, state, done: nDone, total: jobs.length,
+          title: state === 'locked' ? '' : (typeof a.title === 'string' && a.title) || '',
+          intro: state === 'locked' ? '' : this.text(a.intro, flags),
+          outro: state === 'done' ? this.text(a.outro, flags) : '',
+          jobs,
+        });
+      }
+      return out;
+    }
+
+    /** Side stories: [{ id, title, giver, state, done, total, jobs }]. */
+    _sides(chains, flags, done, runId) {
+      const ms = this.game.missions;
+      const out = [];
+      for (const chain of chains) {
+        const list = chain.missions || [];
+        let nextFound = false;
+        const jobs = list.map((m, i) => {
+          let state = 'locked';
+          if (done[m.id]) state = 'done';
+          else if (m.id === runId) state = 'current';
+          else if (!nextFound && ms.isAvailable(m)) state = 'next';
+          if (!done[m.id]) nextFound = true;
+          return this._job(m, state, flags, i + 1);
+        });
+        const nDone = jobs.filter((j) => j.state === 'done').length;
+        const live = jobs.some((j) => j.state === 'current');
+        const avail = jobs.some((j) => j.state === 'next');
+        const state = list.length && nDone === list.length ? 'done' : nDone || live ? 'current' : avail ? 'available' : 'locked';
+        out.push({ id: chain.id, title: chain.title || chain.id, giver: this._name(chain.giver), state, done: nDone, total: list.length, jobs });
+      }
+      return out;
+    }
+
+    /**
+     * The story DLC, as a story of its own (null when there is none):
+     *   { id, title, tagline, state: 'locked'|'open'|'done', opensAfter (the main job it waits for),
+     *     prologue, now, next, acts, side, ending, endingName, done, total }
+     * Act titles come from the recap (R.dlc.acts) or else the DLC's header.
+     */
+    _dlcModel(flags, done, run) {
+      const ms = this.game.missions;
+      const D = dlcData();
+      if (!D || !ms || !ms.dlcMain || !ms.dlcMain.length) return null;
+      const RD = dlcRecap();
+      const runId = run ? run.m.id : null;
+      const unlocked = ms.dlcUnlocked;
+      const acts = {};
+      for (const k of Object.keys(D.acts || {})) acts[k] = Object.assign({ title: (D.acts[k] || {}).title }, (RD.acts || {})[k] || {});
+      for (const k of Object.keys(RD.acts || {})) if (!acts[k]) acts[k] = RD.acts[k];
+      const story2 = this._acts(ms.dlcMain, acts, flags, done, unlocked ? runId : null);
+      // Not open yet: nothing in it is "next".
+      if (!unlocked) {
+        for (const a of story2.acts) {
+          a.state = 'locked';
+          a.title = a.intro = '';
+          for (const j of a.jobs) j.state = 'locked';
+        }
+        story2.next = null;
+      }
+      const after = D.unlockAfter && ms.all ? ms.all.get(D.unlockAfter) : null;
+      const out = {
+        id: D.id, title: D.title || 'The DLC', tagline: D.tagline || '',
+        state: !unlocked ? 'locked' : story2.nextJob ? 'open' : 'done',
+        opensAfter: after ? after.title || after.id : '',
+        prologue: unlocked ? this.text(RD.prologue, flags) : '',
+        now: null, next: story2.next, acts: story2.acts,
+        side: this._sides(ms.dlcSide || [], flags, done, runId),
+        ending: null, endingName: '',
+        done: story2.acts.reduce((a, x) => a + x.done, 0), total: ms.dlcMain.length,
+      };
+      if (out.state === 'done') {
+        const last = ms.dlcMain[ms.dlcMain.length - 1];
+        const lastAct = out.acts[out.acts.length - 1];
+        out.ending = (lastAct && lastAct.outro) || this.text(((recap().jobs || {})[last.id] || {}).recap, flags) || last.summary || '';
+        for (const [f, name] of DLC_ENDINGS) if (flags[f]) out.endingName = name;
+      }
+      const job = run && run.m._dlc ? run.m : null;
+      if (job) {
+        const r = (recap().jobs || {})[job.id] || {};
+        out.now = {
+          kind: 'mission', id: job.id, title: job.title, text: this.text(r.setup, flags) || job.summary || '',
+          objective: run.objective || '', place: null, giver: this._name(job.giver || (job._chain && job._chain.giver)),
+          act: job._dlcMain ? job.act || 1 : 0, side: job._chain ? job._chain.title : null, dlc: true,
+        };
+      } else if (out.next) {
+        const j = out.next;
+        out.now = { kind: 'next', id: j.id, title: j.title, text: j.setup, objective: '', place: j.place, giver: j.giver, act: j.act, side: null, auto: j.auto, n: j.n, dlc: true };
+      } else if (out.state === 'done') {
+        out.now = { kind: 'done', id: null, title: out.endingName ? 'Ending: ' + out.endingName : 'The end', text: out.ending || '', objective: '', place: null, giver: '', act: 0, side: null, dlc: true };
+      } else {
+        out.now = { kind: 'locked', id: null, title: out.title, text: out.tagline, objective: '', place: null, giver: '', act: 0, side: null, dlc: true, opensAfter: out.opensAfter };
+      }
+      return out;
+    }
+
+    /**
+     * The Previously card: the last story job's one-liner (or the prologue)
+     * and what's next, for the story Jay played last: the main story or the
+     * DLC (dlc: its title, for the card's heading).
+     */
     previously() {
       const ms = this.game.missions;
-      const R = recap();
       const flags = this._flags();
-      const main = (ms && ms.main) || [];
+      if (ms && this._lastWasDlc()) {
+        const D = dlcData();
+        const RD = dlcRecap();
+        const p = this._previously(ms.dlcMain, RD.prologue, flags);
+        p.dlc = (D && D.title) || 'the DLC';
+        return p;
+      }
+      const p = this._previously((ms && ms.main) || [], recap().prologue, flags);
+      p.dlc = '';
+      return p;
+    }
+
+    /** Did Jay last play the DLC? (the newest story job passed; a save from before the log: the main story's done and the DLC's begun) */
+    _lastWasDlc() {
+      const ms = this.game.missions;
+      if (!ms || !ms.dlcMain || !ms.dlcMain.length || !ms.dlcUnlocked) return false;
+      for (let i = this.order.length - 1; i >= 0; i--) {
+        const m = ms.all && ms.all.get(this.order[i]);
+        if (m) return !!m._dlc;
+      }
+      return !ms.nextMain && ms.dlcMain.some((m) => ms.completed[m.id]);
+    }
+
+    _previously(main, prologue, flags) {
+      const ms = this.game.missions;
+      const R = recap();
       let last = null;
       for (const m of main) if (ms.completed[m.id]) last = m;
       let line = '';
       if (last) line = this.text(((R.jobs || {})[last.id] || {}).line, flags) || last.summary || '';
       else {
         // The start of the prologue (the card is short): its first few sentences.
-        const p = this.text(R.prologue, flags);
+        const p = this.text(prologue, flags);
         const s = p.match(/[^.!?]+[.!?]+["”']?/g) || (p ? [p] : []);
         for (const x of s) {
           if (line && (line + x).length > 300) break;
@@ -480,7 +626,8 @@
       this.cardBar = el('i');
       bar.append(this.cardBar);
       const kick = el('div', 'vh-prev-kicker');
-      kick.append(el('span', 'vh-prev-book', '📖'), el('span', 'vh-prev-kicker-text', 'Previously in Vicehaven…'));
+      this.cardKicker = el('span', 'vh-prev-kicker-text', 'Previously in Vicehaven…');
+      kick.append(el('span', 'vh-prev-book', '📖'), this.cardKicker);
       c.append(x, kick, this.cardLine, this.cardNext, this.cardFoot, bar);
       document.body.append(c);
       this.card = c;
@@ -497,12 +644,13 @@
       const g = this.game;
       const p = this.previously();
       if (!p.line) return;
+      this.cardKicker.textContent = p.dlc ? 'Previously in ' + p.dlc + '…' : 'Previously in Vicehaven…';
       this.cardLine.textContent = p.line;
       this.cardNext.textContent = '';
       if (p.next) {
         this.cardNext.append(el('span', 'vh-prev-label', 'Up next'), el('b', '', p.next));
         if (p.place) this.cardNext.append(el('span', 'vh-prev-place', ' · ' + p.place));
-      } else this.cardNext.append(el('span', 'vh-prev-label', 'The end'), el('b', '', 'The story is done. The city is still out there.'));
+      } else this.cardNext.append(el('span', 'vh-prev-label', 'The end'), el('b', '', p.dlc ? 'That story is done. The bay is still out there.' : 'The story is done. The city is still out there.'));
       this.cardFoot.textContent = '';
       const pad = g.input && g.input.lastDevice === 'gamepad';
       const key = (k, label) => {

@@ -100,6 +100,12 @@
   ].map(([id, cat, icon, title, how]) => ({ id, cat, icon, title, how }));
   const BY_ID = new Map(LIST.map((a) => [a.id, a]));
 
+  /** The story DLC's name, for its Progress rows. */
+  function dlcTitle() {
+    const D = VH.Data && VH.Data.story && VH.Data.story.dlc;
+    return (D && D.title) || 'Story DLC';
+  }
+
   function loadProfile() {
     try {
       const d = JSON.parse(localStorage.getItem(PROFILE_KEY));
@@ -385,13 +391,18 @@
     _counts() {
       const g = this.game;
       const m = g.missions;
-      const out = { story: 0, storyTotal: 0, side: 0, sideTotal: 0, jobs: 0, jobsTotal: 0, jumps: 0, jumpsTotal: 0, lanterns: 0, lanternsTotal: 0, fares: 0, props: 0, propsTotal: 0 };
+      const out = { story: 0, storyTotal: 0, side: 0, sideTotal: 0, dlc: 0, dlcTotal: 0, dlcSide: 0, dlcSideTotal: 0, jobs: 0, jobsTotal: 0, jumps: 0, jumpsTotal: 0, lanterns: 0, lanternsTotal: 0, fares: 0, props: 0, propsTotal: 0 };
       if (m && m.all) {
         for (const [id, def] of m.all) {
           const done = !!(m.completed && m.completed[id]);
           if (def._main) {
             out.storyTotal++;
             if (done) out.story++;
+          } else if (def._dlc) {
+            // The story DLC counts on its own (main jobs, then its side stories).
+            const k = def._dlcMain ? 'dlc' : 'dlcSide';
+            out[k + 'Total']++;
+            if (done) out[k]++;
           } else if (def._chain) {
             out.sideTotal++;
             if (done) out.side++;
@@ -418,7 +429,7 @@
       return out;
     }
 
-    /** Completion, by category, and every achievement (for the Progress screen). */
+    /** Completion, by category, and every achievement (for the Progress screen; a category with no total is left out). */
     progress() {
       const c = this._counts();
       const districts = (VH.Data.districts || []).length;
@@ -426,6 +437,8 @@
       const cats = [
         { label: 'Story jobs', done: c.story, total: c.storyTotal, weight: 35 },
         { label: 'Side stories', done: c.side, total: c.sideTotal, weight: 12 },
+        { label: dlcTitle(), done: c.dlc, total: c.dlcTotal, weight: 20 },
+        { label: dlcTitle() + ': side stories', done: c.dlcSide, total: c.dlcSideTotal, weight: 7 },
         { label: 'Races and other jobs', done: c.jobs, total: c.jobsTotal, weight: 8 },
         { label: 'Stunt jumps', done: c.jumps, total: c.jumpsTotal, weight: 7 },
         { label: 'Lost lanterns', done: c.lanterns, total: c.lanternsTotal, weight: 7 },

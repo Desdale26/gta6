@@ -954,6 +954,61 @@ body:has(.dlg-sub.show) .vh-prev {
   transform-origin: left center;
 }
 
+/* The story DLC: its tab's tagline and group headings, the locked card, the title screen. */
+.story-dlc-tagline {
+  margin: 0.1rem 0.3rem 0.9rem;
+  font-size: 0.92rem;
+  font-style: italic;
+  color: var(--vh-muted);
+}
+
+.story-dlc-head {
+  margin: 1.4rem 0.3rem 0.7rem;
+  font-family: var(--vh-font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--vh-accent);
+}
+
+.story-now.is-locked {
+  border-color: var(--vh-line-strong);
+  background: linear-gradient(120deg, rgba(255, 79, 139, 0.12), rgba(9, 13, 26, 0.2) 70%);
+}
+
+.title-dlc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1.3rem;
+  padding: 0.6rem 0.8rem 0.65rem;
+  max-width: 26rem;
+  border-left: 3px solid var(--vh-accent);
+  background: linear-gradient(90deg, rgba(255, 79, 139, 0.16), rgba(255, 79, 139, 0));
+  line-height: 1.25;
+}
+
+.title-dlc-kicker {
+  font-family: var(--vh-font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--vh-accent);
+}
+
+.title-dlc-name {
+  font-family: var(--vh-font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--vh-text);
+}
+
+.title-dlc-line {
+  font-size: 0.86rem;
+  color: var(--vh-muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vh-prev,
   .vh-prev.is-on,
