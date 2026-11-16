@@ -69,8 +69,9 @@
  *   s.ui.meter(0..1|null, label) a power/timing bar
  *   s.sound(name, o)             carnival-audio.js cues: 'klaxon', 'bump', 'ding', 'clank',
  *                                'whoosh', 'cheer', 'buzz', 'win', 'lose', 'tick' ...
- *   s.finish(o)                  done: { score, tickets, completed, text } → the results
- *                                card (score, best, tickets), tickets added, 'carnival:end'
+ *   s.finish(o)                  done: { score, tickets, completed, text, rows } → the results
+ *                                card (score, or rows [[label, value, cls]] in its place; best,
+ *                                tickets), tickets added, 'carnival:end'
  *                                emitted, play() resolves; Jay is stood up where he is
  *   s.end(why)                   done without a results card (getting off a ride)
  *
@@ -601,6 +602,7 @@
       o = o || {};
       if (o.score !== undefined) this.score = o.score;
       if (o.tickets !== undefined) this.tickets = o.tickets;
+      this.rows = o.rows || null; // (two players: a row each in place of the score)
       this.carnival._finish(this, o.completed !== false, o.text || null, !this.opts.quiet && o.card !== false, o.why || null);
     }
 
@@ -884,7 +886,8 @@
       this._release(s);
       if (card) {
         const rows = [];
-        if (d.scored) rows.push([d.unit ? d.unit.charAt(0).toUpperCase() + d.unit.slice(1) : 'Score', score, 'big']);
+        if (s.rows) rows.push(...s.rows);
+        else if (d.scored) rows.push([d.unit ? d.unit.charAt(0).toUpperCase() + d.unit.slice(1) : 'Score', score, 'big']);
         if (d.scored) rows.push(['Best', (this.best[d.id] || score) + (newBest ? '  new best!' : ''), newBest ? 'best' : '']);
         rows.push(['Tickets', '+' + tickets, 'tickets']);
         this.overlay.show(true);

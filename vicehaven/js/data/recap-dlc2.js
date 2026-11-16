@@ -14,9 +14,11 @@
  * dlc_chet_told / dlc_chet_kept (d14), dlc_dash_in / dlc_dash_left (d20),
  * dlc_june_told / dlc_june_wait (d25), and the final choice in d30:
  * dlc_end_hers / dlc_end_everybody / dlc_end_gone, which is also the ending
- * (Act 4's outro is what storylog shows as the ending). Side-chain finales
- * (dst4, dsf4, dsr4, dsl3) colour d30 and the endings. No spoilers past each
- * job: who Odie Wren really is waits for d23, and so on.
+ * (Act 4's outro is what storylog shows as the ending). Side jobs can be
+ * finished before or after any main job, so neither kind of recap leans on a
+ * flag that could be set later than the job it describes (only the "Hers"
+ * ending mentions dsl3, as how things stand now). No spoilers past each job:
+ * who Odie Wren really is waits for d23, and so on.
  */
 (function () {
   'use strict';
@@ -116,7 +118,7 @@
         'Today is the festival, and the bell rings at noon when the boats come in.',
       ],
       recap: [
-        { if: 'dlc_dash_in', text: 'Dash and Kit came to the festival too, delighted to be on a team.' },
+        { if: 'dlc_dash_in', text: 'Dash and Kit came too.' },
         'Jay climbed the bell tower and rang the bell once. Inside its clapper he found the ignition coil, the seventh and last part of the Firecrest.',
         'Then Guest Services gunmen stood up on the roofs. Pip herded the old folk into Ines\'s café while Jay cleared the rooftops',
         { if: 'dlc_dash_in', text: 'and Dash and Kit led three of the gunmen on a chase round the church.' },
@@ -234,8 +236,6 @@
       { if: 'dlc_chet_kept', text: 'The film was shelved, and Chet is happily watching the news in his trailer.' },
       { if: 'dlc_dash_in', text: 'Dash\'s special, his first true episode in eight series, is a hit.' },
       { if: 'dlc_dash_left', text: 'Dash\'s show was cancelled.' },
-      { if: 'dsf4_check_ride', text: 'Hob gave Jay another ten.' },
-      { if: '!dsf4_check_ride', text: 'Hob still gives Jay a nine. A very high nine.' },
       'And mind the road.',
     ],
   };
@@ -271,10 +271,9 @@
         'As he left, June said, "And mind the road." She doesn\'t know where she first heard it.',
       ],
       line: [
-        'Jay took a driving lesson with June and found Dess\'s helmet in her car',
-        { if: 'dlc_june_told', text: ', then told June her mother is alive.' },
-        { if: 'dlc_june_wait', text: ', but left it to Dess to tell June the truth.' },
-        { if: ['!dlc_june_told', '!dlc_june_wait'], text: '.' },
+        { if: 'dlc_june_told', text: 'Jay took a driving lesson with June, found Dess\'s old helmet in her car, and told June her mother is alive.' },
+        { if: 'dlc_june_wait', text: 'Jay took a driving lesson with June and found Dess\'s old helmet in her car, but left the truth for Dess to tell.' },
+        { if: ['!dlc_june_told', '!dlc_june_wait'], text: 'Jay took a driving lesson with June and found Dess\'s old helmet in her car.' },
       ],
     },
 
@@ -343,7 +342,6 @@
         'Jay and Pip cleared the four roadblocks: Anchor Street, Seawall Drive, the coast road and the Bowl car park.',
         { if: 'dlc_blog_on', text: 'At two of them Milo\'s readers were already sitting in the road in home-made SHE WON T-shirts.' },
         'Monty announced the tank on the radio and got Jay\'s name wrong again.',
-        { if: 'dst4_the_big_jump', text: 'Fenella\'s film crew is inside the Speedway, ready to film the real thing.' },
         'Then Jay lost the police on foot.',
       ],
       line: 'Jay drove a borrowed film tank through Castellane\'s four roadblocks, so the road to the Speedway is open.',
@@ -358,7 +356,6 @@
       recap: [
         { if: 'dlc_june_told', text: 'Jay drove the Firecrest to the Speedway, with June beside him and Dess in the back holding the cup.' },
         { if: '!dlc_june_told', text: 'Jay drove the Firecrest to the Speedway, with Dess beside him holding the cup.' },
-        { if: 'dsr4_southbay_classic', text: 'Pip and Teddy Castellane drove alongside as guards.' },
         { if: 'dlc_dash_in', text: 'Dash broadcast the chase from a wobbly helicopter, so the police were waiting at the tunnel.' },
         { if: 'dlc_dash_left', text: 'Two Guest Services cars followed him onto the infield, and Jay stopped them.' },
         'Ottoline was arrested. Dess tapped the wheel three times, and Jay drove her lap.',
@@ -370,11 +367,10 @@
         { if: 'dlc_end_gone', text: 'Jay said hide it again.' },
       ],
       line: [
-        'Jay drove Dess Marlow\'s lap of honour, fifty years late, and the whole Speedway learned who really won',
-        { if: 'dlc_end_hers', text: '; the Firecrest went home to June.' },
-        { if: 'dlc_end_everybody', text: '; the Firecrest stays at the Speedway for everyone.' },
-        { if: 'dlc_end_gone', text: '; then the Firecrest vanished again.' },
-        { if: ['!dlc_end_hers', '!dlc_end_everybody', '!dlc_end_gone'], text: '.' },
+        { if: 'dlc_end_hers', text: 'Jay drove Dess Marlow\'s lap of honour, fifty years late, and then gave the Firecrest to June.' },
+        { if: 'dlc_end_everybody', text: 'Jay drove Dess Marlow\'s lap of honour, fifty years late, and the Firecrest stays at the Speedway for everyone.' },
+        { if: 'dlc_end_gone', text: 'Jay drove Dess Marlow\'s lap of honour, fifty years late, then helped her hide the Firecrest all over again.' },
+        { if: ['!dlc_end_hers', '!dlc_end_everybody', '!dlc_end_gone'], text: 'Jay drove Dess Marlow\'s lap of honour, fifty years late, and the whole Speedway learned who really won.' },
       ],
     },
   });
@@ -446,4 +442,230 @@
       } },
     ],
   });
+
+  // =====================================================================
+  // SIDE CHAINS. They can be played in any order around the main jobs (and
+  // after d30), so their recaps never depend on a flag that might be set
+  // later than the job itself (d14's Chet choice for Take Two, d23 or d25
+  // for the others): those scenes are told neutrally. dlc_blog_* is set in
+  // d08, before Marks Out of Ten, Summer Series and Dual Control open.
+  // =====================================================================
+
+  Object.assign(R.jobs, {
+    // ------------------------------------------- Take Two (Fenella and Chet)
+    dst1_second_unit: {
+      setup: [
+        'Fenella Moss\'s film needs a proper car chase, and her first unit filmed Chet driving at thirty.',
+        'So the second unit gets Jay, one take, and a white stunt car the crew have named Trey.',
+      ],
+      recap: [
+        'At Sunreel Studios, Fenella showed Jay the first unit\'s chase: Chet, very slowly.',
+        'Then Jay did it properly, in one take: up the ramp over the fake subway, through the sugar-glass bank window, round the western set at full lock and onto the chalk mark.',
+        'Fenella called it the best chase on the lot in twenty years. Trey was meant to be blown up later by Gary, the explosives man. Trey lived.',
+      ],
+      line: 'Jay drove a perfect one-take film chase for Fenella, and brought Trey the stunt car back in one piece.',
+    },
+    dst2_night_shoot: {
+      setup: [
+        'Tonight Fenella is filming a chase down the Neon Strand, Castellane\'s street on Isla Paloma.',
+        'Jay is to chase the villain car in Trey and wreck it for the cameras. Chet is playing Rex Castellane, in a very big wig.',
+      ],
+      recap: [
+        'Jay chased Vince the stunt driver down the Strand and wrecked his car, while Vince jumped clear.',
+        'Then Castellane\'s Guest Services joined in, uninvited and shooting for real, and so did the police. Fenella was delighted and filmed it all.',
+        'Jay shook them off and brought Trey back with one bullet nick. Fenella admitted Castellane pays for her film, but says she makes it good while he isn\'t looking.',
+      ],
+      line: 'Jay filmed a night chase down the Neon Strand, and Castellane\'s Guest Services joined in for real.',
+    },
+    dst3_rain_machine: {
+      setup: [
+        'Fenella\'s rain machine has broken, and she needs a storm on Sandpiper Beach before the light goes.',
+        'Her idea: Jay borrows a fire engine from the airport, because it has a water cannon on the roof.',
+      ],
+      recap: [
+        'Jay drove a crash tender out of the airport fire station, lost the police and reached Sandpiper Beach just in time.',
+        'He soaked Chet and seven extras with the water cannon, so Rex Castellane could shake his fist at a storm. Gully the lifeguard blew his whistle the whole time.',
+        'The rain soaked the explosives on Trey\'s roof, so Trey lived again. Gully gave Jay one very full ticket.',
+      ],
+      line: 'Jay borrowed an airport fire engine to make a storm for Fenella\'s film, and Trey lived again.',
+    },
+    dst4_the_big_jump: {
+      setup: [
+        'It is half-time at Mariner Stadium, with forty thousand people inside. Fenella wants Trey to jump six buses in the car park.',
+        'Chet Valiant has never gone over thirty in his life, and he is coming too.',
+      ],
+      recap: [
+        'With Chet in the passenger seat, holding his one seatbelt with both hands, Jay jumped all six buses and raced round the stadium before the sun went down. The whole crowd stood up and cheered.',
+        'Chet screamed the whole way, in full sentences, and then said only one word: "Again."',
+        'Trey, parked safely on his mark, quietly exploded. Gary said it wasn\'t him.',
+      ],
+      line: 'Jay jumped six buses for Fenella\'s film with Chet beside him, and Chet went over thirty for the first time.',
+    },
+
+    // ------------------------------------------- Marks Out of Ten (Hob)
+    dsf1_banner_day: {
+      setup: [
+        'Hob\'s flying club has a sponsor: the Sandpiper Prawn Shack, which paid in prawns.',
+        'Jay is to tow its banner low along Sandpiper Beach at lunchtime, so the sunbathers can read it.',
+      ],
+      recap: [
+        'Jay towed thirty metres of banner across the bay, down the beach, over the skate park and along the promenade.',
+        'Gully, the lifeguard at Tower Seven, radioed to say he was too low, too loud and upside down. The banner was: it said SENOB REWEF HTIW WON.',
+        'Hob had shown Jay how to hook it on, upside down, so he gave them both five out of ten. Jay also got a bag of prawns.',
+      ],
+      line: 'Jay towed the Prawn Shack\'s banner along the beach for Hob. It was upside down. Five out of ten.',
+    },
+    dsf2_chimney_pots: {
+      setup: [
+        'Hob\'s record round the Chimney Pots course at Ironside, 3 minutes 11 seconds, has stood for twenty years.',
+        'He polishes the board it is painted on. He says Jay doesn\'t have to beat it.',
+      ],
+      recap: [
+        'Jay flew the Skylark to Ironside: between the power station\'s two big chimneys, low over the rail yard and along the refinery pipes, close enough to read HOB WAS HERE on one of them.',
+        'He did it in 3 minutes 4 seconds, a new record. Hob blamed a tailwind, said he was delighted, painted J. MERCER on the board, and gave Jay eight.',
+      ],
+      line: 'Jay beat Hob\'s twenty-year-old record round the Ironside chimneys, and Hob painted Jay\'s name on the board.',
+    },
+    dsf3_doughnut_drop: {
+      setup: [
+        'It is Tuesday, so the doughnuts must go out, but the Skylark is in for its check.',
+        'Today Jay flies them in the club\'s little Sparrow helicopter, with three drops to make.',
+      ],
+      recap: [
+        'Hob talked Jay through his first helicopter flight by radio. Jay landed boxes on a clinic roof for the night nurses, and on the observatory lawn for the astronomers.',
+        'Then he flew across the bay to the Halcyon sports field, where Professor Quill had ordered twelve for Milo. Milo got the first doughnut ever delivered to him by air.',
+        'Milo gave the landing nine. Hob gave it five and a half.',
+      ],
+      line: 'Jay delivered Hob\'s doughnuts by helicopter, and Milo got his first ever doughnut by air.',
+    },
+    dsf4_check_ride: {
+      setup: [
+        'Today is Hob\'s check ride, and he is wearing a tie. Jay must land at the big airport between the airliners, then fly home to Paloma Field in a crosswind.',
+        'In forty years, Hob has never given a ten.',
+      ],
+      recap: [
+        'Hob sat beside Jay and said nothing, loudly. Jay landed on the airport\'s main runway just ahead of an airliner, then flew home over the Coral Marina light, where Toby told him to waggle his wings.',
+        'He landed at Paloma Field in a strong crosswind, so softly that Hob forgot he was in an aeroplane. Hob gave him a ten, and the blue club Skylark on Tuesdays.',
+      ],
+      line: 'Jay passed Hob\'s check ride with the first ten Hob has given in forty years, and got the blue Skylark on Tuesdays.',
+    },
+
+    // ------------------------------------------- Summer Series (Pip)
+    dsr1_oval_sprint: {
+      setup: [
+        'Pip\'s team, Marlow Racing, has one old Drifter and two tiny sponsors. If it scores nothing in round one of the Summer Series, it loses its garage.',
+        'Pip isn\'t allowed to race, so Jay is driving.',
+      ],
+      recap: [
+        'Pip\'s racing licence was suspended for calling the chief steward a lamppost, so Jay raced for her, from the back of the grid.',
+        'Monty kept calling him Jim Mercy. Jay passed everyone, took the inside line at turn three, and beat Teddy Castellane to win. Marlow Racing keeps its garage.',
+        'Monty told Pip that the inside at three was her gran\'s move, fifty years ago, on this track.',
+      ],
+      line: 'Jay won round one of the Summer Series for Pip\'s team, Marlow Racing, so the team keeps its garage.',
+    },
+    dsr2_campus_sprint: {
+      setup: [
+        'The Summer Series street round is two laps of closed roads round the Halcyon campus, at night.',
+        'Milo has made a flag for Marlow Racing. Officer Plum has not been told about the race.',
+      ],
+      recap: [
+        'Milo cheered from behind a barrier, and Officer Plum said he had seen Jay\'s face somewhere near a clock. Monty commentated from an ice-cream van.',
+        'On the last lap Teddy cut across the lawn, and Plum chased the wrong car on his bicycle. Jay won anyway, and Plum gave Teddy a ticket for conduct unbecoming a lawn.',
+        'Pip told Milo "And mind the road". She doesn\'t know why she says it.',
+      ],
+      line: 'Jay won the Summer Series street round at Halcyon, and Officer Plum gave Teddy a ticket for driving on the lawn.',
+    },
+    dsr3_dirty_air: {
+      setup: [
+        'Teddy Castellane is suddenly two seconds a lap faster, and Pip says nobody finds two seconds.',
+        'Now Castellane mechanics are taking his car away for a "service" on a Tuesday. Pip wants to follow it.',
+      ],
+      recap: [
+        'With Pip hiding in the footwell, Jay tailed the gold transporter to a lock-up in Cinder Creek. Inside, Teddy\'s car was getting a banned turbo engine.',
+        'Teddy turned up and found out too: his uncle had ordered it and never told him. Then Guest Services arrived to "tidy up", and started shooting.',
+        'Jay got Pip and Teddy back to the Speedway, where there were too many witnesses.',
+      ],
+      line: 'Jay and Pip caught Castellane Racing cheating with a banned engine, and rescued Teddy from Guest Services.',
+    },
+    dsr4_southbay_classic: {
+      setup: [
+        'It is the Southbay Classic, the last round of the Summer Series: ten laps, the whole field, and a cup the size of an egg cup.',
+        'A marshal is walking down the grid towards Pip with something in his hand.',
+      ],
+      recap: [
+        'The marshal gave Pip her racing licence back, with the stewards\' apologies. She gave Jay the keys anyway: this season was his, and next season she would drive.',
+        'Teddy raced on his old engine, fair and square. After a side-by-side battle, Jay won the race and the series.',
+        'Pip got the egg cup, Teddy shook her hand, and Pip gave Jay the keys to the team\'s spare Drifter.',
+      ],
+      line: 'Jay won the Southbay Classic and the Summer Series, and Pip got her racing licence back.',
+    },
+
+    // ------------------------------------------- Dual Control (June)
+    dsl1_three_point_turn: {
+      setup: [
+        'June Marlow wants to keep an eye on the man who has been driving her daughter about.',
+        'Today Jay is to watch her most nervous pupil, Rosa Lindqvist, try her twelfth three-point turn.',
+      ],
+      recap: [
+        'Rosa\'s turn took seven points and a hedge. When she got out to swap seats, a thief jumped into June\'s learner car and drove off, with June\'s clipboard inside.',
+        'Jay borrowed a neighbour\'s car and boxed the thief in, gently. The thief ran, and Jay drove the learner car home without a scratch.',
+        'June marked him anyway: boxing in, good; mirror checks, none; the verge, a minor fault.',
+      ],
+      line: 'A thief stole June\'s learner car in the middle of a lesson, and Jay brought it home, clipboard and all.',
+    },
+    dsl2_school_run: {
+      setup: [
+        'The Vista Verde School under-twelves have a cup final at Mariner Stadium in twenty minutes, and their bus has broken down.',
+        'June has volunteered Jay to drive them in the school van. There is also a cake.',
+      ],
+      recap: [
+        'Jay drove eleven footballers, Dougie Penn the pelican mascot, and a huge gold cake shaped like the cup to Mariner Stadium. The team sang the same one-verse song about a pelican all the way.',
+        'When the cake slid on a corner, June caught it without looking up. They arrived on time, cake and all, and Dougie shook Jay\'s hand with a wing.',
+        'June counted seven minor faults. And a pelican.',
+      ],
+      line: 'Jay drove a school football team, a pelican mascot and a giant cake to the cup final, on time.',
+    },
+    dsl3_test_day: {
+      setup: [
+        'It is Sunday in the Verde Mall car park, and time for the Marlow Test. Nobody drives June\'s daughter about who hasn\'t passed it.',
+        'Pip got ninety-one. She argued with the cones.',
+      ],
+      recap: [
+        'Jay put his hands at ten and two without thinking. His grandmother taught him that, in a car park, and June called her a sensible woman.',
+        'He wove through the cones, reversed round a corner, stopped in time for a runaway trolley and parallel parked. June gave him ninety-four per cent, and kept his marked sheet "for reference".',
+        'Rosa passed her real driving test too.',
+      ],
+      line: 'Jay passed the Marlow Test with ninety-four per cent, and Rosa passed her real driving test.',
+    },
+  });
+
+  // People met in the side chains.
+  Object.assign(R.who, {
+    rosa: { intro: 'dsl1_three_point_turn', bio: 'Rosa Lindqvist, sixteen, is June\'s most nervous pupil. She has failed her three-point turn eleven times. June says twelve is a lucky number.' },
+    dougie: { intro: 'dsl2_school_run', bio: 'Dougie Penn is in Year Seven at Vista Verde School, and he is the football team\'s pelican mascot. He has stayed in character since September. "Since the egg," he says.' },
+  });
+
+  // Later news from the side chains (and one that needs both a side job
+  // and d30, whichever came first: Fenella films the real lap either way).
+  R.updates.push(
+    { who: 'fenella', after: 'dst4_the_big_jump', text: 'Trey the stunt car lived through every scene he was meant to die in, then exploded on his own, parked.' },
+    { who: 'chet', after: 'dst4_the_big_jump', text: 'Chet rode over six buses with Jay and went over thirty for the first time in his life. He got to seventy. He wants to go again.' },
+    { who: 'fenella', after: 'd30_the_last_lap', if: 'dst4_the_big_jump', text: 'Fenella filmed Dess\'s real lap of honour. She says it is the best thing she has ever shot, and not one frame of it was for the movie.' },
+    { who: 'gully', after: 'dsf1_banner_day', text: 'Gully radioed Jay\'s plane to say it was too low, too loud and upside down, and then whistled at it.' },
+    { who: 'gully', after: 'dst3_rain_machine', text: 'Gully gave Jay a ticket for a fire engine on the beach and rain on the beach. "It\'s one ticket. It\'s a very full ticket."' },
+    { who: 'hob', after: 'dsf2_chimney_pots', text: 'Jay beat Hob\'s twenty-year-old Chimney Pots record. Hob painted his own name underneath, "where I can see it every day and grow as a person".' },
+    { who: 'milo', after: 'dsf3_doughnut_drop', text: 'Milo got the first doughnut ever delivered to him by air. Hob gave him a seven, for enthusiasm.' },
+    { who: 'prof_quill', after: 'dsf3_doughnut_drop', text: 'The Professor sat in Hob\'s helicopter and didn\'t feel sick at all. Helicopters, he says, don\'t corner.' },
+    { who: 'hob', after: 'dsf4_check_ride', text: 'Hob gave Jay a ten, the first in forty years of teaching, and lent him the blue club Skylark on Tuesdays. Doughnuts are Tuesdays.' },
+    { who: 'toby', after: 'dsf4_check_ride', text: 'Toby radioed Jay over the Coral Marina light and taught him to waggle his wings.' },
+    { who: 'pip', after: 'dsr1_oval_sprint', text: 'Pip\'s racing licence was suspended along with her road one, for calling the chief steward a lamppost. She stands by it.' },
+    { who: 'plum', after: 'dsr2_campus_sprint', text: 'Officer Plum chased the wrong car round the campus on his bicycle, then gave Teddy a ticket for conduct unbecoming a lawn.' },
+    { who: 'teddy', after: 'dsr3_dirty_air', text: 'Teddy found out his uncle had a banned engine put in his car without telling him. "I thought I was just good."' },
+    { who: 'leo', after: 'dsr3_dirty_air', text: 'Castellane Racing secretly put a banned engine in his nephew Teddy\'s car, on "your uncle\'s orders". Then Guest Services came to tidy up.' },
+    { who: 'teddy', after: 'dsr4_southbay_classic', text: 'Teddy raced the Southbay Classic on his old engine, fair and square, and his uncle isn\'t speaking to him. "Next season. Me and you, Pip. No uncles."' },
+    { who: 'pip', after: 'dsr4_southbay_classic', text: 'Pip has her racing licence back, laminated, with the stewards\' apologies. Marlow Racing won the Summer Series and a cup the size of an egg cup.' },
+    { who: 'monty', after: 'dsr4_southbay_classic', text: 'Over the Summer Series, Monty called Jay Jim Mercy, Jem Mersey, Jack Mackerel, Joe Mercury and Jay Murphy.' },
+    { who: 'june', after: 'dsl3_test_day', text: 'June gave Jay ninety-four per cent in the Marlow Test, and kept his marked sheet in her pocket, "for reference".' },
+    { who: 'rosa', after: 'dsl3_test_day', text: 'Rosa passed her driving test on her third go, with a three-point turn in three points. The silent examiner spoke.' },
+  );
 })();

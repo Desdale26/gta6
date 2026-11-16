@@ -368,12 +368,10 @@
     const gctx = world.ctxAt(G.x, G.z);
     gctx.prop.box(G.x - 0.9, KERB, G.z - 0.9, G.x + 0.9, KERB + 1.1, G.z + 0.9, VH.col(0xd4a017));
     gctx.screen.box(G.x - 0.92, KERB + 0.9, G.z - 0.92, G.x + 0.92, KERB + 1.02, G.z + 0.92, VH.col(0xffd96a, 1.8));
-    gctx.screen.box(G.x - 0.85, KERB + 1.1, G.z - 0.85, G.x + 0.85, KERB + 2.3, G.z + 0.85, VH.col(0x9fe6ff, 0.55));
+    // (The glass, the claw and the prizes inside are js/carnival-games.js's: the claw is played.)
     for (const [cx, cz] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) gctx.prop.box(G.x + cx - 0.06, KERB + 1.1, G.z + cz - 0.06, G.x + cx + 0.06, KERB + 2.3, G.z + cz + 0.06, VH.col(0xd4a017));
     gctx.prop.box(G.x - 0.95, KERB + 2.3, G.z - 0.95, G.x + 0.95, KERB + 2.55, G.z + 0.95, VH.col(0xd4a017));
     gctx.screen.cylinder(G.x, KERB + 2.55, G.z, 0.8, 0.15, 0.75, 10, VH.col(0x9fe6ff, 0.6), true);
-    gctx.prop.box(G.x - 0.03, KERB + 1.8, G.z - 0.03, G.x + 0.03, KERB + 2.3, G.z + 0.03, VH.col(0x9aa1a8));
-    gctx.prop.box(G.x - 0.18, KERB + 1.6, G.z - 0.18, G.x + 0.18, KERB + 1.8, G.z + 0.18, VH.col(0x9aa1a8));
     gctx.prop.cylinder(G.x, KERB + 3.3, G.z, 0.12, 0.12, 0.18, 8, VH.col(0xffd24a), true);
     world.physics.addBox(G.x - 0.95, 0, G.z - 0.95, G.x + 0.95, KERB + 3.3, G.z + 0.95, 'metal', F().ALL);
     sign(world, { x: G.x + 0.96, y: KERB + 0.55, z: G.z, yaw: Math.PI / 2, w: 1.7, h: 0.5, lines: ['GOLDEN GRABBER'], style: 'neon', colors: GOLD, posts: false });

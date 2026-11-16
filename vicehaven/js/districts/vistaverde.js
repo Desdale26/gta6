@@ -128,6 +128,14 @@
     // Lamps along the forecourt.
     for (let z = B.z0 + 10; z < B.z1; z += 24) world.addProp('streetlight', Fc.x1 - 0.6, KERB, z, -PI / 2, 1);
 
+    // Plant on the roof: air-handling units, ducts, a lift motor room.
+    for (const [x, z, w, d, h] of [[-140, 684, 6, 4, 1.8], [-128, 690, 4, 4, 1.4], [-112, 680, 8, 3, 1.6], [-138, 760, 6, 5, 2.2], [-118, 768, 4, 4, 1.4], [-100, 756, 5, 3, 1.6], [-130, 724, 3, 8, 2.6]]) {
+      box(world, 'prop', x - w / 2, KERB + B.h, z - d / 2, x + w / 2, KERB + B.h + h, z + d / 2, 0xb8bcc0, 'metal');
+      world.ctxAt(x, z).propMatte.box(x - w / 2 + 0.3, KERB + B.h + h, z - d / 2 + 0.3, x + w / 2 - 0.3, KERB + B.h + h + 0.12, z + d / 2 - 0.3, col(0x5a5e63));
+    }
+    // A zebra crossing over the aisle from the car park to the court.
+    for (let z = MA.court.z0 + 9; z < MA.court.z1 - 9; z += 1.2) W.mark(world, MA.park.x0, z, MA.park.x0 + 6.8, z + 0.6, 0xf4f4ef);
+
     // --- the car park
     buildMallCarPark(world);
   }
@@ -203,8 +211,10 @@
   // Marigold Close. North: the school. South-east: the ball field.
   const SC = {
     x0: -473, x1: -327, z0: 927, z1: 1043,
-    b: { x0: -419, x1: -352, z0: 935, z1: 958, h: 8.2 },
-    play: { x0: -348, x1: -330, z0: 934, z1: 958 },
+    b: { x0: -419, x1: -352, z0: 938, z1: 961, h: 8.2 },
+    rail: 930, // the school's front railings (the pavement on Dune Street in front of them)
+    play: { x0: -348, x1: -330, z0: 937, z1: 961 },
+    staff: { x0: -442, x1: -425, z0: 997, z1: 1041, in: [-437, -430] }, // staff car park and bus bay, in from Orchard Street
     field: { x0: -421, x1: -330, z0: 965, z1: 1040, home: [-414, 1033] },
     close: { x0: -473, x1: -424, rz0: 980, rz1: 988, cx: -437, cz: 984, r: 11 },
   };
@@ -214,15 +224,19 @@
     { id: 'ne', x0: -457, x1: -443, z0: 932, z1: 972, face: 's', wall: 0xd8e6ec, roof: 0x5a6f80 },
     { id: 'sw', x0: -472, x1: -458, z0: 989, z1: 1041, face: 'n', wall: 0xe8e0f0, roof: 0x7a5a8a },
     { id: 'se', x0: -457, x1: -443, z0: 996, z1: 1041, face: 'n', wall: 0xf4e8c8, roof: 0x9a4a3a, june: true },
+    { id: 'e', x0: -442, x1: -425, z0: 932, z1: 972, face: 's', wall: 0xe0ecd8, roof: 0x4f6f4a },
   ];
+  /** A bungalow's footprint: 8 m back from the close (front lawn and drive), a side passage on the east. */
+  function houseRect(h) {
+    const s = h.face === 's' ? 1 : -1;
+    const hz0 = s > 0 ? h.z1 - 19 : h.z0 + 8;
+    return { s, hx0: h.x0 + 1, hx1: h.x1 - 3, hz0, hz1: hz0 + 11 };
+  }
 
   function bungalow(world, h) {
     const W = K();
-    const s = h.face === 's' ? 1 : -1;
-    const w = h.x1 - h.x0;
-    // The house at the back of the lot, the front lawn and drive in front of it.
-    const hz0 = s > 0 ? h.z0 + 3 : h.z1 - 14, hz1 = hz0 + 11;
-    const hx0 = h.x0 + 1, hx1 = h.x1 - 1;
+    // The house 8 m back from the close, the front lawn and drive in front of it, the garden behind.
+    const { s, hx0, hx1, hz0, hz1 } = houseRect(h);
     const frontZ = s > 0 ? hz1 : hz0;
     const roadZ = s > 0 ? h.z1 : h.z0;
     const ctx = W.building(world, hx0, hz0, hx1, hz1, 3.6, { wall: h.wall, style: 1, ww: 0.5, wh: 0.55, bay: 3.2, parapet: false, sides: { [s > 0 ? 's' : 'n']: 'blank' } });
@@ -245,12 +259,15 @@
       world.ctxAt((x0 + x1) / 2, (dz0 + dz1) / 2).grassTop.topRect(x0, dz0, x1, dz1, KERB, col(0xffffff), 6);
       world.addLawn(x0, dz0, x1, dz1);
     }
-    // Back garden lawn.
+    // Back garden lawn, the side passage's strip of lawn, a tree at the bottom of the garden.
     const bz0 = s > 0 ? h.z0 : hz1, bz1 = s > 0 ? hz0 : h.z1;
     if (bz1 - bz0 > 0.5) {
       world.ctxAt((h.x0 + h.x1) / 2, (bz0 + bz1) / 2).grassTop.topRect(h.x0 + 0.2, bz0, h.x1 - 0.2, bz1, KERB, col(0xffffff), 6);
       world.addLawn(h.x0 + 0.2, bz0, h.x1 - 0.2, bz1);
+      world.addProp('treeB', h.x0 + 3 + (h.x1 - h.x0 - 6) * VH.math.hash2(h.x0, 3), KERB, s > 0 ? h.z0 + 5 : h.z1 - 5, 0, 0.75);
     }
+    world.ctxAt(hx1 + 1, (hz0 + hz1) / 2).grassTop.topRect(hx1 + 0.4, hz0, h.x1 - 0.2, hz1, KERB, col(0xffffff), 6);
+    world.addLawn(hx1 + 0.4, hz0, h.x1 - 0.2, hz1);
     // A sprinkler on the front lawn, a letterbox by the drive.
     const sx = hx0 + 0.9, sz = (frontZ + roadZ) / 2;
     ctx.prop.box(sx - 0.04, KERB, sz - 0.04, sx + 0.04, KERB + 0.25, sz + 0.04, col(0x3a3f45)); // solidity: passable
@@ -284,10 +301,11 @@
     // The houses, picket fences between the lots, a basketball hoop on one drive.
     const built = {};
     for (const h of HOUSES) built[h.id] = bungalow(world, h);
-    for (const [x, z0, z1] of [[-457.5, 932, 979], [-457.5, 989, 1041]]) W.fence(world, x, z0 + 0.5, x, z1 - 0.5, [], 'picket', 1.1);
+    for (const [x, z0, z1] of [[-457.5, 932, 979], [-457.5, 989, 1041], [-442.5, 932, 972]]) W.fence(world, x, z0 + 0.5, x, z1 - 0.5, [], 'picket', 1.1);
     W.fence(world, SC.close.x1 - 0.5, 932.5, SC.close.x1 - 0.5, 971, [], 'picket', 1.1);
-    W.fence(world, SC.close.x1 - 0.5, 997, SC.close.x1 - 0.5, 1040.5, [], 'picket', 1.1);
-    for (const z of [932.3, 1040.7]) W.fence(world, SC.x0 + 1, z, SC.close.x1, z, [], 'picket', 1.1);
+    W.fence(world, SC.x0 + 1, 932.3, SC.close.x1, 932.3, [], 'picket', 1.1);
+    W.fence(world, SC.x0 + 1, 1040.7, SC.staff.x0 - 0.5, 1040.7, [], 'picket', 1.1);
+    buildStaffPark(world);
     {
       const b = built.nw;
       const x = b.gx1 + 0.6, z = b.roadZ - 1.4;
@@ -299,7 +317,7 @@
     // June's: Aunt Win's shed at the side, the gnome guarding the key, a perfect lawn stripe.
     {
       const b = built.se;
-      const sx0 = b.hx1 + 0.35, sx1 = sx0 + 2.6, sz0 = b.hz0 + 2, sz1 = sz0 + 3.0;
+      const sx0 = b.hx1 + 0.35, sx1 = sx0 + 2.3, sz0 = b.hz0 + 2, sz1 = sz0 + 3.0;
       const ctx = world.ctxAt(sx0, sz0);
       box(world, 'wood', sx0, KERB, sz0, sx1, KERB + 2.2, sz1, 0x8a6a48, 'plank');
       W.gable(ctx.wood, sx0 - 0.2, sz0 - 0.2, sx1 + 0.2, sz1 + 0.2, KERB + 2.2, 0.6, 'z', col(0x4a3a2a), col(0x8a6a48));
@@ -324,12 +342,89 @@
     for (const [x, z, yaw] of [[-466, 979.2, 0], [-447, 979.2, 0], [-461, 988.8, PI]]) world.addProp('streetlight', x, KERB, z, yaw, 1);
   }
 
+  /**
+   * The school's staff car park and bus bay, south-east of the turning circle,
+   * in from Orchard Street: a row of bays, the school bus parked along the far
+   * side, bollards across the close end (people walk through, cars can't),
+   * a hedge along June's fence.
+   */
+  function buildStaffPark(world) {
+    const W = K();
+    const P = SC.staff;
+    W.pave(world, P.x0, P.z0, P.x1, 1043, 0x8f9096, 'asphaltTop', KERB + 0.01, 6);
+    for (let z = P.z0 + 4; z <= P.z1 - 5 + 1e-6; z += 2.6) W.mark(world, P.x1 - 5, z - 0.06, P.x1, z + 0.06, 0xf4f4ef);
+    W.mark(world, P.x1 - 5.06, P.z0 + 4, P.x1 - 4.94, P.z1 - 5, 0xf4f4ef);
+    // The bus bay: yellow hatching along the west side, BUS painted on it.
+    W.mark(world, P.x0 + 3.9, P.z0 + 3, P.x0 + 4.05, P.z0 + 18, 0xf2c230);
+    for (let z = P.z0 + 3.5; z < P.z0 + 18; z += 2.5) W.mark(world, P.x0 + 0.6, z, P.x0 + 3.8, z + 0.15, 0xf2c230);
+    schoolBus(world, P.x0 + 2.2, P.z0 + 10.5);
+    // Bollards across the close end (no rat run from the close to Orchard Street), the hedge on June's side.
+    for (let x = P.x0 + 0.8; x < P.x1 - 0.3; x += 1.5) {
+      const c = world.ctxAt(x, P.z0 - 0.4);
+      S().drum(world, c.prop, x, KERB, P.z0 - 0.4, 0.13, 0.95, 8, 0x3a3f45, 'pole', F().SOLID | F().SHOTS);
+      c.screen.box(x - 0.135, KERB + 0.75, P.z0 - 0.535, x + 0.135, KERB + 0.82, P.z0 - 0.265, VH.col(0xf2c230, 1.2));
+    }
+    world.ctxAt(P.x0, (P.z0 + P.z1) / 2).hedge.box(P.x0 - 0.7, KERB, P.z0, P.x0 - 0.1, KERB + 1.2, P.z1, col(0x4f7f3a));
+    world.physics.addBox(P.x0 - 0.7, 0, P.z0, P.x0 - 0.1, KERB + 1.2, P.z1, 'hedge', F().SOLID | F().CAMERA);
+    // The east side: the picket fence along the field path; the south: fence either side of the way in.
+    W.fence(world, P.x1 + 0.5, P.z0, P.x1 + 0.5, P.z1, [], 'picket', 1.1);
+    W.fence(world, P.x0, 1040.7, P.x1 + 0.5, 1040.7, [P.in], 'picket', 1.1);
+    W.sign(world, { x: P.in[0] - 1.2, y: KERB + 2.1, z: 1041.6, yaw: 0, w: 3.6, h: 1.0, lines: ['VISTA VERDE SCHOOL', 'STAFF & BUSES ONLY'], style: 'road', posts: true, colors: { bg: ['#1f5fbf', '#1f5fbf'], fg: '#ffffff', border: '#ffffff' } });
+    world.addProp('streetlight', P.x1 - 0.8, KERB, (P.z0 + P.z1) / 2, -PI / 2, 1);
+  }
+
+  /**
+   * School railings: dark green bars on two rails, 1.9 m, solid; along x
+   * (x0, x1, z, gaps along x) or, with four numbers, along z (x, z0, x, z1).
+   */
+  function palisade(world, a, b, c, d, e) {
+    const alongZ = e !== undefined;
+    const x0 = a, z0 = alongZ ? b : c, x1 = alongZ ? c : b, z1 = alongZ ? d : c;
+    const gaps = (alongZ ? e : d) || [];
+    const lo = alongZ ? Math.min(z0, z1) : Math.min(x0, x1), hi = alongZ ? Math.max(z0, z1) : Math.max(x0, x1);
+    const k = alongZ ? x0 : z0;
+    const segs = [];
+    let cur = lo;
+    for (const [g0, g1] of gaps) { if (g0 > cur) segs.push([cur, g0]); cur = Math.max(cur, g1); }
+    if (cur < hi) segs.push([cur, hi]);
+    const G = col(0x1f4f3a), H = 1.9;
+    const R = (p0, p1, c0, c1, y0, y1) => (alongZ ? [c0, y0, p0, c1, y1, p1] : [p0, y0, c0, p1, y1, c1]);
+    for (const [s0, s1] of segs) {
+      for (let p = s0; p < s1 - 1e-6; p += 40) {
+        const p1 = Math.min(s1, p + 40), mid = (p + p1) / 2;
+        const ctx = alongZ ? world.ctxAt(k, mid) : world.ctxAt(mid, k);
+        for (const y of [0.12, 1.7]) ctx.prop.box(...R(p, p1, k - 0.03, k + 0.03, KERB + y, KERB + y + 0.07), G);
+        for (let q = p + 0.08; q < p1; q += 0.2) ctx.prop.box(...R(q, q + 0.035, k - 0.018, k + 0.018, KERB, KERB + H), G);
+        for (let q = Math.ceil(p / 2.5) * 2.5; q <= p1; q += 2.5) ctx.prop.box(...R(q - 0.05, q + 0.05, k - 0.05, k + 0.05, KERB, KERB + H + 0.08), G);
+      }
+      const bx = R(s0, s1, k - 0.08, k + 0.08, 0, KERB + H);
+      world.physics.addBox(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], 'railing', F().SOLID | F().CAMERA);
+    }
+  }
+
+  /** A yellow school bus, parked along z with its nose to -z (drawn, solid). */
+  function schoolBus(world, x, z) {
+    const c = world.ctxAt(x, z);
+    const hw = 1.25, hl = 5.8;
+    c.prop.box(x - hw, KERB + 0.55, z - hl + 1.4, x + hw, KERB + 3.0, z + hl, col(0xf2b818));
+    c.prop.box(x - hw, KERB + 0.55, z - hl, x + hw, KERB + 1.7, z - hl + 1.4, col(0xf2b818)); // the bonnet
+    c.prop.box(x - hw - 0.02, KERB + 1.8, z - hl + 1.6, x + hw + 0.02, KERB + 2.6, z + hl - 0.5, col(0x1c2a33));
+    c.prop.box(x - hw + 0.1, KERB + 1.8, z - hl + 1.36, x + hw - 0.1, KERB + 2.7, z - hl + 1.42, col(0x1c2a33));
+    for (const y of [1.1, 1.65]) c.prop.box(x - hw - 0.03, KERB + y, z - hl + 1.4, x + hw + 0.03, KERB + y + 0.08, z + hl, col(0x1c1c1e));
+    c.prop.box(x - hw - 0.04, KERB + 0.5, z - hl - 0.04, x + hw + 0.04, KERB + 0.75, z - hl + 0.2, col(0x2a2a2a));
+    for (const sx of [-0.85, 0.85]) c.screen.box(x + sx - 0.2, KERB + 1.0, z - hl - 0.03, x + sx + 0.2, KERB + 1.25, z - hl, VH.col(0xfff2d0, 1.4));
+    for (const zz of [z - hl + 1.0, z + hl - 2.2]) for (const sx of [-1, 1]) c.propMatte.box(x + sx * hw - 0.16, KERB, zz - 0.5, x + sx * hw + 0.16, KERB + 1.0, zz + 0.5, col(0x1c1c1e));
+    world.physics.addBox(x - hw, 0, z - hl + 1.4, x + hw, KERB + 3.0, z + hl, 'metal', F().ALL);
+    world.physics.addBox(x - hw, 0, z - hl, x + hw, KERB + 1.7, z - hl + 1.4, 'metal', F().ALL);
+  }
+
   function buildSchool(world) {
     const W = K(), Sk = S();
     const B = SC.b;
     // Front lawn and the path to the doors.
     const doorX = (B.x0 + B.x1) / 2;
-    W.pave(world, SC.close.x1 + 1, SC.z0 + 1, SC.x1 - 1, B.z0, 0xd8d4cc, 'plazaTop', KERB, 3);
+    W.pave(world, SC.close.x1 + 1, SC.z0 + 1, SC.x1 - 1, SC.play.z0, 0xd8d4cc, 'plazaTop', KERB, 3);
+    W.pave(world, B.x0 - 1, SC.play.z0, B.x1 + 1, B.z0, 0xd8d4cc, 'plazaTop', KERB, 3);
     // The school: two storeys of brick with bands of windows, a flat roof.
     const ctx = W.building(world, B.x0, B.z0, B.x1, B.z1, B.h, { wall: 0xc98f6a, roof: 0x8d8a84, style: 3, ww: 0.6, wh: 0.5, bay: 3.4, floorH: 4.1, seed: 0.23, parapet: 0.6 });
     // The entrance: double glass doors (shut) under a canopy on posts; the name above.
@@ -338,10 +433,32 @@
     S().air(world, ctx.prop, doorX - 4, KERB + 3.2, B.z0 - 4, doorX + 4, KERB + 3.5, B.z0, 0x1f5fbf, 'building');
     for (const x of [doorX - 3.7, doorX + 3.7]) box(world, 'prop', x - 0.15, KERB, B.z0 - 3.85, x + 0.15, KERB + 3.2, B.z0 - 3.55, 0xf4f2ec, 'pole');
     W.sign(world, { x: doorX, y: KERB + 5.4, z: B.z0 - 0.08, yaw: PI, w: 14, h: 1.6, lines: ['VISTA VERDE SCHOOL'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
-    // A welcome board on the lawn, a flagpole, bike racks.
-    W.sign(world, { x: B.x0 + 8, y: KERB + 1.6, z: SC.z0 + 3, yaw: PI, w: 5.6, h: 1.8, lines: ['VISTA VERDE SCHOOL', 'Home of the Verde Vipers'], style: 'welcome', posts: true, colors: { bg: ['#1f5fbf', '#2f8fbf', '#3fae7a'] } });
-    Sk.drum(world, ctx.prop, B.x1 - 6, KERB, SC.z0 + 4, 0.08, 9, 8, 0xcfd3d6, 'pole');
-    ctx.prop.box(B.x1 - 5.95, KERB + 7.6, SC.z0 + 3.98, B.x1 - 4.2, KERB + 8.8, SC.z0 + 4.02, col(0x1f5fbf));
+    // The front railings on Dune Street with the school gates (open) at the path to the doors.
+    const R = SC.rail;
+    palisade(world, SC.close.x1 - 0.5, SC.x1 - 3, R, [[doorX - 3, doorX + 3]]);
+    palisade(world, SC.close.x1 - 0.5, R, SC.close.x1 - 0.5, 932.3, []);
+    for (const sx of [-1, 1]) {
+      const px = doorX + sx * 3.35;
+      const c = world.ctxAt(px, R);
+      box(world, 'concrete', px - 0.35, KERB, R - 0.35, px + 0.35, KERB + 2.3, R + 0.35, 0xb5664a, 'brick');
+      c.prop.box(px - 0.42, KERB + 2.3, R - 0.42, px + 0.42, KERB + 2.45, R + 0.42, col(0xe8e2d6));
+      c.screen.cylinder(px, KERB + 2.45, R, 0.16, 0.2, 0.3, 8, VH.col(0xfff0c8, 1.8), true);
+      // The gate leaf, swung right back into the forecourt.
+      const lx = doorX + sx * 2.9;
+      c.prop.box(lx - 0.04, KERB + 0.1, R + 0.1, lx + 0.04, KERB + 0.18, R + 2.9, col(0x1f4f3a));
+      c.prop.box(lx - 0.04, KERB + 1.62, R + 0.1, lx + 0.04, KERB + 1.72, R + 2.9, col(0x1f4f3a));
+      for (let z = R + 0.15; z < R + 2.95; z += 0.2) c.prop.box(lx - 0.02, KERB + 0.1, z, lx + 0.02, KERB + 1.85, z + 0.04, col(0x1f4f3a));
+      world.physics.addBox(lx - 0.08, 0, R + 0.1, lx + 0.08, KERB + 1.85, R + 2.95, 'railing', F().SOLID | F().CAMERA);
+    }
+    W.sign(world, { x: doorX + 3.35, y: KERB + 1.5, z: R - 0.37, yaw: PI, w: 0.62, h: 0.8, lines: ['VVS', 'GATE A'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
+    // The lawn on the close side with two trees.
+    world.ctxAt(-421.5, 950).grassTop.topRect(SC.close.x1 - 0.3, B.z0, B.x0 - 1.2, B.z1, KERB, col(0xffffff), 6);
+    world.addLawn(SC.close.x1 - 0.3, B.z0, B.x0 - 1.2, B.z1);
+    for (const z of [941, 954]) world.addProp('tree', -421.6, KERB, z, 0, 0.9);
+    // A welcome board inside the railings, a flagpole, bike racks.
+    W.sign(world, { x: B.x0 + 8, y: KERB + 1.6, z: R + 2.5, yaw: PI, w: 5.6, h: 1.8, lines: ['VISTA VERDE SCHOOL', 'Home of the Verde Vipers'], style: 'welcome', posts: true, colors: { bg: ['#1f5fbf', '#2f8fbf', '#3fae7a'] } });
+    Sk.drum(world, ctx.prop, B.x1 - 6, KERB, R + 3, 0.08, 9, 8, 0xcfd3d6, 'pole');
+    ctx.prop.box(B.x1 - 5.95, KERB + 7.6, R + 2.98, B.x1 - 4.2, KERB + 8.8, R + 3.02, col(0x1f5fbf));
     for (let x = B.x1 - 14; x < B.x1 - 8; x += 0.8) ctx.prop.box(x - 0.03, KERB, B.z0 - 2.4, x + 0.03, KERB + 0.8, B.z0 - 1.6, col(0x8a9097)); // solidity: passable
     world.physics.addBox(B.x1 - 14.2, 0, B.z0 - 2.4, B.x1 - 7.8, KERB + 0.8, B.z0 - 1.6, 'railing', F().SOLID | F().SHOTS);
     // Lamps along the front.
@@ -476,10 +593,11 @@
         g.fillStyle = '#8f9096';
         R(SC.close.cx - SC.close.r, SC.close.cz - SC.close.r, SC.close.cx + SC.close.r, SC.close.cz + SC.close.r);
         for (const h of HOUSES) {
-          const s = h.face === 's' ? 1 : -1;
-          const hz0 = s > 0 ? h.z0 + 3 : h.z1 - 14;
-          bx(h.x0 + 1, hz0, h.x1 - 1, hz0 + 11, '#' + h.roof.toString(16).padStart(6, '0'));
+          const r = houseRect(h);
+          bx(r.hx0, r.hz0, r.hx1, r.hz1, '#' + h.roof.toString(16).padStart(6, '0'));
         }
+        bx(SC.staff.x0, SC.staff.z0, SC.staff.x1, SC.staff.z1, '#8f9096', false);
+        bx(SC.staff.x0 + 1, SC.staff.z0 + 4.7, SC.staff.x0 + 3.5, SC.staff.z0 + 16.3, '#f2b818');
       }
     });
   }
@@ -499,6 +617,15 @@
           seed++;
           if (VH.math.hash2(seed, 7) < 0.48) continue;
           list.push(W.parkedSpot((x0 + x1) / 2, z, heading, seed));
+        }
+      }
+      // Teachers' cars in the school's staff car park.
+      if (game.world.verdeSchool) {
+        const P = SC.staff;
+        for (let z = P.z0 + 5.3; z < P.z1 - 5; z += 2.6) {
+          seed++;
+          if (VH.math.hash2(seed, 11) < 0.35) continue;
+          list.push(W.parkedSpot(P.x1 - 2.5, z, PI / 2, seed));
         }
       }
       W.addParkedSpots(game, list);
@@ -557,7 +684,7 @@
       }
       if (world.verdeSchool) {
         const C = SC.close;
-        add('vista_verde_school', { name: 'Vista Verde School', x: (SC.b.x0 + SC.b.x1) / 2, z: SC.z0 + 3.5, yaw: 0, kind: 'street', landmark: true });
+        add('vista_verde_school', { name: 'Vista Verde School', x: (SC.b.x0 + SC.b.x1) / 2, z: SC.rail - 1.4, yaw: 0, kind: 'street', landmark: true });
         add('verde_culdesac', { name: 'Marigold Close', x: C.cx - 6, z: C.cz, yaw: -PI / 2, kind: 'street' });
         add('verde_ballfield', { name: 'The ball field behind the school', x: SC.mound.x, z: SC.mound.z, yaw: PI / 4, kind: 'park' });
         if (SC.june) add('june_house', { name: "June Marlow's bungalow, 4 Marigold Close", x: SC.june.x, z: SC.june.z, yaw: 0, kind: 'garage' });
