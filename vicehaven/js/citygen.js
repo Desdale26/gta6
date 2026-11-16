@@ -505,5 +505,14 @@
     owner(plotId) {
       return this.builders.find((b) => (b.plots || []).includes(plotId)) || null;
     },
+    /**
+     * 4.0: declare ground that is meant to stay open (a runway's grass
+     * strips, a pitch, a fairway left as plain grass). tools/emptiness.mjs
+     * counts it as a place, not as empty land. Call it from build().
+     */
+    openGround: [],
+    open(x0, z0, x1, z1, label) {
+      this.openGround.push({ minX: Math.min(x0, x1), maxX: Math.max(x0, x1), minZ: Math.min(z0, z1), maxZ: Math.max(z0, z1), label: label || '' });
+    },
   };
 })();

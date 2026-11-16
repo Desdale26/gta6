@@ -134,7 +134,7 @@
     // The stairs, up from the sand to the deck's south edge.
     W.stairs(world, ctx.wood, x + 1.3, z + h + TW.stairLen, 'n', TW.stairLen, 1.6, KERB, y, wood, { railHex: white, tag: 'plank' });
     // The tower's number on the hut's landward side (towards the promenade).
-    W.sign(world, { x: hx0 - 0.03, y: y + 1.7, z, yaw: -PI / 2, w: 1.0, h: 1.0, lines: [String(n)], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#d8342c', '#d8342c'], fg: '#ffffff', border: '#ffffff' } });
+    W.sign(world, { x: hx0 - 0.03, y: y + 1.7, z, yaw: -PI / 2, w: 1.0, h: 1.0, lines: [String(n)], style: 'plaque', oneSided: true, colors: { bg: ['#d8342c', '#d8342c'], fg: '#ffffff', border: '#ffffff' } });
     // A pool of lamp light on the sand in front.
     (world.floodlights || (world.floodlights = [])).push({ x: x + 9, z, r: 8, y: KERB + 0.02, strength: 0.55, tint: [1.15, 1.1, 0.95] });
   }
@@ -291,7 +291,7 @@
     kc.prop.cylinder(kx0 + 2.1, KERB + 2.8, kz0 + 2.25, 0.08, 0.7, 1.6, 10, col(0xd9a35a), true);
     kc.prop.cylinder(kx0 + 2.1, KERB + 4.4, kz0 + 2.25, 0.82, 0.5, 0.7, 10, col(0xf6c1d4), true);
     world.physics.addBox(kx0 + 1.3, KERB + 2.8, kz0 + 1.45, kx0 + 2.9, KERB + 5.1, kz0 + 3.05, 'building', F().ALL);
-    W.sign(world, { x: kx0 - 0.04, y: KERB + 2.5, z: (kz0 + kz1) / 2, yaw: -PI / 2, w: 3.6, h: 0.5, lines: ['TWO SCOOPS'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#f6c1d4', '#f6c1d4'], fg: '#7a2f4f', border: '#ffffff' } });
+    W.sign(world, { x: kx0 - 0.04, y: KERB + 2.5, z: (kz0 + kz1) / 2, yaw: -PI / 2, w: 3.6, h: 0.5, lines: ['TWO SCOOPS'], style: 'plaque', oneSided: true, colors: { bg: ['#f6c1d4', '#f6c1d4'], fg: '#7a2f4f', border: '#ffffff' } });
 
     // Toilets and showers: a block with two doorways, showers on posts on the sand side.
     const tx0 = 351.2, tx1 = 359, tz0 = 945, tz1 = 955;
@@ -304,7 +304,7 @@
       tc.prop.box(tx1 + 1.0, KERB + 2.3, z - 0.15, tx1 + 1.52, KERB + 2.4, z + 0.15, col(0xcfd3d6));
       tc.marks.topRect(tx1 + 0.5, z - 0.8, tx1 + 2.3, z + 0.8, KERB + 0.025, col(0x9a8a6a));
     }
-    W.sign(world, { x: tx0 - 0.04, y: KERB + 2.6, z: (tz0 + tz1) / 2, yaw: -PI / 2, w: 3.4, h: 0.5, lines: ['TOILETS · SHOWERS'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1f5f7a', '#1f5f7a'], fg: '#ffffff', border: '#ffffff' } });
+    W.sign(world, { x: tx0 - 0.04, y: KERB + 2.6, z: (tz0 + tz1) / 2, yaw: -PI / 2, w: 3.4, h: 0.5, lines: ['TOILETS · SHOWERS'], style: 'plaque', oneSided: true, colors: { bg: ['#1f5f7a', '#1f5f7a'], fg: '#ffffff', border: '#ffffff' } });
 
     // Sandpiper Prawn Shack: "NOW WITH FEWER BONES".
     const px0 = 351, px1 = 361, pz0 = 1114.5, pz1 = 1124.5;
@@ -313,7 +313,7 @@
       box(world, 'wood', px0 - 3.2, KERB, z - 0.6, px0 - 2.0, KERB + 0.75, z + 0.6, 0x8b6a45, 'wood');
     }
     pc.prop.box(px0 - 0.3, KERB + 3.2, pz0 + 1, px0 - 0.1, KERB + 4.4, pz1 - 1, col(0xf4efe2));
-    W.sign(world, { x: px0 - 0.32, y: KERB + 3.8, z: (pz0 + pz1) / 2, yaw: -PI / 2, w: 7.6, h: 1.1, lines: ['SANDPIPER PRAWN SHACK', 'NOW WITH FEWER BONES'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#f4efe2', '#f4efe2'], fg: '#c0392b', border: '#c0392b' } });
+    W.sign(world, { x: px0 - 0.32, y: KERB + 3.8, z: (pz0 + pz1) / 2, yaw: -PI / 2, w: 7.6, h: 1.1, lines: ['SANDPIPER PRAWN SHACK', 'NOW WITH FEWER BONES'], style: 'plaque', oneSided: true, colors: { bg: ['#f4efe2', '#f4efe2'], fg: '#c0392b', border: '#c0392b' } });
   }
 
   /** The Salty Pelican: a beach bar on a deck, a thatched roof on posts, stools and festoon lights. */
@@ -468,7 +468,7 @@
     const ctx = world.ctxAt(fx, lot.cz);
     ctx.prop.box(fx - 0.25, KERB + 4.0, L.z0 + s.a + 0.2, fx + 0.1, KERB + 5.5, L.z0 + s.a + s.SW - 0.2, col(0xd8d0c0));
     world.physics.addBox(fx - 0.25, KERB + 4.0, L.z0 + s.a + 0.2, fx + 0.1, KERB + 5.5, L.z0 + s.a + s.SW - 0.2, 'building', F().ALL);
-    K().sign(world, { x: fx - 0.27, y: KERB + 4.75, z: lot.cz, yaw: -PI / 2, w: s.SW - 1.2, h: 1.2, lines: ['BRASK & MARLOW SPEED SHOP'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#d8d0c0', '#d2c9b8'], fg: '#b9ad97', border: '#d8d0c0' } });
+    K().sign(world, { x: fx - 0.27, y: KERB + 4.75, z: lot.cz, yaw: -PI / 2, w: s.SW - 1.2, h: 1.2, lines: ['BRASK & MARLOW SPEED SHOP'], style: 'plaque', oneSided: true, colors: { bg: ['#d8d0c0', '#d2c9b8'], fg: '#b9ad97', border: '#d8d0c0' } });
     return s;
   }
 
@@ -631,7 +631,7 @@
     const sh = shack(world, 296, 944, 309, 955, 3.2, 'w', { wall: 0x2a2d33, roof: 0xe0574f, awning: 0xf2c230, floor: 0x8f9096 });
     for (let i = 0; i < 5; i++) sh.prop.box(308.6, KERB + 0.9 + i * 0.35, 946 + i * 1.6, 308.75, KERB + 1.1 + i * 0.35, 947.2 + i * 1.6, col(paint[i]));
     world.physics.addBox(308.5, 0, 945.8, 308.75, KERB + 2.6, 954, 'wall', F().SOLID | F().SHOTS);
-    W.sign(world, { x: 295.6, y: KERB + 3.75, z: 949.5, yaw: -PI / 2, w: 7, h: 0.9, lines: ['DECK & WHEEL · SKATE SHOP'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1c1c1e', '#1c1c1e'], fg: '#f2c230', border: '#e0574f' } });
+    W.sign(world, { x: 295.6, y: KERB + 3.75, z: 949.5, yaw: -PI / 2, w: 7, h: 0.9, lines: ['DECK & WHEEL · SKATE SHOP'], style: 'plaque', oneSided: true, colors: { bg: ['#1c1c1e', '#1c1c1e'], fg: '#f2c230', border: '#e0574f' } });
     for (const [x, z, yaw] of [[220, 975, 0], [260, 975, 0], [300, 975, 0], [215, 1020, PI], [255, 1020, PI]]) world.addProp('bench', x, KERB, z, yaw, 1);
     for (const [x, z] of [[230, 975], [290, 975], [312, 965]]) world.addProp('bin', x, KERB, z, 0, 1);
 

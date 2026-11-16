@@ -110,8 +110,8 @@
     world.ctxAt(cx1, (cz0 + cz1) / 2).screen.box(B.x1 + 0.5, KERB + 4.58, cz0 + 1, cx1 - 0.5, KERB + 4.6, cz1 - 1, VH.col(0xfff2d0, 1.8));
     W.sign(world, { x: cx1 - 0.2, y: KERB + 6.6, z: (cz0 + cz1) / 2, yaw: PI / 2, w: 16, h: 2.8, lines: ['VERDE MALL'], style: 'neon', oneSided: true, colors: { bg: ['#2f7f6f', '#1f5f52'], fg: '#ffffff', glow: '#8fe8c8', outline: '#ffffff' } });
     // The anchors' names on the front, north and south.
-    W.sign(world, { x: B.x1 + 0.1, y: KERB + 7.6, z: (B.z0 + C.z0) / 2, yaw: PI / 2, w: 18, h: 2.2, lines: ["BAXTER'S · DEPARTMENT STORE"], style: 'brand', oneSided: true, flat: true, colors: { bg: ['#7a1f2b', '#5a1520'], fg: '#f4e2c0' } });
-    W.sign(world, { x: B.x1 + 0.1, y: KERB + 7.6, z: (C.z1 + B.z1) / 2, yaw: PI / 2, w: 18, h: 2.2, lines: ['VERDE 6 · CINEMAS'], style: 'neon', oneSided: true, flat: true, colors: { bg: ['#1c1c3a', '#2a2a5a'], fg: '#ffd27a', glow: '#ffb050', outline: '#ffd27a' } });
+    W.sign(world, { x: B.x1 + 0.1, y: KERB + 7.6, z: (B.z0 + C.z0) / 2, yaw: PI / 2, w: 18, h: 2.2, lines: ["BAXTER'S · DEPARTMENT STORE"], style: 'brand', oneSided: true, colors: { bg: ['#7a1f2b', '#5a1520'], fg: '#f4e2c0' } });
+    W.sign(world, { x: B.x1 + 0.1, y: KERB + 7.6, z: (C.z1 + B.z1) / 2, yaw: PI / 2, w: 18, h: 2.2, lines: ['VERDE 6 · CINEMAS'], style: 'neon', oneSided: true, colors: { bg: ['#1c1c3a', '#2a2a5a'], fg: '#ffd27a', glow: '#ffb050', outline: '#ffd27a' } });
 
     // --- the forecourt: paving, planters, benches, bollards along its edge, two trolley shelters
     const Fc = MA.fore;
@@ -297,7 +297,7 @@
     world.addProp('tree', C.cx, KERB + 0.2, C.cz, 0, 1);
     // The name.
     W.sign(world, { x: C.x0 + 3, y: KERB + 2.4, z: C.rz0 - 1.2, yaw: -PI / 2, w: 2.6, h: 0.6, lines: ['MARIGOLD CLOSE'], style: 'road', posts: true, colors: { bg: ['#1f5f3a', '#1f5f3a'], fg: '#ffffff', border: '#ffffff' } });
-    W.sign(world, { x: C.x0 + 3, y: KERB + 1.6, z: C.rz0 - 1.2, yaw: -PI / 2, w: 1.6, h: 0.5, lines: ['NO THROUGH ROAD'], style: 'road', flat: true, colors: { bg: ['#ffffff', '#ffffff'], fg: '#1c1c1e', border: '#d8342c' } });
+    W.sign(world, { x: C.x0 + 3, y: KERB + 1.6, z: C.rz0 - 1.2, yaw: -PI / 2, w: 1.6, h: 0.5, lines: ['NO THROUGH ROAD'], style: 'road', colors: { bg: ['#ffffff', '#ffffff'], fg: '#1c1c1e', border: '#d8342c' } });
     // The houses, picket fences between the lots, a basketball hoop on one drive.
     const built = {};
     for (const h of HOUSES) built[h.id] = bungalow(world, h);
@@ -432,7 +432,7 @@
     ctx.prop.box(doorX - 0.06, KERB, B.z0 - 0.08, doorX + 0.06, KERB + 2.6, B.z0, col(0x3a3f45));
     S().air(world, ctx.prop, doorX - 4, KERB + 3.2, B.z0 - 4, doorX + 4, KERB + 3.5, B.z0, 0x1f5fbf, 'building');
     for (const x of [doorX - 3.7, doorX + 3.7]) box(world, 'prop', x - 0.15, KERB, B.z0 - 3.85, x + 0.15, KERB + 3.2, B.z0 - 3.55, 0xf4f2ec, 'pole');
-    W.sign(world, { x: doorX, y: KERB + 5.4, z: B.z0 - 0.08, yaw: PI, w: 14, h: 1.6, lines: ['VISTA VERDE SCHOOL'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
+    W.sign(world, { x: doorX, y: KERB + 5.4, z: B.z0 - 0.08, yaw: PI, w: 14, h: 1.6, lines: ['VISTA VERDE SCHOOL'], style: 'plaque', oneSided: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
     // The front railings on Dune Street with the school gates (open) at the path to the doors.
     const R = SC.rail;
     palisade(world, SC.close.x1 - 0.5, SC.x1 - 3, R, [[doorX - 3, doorX + 3]]);
@@ -450,7 +450,7 @@
       for (let z = R + 0.15; z < R + 2.95; z += 0.2) c.prop.box(lx - 0.02, KERB + 0.1, z, lx + 0.02, KERB + 1.85, z + 0.04, col(0x1f4f3a));
       world.physics.addBox(lx - 0.08, 0, R + 0.1, lx + 0.08, KERB + 1.85, R + 2.95, 'railing', F().SOLID | F().CAMERA);
     }
-    W.sign(world, { x: doorX + 3.35, y: KERB + 1.5, z: R - 0.37, yaw: PI, w: 0.62, h: 0.8, lines: ['VVS', 'GATE A'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
+    W.sign(world, { x: doorX + 3.35, y: KERB + 1.5, z: R - 0.37, yaw: PI, w: 0.62, h: 0.8, lines: ['VVS', 'GATE A'], style: 'plaque', oneSided: true, colors: { bg: ['#1f5fbf', '#1f4f9f'], fg: '#ffffff', border: '#ffffff' } });
     // The lawn on the close side with two trees.
     world.ctxAt(-421.5, 950).grassTop.topRect(SC.close.x1 - 0.3, B.z0, B.x0 - 1.2, B.z1, KERB, col(0xffffff), 6);
     world.addLawn(SC.close.x1 - 0.3, B.z0, B.x0 - 1.2, B.z1);
@@ -558,7 +558,7 @@
       for (const x of [sx - 3, sx + 3]) Sk.drum(world, c.prop, x, KERB, sz, 0.15, 5, 8, 0x3a3f45, 'pole');
       S().air(world, c.prop, sx - 3.6, KERB + 5, sz - 0.2, sx + 3.6, KERB + 8, sz + 0.2, 0x1c3a1c, 'building');
       c.screen.box(sx - 3.0, KERB + 5.4, sz + 0.2, sx + 3.0, KERB + 6.6, sz + 0.24, VH.col(0xffc040, 1.6));
-      W.sign(world, { x: sx, y: KERB + 7.3, z: sz + 0.22, yaw: 0, w: 6.8, h: 1.1, lines: ['VERDE VIPERS · HOME  GUEST'], style: 'plaque', oneSided: true, flat: true, colors: { bg: ['#1c3a1c', '#1c3a1c'], fg: '#ffffff', border: '#f2c230' } });
+      W.sign(world, { x: sx, y: KERB + 7.3, z: sz + 0.22, yaw: 0, w: 6.8, h: 1.1, lines: ['VERDE VIPERS · HOME  GUEST'], style: 'plaque', oneSided: true, colors: { bg: ['#1c3a1c', '#1c3a1c'], fg: '#ffffff', border: '#f2c230' } });
     }
     // Floodlights on four masts, pools on the grass.
     const pools = world.floodlights || (world.floodlights = []);
