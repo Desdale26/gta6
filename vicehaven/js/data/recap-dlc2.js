@@ -204,4 +204,246 @@
       } },
     ],
   });
+
+
+  // =====================================================================
+  // ACT 4: THE LAST LAP (d24 to d30)
+  // =====================================================================
+
+  DLC.acts[4] = {
+    title: 'The Last Lap',
+    intro: [
+      'It is two days to the 50th anniversary Southbay 500, and Castellane banners hang from every lamp post.',
+      'Toby Brask can rebuild the Firecrest, if Jay can fetch his tools, his engine hoist and four tyres nobody has made for fifty years.',
+    ],
+    // Shown when the DLC is finished (storylog uses it as the ending), so it
+    // tells the ending the player chose in d30.
+    outro: [
+      'Fifty years late, Dess Marlow drove her lap of honour in front of forty thousand people, and Monty Sprake called her the winner of the Southbay 500.',
+      'Leo Castellane said it himself over the loudspeakers: his father knew, he knew, and he was sorry. Ottoline was arrested in the Speedway tunnel, and Toby finally handed June the tin box.',
+      { if: 'dlc_end_hers', text: 'Jay said the Firecrest was June\'s. It lives on her drive beside Aunt Win\'s shed, where June gives her mother driving lessons in it and marks every fault.' },
+      { if: ['dlc_end_hers', 'dsl3_test_day'], text: 'She uses Jay\'s old test sheet: "He got a 94. You can get a 94."' },
+      { if: 'dlc_end_hers', text: 'Pip mows the lawn, Toby is not allowed to fix third gear, and Jay stayed for lunch.' },
+      { if: 'dlc_end_everybody', text: 'Jay said it belonged to everyone who was there. The Firecrest and the real cup now sit in a glass room by the start line, beside the new Marlow Stand, and O. MARLOW is back on the honours board in gold.' },
+      { if: 'dlc_end_everybody', text: 'Leo unbolted CHAMPIONS SINCE DAY ONE from his hotel himself, and Milo wrote the plaque: "She won. She hid it. We found it. Mind the road."' },
+      { if: 'dlc_end_gone', text: 'Jay said hide it again. That night he and Dess drove the Firecrest somewhere nobody was told, and she took seven new parts off it.' },
+      { if: 'dlc_end_gone', text: 'Milo wrote the first riddle of a brand-new trail, and this time Toby delivered the tin box himself, to the Halcyon library: FOR WHOEVER ASKS.' },
+      { if: 'dlc_blog_on', text: 'Milo\'s last post made the front page of the Vicehaven Courier.' },
+      { if: 'dlc_blog_off', text: 'Milo is writing the whole story down in an exercise book called The Firecrest Files.' },
+      { if: 'dlc_chet_told', text: 'The film is being reshot as Mind the Road, with Chet playing Toby.' },
+      { if: 'dlc_chet_kept', text: 'The film was shelved, and Chet is happily watching the news in his trailer.' },
+      { if: 'dlc_dash_in', text: 'Dash\'s special, his first true episode in eight series, is a hit.' },
+      { if: 'dlc_dash_left', text: 'Dash\'s show was cancelled.' },
+      { if: 'dsf4_check_ride', text: 'Hob gave Jay another ten.' },
+      { if: '!dsf4_check_ride', text: 'Hob still gives Jay a nine. A very high nine.' },
+      'And mind the road.',
+    ],
+  };
+
+  Object.assign(R.jobs, {
+    // ---------------------------------------------------------------- d24
+    d24_spare_parts: {
+      setup: [
+        'Toby can rebuild the Firecrest. He needs his toolkit from the lighthouse, his engine hoist from lot 17,',
+        'and four old-style tyres that nobody has made for fifty years, except a film studio.',
+      ],
+      recap: [
+        'Jay fetched Toby\'s toolkit and his hoist. On the way, Leo phoned: $250,000 for the car, the parts and the cup, and a warning that the Paloma Bridge closes tomorrow. Jay hung up.',
+        'At Sunreel\'s prop yard, Guest Services were guarding the tyres, and a giant fibreglass Rex Castellane took most of their bullets.',
+        { if: 'dlc_chet_told', text: 'Chet had loaded the tyres himself, "for the real one", and drove them to lot 17 at thirty while Jay kept Guest Services off him.' },
+        { if: 'dlc_chet_kept', text: 'Fenella handed over the tyres. Chet was in his trailer, not taking calls.' },
+        'With the bridge shut, Toby says he will need a big car. Jay has an idea.',
+      ],
+      line: 'Jay gathered Toby\'s tools, his hoist and the film\'s period tyres for the rebuild, and turned down Leo\'s $250,000.',
+    },
+
+    // ---------------------------------------------------------------- d25
+    d25_junebug: {
+      setup: [
+        'June Marlow wants one driving lesson with Jay, so she knows who has been driving her daughter about.',
+        'Jay knows Dess is alive. June doesn\'t.',
+      ],
+      recap: [
+        'June took Jay round her test route and marked everything. In her boot, under the warning triangle, he found an old orange racing helmet with a gold bird on the back and O.M. inside the strap. June said it was a motorcycle helmet she had found.',
+        'She gave him 94%, then asked why he kept looking at her like that.',
+        { if: 'dlc_june_told', text: 'Jay told her the truth: her mother is alive and keeps the fort light. "Is she well?" "She\'s rude." "...Good."' },
+        { if: 'dlc_june_wait', text: 'Jay said she reminded him of someone, and left it for Dess to tell her.' },
+        'As he left, June said, "And mind the road." She doesn\'t know where she first heard it.',
+      ],
+      line: [
+        'Jay took a driving lesson with June and found Dess\'s helmet in her car',
+        { if: 'dlc_june_told', text: ', then told June her mother is alive.' },
+        { if: 'dlc_june_wait', text: ', but left it to Dess to tell June the truth.' },
+        { if: ['!dlc_june_told', '!dlc_june_wait'], text: '.' },
+      ],
+    },
+
+    // ---------------------------------------------------------------- d26
+    d26_blue_lights: {
+      setup: [
+        'Castellane has shut the Paloma Bridge with a roadblock, and the ferry is cancelled "for the event".',
+        'Toby has a plan with one moving part: nothing gets through a roadblock like a fire engine.',
+      ],
+      recap: [
+        { if: 'dlc_june_told', text: 'June insisted on coming, and met Toby at last: "You\'re the man with the box."' },
+        'Jay took a crash tender from the airport fire station and drove it the wrong way up Grand Avenue',
+        { if: 'dlc_june_told', text: 'while June marked his driving.' },
+        { if: '!dlc_june_told', text: 'while June texted, "Drive safely. I mean it."' },
+        'He rammed the roadblock and hosed the guards, their gazebo and their croissants off the bridge.',
+        'Then he lost the police in Old Paloma\'s lanes and parked in the fort courtyard.',
+        { if: 'dlc_june_told', text: 'Dess was waiting at the top of the fort steps. June stopped at the bottom.' },
+        { if: '!dlc_june_told', text: 'Dess had watched it all. "Good line on the bridge. Late on the brakes."' },
+      ],
+      line: 'Jay stole a fire engine, smashed through Castellane\'s roadblock on the Paloma Bridge, and brought Toby to the fort.',
+    },
+
+    // ---------------------------------------------------------------- d27
+    d27_the_powder_store: {
+      setup: [
+        'Everything for the rebuild is at the fort: the seven parts in doughnut boxes, the hoist, the toolbox and the tyres.',
+        'All that is left is the bricked-up wall.',
+      ],
+      recap: [
+        { if: 'dlc_june_told', text: 'On the fort steps June met her mother: "You\'re very late." "I know." She gave back the helmet.' },
+        { if: '!dlc_june_told', text: 'Jay told Dess that June had kept her helmet. Dess laughed until she cried.' },
+        'Then they blew open the wall. Under the sheet was the Firecrest, with "Junebug" painted by the door: June\'s nickname, which came from Dess. In the boot was the real cup, engraved O. MARLOW.',
+        'Every Guest Services car came. Jay held the fort while Toby fitted all seven parts',
+        { if: 'dlc_dash_in', text: 'and Dash blinded the last wave with TV floodlights.' },
+        { if: '!dlc_dash_in', text: 'and Dash, on TV, called it all a hoax.' },
+        'Jay gave Dess the key. She tapped the wheel three times, and the car started first time.',
+      ],
+      line: 'Toby rebuilt the Firecrest in the fort while Jay held off Guest Services, and Dess started her up first time.',
+    },
+
+    // ---------------------------------------------------------------- d28
+    d28_comment_card: {
+      setup: [
+        'It is race day, before dawn, and the Firecrest has gone from the fort.',
+        'Two Guest Services men are tied up in bunting, and on the floor where the car stood lies a comment card.',
+      ],
+      recap: [
+        'Ottoline Graves had taken the car herself, even though Leo had asked her to stop, and was sending it to the Ironside crusher.',
+        'Jay chased the transporter in Dess\'s own surprisingly quick car, with Dess calling the corners, and boxed it in just short of the scrapyard.',
+        'Ottoline handed him a blank comment card ("You choose one") and drove off as the police arrived. Her men were taken away.',
+        'Then Dess let Jay drive the Firecrest home along the causeway. Third gear still sticks.',
+      ],
+      line: 'Ottoline stole the Firecrest on race morning, and Jay, with Dess calling corners, caught her before the crusher.',
+    },
+
+    // ---------------------------------------------------------------- d29
+    d29_road_closed: {
+      setup: [
+        'Castellane has closed every road to the Speedway for the anniversary race, and the race starts at three.',
+        'Fenella Moss is waiting at the Paloma Bridge with something very large under a tarpaulin.',
+      ],
+      recap: [
+        'Fenella\'s "prop" was a real tank, borrowed for a film.',
+        { if: 'dlc_chet_told', text: 'Chet rode in it, thrilled by its top speed of twenty-eight.' },
+        { if: 'dlc_chet_kept', text: 'Chet phoned, confused, to ask what the tank was for.' },
+        'Jay and Pip cleared the four roadblocks: Anchor Street, Seawall Drive, the coast road and the Bowl car park.',
+        { if: 'dlc_blog_on', text: 'At two of them Milo\'s readers were already sitting in the road in home-made SHE WON T-shirts.' },
+        'Monty announced the tank on the radio and got Jay\'s name wrong again.',
+        { if: 'dst4_the_big_jump', text: 'Fenella\'s film crew is inside the Speedway, ready to film the real thing.' },
+        'Then Jay lost the police on foot.',
+      ],
+      line: 'Jay drove a borrowed film tank through Castellane\'s four roadblocks, so the road to the Speedway is open.',
+    },
+
+    // ---------------------------------------------------------------- d30
+    d30_the_last_lap: {
+      setup: [
+        'It is three o\'clock, ten laps from the end of the 50th anniversary Southbay 500, and forty thousand people are watching.',
+        'Dess Marlow never got her lap of honour. Today she does.',
+      ],
+      recap: [
+        { if: 'dlc_june_told', text: 'Jay drove the Firecrest to the Speedway, with June beside him and Dess in the back holding the cup.' },
+        { if: '!dlc_june_told', text: 'Jay drove the Firecrest to the Speedway, with Dess beside him holding the cup.' },
+        { if: 'dsr4_southbay_classic', text: 'Pip and Teddy Castellane drove alongside as guards.' },
+        { if: 'dlc_dash_in', text: 'Dash broadcast the chase from a wobbly helicopter, so the police were waiting at the tunnel.' },
+        { if: 'dlc_dash_left', text: 'Two Guest Services cars followed him onto the infield, and Jay stopped them.' },
+        'Ottoline was arrested. Dess tapped the wheel three times, and Jay drove her lap.',
+        { if: 'dlc_chet_told', text: 'Chet told the crowd the true story.' },
+        { if: 'dlc_chet_kept', text: 'Chet took off Rex\'s red jacket.' },
+        'Monty named Dess the winner, and Leo said sorry. Dess said "And mind the road" to June, and June knew her voice. Toby gave June the tin box.',
+        { if: 'dlc_end_hers', text: 'Jay said the car was June\'s.' },
+        { if: 'dlc_end_everybody', text: 'Jay said it belonged to everyone.' },
+        { if: 'dlc_end_gone', text: 'Jay said hide it again.' },
+      ],
+      line: [
+        'Jay drove Dess Marlow\'s lap of honour, fifty years late, and the whole Speedway learned who really won',
+        { if: 'dlc_end_hers', text: '; the Firecrest went home to June.' },
+        { if: 'dlc_end_everybody', text: '; the Firecrest stays at the Speedway for everyone.' },
+        { if: 'dlc_end_gone', text: '; then the Firecrest vanished again.' },
+        { if: ['!dlc_end_hers', '!dlc_end_everybody', '!dlc_end_gone'], text: '.' },
+      ],
+    },
+  });
+
+  // Later news from Act 4, shown once the job is done.
+  R.updates.push(
+    { who: 'leo', after: 'd24_spare_parts', text: 'Leo offered Jay $250,000 for the car, the parts and the cup, then closed the Paloma Bridge. Jay hung up on him.' },
+    { who: 'chet', after: 'd24_spare_parts', text: [
+      { if: 'dlc_chet_told', text: 'Chet gave them the film\'s period tyres "for the real one", and is going to play Rex worse now, on purpose.' },
+      { if: 'dlc_chet_kept', text: 'Chet is in his trailer, not taking calls, and keeps asking Fenella who really won.' },
+    ] },
+    { who: 'june', after: 'd25_junebug', text: [
+      'June has kept an old orange racing helmet for forty years, and tells everyone it is a motorcycle helmet.',
+      { if: 'dlc_june_told', text: 'Jay has told her that her mother is alive.' },
+    ] },
+    { who: 'toby', after: 'd26_blue_lights', if: 'dlc_june_told', text: 'Toby met June at last, in a stolen fire engine, and tried to tell her about the box. She said it would keep.' },
+    { who: 'dess', after: 'd27_the_powder_store', text: [
+      'The Firecrest is rebuilt. Jay gave Dess the starter key, and she started the car first time.',
+      { if: 'dlc_june_told', text: 'June met her on the fort steps and gave back the helmet.' },
+    ] },
+    { who: 'leo', after: 'd27_the_powder_store', text: 'Leo phoned to say he was glad Dess is well, and would ask Ottoline to stand down.' },
+    { who: 'ottoline', after: 'd28_comment_card', text: 'Leo asked Ottoline to stand down. She stole the Firecrest anyway: "I simply don\'t lose." She gave Jay a blank comment card.' },
+    { who: 'fenella', after: 'd29_road_closed', text: 'Fenella borrowed a real tank for Jay, and signed the forms as Chet.' },
+    { who: 'ottoline', after: 'd30_the_last_lap', text: 'Ottoline was arrested in the Speedway tunnel, holding a comment card she never got to hand over. Jay gave her one star.' },
+    { who: 'monty', after: 'd30_the_last_lap', text: 'Monty was eight, on his dad\'s shoulders, when Dess crossed the line. Fifty years later he called her the winner, and got Jay\'s name right.' },
+    { who: 'leo', after: 'd30_the_last_lap', text: [
+      'Leo told the whole Speedway that Odessa Marlow won, and that he was sorry.',
+      { if: 'dlc_end_everybody', text: 'He unbolted CHAMPIONS SINCE DAY ONE from his hotel himself.' },
+      { if: ['!dlc_end_everybody', 'd30_the_last_lap'], text: 'He has had the CHAMPIONS signs taken down from his hotels.' },
+    ] },
+    { who: 'june', after: 'd30_the_last_lap', text: [
+      'June heard her mother say "And mind the road", and remembered the voice. Toby gave her the tin box, thirty-four years late.',
+      { if: 'dlc_end_hers', text: 'The Firecrest is hers now, on her drive.' },
+    ] },
+    { who: 'chet', after: 'd30_the_last_lap', text: [
+      { if: 'dlc_chet_told', text: 'Chet told forty thousand people the truth about the race. The film is being reshot as Mind the Road, with Chet as Toby.' },
+      { if: 'dlc_chet_kept', text: 'Chet took off Rex\'s jacket in front of everyone. The film was shelved, and he is at peace.' },
+    ] },
+    { who: 'dash', after: 'd30_the_last_lap', text: [
+      { if: 'dlc_dash_in', text: 'Dash said "Legend... FOUND!" about the right thing at last. His special was a hit.' },
+      { if: 'dlc_dash_left', text: 'Dash turned his camera round to film the truth. His show was cancelled.' },
+    ] },
+    { who: 'milo', after: 'd30_the_last_lap', text: [
+      { if: 'dlc_blog_on', text: 'Milo\'s last post made the front page of the Vicehaven Courier.' },
+      { if: 'dlc_blog_off', text: 'Milo is writing the whole story down by hand, in a book called The Firecrest Files.' },
+      { if: 'dlc_end_gone', text: 'He wrote the first riddle of the new trail.' },
+      { if: 'dlc_end_everybody', text: 'He wrote the plaque by the Firecrest\'s glass room.' },
+    ] },
+    { who: 'prof_quill', after: 'd30_the_last_lap', text: 'The Professor held the cup for the photograph, and is writing a fourth book: I Was Wrong: A History. It will be very short.' },
+    { who: 'toby', after: 'd30_the_last_lap', text: [
+      'Toby handed June the tin box properly, with both hands: "Happy birthday. I\'m thirty-four years late."',
+      { if: 'dlc_end_gone', text: 'Then he delivered a new tin box to the Halcyon library, on time.' },
+    ] },
+  );
+
+  // The choices made in Act 4.
+  Object.assign(R.choices, {
+    d25_junebug: [
+      { title: 'Telling June', options: {
+          dlc_june_told: 'Jay told June her mother is alive and keeps the fort light. "Is she well?" "She\'s rude." "...Good."',
+          dlc_june_wait: 'Jay said June reminded him of someone, and left it for Dess to tell her face to face.',
+      } },
+    ],
+    d30_the_last_lap: [
+      { title: 'Where the Firecrest goes', options: {
+          dlc_end_hers: 'Jay said, "It\'s June\'s." The Firecrest went home to June\'s drive in Vista Verde.',
+          dlc_end_everybody: 'Jay said it belongs to everyone who was there. The Firecrest and the cup stay at the Speedway, where everyone can see them.',
+          dlc_end_gone: 'Jay said hide it again and lay a new trail. The Firecrest vanished, and a new tin box waits at the Halcyon library.',
+      } },
+    ],
+  });
 })();

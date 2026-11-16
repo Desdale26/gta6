@@ -376,8 +376,8 @@
       for (const x of [sx0 + 1.7, sx1 - 1.7]) {
         for (const dx of [-0.25, 0.25]) c.prop.box(x + dx - 0.015, KERB + 0.55, sz - 0.015, x + dx + 0.015, KERB + 2.55, sz + 0.015, col(0x8a9097));
         c.prop.box(x - 0.3, KERB + 0.5, sz - 0.12, x + 0.3, KERB + 0.56, sz + 0.12, col(0x1c1c1e));
+        world.physics.addBox(x - 0.32, KERB + 0.45, sz - 0.15, x + 0.32, KERB + 2.6, sz + 0.15, 'metal', F().SOLID | F().SHOTS);
       }
-      world.physics.addBox(sx0 + 1.2, KERB + 0.45, sz - 0.15, sx1 - 1.2, KERB + 2.6, sz + 0.15, 'metal', F().SOLID | F().SHOTS);
     }
 
     // --- the ball field behind the school
