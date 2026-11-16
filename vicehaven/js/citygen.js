@@ -452,6 +452,8 @@
     (VH.Data.cells4 || []).forEach((c, i) => {
       const block = makeBlock(c, 'f_' + c.d + '_' + i, false);
       block.v4 = true;
+      if (c.low) block.low = c.low; // a z range kept clear of trees and lamps (the runway's line)
+      if (c.strip) block.strip = true; // a strip by the edges: not where the maps put the district's name
       const set = c.arch && VH.Data.archSets4 && VH.Data.archSets4[c.arch];
       if (set) block.arch = c.arch;
       if (block.kind === 'buildings') planBlock(block, rng4.fork(block.id), set ? Object.assign({}, block.district, set) : null);

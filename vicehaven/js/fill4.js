@@ -12,6 +12,14 @@
  *             verge it stands on and a post-and-rail fence round it
  *   greens    a 4.0 'park' block: a lawn with a path down the middle,
  *             trees both sides, benches and lamps
+ *   paddocks  a farm block's inner lots: fenced grass with cows, sheep or
+ *             horses grazing and a water trough
+ *   allotments  rows of little plots either side of a gravel path: veg
+ *             beds, bean canes, sheds and water butts
+ *
+ * A block's `low` z range (the runway's line) gets no trees and no lamps.
+ * VH.Data.open4 is ground left open on purpose (declared with
+ * VH.Districts.open for tools/emptiness.mjs, from this file's builder).
  *
  * Country blocks stand on a raised grass verge instead of a concrete
  * pavement, and get lamps only every 60 m, on the sides that face a road.
@@ -45,7 +53,12 @@
   const CROP_LIST = Object.keys(CROPS).map((k) => ({ k, weight: CROPS[k].w }));
 
   function isCountry(block) {
-    return block.v4 && (block.kind === 'fields' || block.arch === 'farm' || (block.kind !== 'plot' && block.district && block.district.id === 'haverly'));
+    return block.v4 && (block.kind === 'fields' || block.kind === 'allotments' || block.arch === 'farm' || (block.kind !== 'plot' && block.kind !== 'park' && block.district && block.district.id === 'haverly'));
+  }
+
+  /** Is z inside the block's low band (the runway's line: no trees, no lamps)? */
+  function lowAt(block, z) {
+    return !!block.low && z > block.low[0] && z < block.low[1];
   }
 
   /** Call fn(a0, a1) for each piece of [a0, a1] no longer than PIECE. */
@@ -132,6 +145,7 @@
       // Gateposts (and an open field gate swung back) at each gap.
       for (const g of gates) {
         if (g - 2.5 < run.a0 || g + 2.5 > run.a1) continue;
+        (block.gates || (block.gates = [])).push({ side: run.s, at: g });
         const ctx = world.ctxAt(run.alongX ? g : run.c, run.alongX ? run.c : g);
         for (const s of [-1, 1]) {
           const p = g + s * 2.6;
@@ -165,21 +179,25 @@
       if (sides[e.s]) {
         for (let p = e.a0 + 20; p < e.a1 - 10; p += 60) {
           const [x, z] = at(p, 0);
+          if (lowAt(block, z)) continue;
           world.addProp('streetlight', x, KERB, z, e.yaw, 1);
         }
       }
       // Hedgerow trees, more on the lanes than on open ground.
       for (let p = e.a0 + 12 + rng.range(0, 10); p < e.a1 - 8; p += rng.range(26, 44)) {
         if (!rng.chance(sides[e.s] ? 0.65 : 0.35)) continue;
-        const [x, z] = at(p, 1.1);
-        world.addProp(type === 'tree' && rng.chance(0.5) ? 'treeB' : type, x, KERB, z, rng.range(0, 6.28), rng.range(0.9, 1.35));
+        const [x, z] = at(p, 3.1); // in the hedge (or fence) line
+        const kind = type === 'tree' && rng.chance(0.5) ? 'treeB' : type;
+        const scale = rng.range(0.9, 1.35);
+        if (lowAt(block, z)) continue;
+        world.addProp(kind, x, KERB, z, rng.range(0, 6.28), scale);
       }
     }
   }
 
   /** Crop strips across a fields block. */
   function fields(world, block, rng) {
-    const ix0 = block.minX + 3, ix1 = block.maxX - 3, iz0 = block.minZ + 3, iz1 = block.maxZ - 3;
+    const ix0 = block.minX + 4.2, ix1 = block.maxX - 4.2, iz0 = block.minZ + 4.2, iz1 = block.maxZ - 4.2;
     // Strips run across the shorter side, laid one after another along the longer one.
     const alongX = ix1 - ix0 >= iz1 - iz0;
     const L0 = alongX ? ix0 : iz0, L1 = alongX ? ix1 : iz1;
@@ -257,7 +275,10 @@
       for (const s of [-1, 1]) {
         if (!rng.chance(0.85)) continue;
         const [x, z] = at(p + s * 3, s * treeOff);
-        world.addProp(rng.chance(0.5) ? 'tree' : 'treeB', x, KERB, z, rng.range(0, 6.28), rng.range(0.8, 1.15));
+        const kind = rng.chance(0.5) ? 'tree' : 'treeB';
+        const yaw = rng.range(0, 6.28), scale = rng.range(0.8, 1.15);
+        if (lowAt(block, z)) continue;
+        world.addProp(kind, x, KERB, z, yaw, scale);
       }
     }
     for (let p = a0 + 20; p < a1 - 10; p += 45) {
@@ -268,8 +289,240 @@
     }
     for (let p = a0 + 10; p < a1 - 5; p += 32) {
       const [x, z] = at(p, -2.0);
+      if (lowAt(block, z)) continue;
       world.addProp('streetlight', x, KERB, z, alongX ? 0 : Math.PI / 2, 1);
     }
+  }
+
+  // ------------------------------------------------------------ paddocks
+  const ANIMALS = {
+    // body half-width, half-length, body y0..y1, leg height, colours
+    cow: { hw: 0.42, hl: 1.0, y0: 0.75, y1: 1.55, colors: [0x2b2b2b, 0x8a5a3a, 0xf2efe8, 0x6b4a32], patch: 0xf2efe8, head: 1.2 },
+    sheep: { hw: 0.36, hl: 0.6, y0: 0.45, y1: 1.05, colors: [0xf2eee4, 0xe8e2d4, 0xdcd6c8], headCol: 0x2b2b2b, head: 0.75 },
+    horse: { hw: 0.36, hl: 1.05, y0: 0.95, y1: 1.65, colors: [0x6b4228, 0x3a2a20, 0x9a6a42, 0xd8cdb8], head: 1.25, neck: true },
+  };
+
+  /** A grazing animal: merged boxes (legs, body, head) and a collider round it. */
+  function animal(world, kind, x, z, yaw, rng) {
+    const A = ANIMALS[kind];
+    const ctx = world.ctxAt(x, z);
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const at = (f, r) => [x + r * c + f * s, z - r * s + f * c];
+    const body = VH.col(rng.pick(A.colors), rng.range(0.92, 1.06));
+    const leg = kind === 'sheep' ? VH.col(0x2b2b2b) : VH.colMul(body, 0.8);
+    const y = KERB;
+    for (const f of [-A.hl * 0.72, A.hl * 0.72]) {
+      for (const r of [-A.hw * 0.62, A.hw * 0.62]) {
+        const [lx, lz] = at(f, r);
+        ctx.propMatte.orientedBox(lx, lz, 0.08, 0.08, yaw, y, y + A.y0 + 0.05, leg); // solidity: passable (inside the body's collider)
+      }
+    }
+    ctx.propMatte.orientedBox(x, z, A.hw, A.hl, yaw, y + A.y0, y + A.y1, body);
+    if (kind === 'cow' && body !== A.patch && rng.chance(0.6)) {
+      const [px, pz] = at(rng.range(-0.4, 0.4), 0);
+      ctx.propMatte.orientedBox(px, pz, A.hw + 0.02, 0.32, yaw, y + A.y0 + 0.25, y + A.y1 + 0.02, VH.col(A.patch));
+    }
+    // Head down grazing, or up.
+    const grazing = rng.chance(0.6);
+    const [hx, hz] = at(A.hl + 0.25, 0);
+    const headCol = A.headCol ? VH.col(A.headCol) : body;
+    if (grazing) ctx.propMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + 0.15, y + A.y0 + 0.2, headCol);
+    else ctx.propMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + A.y1 - 0.25, y + A.y1 + 0.25, headCol);
+    if (A.neck) {
+      const [nx, nz] = at(A.hl, 0);
+      ctx.propMatte.orientedBox(nx, nz, 0.14, 0.3, yaw, y + (grazing ? 0.5 : A.y1 - 0.2), y + A.y1 + (grazing ? -0.2 : 0.3), body);
+    }
+    // From the tail (-hl) to the nose (hl + 0.55).
+    world.physics.addOrientedBox(x + 0.275 * s, z + 0.275 * c, A.hw + 0.05, A.hl + 0.275, yaw, 0, y + A.y1 + (grazing ? 0 : 0.25), 'animal', F().SOLID | F().SHOTS);
+  }
+
+  /** A farm block's inner lot as a paddock: grass, a post-and-rail fence, animals grazing and a trough. */
+  function paddock(world, lot, rng) {
+    const ctx = world.ctxAt(lot.cx, lot.cz);
+    ctx.grassTop.topRect(lot.minX, lot.minZ, lot.maxX, lot.maxZ, KERB, VH.col(0xf0f6dc), 6);
+    world.addLawn(lot.minX, lot.minZ, lot.maxX, lot.maxZ);
+    boundary(world, lot, 0.6, 'fence', { n: false, s: false, w: false, e: false }, rng);
+    const kind = rng.weighted([{ k: 'cow', weight: 4 }, { k: 'sheep', weight: 4 }, { k: 'horse', weight: 2 }]).k;
+    const area = (lot.maxX - lot.minX) * (lot.maxZ - lot.minZ);
+    const n = Math.max(2, Math.min(kind === 'sheep' ? 14 : 8, Math.round(area / (kind === 'sheep' ? 140 : 260))));
+    const placed = [];
+    for (let i = 0, tries = 0; i < n && tries < n * 6; tries++) {
+      const x = rng.range(lot.minX + 3.5, lot.maxX - 3.5), z = rng.range(lot.minZ + 3.5, lot.maxZ - 3.5);
+      if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 3.5)) continue;
+      placed.push([x, z]);
+      animal(world, kind, x, z, rng.range(0, Math.PI * 2), rng);
+      i++;
+    }
+    // A galvanised water trough by the fence.
+    const tx = lot.minX + 2, tz = rng.range(lot.minZ + 3, lot.maxZ - 5);
+    if (!placed.some(([px, pz]) => Math.abs(px - tx) < 3 && Math.abs(pz - tz - 1.2) < 3)) {
+      ctx.prop.box(tx - 0.4, KERB, tz, tx + 0.4, KERB + 0.6, tz + 2.4, VH.col(0x9aa0a6));
+      ctx.decal.topRect(tx - 0.32, tz + 0.08, tx + 0.32, tz + 2.32, KERB + 0.58, VH.col(0x5a7f8a));
+      world.physics.addBox(tx - 0.4, 0, tz, tx + 0.4, KERB + 0.6, tz + 2.4, 'metal');
+    }
+  }
+
+  // ---------------------------------------------------------- allotments
+  const VEG = [
+    { top: 0x6aa878, side: 0x4e8a5a, h: 0.35, rows: 0.7 }, // cabbages
+    { top: 0x86c84e, side: 0x5e9a36, h: 0.25, rows: 0.6 }, // lettuces
+    { top: 0x4f8a3a, side: 0x3e6e2e, h: 0.45, rows: 0.8 }, // potatoes
+    { top: 0x9ac85a, side: 0x6e9a3a, h: 0.3, rows: 0.5 }, //  onions and carrots
+  ];
+
+  /** Allotments: little plots either side of a gravel path, a fence round them, a gate on each lane. */
+  function allotments(world, block, rng, sides) {
+    const { minX, maxX, minZ, maxZ } = block;
+    const alongX = maxX - minX >= maxZ - minZ;
+    const a0 = (alongX ? minX : minZ) + 4.2, a1 = (alongX ? maxX : maxZ) - 4.2;
+    const c0 = (alongX ? minZ : minX) + 4.2, c1 = (alongX ? maxZ : maxX) - 4.2;
+    const mid = (c0 + c1) / 2;
+    const rect = (p0, p1, q0, q1) => (alongX ? [p0, q0, p1, q1] : [q0, p0, q1, p1]);
+    pieces(a0 - 1.2, a1 + 1.2, (p, q) => {
+      const [x0, z0, x1, z1] = rect(p, q, mid - 1.4, mid + 1.4);
+      world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2).plazaTop.topRect(x0, z0, x1, z1, KERB + 0.02, VH.col(0xcfc2a4), 4);
+    });
+    for (const side of [-1, 1]) {
+      const q0 = side < 0 ? c0 : mid + 2.2, q1 = side < 0 ? mid - 2.2 : c1;
+      if (q1 - q0 < 6) continue;
+      for (let p = a0; p + 7.5 <= a1; p += 9.5) {
+        const [x0, z0, x1, z1] = rect(p, p + 8.5, q0, q1);
+        allotmentPlot(world, { x0, z0, x1, z1 }, alongX, side, rng);
+      }
+    }
+  }
+
+  /** One allotment: tilled beds in rows, maybe bean canes, a shed and a water butt at the path end. */
+  function allotmentPlot(world, r, alongX, side, rng) {
+    const ctx = world.ctxAt((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2);
+    // Timber edging round the bed (knee-low), then the earth.
+    ctx.wood.box(r.x0, KERB, r.z0, r.x1, KERB + 0.16, r.z1, VH.col(0x8a6a48), { skip: { top: true } });
+    ctx.asphaltTop.topRect(r.x0 + 0.1, r.z0 + 0.1, r.x1 - 0.1, r.z1 - 0.1, KERB + 0.16, VH.col(0x6b4f35, 4.5), 6); // the asphalt grain, browned: tilled earth
+    world.physics.addBox(r.x0, 0, r.z0, r.x1, KERB + 0.16, r.z1, 'dirt', F().SOLID);
+    const y = KERB + 0.16;
+    // The shed end is the one by the path.
+    const pathEnd = side < 0 ? (alongX ? r.z1 : r.x1) : alongX ? r.z0 : r.x0;
+    const inward = side < 0 ? -1 : 1;
+    const hasShed = rng.chance(0.55);
+    const keep = hasShed ? 3.2 : 0.8; // metres kept clear at the path end
+    const along0 = alongX ? r.x0 + 0.5 : r.z0 + 0.5, along1 = alongX ? r.x1 - 0.5 : r.z1 - 0.5;
+    const deep0 = pathEnd + inward * keep, deep1 = (side < 0 ? (alongX ? r.z0 : r.x0) : alongX ? r.z1 : r.x1) - inward * 0.5;
+    const lo = Math.min(deep0, deep1), hi = Math.max(deep0, deep1);
+    const box = (a0, a1, d0, d1, y0, y1, col, surf) => (alongX ? (surf || ctx.hedge).box(a0, y0, d0, a1, y1, d1, col, { bottom: false }) : (surf || ctx.hedge).box(d0, y0, a0, d1, y1, a1, col, { bottom: false }));
+    if (rng.chance(0.3)) {
+      // Runner beans up a row of canes (tied in an A).
+      const a = (along0 + along1) / 2;
+      for (let d = lo + 0.3; d < hi - 0.2; d += 0.5) box(a - 0.03, a + 0.03, d - 0.03, d + 0.03, y, y + 2.0, VH.col(0xb8a070), ctx.wood);
+      box(a - 0.25, a + 0.25, lo + 0.2, hi - 0.1, y + 0.3, y + 1.8, VH.col(0x4f8a3a), ctx.hedge);
+      if (alongX) world.physics.addBox(a - 0.3, 0, lo + 0.2, a + 0.3, y + 2.0, hi - 0.1, 'hedge', F().SOLID);
+      else world.physics.addBox(lo + 0.2, 0, a - 0.3, hi - 0.1, y + 2.0, a + 0.3, 'hedge', F().SOLID);
+    } else {
+      const v = VEG[rng.int(0, VEG.length - 1)];
+      for (let a = along0 + 0.3; a < along1 - 0.2; a += v.rows + 0.35) {
+        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y, y + v.h, VH.col(v.side), ctx.hedge); // solidity: passable
+        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y + v.h - 0.02, y + v.h, VH.col(v.top), ctx.hedge); // solidity: passable
+      }
+    }
+    if (hasShed) {
+      // A little timber shed with a pent roof, its door on the path.
+      const a = rng.chance(0.5) ? along0 + 0.2 : along1 - 2.4;
+      const d0 = side < 0 ? pathEnd - 2.6 : pathEnd + 0.4, d1 = d0 + 2.2;
+      const wall = VH.col(rng.pick([0x6a8a5a, 0x8a6a48, 0x5a7a8a, 0xa8432f, 0x7a7a6a]));
+      box(a, a + 2.2, d0, d1, y, y + 2.1, wall, ctx.wood);
+      box(a - 0.15, a + 2.35, d0 - 0.15, d1 + 0.15, y + 2.1, y + 2.25, VH.col(0x3a3a3a), ctx.prop);
+      const df = side < 0 ? d1 : d0 - 0.04;
+      box(a + 0.7, a + 1.5, df, df + 0.04, y, y + 1.9, VH.colMul(wall, 0.7), ctx.wood);
+      if (alongX) world.physics.addBox(a - 0.15, 0, d0 - 0.15, a + 2.35, y + 2.25, d1 + 0.15, 'crate');
+      else world.physics.addBox(d0 - 0.15, 0, a - 0.15, d1 + 0.15, y + 2.25, a + 2.35, 'crate');
+      // The water butt beside it.
+      const wa = a < (along0 + along1) / 2 ? a + 2.8 : a - 0.6, wd = (d0 + d1) / 2;
+      const [wx, wz] = alongX ? [wa, wd] : [wd, wa];
+      ctx.propMatte.cylinder(wx, y, wz, 0.38, 0.38, 1.0, 10, VH.col(0x2e5a3a), true, VH.col(0x24482e));
+      world.physics.addOrientedBox(wx, wz, 0.38, 0.38, Math.PI / 4, 0, y + 1.0, 'prop');
+    }
+  }
+
+  /** The ground left open on purpose (VH.Data.open4): declared for the emptiness scan; a farm track along it. */
+  function openGround(world) {
+    for (const o of VH.Data.open4 || []) {
+      VH.Districts.open(o.minX, o.minZ, o.maxX, o.maxZ, o.label);
+      if (!o.track) continue;
+      // A grass-and-gravel farm track down the long side, clear of whatever stands in the middle.
+      const alongX = o.maxX - o.minX >= o.maxZ - o.minZ;
+      const c = alongX ? o.minZ + 6 : o.minX + 6;
+      pieces(alongX ? o.minX : o.minZ, alongX ? o.maxX : o.maxZ, (p, q) => {
+        for (const [t0, t1] of [[-1.6, -0.6], [0.6, 1.6]]) {
+          const r = alongX ? [p, c + t0, q, c + t1] : [c + t0, p, c + t1, q];
+          world.ctxAt((r[0] + r[2]) / 2, (r[1] + r[3]) / 2).decal.topRect(r[0], r[1], r[2], r[3], 0.03, VH.col(0xa48a64));
+        }
+      });
+    }
+  }
+
+  // ------------------------------------------------------------- places
+  // Story places in the 4.0 districts (places.extra[district]) for the kinds
+  // the generic fill makes: field gates, farmhouses, barns, warehouses,
+  // terraces, greens. The landmark plots' builders add their own.
+  const LOT_KINDS = {
+    farmhouse: ['farmhouse', 'farm', 'house', 'front_door'],
+    barn: ['barn', 'farm', 'garage', 'storage'],
+    silo: ['farm', 'yard', 'silo'],
+    warehouse: ['warehouse', 'loading_bay', 'cargo', 'depot'],
+    depot: ['depot', 'yard', 'truckstop', 'garage'],
+    terrace: ['house', 'front_door', 'terrace'],
+    house: ['house', 'front_door'],
+    bigbox: ['retail', 'storefront', 'superstore'],
+    hotel: ['hotel', 'motel'],
+  };
+  const LOT_NAMES = { farmhouse: 'Farmhouse', barn: 'Barn', silo: 'Grain silos', warehouse: 'Warehouse', depot: 'Lorry depot', terrace: 'Terraced houses', house: 'House', bigbox: 'Superstore', hotel: 'Hotel' };
+
+  /** A spot on the verge or pavement `out` metres off side s of r, facing into r. */
+  function sideSpot(r, s, along, out) {
+    if (s === 'n') return { x: along, z: r.minZ - out, yaw: 0 };
+    if (s === 's') return { x: along, z: r.maxZ + out, yaw: Math.PI };
+    if (s === 'w') return { x: r.minX - out, z: along, yaw: Math.PI / 2 };
+    return { x: r.maxX + out, z: along, yaw: -Math.PI / 2 };
+  }
+
+  function registerPlaces(world, places) {
+    const road = (x, z) => world.roadNameAt(x, z) || (world.districtAt(x, z) || {}).name || 'the lane';
+    for (const b of world.layout.blocks3 || []) {
+      if (!b.v4 || b.kind === 'plot') continue;
+      const list = places.extra[b.district.id];
+      if (!list) continue;
+      const add = (p, kinds, name) => list.push({ x: p.x, z: p.z, y: KERB, yaw: p.yaw, kinds, name: name + ', ' + road(p.x + Math.sin(p.yaw) * -6, p.z + Math.cos(p.yaw) * -6) });
+      if (b.kind === 'fields' || b.kind === 'allotments') {
+        const kinds = b.kind === 'fields' ? ['fields', 'field', 'farm', 'lane'] : ['allotments', 'garden', 'park'];
+        for (const g of b.gates || []) add(sideSpot(b, g.side, g.at, -1.5), kinds, b.kind === 'fields' ? 'A field gate' : 'The allotments gate');
+        continue;
+      }
+      if (b.kind === 'park') {
+        const alongX = b.maxX - b.minX >= b.maxZ - b.minZ;
+        add(alongX ? sideSpot(b, 'w', b.cz, -1.5) : sideSpot(b, 'n', b.cx, -1.5), ['park', 'garden', 'bench'], 'The end of the green');
+        continue;
+      }
+      for (const lot of b.lots) {
+        const kinds = lot.kind === 'building' && !lot.interior && LOT_KINDS[lot.archetype];
+        if (!kinds) continue;
+        const f = lot.front;
+        const s = f.s ? 's' : f.n ? 'n' : f.e ? 'e' : f.w ? 'w' : null;
+        if (!s) continue;
+        add(sideSpot(lot, s, s === 'n' || s === 's' ? lot.cx : lot.cz, 2.2), kinds, LOT_NAMES[lot.archetype]);
+      }
+    }
+  }
+
+  // The fill's own builder (after the generic fill, like a district's).
+  if (VH.Districts) {
+    VH.Districts.register({
+      id: 'fill4',
+      name: 'the countryside',
+      plots: [],
+      build(world) {
+        openGround(world);
+      },
+      registerPlaces,
+    });
   }
 
   const Fill4 = {
@@ -292,16 +545,23 @@
       const sides = roadSides(world, block);
       if (block.kind === 'fields') {
         fields(world, block, rng);
-        boundary(world, block, 1.6, 'hedge', sides, rng);
+        boundary(world, block, 3.2, 'hedge', sides, rng); // (outside it, a grass verge people walk along)
+      } else if (block.kind === 'allotments') {
+        allotments(world, block, rng, sides);
+        boundary(world, block, 3.0, 'fence', sides, rng);
       } else {
         for (const lot of block.lots) {
+          if (lot.kind === 'courtyard') {
+            paddock(world, lot, new VH.RNG(lot.seed));
+            continue;
+          }
           const top = VH.Buildings.buildLot(world.ctxAt(lot.cx, lot.cz), lot);
           lot.top = top || 0;
           if (top > 0) world.stats.buildings++;
           world.stats.tallest = Math.max(world.stats.tallest, top || 0);
         }
         world.stats.lots += block.lots.length;
-        boundary(world, block, 1.2, 'fence', sides, rng);
+        boundary(world, block, 3.0, 'fence', sides, rng); // (the lots start 4 m in)
       }
       countryFurniture(world, block, sides, rng);
       return true;

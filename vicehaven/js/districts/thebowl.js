@@ -302,6 +302,50 @@
   }
 
   /**
+   * The way up into the main stand: a long stair outside each end wall from the
+   * plaza to a landing at the back walkway (through the doorway in the end
+   * wall), and aisle stairs down the tiers from the walkway to the front row.
+   */
+  function buildStandAccess(world, yBack, depth, rise, tiers) {
+    const W = K();
+    const S = SP.stand;
+    const zBot = S.zf - 0.5, zTop = S.zb + 4.6, len = zBot - zTop;
+    for (const side of [-1, 1]) {
+      const xw = side < 0 ? S.x0 - 0.6 : S.x1 + 0.6; // the end wall's outer face
+      const xs = xw + side * 1.1, xo = xw + side * 2.2; // the stair's centre and outer edge
+      const ctx = world.ctxAt(xs, (S.zb + S.zf) / 2);
+      W.stairs(world, ctx.concrete, xs, zBot, 'n', len, 2.2, KERB, yBack, 0xcfcabd, { rails: false, tag: 'stairs' });
+      // The landing, its rails (open to the stair and to the doorway).
+      W.deck(world, ctx.concrete, Math.min(xw, xo), S.zb - 0.6, Math.max(xw, xo), zTop + 0.05, yBack, 0xcfcabd, 'concrete', 0.4);
+      for (const [a0, a1, b0, b1] of [[xw, S.zb - 0.6, xo, S.zb - 0.6], [xo, S.zb - 0.6, xo, zTop]]) {
+        const c0 = Math.min(a0, b0) - 0.05, c1 = Math.max(a0, b0) + 0.05, e0 = Math.min(a1, b1) - 0.05, e1 = Math.max(a1, b1) + 0.05;
+        ctx.prop.box(c0, yBack + 0.95, e0, c1, yBack + 1.05, e1, col(0x3f454c));
+        world.physics.addBox(c0, yBack - 0.4, e0, c1, yBack + 1.05, e1, 'railing', F().SOLID | F().SHOTS);
+      }
+      for (const z of [S.zb - 0.6, zTop]) ctx.prop.box(xo - 0.04, yBack, z - 0.04, xo + 0.04, yBack + 1.0, z + 0.04, col(0x3f454c));
+      // The stair's outer rail: a handrail on posts, solid in short runs that follow the slope.
+      W.beam(ctx.prop, xo, KERB + 1.0, zBot, xo, yBack + 1.0, zTop, 0.06, 0x3f454c);
+      const n = Math.ceil(len / 3);
+      for (let k = 0; k <= n; k++) {
+        const z = zBot - (len * k) / n, y = KERB + ((yBack - KERB) * k) / n;
+        ctx.prop.box(xo - 0.04, y, z - 0.04, xo + 0.04, y + 1.0, z + 0.04, col(0x3f454c));
+        if (k < n) {
+          const z1 = zBot - (len * (k + 1)) / n, y1 = KERB + ((yBack - KERB) * (k + 1)) / n;
+          world.physics.addBox(xo - 0.06, Math.max(0, y - 0.6), z1, xo + 0.06, y1 + 1.0, z, 'railing', F().SOLID | F().SHOTS);
+        }
+      }
+      // A sign at the foot: the seats are up here.
+      W.sign(world, { x: xw + side * 0.05, y: KERB + 5.2, z: zBot - 8, yaw: side * PI / 2, w: 6, h: 1.4, lines: ['MAIN STAND', 'ALL SEATS UP THE STAIRS'], style: 'info', oneSided: true, colors: { bg: ['#1f6f8a', '#1f4f7a'], fg: '#ffffff', bar: '#f2c230' } });
+    }
+    // Aisles down the tiers, between the roof columns (the steps cover the seats in their way).
+    for (const xa of [85, 139, 193, 247]) {
+      const ctx = world.ctxAt(xa, (S.zb + S.zf) / 2);
+      const y0 = KERB + 1.4 + rise, y1 = KERB + 1.4 + tiers * rise;
+      W.stairs(world, ctx.concrete, xa, S.zf, 'n', (tiers - 1) * depth, 1.4, y0, y1, 0xcfcabd, { rails: false, tag: 'stairs' });
+    }
+  }
+
+  /**
    * The main stand: tiers of seats from the outer wall up to a back wall on
    * Foundry Road, a roof on slim columns, the glass commentary box over the
    * line, and the vehicle tunnel through it into the circuit.
@@ -386,7 +430,7 @@
         // Leave the tunnel mouth open.
         if (tx0 > x) ctx.b.wall([tx0, 0, S.zb - 2], -1, 0, tx0 - x, yBack + 3, wallC, null, [0, Math.max(1, Math.round((tx0 - x) / 4)), 0, 4], [0.55, 0.5, 1, 0.3]);
         if (xb > tx1) ctx.b.wall([xb, 0, S.zb - 2], -1, 0, xb - tx1, yBack + 3, wallC, null, [0, Math.max(1, Math.round((xb - tx1) / 4)), 0, 4], [0.55, 0.5, 1, 0.3]);
-        ctx.concrete.box(tx0, KERB + T.h, S.zb - 2, tx1, yBack + 3, S.zb, wallC);
+        ctx.concrete.box(tx0, KERB + T.h, S.zb - 2, tx1, yBack + 3, S.zb, wallC, { bottom: true });
       } else {
         ctx.b.wall([xb, 0, S.zb - 2], -1, 0, xb - x, yBack + 3, wallC, null, [0, Math.max(1, Math.round((xb - x) / 4)), 0, 4], [0.55, 0.5, 1, 0.3]);
       }
@@ -395,13 +439,17 @@
     world.physics.addBox(T.x0, KERB + T.h, S.zb - 2, T.x1, yBack + 3, S.zb, 'building', F().ALL);
     // The wall's ends at the tunnel mouth (b.wall draws only the street face).
     for (const x of [T.x0 - 0.2, T.x1]) ctxT.concrete.box(x, 0, S.zb - 2, x + 0.2, KERB + T.h, S.zb, col(0xe4dfd2));
-    // End walls.
+    // End walls, each with a doorway at the top from the stair outside onto the back walkway.
+    const dz0 = S.zb + 0.4, dz1 = S.zb + 3.6, dTop = yBack + 2.6;
     for (const x of [S.x0, S.x1]) {
       const ctx = world.ctxAt(x, (S.zb + S.zf) / 2);
       const x0 = x === S.x0 ? x - 0.6 : x, x1 = x === S.x0 ? x : x + 0.6;
-      ctx.concrete.box(x0, 0, S.zb - 2, x1, yBack + 3, S.zf, col(0xd9d4c8));
-      world.physics.addBox(x0, 0, S.zb - 2, x1, yBack + 3, S.zf, 'building', F().ALL);
+      for (const [y0, y1, z0, z1] of [[0, yBack + 3, S.zb - 2, dz0], [0, yBack + 3, dz1, S.zf], [0, yBack, dz0, dz1], [dTop, yBack + 3, dz0, dz1]]) {
+        ctx.concrete.box(x0, y0, z0, x1, y1, z1, col(0xd9d4c8));
+        world.physics.addBox(x0, y0, z0, x1, y1, z1, 'building', F().ALL);
+      }
     }
+    buildStandAccess(world, yBack, depth, rise, tiers);
     // The roof: a slab on a row of columns along the front of the back walkway half-way down.
     const roofY = yBack + 6.5;
     const zr1 = S.zb + 22;
@@ -544,6 +592,10 @@
   // Walk-through tunnels under the stand on the short axis, out to the track:
   // the players' tunnel on the south side (s = 1), the fans' turnstile gate on the north (s = -1).
   ST.tunnels = [{ s: 1, hw: 2.6, top: 3.1 }, { s: -1, hw: 3.4, top: 3.1 }];
+  // Aisle stairs from the running track up through the tiers to the back row, either side
+  // of both tunnels (x offset from the centre; s = 1 south, -1 north). They cut the podium wall and the seats.
+  ST.aisles = [];
+  for (const s of [-1, 1]) for (const dx of [-9.5, 9.5]) ST.aisles.push({ s, x: ST.cx + dx, hw: 0.9 });
   function tunnelAt(x, z) {
     for (const T of ST.tunnels) if ((z - ST.cz) * T.s > 0 && Math.abs(x - ST.cx) < T.hw) return T;
     return null;
@@ -611,6 +663,45 @@
       }
     }
     for (const q of pieces) box4(world, surfName, q, d1 - d0, y0, y1, hex, tag, flags, noCol);
+  }
+  /** ringPiece, with a gap where an aisle stair comes through (the podium wall, the seat rows). */
+  function ringCut(world, surfName, t0, t1, d0, d1, y0, y1, hex, tag, flags, noCol) {
+    const dm = (d0 + d1) / 2;
+    const e0 = ell(t0, dm), e1 = ell(t1, dm);
+    for (const A of ST.aisles) {
+      if ((e0.z - ST.cz) * A.s <= 0) continue;
+      const lo = Math.min(e0.x, e1.x), hi = Math.max(e0.x, e1.x);
+      if (hi <= A.x - A.hw || lo >= A.x + A.hw) continue;
+      const at = (x) => [x, e0.z + ((e1.z - e0.z) * (x - e0.x)) / (e1.x - e0.x)];
+      const a = at(Math.max(lo, A.x - A.hw)), b = at(Math.min(hi, A.x + A.hw));
+      const L = e0.x < e1.x ? [e0.x, e0.z] : [e1.x, e1.z], R = e0.x < e1.x ? [e1.x, e1.z] : [e0.x, e0.z];
+      if (a[0] > L[0] + 0.05) box4(world, surfName, [L[0], L[1], a[0], a[1]], d1 - d0, y0, y1, hex, tag, flags, noCol);
+      if (R[0] > b[0] + 0.05) box4(world, surfName, [b[0], b[1], R[0], R[1]], d1 - d0, y0, y1, hex, tag, flags, noCol);
+      return;
+    }
+    ringPiece(world, surfName, t0, t1, d0, d1, y0, y1, hex, tag, flags, noCol);
+  }
+  /** z of the stand at x, d metres in from the outer wall, on side s. */
+  function ellZ(x, d, s) {
+    const c = (x - ST.cx) / (ST.a - d);
+    return ST.cz + s * (ST.b - d) * Math.sqrt(Math.max(0, 1 - c * c));
+  }
+  function buildAisles(world) {
+    const W = K();
+    const yF = KERB + ST.base, yB = yF + (ST.tiers - 1) * ST.rise;
+    for (const A of ST.aisles) {
+      const dir = A.s > 0 ? 's' : 'n';
+      const zT = ellZ(A.x, ST.dF + 3.4, A.s), zF = ellZ(A.x, ST.dF, A.s), zB = ellZ(A.x, ST.dF - (ST.tiers - 1) * ST.tierD, A.s);
+      const ctx = world.ctxAt(A.x, zF);
+      // Up from the track through the gap in the podium wall to the front row ...
+      W.stairs(world, ctx.concrete, A.x, zT, dir, Math.abs(zF - zT), 2 * A.hw, KERB, yF, 0xbdb8ac, { rails: false, tag: 'stairs' });
+      // ... and on up the tiers to the back row.
+      W.stairs(world, ctx.concrete, A.x, zF, dir, Math.abs(zB - zF), 2 * A.hw, yF, yB, 0xc9c4b8, { rails: false, tag: 'stairs' });
+      // Handrails down the middle of the lower flight, yellow nosing strips at the gap.
+      K().beam(ctx.prop, A.x, KERB + 1.0, zT, A.x, yF + 1.0, zF, 0.05, 0xd8a520);
+      for (const z of [zT, zF]) ctx.prop.box(A.x - 0.03, z === zT ? KERB : yF, z - 0.03, A.x + 0.03, (z === zT ? KERB : yF) + 1.0, z + 0.03, col(0xd8a520));
+      for (const x of [A.x - A.hw, A.x + A.hw]) ctx.prop.box(x - 0.06, KERB, Math.min(zF, ellZ(A.x, ST.dF + 0.4, A.s)), x + 0.06, KERB + ST.base + 0.95, Math.max(zF, ellZ(A.x, ST.dF + 0.4, A.s)), col(0xd8a520));
+    }
   }
   function box4(world, surfName, q, thick, y0, y1, hex, tag, flags, noCol) {
     const [ax, az, bx, bz] = q;
@@ -689,10 +780,10 @@
         ringPiece(world, 'concrete', t0, t1, d0, d1, 0, yTop, 0xd6d1c4, 'building');
         // A row of seats along the front of each tier (coloured blocks spell the club's stripes).
         const c = (Math.floor(i / 4) + (k > 4 ? 1 : 0)) % 3 === 0 ? seatC : (i + k) % 2 ? seatA : seatB;
-        ringPiece(world, 'prop', t0, t1, d1 - 1.0, d1 - 0.4, yTop, yTop + 0.45, c, 'building', F().SOLID, true);
+        ringCut(world, 'prop', t0, t1, d1 - 1.0, d1 - 0.4, yTop, yTop + 0.45, c, 'building', F().SOLID, true);
       }
       // The podium wall in front of the lowest tier (a rail on it).
-      ringPiece(world, 'concrete', t0, t1, ST.dF, ST.dF + 0.4, 0, KERB + ST.base + 0.9, 0xf2f2ee, 'wall');
+      ringCut(world, 'concrete', t0, t1, ST.dF, ST.dF + 0.4, 0, KERB + ST.base + 0.9, 0xf2f2ee, 'wall');
       // The outer wall: a sand-coloured shell with ribs, a teal band and a lit band under the roof.
       const yW = KERB + ST.wallH;
       ringPiece(world, 'concrete', t0, t1, -0.6, 0, 0, yW, i % 2 ? 0xe2d6bd : 0xd9ccb0, 'building');
@@ -711,6 +802,7 @@
       // Lights under the roof's edge (glow at night, light the pitch).
       if (i % 4 === 0) ringPiece(world, 'screen', t0, t1, 9.8, 10.6, ST.roofY - 0.25, ST.roofY - 0.05, VH.col(0xfff4d8, 1.6), 'building', F().SOLID, true);
     }
+    buildAisles(world);
     // The marathon gates: a lit ceiling, yellow kerb rails, steel gates folded back, big lettering over the west one.
     for (const side of [-1, 1]) {
       const xo = ST.cx + side * (ST.a + 0.8), xi = ST.cx + side * (ST.a - ST.dF - 0.4);
@@ -1485,6 +1577,9 @@
     name: 'The Bowl',
     plots: ['southbay_speedway', 'mariner_stadium', 'expo_hall'],
     build(world, layout) {
+      return VH.SouthKit.withUndersides(() => this._build(world, layout)); // canopies, ceilings and lamps show from below
+    },
+    _build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.southbay_speedway || !VH.WNKit) return;
       buildSpeedway(world);

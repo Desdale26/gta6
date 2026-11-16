@@ -19,6 +19,12 @@
  *             head lands; the puck flies up the scale and maybe rings the bell
  *   crab      Crab Bonkers: nine holes, crabs popping up (gold ones quick),
  *             and gulls you mustn't bonk; pick a hole, bonk
+ *   duck      Hook-a-Duck: ducks float round a pool with a loop on each head;
+ *             hold the hook over a duck's path (it swings on its line) and
+ *             dip as the loop comes under it; gold ducks are quick
+ *   hoops     Boardwalk Hoops: a basketball at a hoop sliding along a rail;
+ *             aim across, hold for the power (let go in the middle); the
+ *             ball bounces off the ring and the board for real
  *
  * Every game: a fixed price, 30–60 seconds, tickets by the score (a go played
  * to the end always wins at least one), and "challenge a friend" (two players
@@ -1905,7 +1911,8 @@
     hover: 0.34, //                    the bonker's head over a hole
     swing: 0.09, //                    down onto it
     back: 0.16, //                     and up again
-    pts: { crab: 10, gold: 25, gull: -20 },
+    pts: { crab: 10, gold: 25, gull: -20, quick: 5 },
+    quick: 0.25, //                    a bonk this soon after one's fully up is quick (+5)
   };
   const HOLES = [];
   CB.rows.forEach((v, r) => CB.cols.forEach((u, c) => HOLES.push({ u, v, r, c })));
@@ -1991,17 +1998,18 @@
     tint: 5,
     howto: [
       'Crabs pop out of the holes. Bonk them before they hide again: 10 points.',
-      'A gold crab is quick: 25 points. Gulls pop up too: leave them alone, a bonked gull costs 20.',
+      'A gold crab is quick: 25 points. Bonk one the moment it pops up for 5 more.',
+      'Gulls pop up too: leave them alone, a bonked gull costs 20.',
       'Point at a hole and click, or step between the holes with W A S D and bonk with Space.',
     ],
     keys: 'Mouse / W A S D / left stick  pick a hole   ·   Click / Space / A  bonk',
-    prize: 'One for every 25 points',
+    prize: 'One for every 30 points',
     barks: ['Crab Bonkers! Bonk a crab, spare the gulls!', 'They\'re quick, these crabs! Three dollars a go!', 'Gold crab pays twenty-five! Step up and bonk!'],
     statKeys: { crabs: 1 },
     countIdle: false,
 
     tickets(score) {
-      return score / 25;
+      return score / 30;
     },
 
     verdict(g) {
@@ -2040,6 +2048,7 @@
     begin(g, s) {
       g.crabs = 0;
       g.gulls = 0;
+      g.quick = 0;
       g.missed = 0;
       g.next = 0.6;
       g.cx = 0;
@@ -2071,7 +2080,7 @@
       o.kind = roll < (idle ? 0.25 : 0.17) ? 'gull' : roll < 0.25 && !idle ? 'gold' : 'crab';
       o.state = 'rise';
       o.t = 0;
-      o.up = o.kind === 'gull' ? 1.35 : o.kind === 'gold' ? 0.62 : 1.3 - 0.5 * k;
+      o.up = o.kind === 'gull' ? 1.35 : o.kind === 'gold' ? 0.55 : 1.15 - 0.45 * k;
       o.squash = 0;
       this.crabMesh.setColorAt(pick, _cbCol.set(o.kind === 'gold' ? 0xffc21a : 0xff5a3c));
       this.crabMesh.instanceColor.needsUpdate = true;
@@ -2145,9 +2154,9 @@
       g.next -= dt;
       let upNow = 0;
       for (const o of this.holes) if (o.state === 'rise' || o.state === 'up') upNow++;
-      if (g.next <= 0 && upNow < (g.t < 10 ? 2 : 3)) {
+      if (g.next <= 0 && upNow < (g.t < 8 ? 2 : g.t < 25 ? 3 : 4)) {
         this.spawn(g, false);
-        g.next = (0.82 - 0.4 * k) * (0.75 + Math.random() * 0.5);
+        g.next = (0.78 - 0.4 * k) * (0.75 + Math.random() * 0.5);
       }
       this.holesStep(dt);
       // The bonk: a press swings the bonker down onto the picked hole; it lands a beat later.
@@ -2190,13 +2199,15 @@
         s.ui.caption('Squawk! Leave the gulls be!', 1400);
         return;
       }
-      const pts = CB.pts[o.kind];
+      const quick = o.state === 'rise' || o.t < CB.quick;
+      const pts = CB.pts[o.kind] + (quick ? CB.pts.quick : 0);
+      if (quick) g.quick++;
       g.crabs++;
       g.score += pts;
       o.state = 'bonked';
       o.t = 0;
       s.ui.stat('crabs', 'Crabs', g.crabs);
-      this.kit.pop(H.u, CB.top + 0.4, H.v, '+' + pts, o.kind === 'gold' ? 'gold' : '');
+      this.kit.pop(H.u, CB.top + 0.4, H.v, '+' + pts + (quick ? ' quick!' : ''), o.kind === 'gold' ? 'gold' : '');
       this.kit.burst(H.u, CB.top + 0.15, H.v, o.kind === 'gold' ? 0xffd24a : 0xfff1a8, o.kind === 'gold' ? 18 : 8);
       s.sound('bump', { gain: 0.7 });
       s.sound(o.kind === 'gold' ? 'ding' : 'pop', { gain: 0.6 });
@@ -2254,6 +2265,787 @@
       this.holesStep(dt);
       this.bonkT = 9;
       this.place();
+    },
+  });
+
+  // ============================================================ HOOK-A-DUCK
+  // A pool round an island in the booth ('duck', 9 wide, 6 deep). Yellow ducks drift round on the current;
+  // gold ones swim the inside lane more than twice as fast. Each wears a red loop: dip the hook into it.
+  const HD = {
+    seconds: 45,
+    water: KERB + 0.86, //      the water's surface
+    rim: KERB + 0.97, //        the tank's edge
+    vc: 1.3, //                 the island's middle line (v); its straight runs u -sl..sl
+    sl: 2.7,
+    lane: { duck: 0.74, gold: 0.52 }, // each kind's lane, out from the middle line
+    speed: { duck: 0.36, gold: 0.75 },
+    count: { duck: 16, gold: 3 },
+    pts: { duck: 10, gold: 30 },
+    loop: { duck: 0.06, gold: 0.05 }, // the hook this close to a loop at the bottom of a dip: hooked
+    reach: [-3.3, 3.3, 2.2, 1.2], //    where the hook can go: u from, u to, v near, v far
+    tip: KERB + 1.5, //         the cane's tip, over the hook
+    hang: 0.34, //              the hook over the water, waiting
+    dip: 0.13, //               seconds down into the water
+    hands: [0.24, KERB + 1.28, 3.12],
+    bucket: [1.75, 2.74], //    the bucket on the counter
+    omega2: 19, //              the line's swing (gravity / length) and its damping
+    damp: 5.5,
+  };
+  const POOL_DUCKS = [];
+  for (const kind of ['duck', 'gold']) {
+    const n = HD.count[kind], r = HD.lane[kind], L = 4 * HD.sl + TAU * r;
+    for (let k = 0; k < n; k++) POOL_DUCKS.push({ kind, r, speed: HD.speed[kind], s0: (L * (k + (kind === 'gold' ? 0.3 : 0) + hash(k + 7) * 0.35)) / n });
+  }
+
+  /** A point round the pool, distance s along a lane r out from the middle line: into out { u, v, yaw }. */
+  function poolAt(s, r, out) {
+    const sl = HD.sl, L = 4 * sl + TAU * r;
+    s = ((s % L) + L) % L;
+    if (s < 2 * sl) {
+      out.u = -sl + s;
+      out.v = HD.vc + r;
+      out.yaw = PI / 2;
+      return out;
+    }
+    s -= 2 * sl;
+    if (s < PI * r) {
+      const a = s / r;
+      out.u = sl + Math.sin(a) * r;
+      out.v = HD.vc + Math.cos(a) * r;
+      out.yaw = PI / 2 + a;
+      return out;
+    }
+    s -= PI * r;
+    if (s < 2 * sl) {
+      out.u = sl - s;
+      out.v = HD.vc - r;
+      out.yaw = -PI / 2;
+      return out;
+    }
+    s -= 2 * sl;
+    const a = s / r;
+    out.u = -sl - Math.sin(a) * r;
+    out.v = HD.vc - Math.cos(a) * r;
+    out.yaw = -PI / 2 + a;
+    return out;
+  }
+
+  function poolDuckGeometry() {
+    // Facing +v, white (the instance colour makes it yellow or gold), an orange beak, a red loop on its head.
+    const g = new VH.GeometryBuilder({});
+    const W = VH.col(0xffffff), O = VH.col(0xff7a1c), K = VH.col(0x111111), R = VH.col(0xd8342c);
+    g.box(-0.065, -0.03, -0.1, 0.065, 0.07, 0.07, W); //   the body, a little under the water
+    g.box(-0.07, 0.01, -0.07, 0.07, 0.06, 0.04, W); //     wings
+    g.box(-0.04, 0.05, -0.13, 0.04, 0.11, -0.08, W); //    the tail, up
+    g.box(-0.045, 0.07, 0.0, 0.045, 0.155, 0.08, W); //    the head
+    g.box(-0.028, 0.095, 0.08, 0.028, 0.115, 0.13, O); //  the beak
+    g.box(-0.049, 0.118, 0.04, -0.044, 0.134, 0.058, K); // eyes
+    g.box(0.044, 0.118, 0.04, 0.049, 0.134, 0.058, K);
+    // The loop: a short stalk and a square ring standing up across the head.
+    g.box(-0.006, 0.155, 0.034, 0.006, 0.172, 0.046, R);
+    g.box(-0.032, 0.17, 0.034, 0.032, 0.182, 0.046, R);
+    g.box(-0.032, 0.228, 0.034, 0.032, 0.24, 0.046, R);
+    g.box(-0.032, 0.17, 0.034, -0.02, 0.24, 0.046, R);
+    g.box(0.02, 0.17, 0.034, 0.032, 0.24, 0.046, R);
+    return g.build();
+  }
+
+  decorate((world, K) => {
+    const put = deco(world, K, 'duck');
+    const F = put.F, ctx = put.ctx;
+    const sl = HD.sl, vc = HD.vc, wood = 0x9b6a3c, rim = 0xe8c48a;
+    // The tank: water to the brim, wooden sides with a pale rim.
+    put('prop', -3.95, KERB, 0.2, 3.95, HD.water, 2.4, 0x2b86c8);
+    put('wood', -4.02, KERB, 2.4, 4.02, HD.rim, 2.46, wood);
+    put('wood', -4.02, KERB, 0.14, 4.02, HD.rim, 0.2, wood);
+    for (const s of [-1, 1]) put('wood', s * 3.95 - (s < 0 ? 0.07 : 0), KERB, 0.14, s * 3.95 + (s > 0 ? 0.07 : 0), HD.rim, 2.46, wood);
+    put('prop', -4.04, HD.rim, 2.38, 4.04, HD.rim + 0.025, 2.48, rim);
+    put('prop', -4.04, HD.rim, 0.12, 4.04, HD.rim + 0.025, 0.22, rim);
+    for (const s of [-1, 1]) put('prop', s * 3.98 - 0.06, HD.rim, 0.12, s * 3.98 + 0.06, HD.rim + 0.025, 2.48, rim);
+    // The island: grass, rounded ends, reeds, and a little duck house in the middle.
+    put('prop', -sl, KERB, vc - 0.3, sl, HD.water + 0.06, vc + 0.3, 0x5aa85a);
+    for (const s of [-1, 1]) ctx.prop.cylinder(F.wx(s * sl, vc), KERB, F.wz(s * sl, vc), 0.3, 0.3, HD.water + 0.06 - KERB, 12, VH.col(0x5aa85a), true);
+    for (let i = 0; i < 9; i++) {
+      const u = -sl + 0.2 + (i * (2 * sl - 0.4)) / 8 + (hash(i) - 0.5) * 0.2, v = vc + (hash(i + 3) - 0.5) * 0.36;
+      if (Math.abs(u) < 0.5) continue;
+      put('prop', u - 0.015, HD.water + 0.06, v - 0.015, u + 0.015, HD.water + 0.3 + hash(i + 9) * 0.15, v + 0.015, 0x3f8a3a);
+      put('prop', u - 0.022, HD.water + 0.22 + hash(i + 9) * 0.15, v - 0.022, u + 0.022, HD.water + 0.3 + hash(i + 9) * 0.15, v + 0.022, 0x6b4a32);
+    }
+    put('prop', -0.3, HD.water + 0.06, vc - 0.2, 0.3, HD.water + 0.36, vc + 0.2, 0xf6f1e4);
+    put('prop', -0.36, HD.water + 0.36, vc - 0.25, 0.36, HD.water + 0.42, vc + 0.25, 0xe0403a);
+    put('prop', -0.24, HD.water + 0.42, vc - 0.16, 0.24, HD.water + 0.48, vc + 0.16, 0xe0403a);
+    put('prop', -0.08, HD.water + 0.08, vc + 0.2, 0.08, HD.water + 0.24, vc + 0.21, 0x2a1a12);
+    // The bucket on the counter, where the hooked ducks go.
+    const [bu, bv] = HD.bucket;
+    ctx.prop.cylinder(F.wx(bu, bv), KERB + 1.04, F.wz(bu, bv), 0.13, 0.16, 0.2, 14, VH.col(0x37b8ff), true, VH.col(0x1b3e6e));
+    // A pond painted on the back wall: sky, hills, reeds; the prize board over it.
+    put('prop', -4.3, KERB + 0.9, -2.74, 4.3, KERB + 3.2, -2.71, 0x9fdcf5);
+    put('prop', -4.3, KERB + 0.9, -2.71, 4.3, KERB + 1.5, -2.69, 0x6cbf62);
+    put('prop', -2.6, KERB + 1.5, -2.71, -0.6, KERB + 1.85, -2.69, 0x6cbf62);
+    put('prop', 1.2, KERB + 1.5, -2.71, 3.6, KERB + 1.75, -2.69, 0x6cbf62);
+    put('prop', -4.3, KERB + 0.9, -2.69, 4.3, KERB + 1.1, -2.67, 0x2b86c8);
+    for (let i = 0; i < 12; i++) {
+      const u = -4.1 + i * 0.72 + hash(i + 20) * 0.3;
+      put('prop', u - 0.03, KERB + 1.0, -2.67, u + 0.03, KERB + 1.35 + hash(i + 30) * 0.3, -2.66, 0x3f8a3a);
+    }
+    K.wantSign('duck_board', ['YELLOW 10 · GOLD 30', 'Dip the hook in the loop'], 0x2fb7b0, 0xffd24a);
+    K.QUADS.push(['duck_board', F.wx(0, -2.64), KERB + 2.2, F.wz(0, -2.64), F.yaw, 3.2, 0.8]);
+  });
+
+  const _hdP = { u: 0, v: 0, yaw: 0 };
+  const _hdD = new THREE.Vector3();
+  const _hdQ = new THREE.Quaternion();
+  const _hdY = new THREE.Vector3(0, 1, 0);
+
+  Carnival.stall({
+    id: 'duck',
+    name: 'Hook-a-Duck',
+    booth: 'duck',
+    tagline: 'Forty-five seconds. Hook a duck by its loop.',
+    price: 3,
+    unit: 'points',
+    stand: [0, 3.35],
+    cam: [1.0, KERB + 3.0, 6.0, 0, HD.water + 0.3, 1.35, 52],
+    seconds: HD.seconds,
+    holder: [-3.2, -1.1, 0.3],
+    tint: 3,
+    howto: [
+      'Ducks float round the pool, each with a red loop on its head. Hold the hook over a duck\'s path.',
+      'Dip just as the loop comes under it: hooked! It goes in your bucket. Yellow ducks 10, gold ones 30.',
+      'The hook swings on its line when you move it: let it settle before you dip.',
+    ],
+    keys: 'Mouse / W A S D / left stick  move the hook   ·   Click / Space / A  dip',
+    prize: 'One for every 12 points',
+    barks: ['Hook-a-Duck! Everyone\'s a winner!', 'Hook a duck, win a prize! Three dollars!', 'Gold ducks pay thirty! Quick, mind, they\'re quick!'],
+    statKeys: { ducks: 1 },
+
+    tickets(score) {
+      return score / 12;
+    },
+
+    verdict(g) {
+      return g.ducks + (g.ducks === 1 ? ' duck' : ' ducks') + (g.golds ? ', ' + g.golds + ' gold' : '');
+    },
+
+    build(kit) {
+      this.duckMesh = kit.mesh(poolDuckGeometry(), POOL_DUCKS.length);
+      const col = new THREE.Color();
+      POOL_DUCKS.forEach((D, i) => this.duckMesh.setColorAt(i, col.set(D.kind === 'gold' ? 0xffb81a : 0xffe85a)));
+      this.ducks = POOL_DUCKS.map((D, i) => Object.assign({ i, state: 'swim', t: 9, u: 0, v: 0, yaw: 0, lu: 0, lv: 0 }, D));
+      this.cane = kit.boxes(4); // the cane, the line, the hook's shank and its point
+      this.cane.part(0, 0, -5, 0, 0.03, 1, 0.03, 0, 0, 0, 0xd9b26a);
+      this.cane.part(1, 0, -5, 0, 0.006, 1, 0.006, 0, 0, 0, 0xf6f1e4);
+      this.cane.part(2, 0, -5, 0, 0.012, 0.07, 0.012, 0, 0, 0, 0xc0c8d0);
+      this.cane.part(3, 0, -5, 0, 0.05, 0.012, 0.012, 0, 0, 0, 0xc0c8d0);
+      this.poolT = 0;
+      this.HD = HD;
+      this.poolAt = poolAt;
+      this.reset();
+    },
+
+    reset() {
+      for (const d of this.ducks) if (d.state !== 'swim') {
+        d.state = 'swim';
+        d.t = 9;
+      }
+      this.caneOn = false;
+      for (let i = 0; i < 4; i++) this.cane.hide(i);
+      this.cane.done();
+    },
+
+    begin(g, s) {
+      g.ducks = 0;
+      g.golds = 0;
+      g.cx = 0;
+      g.cy = 0.3;
+      g.hu = 0;
+      g.hv = HD.reach[2] - 0.3;
+      g.vu = 0;
+      g.vv = 0;
+      g.hy = HD.water + HD.hang;
+      g.st = 'aim';
+      g.k = 0;
+      g.duck = null;
+      this.caneOn = true;
+      s.ui.stat('ducks', 'Ducks', 0);
+    },
+
+    pose(g) {
+      const [hu, , hv] = HD.hands;
+      const tu = g.tu === undefined ? 0 : g.tu, tv = g.tv === undefined ? 2 : g.tv;
+      const reach = clamp(Math.hypot(tu - hu, tv - hv) / 3, 0, 1);
+      return { w: 1, shoulderL: 0.95 + reach * 0.35, shoulderR: 1.05 + reach * 0.3, elbowL: 0.55 - reach * 0.3, elbowR: 0.45 - reach * 0.25, lean: 0.18 + reach * 0.15, twist: -Math.atan2(tu - hu, hv - tv) * 0.45, splayL: 0.05, splayR: 0.05 };
+    },
+
+    /** The ducks drift round; one that went in the bucket comes back a little later with a plop. */
+    pool(dt) {
+      this.poolT += dt;
+      for (const d of this.ducks) {
+        d.t += dt;
+        if (d.state === 'gone' && d.t > 2.5) {
+          d.state = 'swim';
+          d.t = 0;
+        }
+        if (d.state !== 'swim') continue;
+        poolAt(d.s0 + d.speed * this.poolT, d.r, _hdP);
+        const sway = Math.sin(this.poolT * 1.3 + d.i * 1.7) * 0.018;
+        d.u = _hdP.u + Math.cos(_hdP.yaw) * sway;
+        d.v = _hdP.v - Math.sin(_hdP.yaw) * sway;
+        d.yaw = _hdP.yaw + Math.sin(this.poolT * 0.9 + d.i) * 0.12;
+        // The loop sits a little forward on the head.
+        d.lu = d.u + Math.sin(d.yaw) * 0.04;
+        d.lv = d.v + Math.cos(d.yaw) * 0.04;
+      }
+    },
+
+    play(dt, g, s) {
+      const R = HD.reach;
+      this.kit.cursor(g, dt, 2.2, R[0], R[1], 0, R[2] - R[3], 2.6);
+      this.pool(dt);
+      this.move(dt, g, s, true);
+      if (g.st === 'aim' || g.st === 'dip') this.kit.reticle(g.hu, HD.water, g.hv, 'hole');
+      else this.kit.reticle(null);
+      this.place(g);
+    },
+
+    /** The cane, the line and the hook; live: the player can dip (not after the whistle). */
+    move(dt, g, s, live) {
+      const R = HD.reach;
+      g.k += dt;
+      // The cane's tip: over the cursor, or carrying a duck to the bucket and back.
+      let tu = g.cx, tv = R[2] - g.cy;
+      if (g.st === 'haul') {
+        const f = clamp((g.k - 0.25) / 0.45, 0, 1), e = f * f * (3 - 2 * f);
+        tu = g.tu0 + (HD.bucket[0] - g.tu0) * e;
+        tv = g.tv0 + (HD.bucket[1] - g.tv0) * e;
+      } else if (g.st === 'back') {
+        const e = clamp(g.k / 0.25, 0, 1);
+        tu = HD.bucket[0] + (tu - HD.bucket[0]) * e;
+        tv = HD.bucket[1] + (tv - HD.bucket[1]) * e;
+      }
+      g.tu = tu;
+      g.tv = tv;
+      // The hook swings on its line under the tip (held still while it hauls a duck).
+      if (g.st === 'haul' || g.st === 'back') {
+        g.hu += (tu - g.hu) * Math.min(1, dt * 12);
+        g.hv += (tv - g.hv) * Math.min(1, dt * 12);
+        g.vu = 0;
+        g.vv = 0;
+      } else {
+        const n = dt > 0.02 ? 2 : 1, h = dt / n;
+        for (let i = 0; i < n; i++) {
+          g.vu += (HD.omega2 * (tu - g.hu) - HD.damp * g.vu) * h;
+          g.vv += (HD.omega2 * (tv - g.hv) - HD.damp * g.vv) * h;
+          g.hu += g.vu * h;
+          g.hv += g.vv * h;
+        }
+      }
+      const top = HD.water + HD.hang;
+      switch (g.st) {
+        case 'aim':
+          g.hy = top;
+          if (live && (s.pressed('fire') || s.pressed('jump') || s.pressed('interact'))) {
+            g.st = 'dip';
+            g.k = 0;
+            s.sound('whoosh', { gain: 0.15 });
+          }
+          break;
+        case 'dip':
+          g.hy = top - (top - HD.water - 0.02) * clamp(g.k / HD.dip, 0, 1);
+          if (g.k >= HD.dip) this.dipped(g, s);
+          break;
+        case 'up':
+          g.hy = HD.water + 0.02 + (top - HD.water - 0.02) * clamp(g.k / 0.25, 0, 1);
+          if (g.k >= 0.35) {
+            g.st = 'aim';
+            g.k = 0;
+          }
+          break;
+        case 'haul': {
+          // Up out of the water, across to the bucket, and in.
+          const lift = clamp(g.k / 0.25, 0, 1);
+          g.hy = HD.water + 0.02 + (KERB + 1.62 - HD.water) * lift * (2 - lift);
+          if (g.k >= 0.75) this.bucketed(g, s);
+          break;
+        }
+        case 'back':
+          g.hy = KERB + 1.62 + (top - KERB - 1.62) * clamp(g.k / 0.25, 0, 1);
+          if (g.k >= 0.25) {
+            g.st = 'aim';
+            g.k = 0;
+          }
+          break;
+      }
+    },
+
+    /** The hook's in the water: is a loop on it? */
+    dipped(g, s) {
+      let best = null, bd = 1e9;
+      for (const d of this.ducks) {
+        if (d.state !== 'swim' || d.t < 0.3) continue;
+        const dd = Math.hypot(d.lu - g.hu, d.lv - g.hv);
+        if (dd < bd) {
+          bd = dd;
+          best = d;
+        }
+      }
+      if (best && bd < HD.loop[best.kind]) {
+        best.state = 'hooked';
+        best.t = 0;
+        g.duck = best;
+        g.st = 'haul';
+        g.k = 0;
+        g.tu0 = g.tu;
+        g.tv0 = g.tv;
+        s.sound('splash', { gain: 0.35 });
+        s.sound('pop', { gain: 0.5 });
+        this.kit.pop(best.u, HD.water + 0.35, best.v, 'Hooked!', best.kind === 'gold' ? 'gold' : '');
+      } else {
+        g.st = 'up';
+        g.k = 0;
+        s.sound('splash', { gain: 0.3 });
+        this.kit.burst(g.hu, HD.water + 0.02, g.hv, 0x9fdcf5, 6);
+        if (best && bd < 0.16) this.kit.pop(g.hu, HD.water + 0.3, g.hv, 'So close!', 'bad');
+      }
+    },
+
+    /** The hooked duck drops in the bucket: points. */
+    bucketed(g, s) {
+      const d = g.duck;
+      g.duck = null;
+      g.st = 'back';
+      g.k = 0;
+      if (!d) return;
+      d.state = 'gone';
+      d.t = 0;
+      const pts = HD.pts[d.kind];
+      g.score += pts;
+      g.ducks++;
+      if (d.kind === 'gold') g.golds++;
+      s.ui.stat('ducks', 'Ducks', g.ducks);
+      const [bu, bv] = HD.bucket;
+      this.kit.pop(bu, KERB + 1.5, bv, '+' + pts, d.kind === 'gold' ? 'gold' : '');
+      this.kit.burst(bu, KERB + 1.3, bv, d.kind === 'gold' ? 0xffd24a : 0xfff1a8, d.kind === 'gold' ? 16 : 7);
+      s.sound(d.kind === 'gold' ? 'win' : 'ding', { gain: 0.55 });
+    },
+
+    after(dt, g, s) {
+      // A duck on the hook at the whistle still goes in the bucket (and counts).
+      this.pool(dt);
+      this.move(dt, g, s, false);
+      this.place(g);
+    },
+
+    place(g) {
+      const kit = this.kit;
+      for (const d of this.ducks) {
+        if (d.state === 'gone') {
+          kit.hide(this.duckMesh, d.i);
+          continue;
+        }
+        if (d.state === 'hooked' && g) {
+          // Hanging by its loop from the hook, swinging a little.
+          kit.set(this.duckMesh, d.i, g.hu, g.hy - 0.21, g.hv, Math.sin(d.t * 9) * 0.25, d.yaw + d.t * 2, 0);
+          continue;
+        }
+        const plop = d.t < 0.3 ? (1 - d.t / 0.3) * 0.5 : 0;
+        const bob = Math.sin(this.poolT * 2.3 + d.i * 2.1) * 0.006;
+        kit.set(this.duckMesh, d.i, d.u, HD.water + bob + plop, d.v, Math.sin(this.poolT * 1.7 + d.i) * 0.05, d.yaw, Math.sin(this.poolT * 2.1 + d.i * 0.7) * 0.06);
+      }
+      this.duckMesh.instanceMatrix.needsUpdate = true;
+      if (!this.caneOn || !g) return;
+      // The cane from Jay's hands to the tip over the hook; the line down to the hook.
+      const [hu, hy, hv] = HD.hands;
+      const tu = g.tu, tv = g.tv, ty = Math.max(HD.tip, g.hy + 0.2);
+      this.rod(0, hu, hy, hv, tu, ty, tv, 0.03);
+      this.rod(1, tu, ty, tv, g.hu, g.hy + 0.07, g.hv, 0.006);
+      this.cane.part(2, g.hu, g.hy + 0.035, g.hv, 0.012, 0.07, 0.012, 0, 0, 0);
+      this.cane.part(3, g.hu + 0.018, g.hy + 0.004, g.hv, 0.045, 0.012, 0.012, 0, 0, 0.5);
+      this.cane.done();
+    },
+
+    /** Box i of the cane set as a rod from a to b. */
+    rod(i, au, ay, av, bu, by, bv, w) {
+      const d = _hdD.set(bu - au, by - ay, bv - av);
+      const len = Math.max(0.001, d.length());
+      _hdQ.setFromUnitVectors(_hdY, d.multiplyScalar(1 / len));
+      this.cane.partQ(i, (au + bu) / 2, (ay + by) / 2, (av + bv) / 2, w, len, w, _hdQ);
+    },
+
+    idleGame(dt) {
+      this.pool(dt);
+      this.place(null);
+    },
+  });
+
+  // ======================================================== BOARDWALK HOOPS
+  // A hoop on a backboard sliding along a rail at the back of the booth ('hoops', 8 wide, 6 deep). Every throw
+  // tops out just under the canopy; the power sets how deep it goes, the aim where across. The hoop keeps still
+  // for the first few seconds, then slides, faster and faster.
+  const HO = {
+    seconds: 45,
+    ring: { y: KERB + 2.05, v: -1.95, R: 0.23, tube: 0.016 },
+    board: { v: -2.3, hw: 0.56, y0: KERB + 1.88, y1: KERB + 2.72 }, // the backboard's face and its size
+    rail: 2.2, //              the hoop slides u -rail..rail
+    still: 6, //               seconds before it starts to slide
+    rb: 0.115, //              the ball
+    hand: [0.16, KERB + 1.6, 2.95], // where a throw leaves Jay's hands
+    peak: KERB + 3.05, //      every throw's top (just under the canopy)
+    depth: 0.8, //             metres deeper per unit of power (0.5 is a throw to the ring)
+    sweep: 1.3, //             seconds for the power to run from one end to the other
+    pts: 20, //                a basket (a swish, touching nothing, 10 more)
+    swish: 10,
+    balls: 6,
+    g: 9.81,
+    back: -2.74, //            the back wall, the side walls, the floor
+    side: 3.8,
+    floor: KERB + 0.02,
+  };
+
+  /** The hoop's place across the rail at go time t (still, then sliding faster). */
+  function hoopAt(t) {
+    if (t < HO.still) return 0;
+    const x = t - HO.still;
+    // The phase: a slow start, then up to about 1.3 m/s along the rail.
+    const ph = 0.35 * x + 0.0045 * x * x;
+    return Math.sin(ph) * HO.rail;
+  }
+
+  function basketballGeometry() {
+    // Orange, with dark seams round the middle and over the top.
+    const r = HO.rb;
+    const geo = new THREE.IcosahedronGeometry(r, 2);
+    const n = geo.attributes.position.count;
+    const p = geo.attributes.position.array;
+    const cols = new Float32Array(n * 3);
+    const o = new THREE.Color(0xe8661c), k = new THREE.Color(0x3a1a0a);
+    for (let i = 0; i < n; i++) {
+      const seam = Math.abs(p[i * 3]) < r * 0.12 || Math.abs(p[i * 3 + 1]) < r * 0.12;
+      const c = seam ? k : o;
+      cols[i * 3] = c.r;
+      cols[i * 3 + 1] = c.g;
+      cols[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    return geo;
+  }
+
+  function hoopGeometry() {
+    // At u = 0 (the mesh slides): the backboard, the bracket, the ring and the net; an arm back to the rail.
+    const g = new VH.GeometryBuilder({});
+    const R = HO.ring, B = HO.board;
+    const W = VH.col(0xffffff), Rd = VH.col(0xe0403a), O = VH.col(0xff7a1c), N = VH.col(0xf6f1e4), M = VH.col(0x8a96a3);
+    g.box(-B.hw, B.y0, B.v - 0.04, B.hw, B.y1, B.v, W);
+    // A red frame round the board, and the small square over the ring.
+    g.box(-B.hw, B.y1 - 0.04, B.v, B.hw, B.y1, B.v + 0.005, Rd);
+    g.box(-B.hw, B.y0, B.v, B.hw, B.y0 + 0.04, B.v + 0.005, Rd);
+    g.box(-B.hw, B.y0, B.v, -B.hw + 0.04, B.y1, B.v + 0.005, Rd);
+    g.box(B.hw - 0.04, B.y0, B.v, B.hw, B.y1, B.v + 0.005, Rd);
+    g.box(-0.2, R.y + 0.02, B.v, 0.2, R.y + 0.05, B.v + 0.006, Rd);
+    g.box(-0.2, R.y + 0.32, B.v, 0.2, R.y + 0.35, B.v + 0.006, Rd);
+    g.box(-0.2, R.y + 0.02, B.v, -0.17, R.y + 0.35, B.v + 0.006, Rd);
+    g.box(0.17, R.y + 0.02, B.v, 0.2, R.y + 0.35, B.v + 0.006, Rd);
+    g.box(-0.05, R.y - 0.03, B.v, 0.05, R.y + 0.01, R.v - R.R + 0.01, O); // the bracket
+    // The ring: short boxes round a circle.
+    const n = 20;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * TAU, a1 = ((i + 1) / n) * TAU;
+      const x0 = Math.cos(a0) * R.R, z0 = Math.sin(a0) * R.R, x1 = Math.cos(a1) * R.R, z1 = Math.sin(a1) * R.R;
+      g.box(Math.min(x0, x1) - R.tube, R.y - R.tube, R.v + Math.min(z0, z1) - R.tube, Math.max(x0, x1) + R.tube, R.y + R.tube, R.v + Math.max(z0, z1) + R.tube, O);
+    }
+    // The net: strands from the ring down to a narrower loop, and two hoops of cord.
+    const m = 12;
+    for (let i = 0; i < m; i++) {
+      const a = (i / m) * TAU;
+      for (let k = 0; k < 4; k++) {
+        const f0 = k / 4, f1 = (k + 1) / 4;
+        const r0 = R.R * (1 - 0.35 * f0), r1 = R.R * (1 - 0.35 * f1);
+        const xm = Math.cos(a) * (r0 + r1) / 2, zm = Math.sin(a) * (r0 + r1) / 2;
+        g.box(xm - 0.006, R.y - 0.4 * f1, R.v + zm - 0.006, xm + 0.006, R.y - 0.4 * f0, R.v + zm + 0.006, N);
+      }
+    }
+    for (const f of [0.45, 0.95]) {
+      const r = R.R * (1 - 0.35 * f), y = R.y - 0.4 * f;
+      for (let i = 0; i < m; i++) {
+        const a0 = (i / m) * TAU, a1 = ((i + 1) / m) * TAU;
+        const x0 = Math.cos(a0) * r, z0 = Math.sin(a0) * r, x1 = Math.cos(a1) * r, z1 = Math.sin(a1) * r;
+        g.box(Math.min(x0, x1) - 0.005, y - 0.005, R.v + Math.min(z0, z1) - 0.005, Math.max(x0, x1) + 0.005, y + 0.005, R.v + Math.max(z0, z1) + 0.005, N);
+      }
+    }
+    // The carriage on the rail behind.
+    g.box(-0.3, KERB + 2.2, HO.back + 0.02, 0.3, KERB + 2.38, B.v - 0.04, M);
+    return g.build();
+  }
+
+  decorate((world, K) => {
+    const put = deco(world, K, 'hoops');
+    // A court: wooden floor with a painted key; a night-blue wall with stars; the rail the hoop runs on.
+    put('wood', -3.8, KERB + 0.02, -2.74, 3.8, KERB + 0.04, 2.4, 0xc8955a);
+    put('prop', -1.0, KERB + 0.04, -2.74, -0.94, KERB + 0.045, 0.2, 0xffffff);
+    put('prop', 0.94, KERB + 0.04, -2.74, 1.0, KERB + 0.045, 0.2, 0xffffff);
+    put('prop', -1.0, KERB + 0.04, 0.14, 1.0, KERB + 0.045, 0.2, 0xffffff);
+    put('prop', -3.85, KERB + 0.04, -2.75, 3.85, KERB + 3.2, -2.71, 0x1b2a5e);
+    for (let i = 0; i < 26; i++) {
+      const u = -3.6 + hash(i + 40) * 7.2, y = KERB + 0.6 + hash(i + 60) * 2.5, sz = 0.03 + hash(i + 80) * 0.04;
+      put('screen', u - sz, y - sz, -2.71, u + sz, y + sz, -2.7, i % 3 ? 0xfff1a8 : 0xffffff);
+    }
+    put('prop', -3.8, KERB + 2.24, -2.71, 3.8, KERB + 2.34, -2.62, 0x8a96a3);
+    for (const u of [-3.0, 0, 3.0]) put('prop', u - 0.05, KERB + 2.18, -2.71, u + 0.05, KERB + 2.4, -2.6, 0x5a6470);
+    // The ball rack on the counter, by Jay's left hand.
+    put('wood', -1.3, KERB + 1.04, 2.5, -0.5, KERB + 1.1, 2.95, 0x6b4a32);
+    K.wantSign('hoops_board', ['BASKET 20 · SWISH 30', 'The hoop moves after 6 seconds'], 0xff8a3c, 0xffffff);
+    K.QUADS.push(['hoops_board', put.F.wx(-2.4, -2.68), KERB + 1.2, put.F.wz(-2.4, -2.68), put.F.yaw, 2.2, 0.55]);
+  });
+
+  const _hoN = new THREE.Vector3();
+
+  Carnival.stall({
+    id: 'hoops',
+    name: 'Boardwalk Hoops',
+    booth: 'hoops',
+    tagline: 'Forty-five seconds. Sink as many as you can.',
+    price: 3,
+    unit: 'points',
+    stand: [0, 3.35],
+    cam: [0.75, KERB + 2.45, 6.4, 0, KERB + 1.85, -1.9, 50],
+    seconds: HO.seconds,
+    holder: [-3.0, 1.6, 0.4],
+    tint: 4,
+    howto: [
+      'Move the ring marker over the hoop. Hold to swing the power; let go in the middle for a throw that reaches the ring.',
+      'A basket is 20 points; a swish that touches nothing is 30.',
+      'The hoop starts to slide after six seconds, faster and faster: aim where it will be, not where it is.',
+    ],
+    keys: 'Mouse / A D / left stick  aim   ·   Hold click / Space / RT  power, let go to throw',
+    prize: 'One for every 15 points',
+    barks: ['Boardwalk Hoops! Sink it, win it!', 'Three dollars, all the balls you can throw!', 'Swish pays thirty! Step up, shooter!'],
+    statKeys: { baskets: 1 },
+
+    tickets(score) {
+      return score / 15;
+    },
+
+    verdict(g) {
+      return g.baskets + (g.baskets === 1 ? ' basket' : ' baskets') + ' from ' + g.shots + (g.swishes ? ', ' + g.swishes + (g.swishes === 1 ? ' swish' : ' swishes') : '');
+    },
+
+    build(kit) {
+      this.hoop = kit.single(hoopGeometry());
+      this.ballMesh = kit.mesh(basketballGeometry(), HO.balls + 1);
+      this.balls = [];
+      for (let i = 0; i < HO.balls; i++) this.balls.push({ i, state: 'off', u: 0, y: 0, v: 0, vu: 0, vy: 0, vv: 0, t: 0, rx: 0, ry: 0, touched: false, scored: false });
+      this.hu = 0;
+      this.idleT = 0;
+      this.HO = HO;
+      this.hoopAt = hoopAt;
+      this.reset();
+    },
+
+    reset() {
+      for (const b of this.balls) b.state = 'off';
+      this.hu = 0;
+      this.next = 0;
+      this.place(null);
+    },
+
+    begin(g, s) {
+      g.cx = 0;
+      g.power = 0;
+      g.dir = 1;
+      g.charging = false;
+      g.ready = 0.3;
+      g.last = null;
+      g.shots = 0;
+      g.baskets = 0;
+      g.swishes = 0;
+      g.streak = 0;
+      s.ui.stat('baskets', 'Baskets', 0);
+    },
+
+    pose(g) {
+      // The ball up in both hands; drawn back over the head while the power runs; arms up after a throw.
+      const k = g.charging ? 0.6 + 0.4 * g.power : 0, f = clamp(1 - (g.since || 9) / 0.35, 0, 1);
+      return { w: 1, shoulderL: 1.5 + k * 0.9 + f * 0.6, shoulderR: 1.5 + k * 0.9 + f * 0.6, elbowL: 1.3 + k * 0.5 - f * 1.0, elbowR: 1.3 + k * 0.5 - f * 1.0, lean: 0.05 - k * 0.12 + f * 0.1, twist: g.cx * 0.06, splayL: 0.18, splayR: 0.18 };
+    },
+
+    play(dt, g, s) {
+      this.kit.cursor(g, dt, 2.4, -3.2, 3.2, -1, 1, 2.2);
+      this.hu = hoopAt(g.t);
+      g.ready -= dt;
+      g.since = (g.since || 9) + dt;
+      const hold = s.down('fire') || s.down('jump');
+      if (g.ready <= 0) {
+        if (hold) {
+          if (!g.charging) {
+            g.charging = true;
+            g.power = 0;
+            g.dir = 1;
+          }
+          // The power runs out and back.
+          g.power += (g.dir * dt) / HO.sweep;
+          if (g.power >= 1) {
+            g.power = 2 - g.power;
+            g.dir = -1;
+          } else if (g.power <= 0) {
+            g.power = -g.power;
+            g.dir = 1;
+          }
+        } else if (g.charging) {
+          g.charging = false;
+          this.shoot(g, s);
+        }
+      }
+      // The gauge: the power, with a tick where the last throw was.
+      const ui = Carnival.Midway.ui;
+      if (g.charging) ui.gauge(g.power, g.last === null ? -1 : g.last - 0.008, g.last === null ? -1 : g.last + 0.008, 'Power');
+      else ui.gauge(null);
+      this.flight(dt, g, s);
+      this.kit.reticle(g.cx, HO.ring.y, HO.ring.v, 'hole');
+      this.place(g);
+    },
+
+    after(dt, g, s) {
+      Carnival.Midway.ui.gauge(null);
+      this.hu = hoopAt(g.t);
+      this.flight(dt, g, s);
+      this.place(g);
+    },
+
+    /** Let go: a ball from Jay's hands to the top of the arc and down to the depth the power says. */
+    shoot(g, s) {
+      const b = this.balls.find((x) => x.state === 'off') || this.balls.reduce((a, x) => (x.t > a.t ? x : a), this.balls[0]);
+      const [u0, y0, v0] = HO.hand;
+      const tu = g.cx, tv = HO.ring.v - (g.power - 0.5) * HO.depth;
+      const up = Math.sqrt(2 * HO.g * (HO.peak - y0)), tUp = up / HO.g, tDown = Math.sqrt((2 * (HO.peak - HO.ring.y)) / HO.g), T = tUp + tDown;
+      b.state = 'fly';
+      b.t = 0;
+      b.u = u0;
+      b.y = y0;
+      b.v = v0;
+      b.vu = (tu - u0) / T;
+      b.vy = up;
+      b.vv = (tv - v0) / T;
+      b.touched = false;
+      b.scored = false;
+      b.rest = 0;
+      g.last = g.power;
+      g.shots++;
+      g.ready = 0.45;
+      g.since = 0;
+      s.sound('whoosh', { gain: 0.3 });
+    },
+
+    /** The balls in the air: gravity, the ring, the board, the walls and the floor; a basket when one drops through. */
+    flight(dt, g, s) {
+      const R = HO.ring, B = HO.board, rb = HO.rb, n = 6, h = dt / n;
+      for (const b of this.balls) {
+        if (b.state === 'off') continue;
+        b.t += dt;
+        b.rx += dt * 9;
+        if (b.state === 'rest') {
+          b.rest += dt;
+          if (b.rest > 1.2) b.state = 'off';
+          continue;
+        }
+        for (let k = 0; k < n; k++) {
+          const py = b.y;
+          b.vy -= HO.g * h;
+          b.u += b.vu * h;
+          b.y += b.vy * h;
+          b.v += b.vv * h;
+          // Through the ring, going down: a basket.
+          const du = b.u - this.hu, dv = b.v - R.v, rho = Math.hypot(du, dv);
+          if (!b.scored && py > R.y && b.y <= R.y && rho < R.R) {
+            b.scored = true;
+            b.vu *= 0.25;
+            b.vv *= 0.25;
+            b.vy *= 0.5;
+            if (g) this.basket(g, s, b);
+          }
+          // The ring: the nearest point on its circle.
+          if (rho > 1e-4 && Math.abs(b.y - R.y) < rb + R.tube + 0.02) {
+            const cu = this.hu + (du / rho) * R.R, cv = R.v + (dv / rho) * R.R;
+            const nu = b.u - cu, ny = b.y - R.y, nv = b.v - cv, d = Math.hypot(nu, ny, nv), min = rb + R.tube;
+            if (d < min && d > 1e-5) {
+              const ku = nu / d, ky = ny / d, kv = nv / d;
+              b.u = cu + ku * min;
+              b.y = R.y + ky * min;
+              b.v = cv + kv * min;
+              const vn = b.vu * ku + b.vy * ky + b.vv * kv;
+              if (vn < 0) {
+                b.vu -= 1.55 * vn * ku;
+                b.vy -= 1.55 * vn * ky;
+                b.vv -= 1.55 * vn * kv;
+                if (!b.touched && s && -vn > 0.8) s.sound('clank', { gain: 0.25 });
+              }
+              b.touched = true;
+            }
+          }
+          // The backboard.
+          if (b.v - rb < B.v && b.vv < 0 && b.v > B.v - 0.3 && Math.abs(b.u - this.hu) < B.hw + rb * 0.5 && b.y > B.y0 - rb * 0.5 && b.y < B.y1 + rb * 0.5) {
+            b.v = B.v + rb;
+            b.vv = -b.vv * 0.6;
+            b.touched = true;
+            if (s) s.sound('thud', { gain: 0.3 });
+          }
+          // The back wall, the sides, the floor.
+          if (b.v - rb < HO.back && b.vv < 0) {
+            b.v = HO.back + rb;
+            b.vv = -b.vv * 0.5;
+          }
+          if (Math.abs(b.u) + rb > HO.side && b.u * b.vu > 0) b.vu = -b.vu * 0.5;
+          if (b.y - rb < HO.floor && b.vy < 0) {
+            b.y = HO.floor + rb;
+            b.vy = -b.vy * 0.55;
+            b.vu *= 0.8;
+            b.vv *= 0.8;
+            if (b.vy < 0.6) {
+              b.state = 'rest';
+              b.rest = 0;
+              break;
+            }
+          }
+          // Back towards the counter: it stops there.
+          if (b.v > 2.3 && b.vv > 0) b.vv = -b.vv * 0.3;
+        }
+      }
+    },
+
+    basket(g, s, b) {
+      const swish = !b.touched;
+      const pts = HO.pts + (swish ? HO.swish : 0);
+      g.score += pts;
+      g.baskets++;
+      if (swish) g.swishes++;
+      s.ui.stat('baskets', 'Baskets', g.baskets);
+      this.kit.pop(this.hu, HO.ring.y + 0.35, HO.ring.v, swish ? '+' + pts + ' swish!' : '+' + pts, swish ? 'gold' : '');
+      this.kit.burst(this.hu, HO.ring.y - 0.1, HO.ring.v, swish ? 0xffd24a : 0xfff1a8, swish ? 16 : 8);
+      s.sound('ding', { gain: 0.5 });
+      if (swish) s.sound('cheer', { gain: 0.3 });
+    },
+
+    place(g) {
+      const kit = this.kit;
+      this.hoop.position.x = this.hu;
+      for (const b of this.balls) {
+        if (b.state === 'off') kit.hide(this.ballMesh, b.i);
+        else kit.set(this.ballMesh, b.i, b.u, b.y, b.v, b.rx, b.rx * 0.3, 0, b.state === 'rest' ? Math.max(0.01, 1 - Math.max(0, b.rest - 0.8) / 0.4) : 1);
+      }
+      // The next ball, in Jay's hands (drawn back over his head while the power runs).
+      const H = HO.balls;
+      if (!g || g.ready > 0) kit.hide(this.ballMesh, H);
+      else {
+        const k = g.charging ? 0.5 + 0.5 * g.power : 0;
+        kit.set(this.ballMesh, H, HO.hand[0] - 0.1, HO.hand[1] - 0.05 + k * 0.32, HO.hand[2] + 0.12 + k * 0.12, 0, 0, 0);
+      }
+      this.ballMesh.instanceMatrix.needsUpdate = true;
+    },
+
+    idleGame(dt) {
+      // The hoop glides to and fro while nobody plays.
+      this.idleT += dt;
+      this.hu = Math.sin(this.idleT * 0.3) * HO.rail * 0.6;
+      this.hoop.position.x = this.hu;
     },
   });
 })();

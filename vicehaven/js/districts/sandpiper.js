@@ -129,8 +129,10 @@
     const lx = x + h - 0.1;
     ctx.prop.box(lx - 0.08, y + 1.0, z - 0.08, lx + 0.08, y + 1.35, z + 0.08, col(0x3f454c));
     ctx.prop.cylinder(lx, y + 1.35, z, 0.36, 0.36, 0.62, 12, col(0x2a2d33), true);
+    ctx.prop.box(lx - 0.38, y + 1.3, z - 0.38, lx + 0.42, y + 1.35, z + 0.38, col(0x3f454c), { bottom: true }); // its mounting plate
     ctx.screen.box(lx + 0.3, y + 1.42, z - 0.27, lx + 0.4, y + 1.9, z + 0.27, VH.col(0xfff6d8, 2.6));
-    world.physics.addBox(lx - 0.38, y + 1.0, z - 0.38, lx + 0.42, y + 1.97, z + 0.38, 'metal', F().ALL);
+    world.physics.addBox(lx - 0.38, y + 1.3, z - 0.38, lx + 0.42, y + 1.97, z + 0.38, 'metal', F().ALL);
+    world.physics.addBox(lx - 0.08, y + 1.0, z - 0.08, lx + 0.08, y + 1.3, z + 0.08, 'metal', F().ALL);
     // The stairs, up from the sand to the deck's south edge.
     W.stairs(world, ctx.wood, x + 1.3, z + h + TW.stairLen, 'n', TW.stairLen, 1.6, KERB, y, wood, { railHex: white, tag: 'plank' });
     // The tower's number on the hut's landward side (towards the promenade).
@@ -719,6 +721,9 @@
     name: 'Sandpiper Beach',
     plots: ['sandpiper_beach', 'skate_park'],
     build(world, layout) {
+      return VH.SouthKit.withUndersides(() => this._build(world, layout)); // canopies, ceilings and lamps show from below
+    },
+    _build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !VH.WNKit || !VH.SouthKit) return;
       if (layout.plots.sandpiper_beach) {

@@ -648,6 +648,8 @@
       // 3.0: the new districts set their own traffic (a quiet suburb, a busy strip).
       const dist = this.world && this.world.districtAt(focus.x, focus.z);
       this._areaK = dist && dist.v3 && dist.ambient && dist.ambient.cars ? dist.ambient.cars : 1;
+      // 4.0: and their own mix of vehicles (vans by the airport, buses in town; types that don't exist are skipped).
+      this._mix = (dist && dist.v4 && dist.ambient && dist.ambient.mix) || null;
       const list = this.vehicles.list;
       let count = 0;
       const last = this.vehicles.lastPlayerCar;
@@ -682,7 +684,7 @@
           }
         }
         if (!clear) continue;
-        this.spawnAt(lp);
+        this.spawnAt(lp, this._mix ? weightedPick(this._mix) : undefined);
         count++;
       }
     }

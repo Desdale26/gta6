@@ -36,8 +36,55 @@
 
   /** A box drawn and solid, with its collider starting where it is drawn (for things in the air). */
   function air(world, surf, x0, y0, z0, x1, y1, z1, hex, tag, flags, opts) {
-    surf.box(x0, y0, z0, x1, y1, z1, VH.col(hex), opts);
+    // Off the ground its underside shows (GeometryBuilder.box leaves bottoms out by default).
+    surf.box(x0, y0, z0, x1, y1, z1, VH.col(hex), y0 > KERB + 0.3 ? Object.assign({ bottom: true }, opts) : opts);
     world.physics.addBox(x0, y0 <= KERB + 0.01 ? 0 : y0, z0, x1, y1, z1, tag || 'building', flags === undefined ? F().ALL : flags);
+  }
+
+  /** The underside of an oriented box at height y (GeometryBuilder leaves box bottoms out). */
+  function under(surf, cx, cz, hx, hz, yaw, y, color) {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const P = (lx, lz) => [cx + lx * c + lz * s, y, cz - lx * s + lz * c];
+    surf.quad(P(-hx, -hz), P(hx, -hz), P(hx, hz), P(-hx, hz), [0, -1, 0], color);
+  }
+
+  /** A downward-facing disc at height y: the bottom cap of a cylinder hanging in the air. */
+  function capUnder(surf, cx, y, cz, r, seg, color) {
+    surf.cylinder(cx, y - 0.002, cz, 0, r, 0.002, seg || 12, color, false);
+  }
+
+  /**
+   * Run a district's build with undersides on: GeometryBuilder leaves the
+   * bottom face of a box (and of an oriented box or an upright cylinder) out,
+   * which is right for things standing on the ground but shows the sky
+   * through every canopy, ceiling, light strip, catwalk and parasol seen from
+   * below. While `fn` runs, anything that starts above knee height gets its
+   * underside drawn (pass bottom: false to a box to keep it out).
+   */
+  function withUndersides(fn) {
+    const GB = VH.GeometryBuilder && VH.GeometryBuilder.prototype;
+    if (!GB) return fn();
+    const LOW = KERB + 0.3;
+    const { box, orientedBox, cylinder } = GB;
+    GB.box = function (x0, y0, z0, x1, y1, z1, color, opts) {
+      if (y0 > LOW && (!opts || opts.bottom === undefined)) opts = Object.assign({}, opts, { bottom: true });
+      return box.call(this, x0, y0, z0, x1, y1, z1, color, opts);
+    };
+    GB.orientedBox = function (cx, cz, hx, hz, yaw, y0, y1, color, topColor) {
+      const r = orientedBox.apply(this, arguments);
+      if (y0 > LOW) under(this, cx, cz, hx, hz, yaw, y0, color);
+      return r;
+    };
+    GB.cylinder = function (cx, y0, cz, rBottom, rTop, h, segments, color) {
+      const r = cylinder.apply(this, arguments);
+      if (y0 > LOW && rBottom > 0.04 && h > 0.01) cylinder.call(this, cx, y0 - 0.002, cz, 0, rBottom, 0.002, segments, color, false);
+      return r;
+    };
+    try {
+      return fn();
+    } finally {
+      Object.assign(GB, { box, orientedBox, cylinder });
+    }
   }
 
   /** A flat face, its points turned so the normal points away from `inside`. */
@@ -113,5 +160,5 @@
     return pts;
   }
 
-  VH.SouthKit = { disc, drum, obox, air, face, profileRamp, quarterProfile };
+  VH.SouthKit = { disc, drum, obox, air, under, capUnder, withUndersides, face, profileRamp, quarterProfile };
 })();

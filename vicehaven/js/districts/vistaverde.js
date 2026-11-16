@@ -647,6 +647,9 @@
     name: 'Vista Verde',
     plots: ['verde_mall', 'vista_verde_school'],
     build(world, layout) {
+      return VH.SouthKit.withUndersides(() => this._build(world, layout)); // canopies, ceilings and lamps show from below
+    },
+    _build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !VH.WNKit || !VH.SouthKit) return;
       if (layout.plots.verde_mall) {

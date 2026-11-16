@@ -543,19 +543,40 @@
     ctx.prop.cylinder(x, KERB + h, z, r + 0.1, r * 0.25, r * 0.18, 24, col(0xb8bcc0), true);
     for (const yy of [h * 0.33, h * 0.66]) ctx.prop.cylinder(x, KERB + yy, z, r + 0.04, r + 0.04, 0.15, 24, col(0x9aa0a6), false);
     ctx.prop.cylinder(x, KERB + 0.4, z, r + 0.05, r + 0.05, 0.5, 24, col(i % 2 ? 0x2f7f6f : 0xd8a520), false);
-    // A stair wound up the side: treads with a rail; the low ones are solid blocks down to the ground.
-    const steps = 18;
+    // A stair wound up the side to the roof: treads (the low ones blocks down to the
+    // ground), a handrail on posts. You can climb it: a ramp per flight under the
+    // treads, a rail along the outside, and you come out on the rim.
+    const steps = 18, da = 1.6 / steps;
+    const at = (a, rr) => [x + Math.cos(a) * rr, z + Math.sin(a) * rr];
+    let prevPost = null;
     for (let k = 0; k < steps; k++) {
-      const a0 = -PI / 2 + (k / steps) * 1.6, yy = KERB + (h * (k + 1)) / steps;
-      const sx = x + Math.cos(a0) * (r + 0.5), sz = z + Math.sin(a0) * (r + 0.5);
-      if (yy < 2.6) {
-        S().obox(world, ctx.prop, sx, sz, 0.5, 0.38, -a0, KERB, yy, 0x8f969c, 'metal', F().SOLID | F().SHOTS);
-        continue;
-      }
-      ctx.prop.orientedBox(sx, sz, 0.5, 0.35, -a0, yy - 0.08, yy, col(0x8f969c));
-      ctx.prop.orientedBox(x + Math.cos(a0) * (r + 1.0), z + Math.sin(a0) * (r + 1.0), 0.03, 0.03, -a0, yy, yy + 1.0, col(0xd8a520));
+      const a0 = -PI / 2 + k * da, yy = KERB + (h * (k + 1)) / steps, yPrev = KERB + (h * k) / steps;
+      const [sx, sz] = at(a0, r + 0.5);
+      if (yy < 2.6) ctx.prop.orientedBox(sx, sz, 0.5, 0.38, -a0, KERB, yy, col(0x8f969c));
+      else ctx.prop.orientedBox(sx, sz, 0.5, 0.35, -a0, yy - 0.08, yy, col(0x8f969c));
+      const [px, pz] = at(a0, r + 0.97);
+      ctx.prop.orientedBox(px, pz, 0.03, 0.03, -a0, yy, yy + 1.0, col(0xd8a520));
+      if (prevPost) K().beam(ctx.prop, prevPost[0], prevPost[1] + 1.0, prevPost[2], px, yy + 1.0, pz, 0.05, 0xd8a520);
+      prevPost = [px, yy, pz];
+      // The flight up to this tread: from the last tread's centre (the ground before the first).
+      const [ax, az] = at(a0 - da, r + 0.5), dx = sx - ax, dz = sz - az, len = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
+      const low = yPrev < 2.6; // a flight over a block tread: solid to the ground
+      world.physics.addRamp((ax + sx) / 2, (az + sz) / 2, 0.5, len / 2 + 0.05, yaw, low ? 0 : yPrev - 0.4, yPrev, yy, 'metal', F().SOLID | F().SHOTS);
+      const [rx0, rz0] = at(a0 - da, r + 1.0), [rx1, rz1] = at(a0, r + 1.0);
+      world.physics.addOrientedBox((rx0 + rx1) / 2, (rz0 + rz1) / 2, 0.05, len / 2 + 0.06, yaw, low ? 0 : yPrev - 0.4, yy + 1.0, 'metal', F().ALL);
+      // The balustrade: a mesh panel under the handrail (what the rail collider is).
+      const pan = [[rx0, yPrev - 0.1, rz0], [rx1, yy - 0.1, rz1], [rx1, yy + 1.0, rz1], [rx0, yPrev + 1.0, rz0]];
+      S().face(ctx.prop, pan, col(0x5a5e63), [x, yy, z]);
+      S().face(ctx.prop, pan, col(0x5a5e63), [2 * rx1 - x, yy, 2 * rz1 - z]);
     }
-    ctx.screen.box(x - 0.3, KERB + h + r * 0.18, z - 0.3, x + 0.3, KERB + h + r * 0.18 + 0.4, z + 0.3, VH.col(0xfff0c8, 2.2));
+    // The roof: solid in steps a stride high, so you can walk up it to the lamp at the top.
+    const H = r * 0.18, R0 = r + 0.1, R1 = r * 0.25, n = Math.ceil(H / 0.42);
+    for (let k = 1; k <= n; k++) {
+      const ym = H * (k - 0.5) / n;
+      S().disc(world, x, z, R0 - (R0 - R1) * ym / H, KERB + h + H * (k - 1) / n, KERB + h + H * k / n, 'metal', F().ALL);
+    }
+    ctx.screen.box(x - 0.3, KERB + h + H, z - 0.3, x + 0.3, KERB + h + H + 0.4, z + 0.3, VH.col(0xfff0c8, 2.2));
+    world.physics.addBox(x - 0.3, KERB + h + H, z - 0.3, x + 0.3, KERB + h + H + 0.4, z + 0.3, 'metal', F().ALL);
   }
 
   function buildPower(world) {
@@ -834,7 +855,7 @@
   /** A shipping container (drawn with ribs, ends and doors) sitting at y. */
   function container(world, c, x0, x1, z, y, hex) {
     const hw = 1.22, h = 2.6;
-    c.prop.box(x0, y, z - hw, x1, y + h, z + hw, col(hex));
+    c.prop.box(x0, y, z - hw, x1, y + h, z + hw, col(hex), y > KERB + 0.3 ? { bottom: true } : undefined);
     const rib = VH.colMul(col(hex), 0.8);
     for (let rx = x0 + 0.3; rx < x1 - 0.2; rx += 0.6) for (const s of [-1, 1]) c.prop.box(rx, y + 0.1, Math.min(z + s * hw, z + s * (hw + 0.04)), rx + 0.12, y + h - 0.1, Math.max(z + s * hw, z + s * (hw + 0.04)), rib);
     c.prop.box(x1, y + 0.1, z - hw + 0.1, x1 + 0.04, y + h - 0.1, z + hw - 0.1, rib);
@@ -1372,6 +1393,9 @@
     name: 'Ironside',
     plots: ['ironside_scrapyard', 'ironside_power', 'ironside_railyard'],
     build(world, layout) {
+      return VH.SouthKit.withUndersides(() => this._build(world, layout)); // canopies, ceilings and lamps show from below
+    },
+    _build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !VH.WNKit || !VH.SouthKit) return;
       if (layout.plots.ironside_scrapyard) {

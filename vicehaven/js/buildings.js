@@ -803,12 +803,16 @@
     return yr;
   }
 
+  /** A round collider: eight thin boxes round the circle (a 16-sided shape within 1% of the drawn edge). */
+  function roundCollider(physics, x, z, r, y0, y1, tag) {
+    for (let k = 0; k < 8; k++) physics.addOrientedBox(x, z, r * 0.991, r * 0.197, (k * Math.PI) / 8, y0, y1, tag);
+  }
+
   /** A round hay bale standing on end (solid: Jay climbs it, cars stop). */
   function hayBale(ctx, x, z, y, s) {
     const r = 0.8 * (s || 1);
-    ctx.wood.cylinder(x, y, z, r, r, 1.2, 10, VH.col(0xd8be6a), true, VH.col(0xc9a94e));
-    ctx.physics.addOrientedBox(x, z, r * 0.9, r * 0.9, 0, y - 0.1, y + 1.2, 'crate');
-    ctx.physics.addOrientedBox(x, z, r * 0.9, r * 0.9, Math.PI / 4, y - 0.1, y + 1.2, 'crate');
+    ctx.propMatte.cylinder(x, y, z, r, r, 1.2, 10, VH.col(0xd8be6a), true, VH.col(0xc9a94e)); // (matte paint: the wood grain needs UVs a cylinder has not got)
+    roundCollider(ctx.physics, x, z, r, y - 0.1, y + 1.2, 'crate');
   }
 
   /** Farmhouse: one or two storeys under a pitched roof, a porch on the front, a lawn and a white fence. */
@@ -934,7 +938,7 @@
       box(mid - 1.1, mid + 1.1, eave - 0.6, eave + 1.4, trim);
       box(mid - 0.9, mid + 0.9, eave - 0.4, eave + 1.2, VH.col(0x3a2a20));
     });
-    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, y1);
+    addCollider(ctx, r.x0 - 0.2, r.z0 - 0.2, r.x1 + 0.2, r.z1 + 0.2, y1); // (the corner boards and the doors stand proud of the walls)
     farmyard(ctx, { minX: yard.x0, maxX: yard.x1, minZ: yard.z0, maxZ: yard.z1, front: lot.front, district: lot.district }, rng, r);
     return y2;
   }
@@ -980,8 +984,11 @@
       ctx.prop.cylinder(cx, KERB, cz, rad, rad, h, 14, steel, false);
       ctx.prop.cylinder(cx, KERB + h, cz, rad * 1.02, 0.4, rad * 0.7, 14, VH.colMul(steel, 0.9), true);
       for (let y = KERB + 3; y < h; y += 3) ctx.prop.cylinder(cx, y, cz, rad + 0.06, rad + 0.06, 0.18, 14, VH.colMul(steel, 0.8), false);
-      ctx.prop.box(cx - 0.3, KERB, cz + (horiz ? -rad - 0.35 : 0), cx + 0.3, KERB + h, cz + (horiz ? -rad - 0.05 : 0.3), VH.col(0x6b6e72));
-      for (const yaw of [0, Math.PI / 4]) ctx.physics.addOrientedBox(cx, cz, rad * 0.93, rad * 0.93, yaw, 0, KERB + h + rad * 0.7, 'metal');
+      // The caged ladder up its side.
+      const lad = horiz ? [cx - 0.3, cz - rad - 0.35, cx + 0.3, cz - rad - 0.05] : [cx - rad - 0.35, cz - 0.3, cx - rad - 0.05, cz + 0.3];
+      ctx.prop.box(lad[0], KERB, lad[1], lad[2], KERB + h, lad[3], VH.col(0x6b6e72));
+      ctx.physics.addBox(lad[0], 0, lad[1], lad[2], KERB + h, lad[3], 'metal');
+      roundCollider(ctx.physics, cx, cz, rad + 0.06, 0, KERB + h + rad * 0.7, 'metal'); // (to the hoops' edge)
       top = Math.max(top, KERB + h + rad * 0.7);
     }
     // A machine shed by the street.

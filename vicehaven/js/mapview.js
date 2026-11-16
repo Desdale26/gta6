@@ -1784,7 +1784,7 @@
       const plans = [];
       const spots = [];
       for (const d of districts) {
-        const blocks = lay.blocks.concat(lay.blocks3 || []).filter((b) => b.district && b.district.id === d.id);
+        const blocks = lay.blocks.concat(lay.blocks3 || []).filter((b) => b.district && b.district.id === d.id && !b.strip); // (4.0: not the strips by the edges)
         if (!blocks.length) continue;
         let cx = 0;
         let cz = 0;

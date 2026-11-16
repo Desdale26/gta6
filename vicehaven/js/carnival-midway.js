@@ -75,7 +75,7 @@
     hoops: { x: 848, z: -42.6, yaw: 0, w: 8, d: 6, a: 0xff8a3c, b: 0xffffff, sign: ['BOARDWALK HOOPS', 'Sink it, win it'] },
     shack: { x: 857.5, z: -42.6, yaw: 0, w: 9, d: 6, a: 0xb45cff, b: 0xffd24a, sign: ['PRIZE SHACK', 'Tickets in · Prizes out'] },
     crab: { x: 815.4, z: -30.5, yaw: PI / 2, w: 7, d: 6, a: 0xff5c95, b: 0xffffff, sign: ['CRAB BONKERS', 'Bonk a crab · Spare the gulls'] },
-    duck: { x: 815.4, z: -20.5, yaw: PI / 2, w: 9, d: 6, a: 0xffd24a, b: 0x2fb7b0, sign: ['HOOK-A-DUCK', 'Gold ducks pay double'] },
+    duck: { x: 815.4, z: -20.5, yaw: PI / 2, w: 9, d: 6, a: 0xffd24a, b: 0x2fb7b0, sign: ['HOOK-A-DUCK', 'Hook a duck · Gold ones pay big'] },
   };
   // Stalls with no booth (their own frames): the strongman's bell, the claw machine.
   const STANDS = {

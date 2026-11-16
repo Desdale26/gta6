@@ -43,7 +43,7 @@
         const n = r.lanesPerDirection;
         r.laneWidth = (half - r.median / 2 - 0.5) / n;
         r.speedLimit = r.width >= 18 ? 17.5 : 13.5;
-        r.parking = n === 1;
+        r.parking = n === 1 && r.width >= 14; // (4.0: no parking on the narrow country lanes)
       }
       this._markRoadEnds(layout);
     }

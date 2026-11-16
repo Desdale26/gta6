@@ -670,6 +670,8 @@
   // after the 3.0 ones (ids f_<district>_<n>, RNG 'vicehaven-4'); the
   // districts are flagged v3 too, so everything that knows about the new
   // districts (traffic, crowds, places, the maps) treats them alike.
+  // ambient.mix is the traffic there ([vehicle type, weight]; a type that
+  // doesn't exist yet, a bus or a tractor, is skipped until it does).
   // docs/WORLD.md has the plan as built.
   // ===================================================================
   const FILL_DISTRICTS = [
@@ -690,7 +692,7 @@
         accents: [0xffffff, 0x2f5d50, 0x7a2f2a, 0xe0b12e],
       },
       trees: { type: 'tree', spacing: 34, chance: 0.6 },
-      ambient: { crowd: 'light', traffic: 'light', peds: 0.15, cars: 0.3 },
+      ambient: { crowd: 'light', traffic: 'light', peds: 0.15, cars: 0.3, mix: [['mesa', 10], ['porter', 10], ['hauler', 8], ['beater', 8], ['scout', 6], ['halcyon', 8], ['pipit', 6], ['tractor', 12]] },
     },
     {
       id: 'gateway', name: 'Gateway Park', tagline: 'Cargo, car hire and a very long walk to the terminal',
@@ -710,12 +712,13 @@
         accents: [0x1fa3a3, 0xe06a1a, 0x2b4a6b, 0xd8c070, 0xb03a2e],
       },
       trees: { type: 'treeB', spacing: 36, chance: 0.6 },
-      ambient: { crowd: 'industrial', traffic: 'industrial', peds: 0.4, cars: 0.9 },
+      ambient: { crowd: 'industrial', traffic: 'industrial', peds: 0.4, cars: 0.9, mix: [['hauler', 14], ['porter', 14], ['cab', 12], ['halcyon', 16], ['pipit', 8], ['mesa', 6], ['tern', 6], ['bus', 6]] },
     },
     {
       id: 'lantern', name: 'Lantern Heights', tagline: 'Corner shops, conkers and a lake with ducks',
       // Between Halcyon University and the old city's north edge.
       rect: { minX: -640, maxX: -96, minZ: -680, maxZ: -392.01 },
+      rects: [{ minX: -640, maxX: -96, minZ: -680, maxZ: -392.01 }, { minX: -80, maxX: -60.01, minZ: -1100, maxZ: -655.01 }], // and the terraces along Coral Avenue
       lot: { min: 12, max: 22 }, alleyChance: 0.5, emptyLotChance: 0.05,
       archetypes: [
         { type: 'terrace', weight: 6, floors: [2, 3] },
@@ -728,7 +731,7 @@
         accents: [0xe7dcc8, 0x2f5d50, 0x7a2f2a, 0x2b4a6b, 0xc9a227, 0xffffff],
       },
       trees: { type: 'tree', spacing: 16, chance: 0.85 },
-      ambient: { crowd: 'residential', traffic: 'medium', peds: 1.2, cars: 0.8 },
+      ambient: { crowd: 'residential', traffic: 'medium', peds: 1.2, cars: 0.8, mix: [['halcyon', 22], ['pipit', 18], ['cab', 10], ['tern', 8], ['vireo', 4], ['porter', 6], ['bus', 8]] },
     },
     {
       id: 'southgate', name: 'Southgate', tagline: 'Buses, bargains and the big screen',
@@ -746,7 +749,7 @@
         accents: [0xffffff, 0xd8262e, 0x2a7de1, 0xe0b12e, 0x2f7f86],
       },
       trees: { type: 'treeB', spacing: 22, chance: 0.8 },
-      ambient: { crowd: 'market', traffic: 'heavy', peds: 1.3, cars: 1.0 },
+      ambient: { crowd: 'market', traffic: 'heavy', peds: 1.3, cars: 1.0, mix: [['halcyon', 20], ['pipit', 14], ['cab', 14], ['porter', 10], ['tern', 8], ['mesa', 6], ['bus', 14]] },
     },
     {
       id: 'redwater', name: 'Redwater', tagline: 'Fairways, ponies and a very slow tractor',
@@ -766,7 +769,7 @@
         accents: [0xffffff, 0x2f5d50, 0x7a2f2a, 0x3d6b8f],
       },
       trees: { type: 'tree', spacing: 24, chance: 0.8 },
-      ambient: { crowd: 'light', traffic: 'light', peds: 0.3, cars: 0.4 },
+      ambient: { crowd: 'light', traffic: 'light', peds: 0.3, cars: 0.4, mix: [['mesa', 12], ['scout', 10], ['porter', 8], ['halcyon', 12], ['pipit', 8], ['beater', 6], ['ironclad', 4], ['tractor', 8]] },
     },
     {
       id: 'palomacove', name: 'Paloma Cove', tagline: 'Toll paid, flip-flops on',
@@ -783,7 +786,7 @@
         accents: [0xffffff, 0x1f8a8a, 0xff6f91, 0xf0a030, 0x2a7de1],
       },
       trees: { type: 'palmTall', spacing: 20, chance: 0.9 },
-      ambient: { crowd: 'tourist', traffic: 'light', peds: 0.9, cars: 0.4 },
+      ambient: { crowd: 'tourist', traffic: 'light', peds: 0.9, cars: 0.4, mix: [['zephyr', 4], ['drifter', 3], ['pipit', 12], ['halcyon', 12], ['cab', 10], ['mesa', 6], ['tern', 8]] },
     },
   ];
   for (const d of FILL_DISTRICTS) {
@@ -805,6 +808,7 @@
     farm: { lot: { min: 34, max: 60 }, emptyLotChance: 0.3, yard: 'dirt', archetypes: [{ type: 'farmhouse', weight: 3, floors: [1, 2] }, { type: 'barn', weight: 4, floors: [1, 1] }, { type: 'silo', weight: 2, floors: [1, 1] }] },
     hotels: { lot: { min: 40, max: 70 }, emptyLotChance: 0.25, archetypes: [{ type: 'hotel', weight: 4, floors: [5, 8] }, { type: 'lowrise', weight: 1, floors: [1, 1] }] },
     carhire: { lot: { min: 30, max: 50 }, emptyLotChance: 0.7, archetypes: [{ type: 'lowrise', weight: 3, floors: [1, 1] }, { type: 'depot', weight: 1, floors: [1, 1] }] },
+    trade: { lot: { min: 50, max: 80 }, emptyLotChance: 0.1, archetypes: [{ type: 'bigbox', weight: 3, floors: [1, 1] }, { type: 'warehouse', weight: 2, floors: [1, 2] }] }, // a trade park
   };
 
   /**
@@ -814,13 +818,13 @@
    */
   VH.Data.roads4 = [
     // Haverly Farms, and the lanes round the edge of the map.
-    { id: 'haverly_ln', axis: 'x', coord: -1700, from: -1570, to: 384, width: 10, name: 'Haverly Lane' },
-    { id: 'westfield_rd', axis: 'z', coord: -1570, from: -1700, to: 1760, width: 12, name: 'Westfield Road' },
+    { id: 'haverly_ln', axis: 'x', coord: -1700, from: -1588, to: 384, width: 10, name: 'Haverly Lane' },
+    { id: 'westfield_rd', axis: 'z', coord: -1588, from: -1700, to: 1760, width: 12, name: 'Westfield Road' },
     { id: 'mill_ln', axis: 'z', coord: -1300, from: -1700, to: -440, width: 12, name: 'Mill Lane' },
-    { id: 'thresher_ln', axis: 'x', coord: -1560, from: -1570, to: -1300, width: 10, name: 'Thresher Lane' },
-    { id: 'hayrick_ln', axis: 'x', coord: -1320, from: -1570, to: -1300, width: 10, name: 'Hayrick Lane' },
+    { id: 'thresher_ln', axis: 'x', coord: -1560, from: -1588, to: -1300, width: 10, name: 'Thresher Lane' },
+    { id: 'hayrick_ln', axis: 'x', coord: -1320, from: -1588, to: -1300, width: 10, name: 'Hayrick Lane' },
     // Gateway Park.
-    { id: 'freight_rd', axis: 'x', coord: -870, from: -1570, to: -636, width: 14, name: 'Freight Road' },
+    { id: 'freight_rd', axis: 'x', coord: -870, from: -1588, to: -636, width: 14, name: 'Freight Road' },
     // Lantern Heights (Cinder Road carries on east as its top street).
     { id: 'school_ln', axis: 'z', coord: -510, from: -660, to: -530, width: 14, name: 'School Lane' },
     { id: 'lamplighter_st', axis: 'x', coord: -530, from: -636, to: -96, width: 14, name: 'Lamplighter Street' },
@@ -846,10 +850,10 @@
    */
   VH.Data.extend4 = [
     ['ave384', -1700, null], //      Seawall Drive, north past the airport to Haverly Lane
-    ['airport_rd', -1570, null], //  Airport Road, west to Westfield Road
-    ['college_rd', -1570, null],
-    ['cinder_rd', -1570, -96], //    west through Gateway Park, east as Lantern Heights' top street
-    ['starview_rd', -1570, null], // along the fort's north fence
+    ['airport_rd', -1588, null], //  Airport Road, west to Westfield Road
+    ['college_rd', -1588, null],
+    ['cinder_rd', -1588, -96], //    west through Gateway Park, east as Lantern Heights' top street
+    ['starview_rd', -1588, null], // along the fort's north fence
     ['dustbowl_ln', -1180, null],
     ['juniper_ave', -1180, null],
     ['ave-384', -660, 660], //       Cypress Parkway, north into Lantern Heights and south through Southgate
@@ -858,12 +862,12 @@
     ['ave-96', null, 520], //        Coral Avenue
     ['birchwood', 384, null], //     Birchwood and Hollyhock Avenues, north through Southgate
     ['hollyhock', 384, null],
-    ['klieg_st', -1570, null], //    along the fort's south fence
-    ['southbay_rd', -1570, null],
+    ['klieg_st', -1588, null], //    along the fort's south fence
+    ['southbay_rd', -1588, null],
     ['dune_st', -1050, null],
-    ['mariner_way', -1570, null],
-    ['foundry_rd', -1570, null],
-    ['southcoast', -1570, null],
+    ['mariner_way', -1588, null],
+    ['foundry_rd', -1588, null],
+    ['southcoast', -1588, null],
     ['backlot_ave', null, 1760],
     ['sandpiper_dr', null, 1784], // to the Cove Causeway
   ];
@@ -881,35 +885,40 @@
    */
   const C4 = (d, r, o) => Object.assign({ d, r }, o || {});
   VH.Data.cells4 = [
-    // Haverly Farms: the farm heartland west of the airport (its approach,
-    // z -1500..-1400, stays low: fields and the maze), fields and the wind farm north of it.
-    C4('haverly', [-1570, -1300, -1800, -1700], { arch: 'farm' }),
+    // Haverly Farms: the farm heartland west of the airport, fields and the
+    // wind farm north of it. Runway 09's approach (z -1505..-1395, the
+    // approach lights at z -1450 from x -1360) stays low: fields and the maze,
+    // no trees or lamps (`low`), and the lights stand in an open strip
+    // (VH.Data.open4) between the field rows.
+    C4('haverly', [-1588, -1300, -1800, -1700], { arch: 'farm' }),
     C4('haverly', [-1300, -1070, -1800, -1700], { kind: 'fields' }),
     C4('haverly', [-1070, 384, -1800, -1700], { plot: 'haverly_windfarm' }),
-    C4('haverly', [-1570, -1300, -1700, -1560], { arch: 'farm' }),
-    C4('haverly', [-1300, -1070, -1700, -1560], { kind: 'fields' }),
-    C4('haverly', [-1070, -560, -1700, -1600], { kind: 'fields' }),
-    C4('haverly', [-560, -80, -1700, -1600], { kind: 'fields' }),
-    C4('haverly', [-80, 384, -1700, -1600], { kind: 'fields' }),
-    C4('haverly', [-1570, -1300, -1560, -1320], { plot: 'corn_maze' }),
-    C4('haverly', [-1300, -1070, -1560, -1320], { kind: 'fields' }),
-    C4('haverly', [-1570, -1300, -1320, -1180], { plot: 'haverly_farm_shop' }),
-    C4('haverly', [-1300, -1070, -1320, -1180], { arch: 'farm' }),
+    C4('haverly', [-1588, -1300, -1700, -1560], { arch: 'farm' }),
+    C4('haverly', [-1300, -1036, -1700, -1560], { kind: 'fields' }),
+    C4('haverly', [-1036, -560, -1700, -1516], { kind: 'fields', low: [-1560, -1395] }), // down to the airport fence (z -1510)
+    C4('haverly', [-560, -80, -1700, -1516], { kind: 'fields', low: [-1560, -1395] }),
+    C4('haverly', [-80, 384, -1700, -1516], { kind: 'fields', low: [-1560, -1395] }),
+    C4('haverly', [-1588, -1300, -1560, -1475], { kind: 'fields', low: [-1505, -1395] }),
+    C4('haverly', [-1300, -1036, -1560, -1475], { kind: 'fields', low: [-1505, -1395] }), // east to the fence's west end (x -1030)
+    C4('haverly', [-1588, -1300, -1425, -1320], { plot: 'corn_maze', low: [-1505, -1395] }),
+    C4('haverly', [-1300, -1036, -1425, -1320], { kind: 'fields', low: [-1505, -1395] }),
+    C4('haverly', [-1588, -1300, -1320, -1180], { plot: 'haverly_farm_shop' }),
+    C4('haverly', [-1300, -1036, -1320, -1180], { arch: 'farm' }),
     // Gateway Park.
-    C4('gateway', [-1570, -1300, -1180, -1070]),
+    C4('gateway', [-1588, -1300, -1180, -1070]),
     C4('gateway', [-1300, -1050, -1180, -1070], { arch: 'hotels' }),
     C4('gateway', [-1050, -850, -1180, -1070], { arch: 'carhire' }),
     C4('gateway', [-850, -760, -1180, -1070], { arch: 'carhire' }),
     C4('gateway', [-760, -636, -1134, -1070]), // behind the airport road's motels
-    C4('gateway', [-1570, -1300, -1070, -870]),
+    C4('gateway', [-1588, -1300, -1070, -870]),
     C4('gateway', [-1300, -1050, -1070, -870], { plot: 'longstay_parking' }),
     C4('gateway', [-1050, -850, -1070, -870], { plot: 'gateway_cargo' }),
     C4('gateway', [-850, -636, -1070, -870]),
-    C4('gateway', [-1570, -1300, -870, -660], { plot: 'redline_mx' }),
-    C4('gateway', [-1300, -1050, -870, -660]),
+    C4('gateway', [-1588, -1300, -870, -660], { plot: 'redline_mx' }),
+    C4('gateway', [-1300, -1050, -870, -660], { arch: 'trade' }),
     C4('gateway', [-1050, -850, -870, -660]),
     C4('gateway', [-850, -636, -870, -660]),
-    C4('gateway', [-1570, -1300, -660, -440], { plot: 'gateway_pound' }),
+    C4('gateway', [-1588, -1300, -660, -440], { plot: 'gateway_pound' }),
     C4('gateway', [-1300, -1050, -660, -440]),
     // Lantern Heights (the 'Outskirts rodeo' stunt ramp stands in Kingfisher Park).
     C4('lantern', [-636, -96, -686, -660], { kind: 'park' }), // a green between the university and Cinder Road
@@ -933,15 +942,15 @@
     C4('southgate', [-160, 0, 520, 660], { plot: 'southgate_depot' }),
     // Redwater: the village south of the fort, the golf course, the ranch,
     // the lake, the solar farm and the recycling centre by Ironside.
-    C4('redwater', [-1570, -1300, 440, 660]),
+    C4('redwater', [-1588, -1300, 440, 660]),
     C4('redwater', [-1300, -1050, 440, 660]),
-    C4('redwater', [-1570, -1050, 660, 1190], { plot: 'pelican_links' }),
+    C4('redwater', [-1588, -1050, 660, 1190], { plot: 'pelican_links' }),
     C4('redwater', [-1050, -636, 660, 920], { plot: 'redwater_ranch' }),
     C4('redwater', [-1050, -636, 920, 1190], { arch: 'farm' }),
-    C4('redwater', [-1570, -1300, 1190, 1470], { plot: 'willow_lake' }),
+    C4('redwater', [-1588, -1300, 1190, 1470], { plot: 'willow_lake' }),
     C4('redwater', [-1300, -1050, 1190, 1470], { arch: 'farm' }),
     C4('redwater', [-1050, -636, 1190, 1470]),
-    C4('redwater', [-1570, -1300, 1470, 1760], { plot: 'redwater_solar' }),
+    C4('redwater', [-1588, -1300, 1470, 1760], { plot: 'redwater_solar' }),
     C4('redwater', [-1300, -1050, 1470, 1760], { kind: 'fields' }),
     C4('redwater', [-1050, -870, 1470, 1760]),
     C4('redwater', [-870, -636, 1470, 1760], { plot: 'redwater_recycling' }),
@@ -950,6 +959,40 @@
     C4('palomacove', [760, 940, 1480, 1600], { plot: 'cove_beach_club' }),
     C4('palomacove', [940, 1040, 1480, 1784], { plot: 'paloma_cove' }),
     C4('palomacove', [760, 940, 1600, 1784]),
+    // The strips left between the old world and the edges (after the
+    // districts above, so their block ids stay as they are). 'outskirts'
+    // blocks are greens nobody's story uses; `low` keeps trees off the
+    // runway's line (z range); `strip` keeps them out of where the maps put
+    // a district's name.
+    C4('outskirts', [-1588, -1503, -440, -150], { strip: true, kind: 'allotments' }), // Breakwater Allotments, up to the fort's west wall (x -1500)
+    C4('outskirts', [-1588, -1503, -150, 150], { strip: true, kind: 'park' }),
+    C4('outskirts', [-1588, -1503, 150, 440], { strip: true, kind: 'allotments' }),
+    C4('redwater', [-1588, -1300, 1760, 1800], { strip: true, kind: 'park' }), //      the South Coast Greenway, south of the highway
+    C4('redwater', [-1300, -870, 1760, 1800], { strip: true, kind: 'park' }),
+    C4('redwater', [-870, -636, 1760, 1800], { strip: true, kind: 'park' }),
+    C4('outskirts', [-636, -320, 1760, 1800], { strip: true, kind: 'park' }),
+    C4('outskirts', [-320, 0, 1760, 1800], { strip: true, kind: 'park' }),
+    C4('outskirts', [0, 330, 1760, 1800], { strip: true, kind: 'park' }),
+    C4('haverly', [384, 424, -1800, -1076], { strip: true, kind: 'park', low: [-1570, -1330] }), // the Seawall Walk, past the airport
+    C4('outskirts', [384, 424, -745, -390], { strip: true, kind: 'park' }),
+    C4('outskirts', [288, 384, -664, -384], { strip: true, kind: 'park' }), //           Northgate Gardens
+    C4('gateway', [-636, -410, -1134, -1070], { strip: true, arch: 'carhire' }), //      behind Airport Road, north of the university
+    C4('gateway', [-410, -96, -1108, -1070], { strip: true, arch: 'carhire' }),
+    C4('gateway', [-96, -50, -1162, -1070], { strip: true, arch: 'carhire' }),
+    C4('gateway', [47, 288, -1134, -1070], { strip: true, arch: 'carhire' }),
+    C4('gateway', [288, 384, -1134, -1070], { strip: true, arch: 'carhire' }),
+    C4('lantern', [-96, -50, -1070, -660], { strip: true }), //                              terraces along Coral Avenue
+    C4('outskirts', [-1088, -1050, -193, -46], { strip: true, kind: 'park' }), //       either side of the fort's road in
+    C4('outskirts', [-1088, -1050, 46, 193], { strip: true, kind: 'park' }),
+    C4('outskirts', [330, 424, 1760, 1784], { strip: true, kind: 'park' }), //           by the Cove Causeway
+  ];
+
+  // Open ground on purpose (tools/emptiness.mjs counts it as a place, see
+  // VH.Districts.open): fill4.js declares these at load time.
+  VH.Data.open4 = [
+    { minX: -1582, maxX: -1039, minZ: -1478, maxZ: -1422, label: 'Runway 09 approach lights', track: true },
+    { minX: 13, maxX: 200, minZ: -853, maxZ: -747, label: 'The stunt ramps field' },
+    { minX: -630, maxX: -392, minZ: -382, maxZ: 382, label: 'Crestline estate gardens (walled lawns)' },
   ];
 
   // The 4.0 landmarks, after the 3.0 ones (so nothing there changes): built-in
@@ -977,5 +1020,10 @@
     { id: 'paloma_cove', name: 'Paloma Cove', district: 'palomacove', plot: 'paloma_cove', kind: 'beach', major: true, short: 'Beach' },
     { id: 'cove_beach_club', name: 'Cove Beach Club', district: 'palomacove', plot: 'cove_beach_club', kind: 'club' },
     { id: 'cove_campsite', name: 'Cove Campsite', district: 'palomacove', plot: 'cove_campsite', kind: 'campsite' },
+    // The strips' names on the full map (points, no plot).
+    { id: 'breakwater_allotments', name: 'Breakwater Allotments', district: 'outskirts', x: -1546, z: -296, kind: 'allotments' },
+    { id: 'south_coast_greenway', name: 'South Coast Greenway', district: 'redwater', x: -760, z: 1784, kind: 'park' },
+    { id: 'seawall_walk', name: 'Seawall Walk', district: 'haverly', x: 406, z: -1250, kind: 'park' },
+    { id: 'northgate_gardens', name: 'Northgate Gardens', district: 'outskirts', x: 336, z: -526, kind: 'park' },
   ]) VH.Data.landmarks3.push(Object.assign(lm, { v4: true }));
 })();

@@ -948,6 +948,17 @@
       } else if (bl.kind === 'park' && bl.v3) {
         g.fillStyle = PAL.lawn;
         R(ix0, iz0, ix1, iz1);
+      } else if (bl.kind === 'fields' || bl.kind === 'allotments') {
+        // 4.0: crop fields (strips of colour across the block) and allotments.
+        const crops = bl.kind === 'fields' ? ['#8a7a3a', '#5e7a34', '#6b5038', '#9a8a2e', '#4f6e3a', '#7a6aa0'] : ['#5a4a36', '#4f6e3a'];
+        const alongX = ix1 - ix0 >= iz1 - iz0;
+        const w = bl.kind === 'fields' ? 19 : 9.5;
+        let k = Math.abs((bl.minX * 7 + bl.minZ * 13) | 0);
+        for (let a = alongX ? ix0 : iz0, end = alongX ? ix1 : iz1; a < end; a += w) {
+          g.fillStyle = crops[k++ % crops.length];
+          if (alongX) R(a, iz0, Math.min(end, a + w - 1.4), iz1);
+          else R(ix0, a, ix1, Math.min(end, a + w - 1.4));
+        }
       } else if (bl.kind === 'park') {
         g.fillStyle = PAL.lawn;
         R(ix0, iz0, ix1, iz1);
@@ -1434,7 +1445,7 @@
   /** For districts without blocks (open land, the bay): the longest clear run of their cells. */
   function openDistrictSpots(layout, land, avoid) {
     const districts = VH.Data.districts || [];
-    const withBlocks = new Set(layout.blocks.concat(layout.blocks3 || []).map((b) => b.district && b.district.id));
+    const withBlocks = new Set(layout.blocks.concat(layout.blocks3 || []).filter((b) => !b.strip).map((b) => b.district && b.district.id)); // (4.0: the strips by the edges don't count)
     const wanted = districts.filter((d) => !withBlocks.has(d.id));
     if (!wanted.length || !layout.districtAt) return [];
     const step = 32;
