@@ -1310,7 +1310,9 @@
     _until(fn, run, timeLimit, timeoutReason) {
       return new Promise((resolve, reject) => {
         const limit = timeLimit !== undefined ? timeLimit : run.pendingTimer;
-        run.pendingTimer = null;
+        // A step's own pauses (a race countdown, a short beat) pass an explicit
+        // limit and leave a pending timer for the wait it was meant for.
+        if (timeLimit === undefined) run.pendingTimer = null;
         const w = { fn, resolve, reject, run, t: 0, limit, reason: timeoutReason || 'You ran out of time.' };
         if (limit) {
           run.timer = { left: limit };
@@ -1939,6 +1941,8 @@
         this._objective(label);
         const d = Math.hypot(p.pos.x - place.x, p.pos.z - place.z);
         if (d > radius) return false;
+        // Height counts too: a roof spot isn't met from the street beside the building.
+        if (!(v && v.flying) && place.y !== undefined && Math.abs((v ? v.pos.y : p.pos.y) - place.y) > (v ? 4.5 : 3.5)) return false;
         if (step.stop !== false && v && v.flying) {
           this._objective('Land');
           return false;
@@ -2741,7 +2745,8 @@
           if (it.collected) continue;
           const p = game.player;
           const d = Math.hypot(p.pos.x - it.pos.x, p.pos.z - it.pos.z);
-          if (d < (p.inVehicle ? 3 : 1.4)) {
+          const dy = Math.abs((p.vehicle ? p.vehicle.pos.y : p.pos.y) - (it.pos.y - 0.85));
+          if (d < (p.inVehicle ? 3 : 1.4) && dy < 3) {
             it.collected = true;
             it.dispose();
             if (game.audio.pickup) game.audio.pickup();

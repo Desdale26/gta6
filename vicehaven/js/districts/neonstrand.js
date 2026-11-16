@@ -1042,8 +1042,9 @@
         for (let i = 0; i < N; i++) {
           const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
           beam(tmp, Math.cos(a0) * W.r, Math.sin(a0) * W.r, z, Math.cos(a1) * W.r, Math.sin(a1) * W.r, z, 0.45, steel);
-          beam(tmp, Math.cos(a0) * (W.r - 2), Math.sin(a0) * (W.r - 2), z, Math.cos(a1) * (W.r - 2), Math.sin(a1) * (W.r - 2), z, 0.25, steel);
-          if (i % 2 === 0) beam(tmp, 0, 0, z * 1.6, Math.cos(a0) * W.r, Math.sin(a0) * W.r, z, 0.18, steel);
+          // The inner ring sits below the gondolas' floors even at the top, so it never crosses a rider's view.
+          beam(tmp, Math.cos(a0) * (W.r - 5), Math.sin(a0) * (W.r - 5), z * 1.1, Math.cos(a1) * (W.r - 5), Math.sin(a1) * (W.r - 5), z * 1.1, 0.25, steel);
+          if (i % 2 === 1) beam(tmp, 0, 0, z * 1.6, Math.cos(a0) * W.r, Math.sin(a0) * W.r, z, 0.18, steel); // (between the gondolas, not across their open ends)
           const bc = VH.col(i % 3 === 0 ? 0xff5c95 : i % 3 === 1 ? 0xffd24a : 0x37e8ff, 2.2);
           // A neon ring round the rim, in coloured thirds.
           const ring = { merge: (geo, m, c) => bulbs.merge(geo, m, c) };
@@ -1052,7 +1053,7 @@
           const bx = Math.cos(a0 + 0.08) * W.r, by = Math.sin(a0 + 0.08) * W.r;
           bulbs.box(bx - 0.2, by - 0.2, z + Math.sign(z) * 0.2, bx + 0.2, by + 0.2, z + Math.sign(z) * 0.5, bc);
           const sx = Math.cos(a0) * W.r * 0.55, sy = Math.sin(a0) * W.r * 0.55;
-          if (i % 2 === 0) bulbs.box(sx - 0.15, sy - 0.15, z * 1.25 - 0.15, sx + 0.15, sy + 0.15, z * 1.25 + 0.15, VH.col(0xfff2c8, 2));
+          if (i % 2 === 1) bulbs.box(sx - 0.15, sy - 0.15, z * 1.25 - 0.15, sx + 0.15, sy + 0.15, z * 1.25 + 0.15, VH.col(0xfff2c8, 2));
         }
       }
       for (let i = 0; i < W.cars; i++) {
@@ -1075,9 +1076,16 @@
       // Gondolas: one instanced mesh, kept level.
       const gb = new VH.GeometryBuilder({});
       const white = VH.col(0xffffff);
-      gb.box(-1.3, -3.4, -1.1, 1.3, -2.3, 1.1, white);
-      gb.box(-1.3, -2.3, -1.1, -1.2, -0.9, 1.1, white);
-      gb.box(1.2, -2.3, -1.1, 1.3, -0.9, 1.1, white);
+      // A cabin open at both ends (along the axle): floor, waist-high sides, corner posts, a bench at each end.
+      gb.box(-1.3, -3.4, -1.1, 1.3, -3.25, 1.1, white);
+      for (const sx of [-1, 1]) {
+        gb.box(sx > 0 ? 1.2 : -1.3, -3.25, -1.1, sx > 0 ? 1.3 : -1.2, -2.35, 1.1, white);
+        for (const sz of [-1, 1]) gb.box(sx * 1.25 - 0.05, -2.35, sz * 1.05 - 0.05, sx * 1.25 + 0.05, -0.9, sz * 1.05 + 0.05, white);
+      }
+      for (const sz of [-1, 1]) {
+        gb.box(-1.2, -3.25, sz > 0 ? 1.0 : -1.1, 1.2, -2.65, sz > 0 ? 1.1 : -1.0, white);
+        gb.box(-1.15, -3.25, sz > 0 ? 0.55 : -1.0, 1.15, -2.87, sz > 0 ? 1.0 : -0.55, VH.col(0x3a2a20));
+      }
       gb.box(-1.45, -0.9, -1.25, 1.45, -0.6, 1.25, VH.col(0xf2efe6));
       gb.box(-0.06, -0.6, -0.06, 0.06, 0, 0.06, VH.col(0x9aa1a8));
       this.cars = new THREE.InstancedMesh(gb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), W.cars);
@@ -1104,9 +1112,11 @@
       });
       this.top = top;
       const tb = new VH.GeometryBuilder({});
-      tb.box(-0.75, 0.55, -1.3, 0.75, 1.15, 1.3, white);
-      tb.box(-0.75, 1.15, -1.3, 0.75, 1.6, -1.0, white);
-      tb.box(-0.75, 1.15, 0.0, 0.75, 1.5, 0.25, white);
+      tb.box(-0.75, 0.55, -1.3, 0.75, 1.0, 1.3, white); //     the tub (riders sit on its top, legs inside)
+      tb.box(-0.75, 1.0, -1.3, 0.75, 1.45, -1.05, white); //   seat back
+      tb.box(-0.75, 1.0, 0.7, 0.75, 1.18, 1.3, white); //      the nose
+      tb.box(-0.6, 1.0, -1.02, 0.6, 1.04, -0.15, VH.col(0x2a2d33)); // seat
+      tb.box(-0.62, 1.22, -0.02, 0.62, 1.28, 0.06, VH.col(0x9aa1a8)); // lap bar
       tb.box(-0.8, 0.45, -1.35, 0.8, 0.6, 1.35, VH.col(0x2a2d33));
       this.train = new THREE.InstancedMesh(tb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), 4);
       this.train.frustumCulled = false;
@@ -1171,7 +1181,7 @@
       this.gateMesh.count = this.gates.length;
       this.gateMesh.frustumCulled = false;
       game.scene.add(this.gateMesh);
-      // The Riptide's station: where the train stops (its second car by the platform gate).
+      // The Riptide's station: where the train stops (its front car by the platform gate).
       let best = 0, bd = 1e9;
       for (let i = 0; i < 30; i++) {
         const d = Math.abs(this.pz[i] - 140) + Math.abs(this.px[i] - 912) * 2;
@@ -1181,7 +1191,7 @@
         }
       }
       const dz = this.pz[best] - this.pz[best + 1] || 1;
-      this.stationS = best + 3 + (this.pz[best] - 140) / dz;
+      this.stationS = best + (this.pz[best] - 140) / dz;
       // State. Each part runs on its own unless a ride drives it (the *Driven flags: the ride sets the numbers).
       this.dropT = 20;
       this.towerY = KERB + 1;
@@ -1268,8 +1278,8 @@
         return;
       }
       const i0 = Math.floor(this.s) % n;
-      const lift = i0 >= this.stationS && i0 < this.topIndex;
-      let target = lift ? 3.2 : Math.max(4, Math.sqrt(2 * 9.8 * Math.max(0, this.top + 1.5 - this.py[i0])));
+      const lift = i0 >= Math.floor(this.stationS) && i0 < this.topIndex;
+      let target = lift ? 4.4 : Math.max(4, Math.sqrt(2 * 9.8 * Math.max(0, this.top + 1.5 - this.py[i0])));
       const dist = (this.stationS - this.s + n) % n;
       const braking = dist < 70 && !lift;
       this.v += (target - this.v) * Math.min(1, dt * 2.5);

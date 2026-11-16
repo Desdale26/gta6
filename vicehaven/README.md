@@ -417,6 +417,16 @@ at red lights, queues, overtakes parked cars and honks at you. Pedestrians
 walk the blocks, wait at crossings, and scatter from gunfire and
 pavement-driving.
 
+**Wonder Wharf.** The funfair on Isla Paloma is always open, and every ride
+is rideable: walk up to its gate and press E. Ride a full turn of the
+Wonder Wheel (with a pause at the top over the bay), the Riptide roller
+coaster from the front car, the Skyhook drop tower, the Galloping Horses
+and the helter-skelter (climb the stair inside, take a mat at the top), or
+drive the Dodgems for 90 seconds against six other cars for tickets. Esc
+gets you off at the next stop; trouble near the fair (gunfire, police, a
+car on the fairground) stops the rides for a minute. The food stalls sell
+candy floss, hot dogs, ice cream and doughnuts that restore health.
+
 **Police.** Crimes that someone sees raise your heat (1–5). If a passer-by
 phones it in, the police know where you are for the first 12 seconds or so
 (longer at higher heat) and come straight for you. Patrol cars

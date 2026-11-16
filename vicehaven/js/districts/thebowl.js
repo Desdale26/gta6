@@ -861,7 +861,8 @@
     const H = KERB + E.h;
     // --- ground: the forecourt plaza, the floor inside, the service yard and the north car park
     W.pave(world, 339, 1193, E.x0, 1467, 0xe2dccd, 'plazaTop');
-    W.pave(world, E.x0, E.z0, E.x1, E.z1, 0xd9dcdf, 'plazaTop', KERB + 0.014, 3);
+    // The hall floor (and its walls' lining, below) on the unshadowed interior surface: it reads lit, not in the roof's shadow.
+    W.pave(world, E.x0, E.z0, E.x1, E.z1, 0xd9dcdf, 'interior', KERB + 0.014, 3);
     W.pave(world, E.x0, E.z1, 421, 1467, 0xb8b8ba, 'asphaltTop');
     W.pave(world, E.x0, 1193, 421, E.z0, 0xb8b8ba, 'asphaltTop');
     for (let x = 354; x < 414; x += 3) W.mark(world, x - 0.06, 1197, x + 0.06, 1209, 0xf4f4ef);
@@ -894,6 +895,22 @@
     longBox(world, 'concrete', E.x0, H, E.z0, E.x1, H + 0.6, E.z1, 0xcfd3d6, { bottom: true }, 'building');
     longBox(world, 'prop', E.x0 - 0.1, H + 0.6, E.z0 - 0.1, E.x0 + 0.4, H + 1.6, E.z1 + 0.1, trim, null, false);
     longBox(world, 'prop', E.x1 - 0.4, H + 0.6, E.z0 - 0.1, E.x1 + 0.1, H + 1.6, E.z1 + 0.1, trim, null, false);
+    // The lining inside: pale panels to 5 m, a club-blue band above (each solid, flush with the wall).
+    for (const [x0, x1] of [[E.x0 + t, E.x0 + t + 0.05], [E.x1 - t - 0.05, E.x1 - t]]) {
+      for (const [z0, z1] of x0 < 383 ? [[E.z0 + t, E.foyer.z0], [E.foyer.z1, E.z1 - t]] : [[E.z0 + t, E.z1 - t]]) {
+        longBox(world, 'interior', x0, KERB, z0, x1, KERB + 5, z1, 0xf1efe8);
+        longBox(world, 'interior', x0, KERB + 5, z0, x1, KERB + 6.2, z1, trim, null, false);
+      }
+    }
+    // A red carpet from the doors to the trophy, then the length of the hall between the plinth rows.
+    W.pave(world, E.x0 + t, 1326, 382, 1334, 0x9a1b22, 'interior', KERB + 0.03, 2);
+    W.pave(world, 372, E.z0 + 8, 376, E.z1 - 8, 0x9a1b22, 'interior', KERB + 0.03, 2);
+    // Banners hung from the roof down the hall: teal and gold, a racing number on each.
+    for (let z = E.z0 + 18; z < E.z1 - 10; z += 24) {
+      const ctx = world.ctxAt(383, z);
+      ctx.prop.box(382.95, H - 6.5, z - 1.6, 383.05, H - 0.1, z + 1.6, col(Math.round(z / 24) % 2 ? 0x0f5f5a : 0xd4a017));
+      ctx.prop.box(382.9, H - 4.6, z - 0.9, 383.1, H - 2.8, z + 0.9, col(0xf2f2ee));
+    }
     // Ceiling lights in three long rows (they glow; the hall reads lit at night through the foyer).
     for (const x of [365, 383, 401]) {
       for (let z = E.z0 + 6; z < E.z1 - 6; z += 12) world.ctxAt(x, z).screen.box(x - 0.4, H - 0.12, z - 3, x + 0.4, H - 0.02, z + 3, VH.col(0xf6f8ff, 2.0));
@@ -902,7 +919,7 @@
     for (const x of [368, 398]) {
       for (let z = E.z0 + 36; z < E.z1 - 20; z += 36) {
         const ctx = world.ctxAt(x, z);
-        ctx.concrete.box(x - 0.45, KERB, z - 0.45, x + 0.45, H, z + 0.45, col(0xe2e4e6));
+        ctx.interior.box(x - 0.45, KERB, z - 0.45, x + 0.45, H, z + 0.45, col(0xe2e4e6));
         world.physics.addBox(x - 0.45, 0, z - 0.45, x + 0.45, H, z + 0.45, 'building', F().ALL);
       }
     }
@@ -954,6 +971,7 @@
       W.tiltBox(ctx.prop, rx, KERB + 1.82, rz + 0.48, 0.06, 0.62, 0.13, 0, -0.5, col(0xf2f2ee)); // the waving arm
       ctx.prop.box(rx + 0.03, KERB, rz - 0.3, rx + 0.4, KERB + 0.04, rz + 0.3, col(0x5a4636)); // the stand
       world.physics.addBox(rx - 0.06, 0, rz - 0.34, rx + 0.4, KERB + 1.98, rz + 0.34, 'plank', F().SOLID | F().CAMERA);
+      world.physics.addBox(rx - 0.06, KERB + 1.45, rz + 0.34, rx + 0.06, KERB + 2.2, rz + 0.7, 'plank', F().SOLID | F().CAMERA);
     }
 
     // --- outside: signs, flags, lamps, benches
@@ -972,7 +990,7 @@
     // A pool of light on the forecourt and in the doorway; the hall's own light inside.
     const pools = world.floodlights || (world.floodlights = []);
     pools.push({ x: fx0 - 2, z: 1330, r: 10, y: KERB + 0.03, strength: 0.6, tint: [1.2, 1.1, 0.9] });
-    for (let z = E.z0 + 24; z < E.z1; z += 40) pools.push({ x: 383, z, r: 22, y: KERB + 0.03, strength: 0.45, tint: [1, 1.05, 1.1] });
+    for (let z = E.z0 + 16; z < E.z1; z += 30) for (const x of [368, 398]) pools.push({ x, z, r: 20, y: KERB + 0.03, strength: 0.8, tint: [1.15, 1.1, 1.0] });
 
     // --- inside: plinths for the cars, a trophy island in the middle, display boards
     for (const c of E.cars) {
@@ -995,8 +1013,8 @@
       ctx.prop.cylinder(tx, KERB + 0.5, tz, 1.0, 0.8, 1.0, 12, col(0xeef0f2), true);
       ctx.prop.cylinder(tx, KERB + 1.5, tz, 0.25, 0.5, 0.9, 12, col(0xd4a017), true);
       ctx.prop.cylinder(tx, KERB + 2.4, tz, 0.5, 0.75, 0.9, 12, col(0xd4a017), true);
-      world.physics.addBox(tx - 2.9, 0, tz - 2.9, tx + 2.9, KERB + 0.5, tz + 2.9, 'stone', F().ALL);
-      world.physics.addBox(tx - 1.0, 0, tz - 1.0, tx + 1.0, KERB + 3.3, tz + 1.0, 'stone', F().ALL);
+      VH.SouthKit.disc(world, tx, tz, 4, 0, KERB + 0.5, 'stone');
+      VH.SouthKit.disc(world, tx, tz, 1.0, 0, KERB + 3.3, 'stone');
     }
     W.sign(world, { x: E.x1 - t - 0.1, y: KERB + 6.5, z: 1330, yaw: -PI / 2, w: 24, h: 3.6, lines: ['CASTELLANE · 50 YEARS OF CHAMPIONS', 'SOUTHBAY 500 · WINNERS 1961 – TODAY'], style: 'plaque', oneSided: true, colors: { bg: ['#0f5f5a', '#0a3f3c'], fg: '#e8d080', border: '#d4a017' } });
   }

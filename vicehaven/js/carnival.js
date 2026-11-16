@@ -31,6 +31,7 @@
  *                                next safe point (a ride) or at once (a game: s.finish())
  *     stop(s, why) {},           forced end (Jay died or was arrested, a mission took
  *                                over, game reset): put props back; Jay is stood up for you
+ *     exit: { x, z, y, yaw },    where a forced end puts Jay (off a ride high up)
  *     serialize() {}, load(d) {} optional extra saved state of its own
  *   });
  *
@@ -86,12 +87,15 @@
  *                                end(); kinds 'sit', 'up' (arms up), 'stand'
  *   carnival.life                the Neon Strand's moving parts (WharfLife in
  *                                districts/neonstrand.js): the wheel (angle, wheelDriven,
- *                                gondola(i, out)), the Riptide's train (s, v, trainState,
- *                                trainHold, carPos[], carQ[]), the Skyhook (dropT, towerY,
- *                                towerHold, towerDriven), the carousel (carAngle, carSpeed,
- *                                carouselDriven, horse(k, out)) and the rides' gates
- *                                (gateById[id].target = 1 opens one). Stepped by this system
- *                                before any attraction runs, so what they read is this frame's.
+ *                                gondola(i, out)), the Riptide's train (s, v, trainState
+ *                                'station'|'run', trainDwell, trainHold, laps, lift, topIndex,
+ *                                carPos[4], carQ[4]: front car first), the Skyhook (dropT, towerY,
+ *                                towerHold, towerDriven; the cycle in game.world.wonderWharf.drop),
+ *                                the carousel (carAngle, carSpeed, carT, carouselDriven,
+ *                                horse(k, out)) and the rides' gates (gateById[id].target = 1
+ *                                opens one). A part left un-driven runs its own cycle. Stepped by
+ *                                this system before any attraction runs, so what they read is
+ *                                this frame's.
  *   carnival.gate(id, open)      swing a ride's gate open (true) or shut
  *   carnival.movable(x0, z0, x1, z1, hx, hz, y0, y1, tag, flags)
  *                                a solid box that moves within the rectangle x0..x1, z0..z1
@@ -99,6 +103,34 @@
  *                                enable(on) }; half sizes hx (across) and hz (along yaw)
  *   Events: 'carnival:start' { id }, 'carnival:end' { id, score, tickets, completed, why },
  *   'carnival:tickets' { tickets, delta }.
+ *
+ * Prompts use the game's interaction system: Jay must be within `radius`, on
+ * foot, within 1.8 m of the prompt's height (y + 1) and roughly facing it. A
+ * ride shows "<name>: closed for a moment" while the fair is alarmed.
+ *
+ * ------------------------------------------------- a stall game, in brief
+ *   VH.Carnival.define({
+ *     id: 'hoopla', name: 'Hoopla', kind: 'game', x: 884, z: 30, radius: 1.8, price: 3,
+ *     scored: true, unit: 'points', barks: ['Ring a peg, win a prize!'],
+ *     setup(c) { this.c = c; },                               // build the stall's moving bits
+ *     start(s) { s.data.left = 45; s.ui.title('Hoopla', 'Mouse aim · hold Fire for power · Esc stop'); },
+ *     update(dt, s) {
+ *       s.seat(884, 0.15, 31.5, Math.PI, 'stand');           // Jay at the counter (the plaza is at 0.15)
+ *       s.shot(884, 2.2, 33, 884, 1, 27, 55);                 // the camera over his shoulder
+ *       if (s.pressed('fire')) { s.score += 10; s.ui.stat('score', 'Points', s.score); s.sound('ding'); }
+ *       s.ui.timer(s.data.left -= dt);
+ *       if (s.data.left <= 0 || s.leaving) s.finish({ score: s.score, tickets: Math.round(s.score / 20) });
+ *     },
+ *   });
+ * Two players: when s.opts.players === 2 (or the game offers it itself), run the
+ * go twice, setting s.player2 for the second, and finish with text naming the winner.
+ *
+ * ------------------------------------------------------------- the rides
+ * js/carnival-rides.js: 'dodgems', 'riptide', 'wheel', 'skyhook', 'helter',
+ * 'carousel'. Each walks Jay to the gate, waits for its machinery, swings the
+ * gate, seats him, drives the machinery through carnival.life while he's on
+ * and walks him off where he got on. Esc gets off at the next safe point (the
+ * station, the deck, the bottom, the gate); before boarding it refunds.
  *
  * Rules every attraction keeps: Jay can't start one while wanted, in a car or
  * on a job; gunfire or a blast near the fair, a car driven in among the
@@ -133,12 +165,12 @@
   // How far below the hips the feet of a standing Jay are (his root is at his feet).
   const HIP = 0.97;
 
-  // FOOD: [stall index (south from the arcade), name, price, health, icon, line]
+  // FOOD: [stall index (south from the arcade), name, price, health, icon, line, what the stallholder calls out]
   const FOOD = [
-    ['candyfloss', 'Candy floss', 3, 25, '🍭', 'Pink, sticky and gone in four bites.'],
-    ['hotdog', 'A hot dog', 5, 45, '🌭', 'Onions, mustard, the works.'],
-    ['icecream', 'An ice cream', 4, 35, '🍦', 'Two scoops and a wafer.'],
-    ['doughnuts', 'Hot doughnuts', 4, 35, '🍩', 'A paper bag of six, rolled in sugar.'],
+    ['candyfloss', 'Candy floss', 3, 25, '🍭', 'Pink, sticky and gone in four bites.', 'Candy floss! Spun while you wait, pink or blue!'],
+    ['hotdog', 'A hot dog', 5, 45, '🌭', 'Onions, mustard, the works.', 'Hot dogs! Get your hot dogs, fried onions on the house!'],
+    ['icecream', 'An ice cream', 4, 35, '🍦', 'Two scoops and a wafer.', 'Ice cream! Two scoops, any flavour, cools you right down!'],
+    ['doughnuts', 'Hot doughnuts', 4, 35, '🍩', 'A paper bag of six, rolled in sugar.', 'Hot sugared doughnuts! Six in a bag, fresh from the fryer!'],
   ];
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -393,7 +425,7 @@
       this._seated = false;
       this._cam = null; // { mode, ... } placed this frame
       this._look = 0; //   free-look yaw, relative to the seat
-      this._rigPrev = 0;
+      this._rigPrev = carnival.game.cameraRig.yaw; // free look counts the rig's turns from here
       this._walk = null;
       this._held = {};
       this._prevHeld = {};
@@ -712,11 +744,11 @@
 
     _defineFood() {
       const ix0 = FAIR.x0 + 4;
-      FOOD.forEach(([id, name, price, heal, icon, line], i) => {
+      FOOD.forEach(([id, name, price, heal, icon, line, bark], i) => {
         const z = 128 + i * 11;
         const x = ix0 + 2 + 6 + 0.7; // in front of the counter
         if (DEFS.find((d) => d.id === 'food_' + id)) return;
-        DEFS.push({ id: 'food_' + id, name, kind: 'food', label: 'Buy ' + name.replace(/^An? /, 'a ').replace(/^Hot/, 'hot').replace(/^Candy/, 'candy'), x, z, radius: 2.4, price, heal, icon, line, food: true, sleep: 0 });
+        DEFS.push({ id: 'food_' + id, name, kind: 'food', label: 'Buy ' + name.replace(/^An? /, 'a ').replace(/^Hot/, 'hot').replace(/^Candy/, 'candy'), x, z, radius: 2.4, price, heal, icon, line, food: true, sleep: 0, barks: [bark] });
       });
     }
 
@@ -912,6 +944,10 @@
         console.error(e);
       }
       this._finish(s, false, null, false, why);
+      // Off a ride somewhere high (a mission took over, the game was reset): back on the ground at its way out.
+      const ex = s.def.exit;
+      const p = this.game.player;
+      if (ex && why !== 'died' && why !== 'load' && p.state !== 'dead' && Math.hypot(p.pos.x - ex.x, p.pos.z - ex.z) > 1) p.teleport(ex.x, ex.z, ex.yaw || 0, ex.y);
     }
 
     /** Esc / pad Menu while something runs: get off at the next stop (or close the results). main.js asks first. */
@@ -1024,6 +1060,11 @@
       this._dt = dt;
       const g = this.game;
       const p = g.player;
+      if (this._pendingExit) {
+        const ex = this._pendingExit;
+        this._pendingExit = null;
+        if (!this.session && !p.inVehicle) p.teleport(ex.x, ex.z, ex.yaw, ex.y);
+      }
       const dx = p.pos.x - FAIR.cx, dz = p.pos.z - FAIR.cz;
       const awake = dx * dx + dz * dz < WAKE * WAKE || !!this.session;
       if (awake !== this.awake) {
@@ -1161,11 +1202,16 @@
     serialize() {
       const own = {};
       for (const d of DEFS) if (d.serialize) own[d.id] = d.serialize();
-      return { v: SAVE_V, tickets: this.tickets, earned: this.earned, best: Object.assign({}, this.best), counts: Object.assign({}, this.counts), prizes: Object.assign({}, this.prizes), own };
+      // Saved while on a ride: the save has Jay where the seat was (perhaps fifty metres up); he loads at its way out.
+      const ex = this.session && this.session.def.exit;
+      const out = { v: SAVE_V, tickets: this.tickets, earned: this.earned, best: Object.assign({}, this.best), counts: Object.assign({}, this.counts), prizes: Object.assign({}, this.prizes), own };
+      if (ex) out.exit = { x: ex.x, z: ex.z, y: ex.y, yaw: ex.yaw || 0 };
+      return out;
     }
 
     load(d) {
       if (this.session) this._force('load');
+      this._pendingExit = null;
       this.tickets = 0;
       this.earned = 0;
       this.best = {};
@@ -1178,6 +1224,7 @@
         if (d.counts) Object.assign(this.counts, d.counts);
         if (d.prizes) Object.assign(this.prizes, d.prizes);
         for (const def of DEFS) if (def.load) def.load(d.own ? d.own[def.id] : undefined);
+        if (d.exit && typeof d.exit.x === 'number') this._pendingExit = d.exit; // (next frame: after the player's own state has loaded)
       } else for (const def of DEFS) if (def.load) def.load(undefined);
       this._showTickets(this.atFair);
     }

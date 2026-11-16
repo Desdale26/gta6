@@ -381,7 +381,7 @@
       if (c.propsTotal && c.props >= c.propsTotal) this.unlock('mogul');
       // The end of the pier, and the top of the skyline.
       const pier = lay.waterfront && lay.waterfront.pier;
-      if (pier && pos.x > pier.x1 - 10 && pos.z > pier.z0 && pos.z < pier.z1) this.unlock('pier_end');
+      if (pier && pos.x > pier.x1 - 10 && pos.x < pier.x1 + 3 && pos.z > pier.z0 && pos.z < pier.z1) this.unlock('pier_end'); // (not anywhere east of it: the island is out there)
       const tallest = (g.world && g.world.stats && g.world.stats.tallest) || 150;
       if (!p.inVehicle && pos.y >= Math.min(150, tallest * 0.75)) this.unlock('sky_high');
       if (this.progress().percent >= 100) this.unlock('hundred');
