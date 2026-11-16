@@ -1143,7 +1143,7 @@
     rounds: 3,
     balls: 3,
     seconds: 60,
-    shelf: { v: -0.8, top: KERB + 1.05, hu: 0.9, hv: 0.2 }, // the shelf: middle v, top, half sizes
+    shelf: { v: -0.8, top: KERB + 1.05, hu: 0.9, hv: 0.14 }, // the shelf: middle v, top, half sizes
     floor: KERB + 0.02,
     back: -2.75, //   the curtain at the back
     side: 3.8,
@@ -1327,7 +1327,7 @@
         this.kit.pop(0, CN.shelf.top + 0.6, CN.shelf.v, '+30', 'gold');
         this.kit.burst(0, CN.shelf.top + 0.3, CN.shelf.v, 0xffd24a, 20);
       } else if (g.balls <= 0 && !this.balls.some((b) => b.on && b.t < 2.2) && !this.tins.some((t) => t.state === 'loose' && t.v.lengthSq() > 0.05)) g.wait = 1.0;
-      this.kit.reticle(A.u, A.y, CN.shelf.v);
+      this.kit.reticle(A.u, A.y, CN.shelf.v + CN.R);
       this.place();
     },
 
@@ -1342,7 +1342,7 @@
       g.throwT = 0;
       s.ui.stat('balls', 'Balls', g.balls);
       const [hu, hy, hv] = CN.hand;
-      const dx = A.u - hu, dy = A.y - hy, dz = CN.shelf.v - hv;
+      const dx = A.u - hu, dy = A.y - hy, dz = CN.shelf.v + CN.R - hv;
       const T = Math.hypot(dx, dz) / CN.speed;
       b.p.set(hu, hy, hv);
       b.v.set(dx / T, (dy + 0.5 * 9.8 * T * T) / T, dz / T);
@@ -1388,7 +1388,8 @@
           if (this.tins[a].state !== 'stand' || this.tins[c].state !== 'stand') {
             t.state = 'loose';
             const side = this.tins[a].state !== 'stand' ? -1 : 1;
-            t.v.set(side * 0.15, 0, -0.05);
+            t.v.set(side * 0.3, 0, -0.45);
+            t.w.set(-3, 0, -side * 2);
           }
         }
         // Balls into tins, tins into tins.
@@ -1417,9 +1418,10 @@
         p.z = CN.back + r;
         if (v.z < 0) v.z = -v.z * 0.2;
       }
-      if (p.z + r > 2.3) {
+      if (p.z + r > 2.3 && v.z > 0) {
+        // The counter's inside (a ball on its way out from Jay's hand passes).
         p.z = 2.3 - r;
-        if (v.z > 0) v.z = -v.z * 0.3;
+        v.z = -v.z * 0.3;
       }
       if (Math.abs(p.x) + r > CN.side) {
         p.x = Math.sign(p.x) * (CN.side - r);
@@ -1435,25 +1437,37 @@
       }
     },
 
-    /** A ball meets a tin. */
+    /** A ball meets a tin: the ball against the tin's real shape (a cylinder, however it lies). */
     hit(bp, bv, mb, rb, t, s) {
-      const d = _cv.subVectors(t.p, bp);
-      const dist = d.length(), min = rb + CN.R;
-      if (dist >= min || dist < 1e-5) return;
-      d.multiplyScalar(1 / dist);
+      const d = _cv.subVectors(bp, t.p);
+      if (d.lengthSq() > 0.09) return;
+      // Into the tin's own frame, to the nearest point of the cylinder, and back.
+      _cq.copy(t.q).invert();
+      d.applyQuaternion(_cq);
+      const hz = Math.hypot(d.x, d.z), hh = CN.H / 2;
+      const k = hz > CN.R ? CN.R / hz : 1;
+      const inside = hz < CN.R && Math.abs(d.y) < hh;
+      _ca.set(d.x * k, clamp(d.y, -hh, hh), d.z * k);
+      if (inside) _ca.set(d.x * (CN.R / Math.max(hz, 1e-4)), d.y, d.z * (CN.R / Math.max(hz, 1e-4)));
+      d.sub(_ca); // the nearest point → the ball
+      let dist = d.length();
+      if (!inside && (dist >= rb || dist < 1e-5)) return;
+      if (inside) { d.set(_ca.x, 0, _ca.z).normalize(); dist = -0.01; } else d.multiplyScalar(1 / dist);
+      d.applyQuaternion(t.q).negate(); // now the normal from the ball into the tin
       const rel = (bv.x - t.v.x) * d.x + (bv.y - t.v.y) * d.y + (bv.z - t.v.z) * d.z;
       // Apart first.
-      bp.addScaledVector(d, -(min - dist) * 0.5);
-      if (t.state !== 'stand') t.p.addScaledVector(d, (min - dist) * 0.5);
+      bp.addScaledVector(d, -(rb - dist) * 0.6);
+      if (t.state !== 'stand') t.p.addScaledVector(d, (rb - dist) * 0.4);
       if (rel <= 0) return;
       const J = ((1 + 0.3) * rel) / (1 / mb + 1);
       bv.addScaledVector(d, -J / mb);
       if (t.state === 'stand') t.state = 'loose';
       t.v.addScaledVector(d, J);
-      // Spin from where it was struck.
-      t.w.x += d.z * J * 6;
-      t.w.z -= d.x * J * 6;
-      t.w.y += d.x * J * 2;
+      // Spin from where it was struck: high up tips it over, off-centre turns it.
+      const up = bp.y - t.p.y;
+      t.w.x += d.z * J * (3 + up * 30);
+      t.w.z -= d.x * J * (3 + up * 30);
+      t.w.y += (bp.x - t.p.x) * J * 20;
       s.sound('clank', { gain: clamp(J / 4, 0.3, 1.2) });
     },
 

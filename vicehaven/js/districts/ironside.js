@@ -958,6 +958,7 @@
       for (const dx of [-5, 5]) c.prop.box(tx + dx - 0.03, KERB + 9.4, tz - 0.03, tx + dx + 0.03, KERB + G.h + 1.6, tz + 0.03, col(0x2a2c30));
       c.prop.box(tx - 6.3, KERB + 9.0, tz - 1.25, tx + 6.3, KERB + 9.4, tz + 1.25, col(0xd8a520));
       container(world, c, tx - 6.1, tx + 6.1, tz, KERB + 6.4, 0x2a8a8a);
+      world.physics.addBox(tx - 6.3, KERB + 6.4, tz - 1.25, tx + 6.3, KERB + 9.4, tz + 1.25, 'metal', F().ALL); // hangs in the air: solid to aircraft and shots
       W.sign(world, { x: G.x0 - 0.62, y: KERB + G.h + 0.8, z: (G.z0 + G.z1) / 2, yaw: -PI / 2, w: 18, h: 1.2, lines: ['SOUTHBAY FREIGHT · SWL 40 T'], style: 'info', oneSided: true, colors: { bg: ['#d8a520', '#c08f18'], fg: '#1c1c1e', bar: '#1c1c1e' } });
     }
 
