@@ -427,6 +427,20 @@ gets you off at the next stop; trouble near the fair (gunfire, police, a
 car on the fairground) stops the rides for a minute. The food stalls sell
 candy floss, hot dogs, ice cream and doughnuts that restore health.
 
+**The midway and Arcade Row.** Every stall at Wonder Wharf is a game of
+skill with a fixed price, 30 to 60 seconds a go: the Golden Grabber claw
+machine, Sharpshooter Alley (a cork rifle at ducks and pop-up targets), Ring
+Fling hoopla, Tin Can Tumble, the Bell Ringer strongman, Crab Bonkers,
+Hook-a-Duck and Boardwalk Hoops. In Arcade Row three cabinets are playable,
+each with a table of high scores: Boardwalk Dash (run the pier), Seafront
+Sprint (a top-down time trial) and Bubble Sub (bubble the fish, then the Big
+Angler). Every game pays tickets by the score; at any of them press R to
+"challenge a friend" and two players take turns on the same go. Swap tickets
+at the Prize Shack for plush toys, the Wonder Wharf cap (Jay wears it),
+armour, a cash voucher, Wharf Gold paint for the body shops, or the giant
+plush crab. The Wharf app on Jay's phone lists every attraction, its price,
+your best and the prizes still to win.
+
 **Police.** Crimes that someone sees raise your heat (1–5). If a passer-by
 phones it in, the police know where you are for the first 12 seconds or so
 (longer at higher heat) and come straight for you. Patrol cars

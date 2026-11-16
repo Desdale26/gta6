@@ -24,8 +24,10 @@
  * Country blocks stand on a raised grass verge instead of a concrete
  * pavement, and get lamps only every 60 m, on the sides that face a road.
  * Everything is merged into the chunk builders or instanced (trees, lamps);
- * crops are walk-through (you can push through corn) and marked for the
- * collision audit; hedges, fences, gateposts and bales are solid.
+ * the small things (fences, gates, animals, bales, troughs, sheds, veg
+ * beds) go on the chunks' detail surfaces, hidden beyond 320 m. Crops are
+ * walk-through (you can push through corn) and marked for the collision
+ * audit; hedges, fences, gateposts and bales are solid.
  *
  *   VH.Fill4.block(world, block) -> true if it built the block
  */
@@ -44,7 +46,7 @@
     oilseed: { w: 2, top: 0xf0d820, side: 0x8aa83a, h: 1.0, rows: 1.6, rowW: 1.6, surf: 'concrete' },
     lettuce: { w: 2, top: 0x86c84e, side: 0x5e9a36, h: 0.28, rows: 0.9, rowW: 0.5, surf: 'concrete', soil: true },
     cabbage: { w: 1, top: 0x6aa878, side: 0x4e8a5a, h: 0.4, rows: 1.0, rowW: 0.6, surf: 'concrete', soil: true },
-    plough: { w: 2, top: 0x7a5a3a, side: 0x5e4430, h: 0.16, rows: 1.0, rowW: 0.55, surf: 'concrete', soil: true },
+    plough: { w: 2, top: 0xb08a60, side: 0x94704c, h: 0.16, rows: 1.0, rowW: 0.55, surf: 'concrete', soil: true },
     corn: { w: 2, top: 0x8ab84a, side: 0x6a9a3a, h: 2.2, rows: 1.1, rowW: 0.7, surf: 'hedge', soil: true },
     sunflower: { w: 2, top: 0xf2c318, side: 0x5e8a2e, h: 1.7, rows: 1.2, rowW: 0.6, surf: 'hedge', soil: true, head: true },
     hay: { w: 2, top: 0xc8c070, side: 0xa8a050, h: 0.35, rows: 2.0, rowW: 2.0, surf: 'concrete', bales: true },
@@ -133,10 +135,10 @@
             // Post and rail: posts every 2.5 m, two rails.
             const ax0 = run.alongX ? a : run.c - 0.06, ax1 = run.alongX ? b : run.c + 0.06;
             const az0 = run.alongX ? run.c - 0.06 : a, az1 = run.alongX ? run.c + 0.06 : b;
-            for (const y of [0.55, 1.0]) ctx.wood.box(ax0, KERB + y, az0, ax1, KERB + y + 0.12, az1, post);
+            for (const y of [0.55, 1.0]) ctx.detailWood.box(ax0, KERB + y, az0, ax1, KERB + y + 0.12, az1, post);
             for (let p = a; p <= b + 0.01; p += 2.5) {
               const px = run.alongX ? p : run.c, pz = run.alongX ? run.c : p;
-              ctx.wood.box(px - 0.08, KERB, pz - 0.08, px + 0.08, KERB + 1.25, pz + 0.08, post);
+              ctx.detailWood.box(px - 0.08, KERB, pz - 0.08, px + 0.08, KERB + 1.25, pz + 0.08, post);
             }
             world.physics.addBox(ax0, 0, az0, ax1, KERB + 1.25, az1, 'fence', F().SOLID);
           }
@@ -150,7 +152,7 @@
         for (const s of [-1, 1]) {
           const p = g + s * 2.6;
           const px = run.alongX ? p : run.c, pz = run.alongX ? run.c : p;
-          ctx.wood.box(px - 0.15, KERB, pz - 0.15, px + 0.15, KERB + 1.5, pz + 0.15, post);
+          ctx.detailWood.box(px - 0.15, KERB, pz - 0.15, px + 0.15, KERB + 1.5, pz + 0.15, post);
           world.physics.addBox(px - 0.16, 0, pz - 0.16, px + 0.16, KERB + 1.5, pz + 0.16, 'pole', F().SOLID | F().SHOTS);
         }
         // The gate stands open, flat against the hedge line on one side.
@@ -158,7 +160,7 @@
         const gx0 = run.alongX ? p0 : run.c - 0.05, gx1 = run.alongX ? p1 : run.c + 0.05;
         const gz0 = run.alongX ? run.c + 0.5 : p0, gz1 = run.alongX ? run.c + 0.6 : p1;
         const steel = VH.col(0x9aa0a6);
-        for (const y of [0.3, 0.7, 1.1]) ctx.prop.box(gx0, KERB + y, gz0, gx1, KERB + y + 0.06, gz1, steel);
+        for (const y of [0.3, 0.7, 1.1]) ctx.detail.box(gx0, KERB + y, gz0, gx1, KERB + y + 0.06, gz1, steel);
         world.physics.addBox(gx0, 0, gz0, gx1, KERB + 1.16, gz1, 'metal', F().SOLID);
       }
     }
@@ -314,23 +316,23 @@
     for (const f of [-A.hl * 0.72, A.hl * 0.72]) {
       for (const r of [-A.hw * 0.62, A.hw * 0.62]) {
         const [lx, lz] = at(f, r);
-        ctx.propMatte.orientedBox(lx, lz, 0.08, 0.08, yaw, y, y + A.y0 + 0.05, leg); // solidity: passable (inside the body's collider)
+        ctx.detailMatte.orientedBox(lx, lz, 0.08, 0.08, yaw, y, y + A.y0 + 0.05, leg); // solidity: passable (inside the body's collider)
       }
     }
-    ctx.propMatte.orientedBox(x, z, A.hw, A.hl, yaw, y + A.y0, y + A.y1, body);
+    ctx.detailMatte.orientedBox(x, z, A.hw, A.hl, yaw, y + A.y0, y + A.y1, body);
     if (kind === 'cow' && body !== A.patch && rng.chance(0.6)) {
       const [px, pz] = at(rng.range(-0.4, 0.4), 0);
-      ctx.propMatte.orientedBox(px, pz, A.hw + 0.02, 0.32, yaw, y + A.y0 + 0.25, y + A.y1 + 0.02, VH.col(A.patch));
+      ctx.detailMatte.orientedBox(px, pz, A.hw + 0.02, 0.32, yaw, y + A.y0 + 0.25, y + A.y1 + 0.02, VH.col(A.patch));
     }
     // Head down grazing, or up.
     const grazing = rng.chance(0.6);
     const [hx, hz] = at(A.hl + 0.25, 0);
     const headCol = A.headCol ? VH.col(A.headCol) : body;
-    if (grazing) ctx.propMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + 0.15, y + A.y0 + 0.2, headCol);
-    else ctx.propMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + A.y1 - 0.25, y + A.y1 + 0.25, headCol);
+    if (grazing) ctx.detailMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + 0.15, y + A.y0 + 0.2, headCol);
+    else ctx.detailMatte.orientedBox(hx, hz, A.hw * 0.5, 0.3, yaw, y + A.y1 - 0.25, y + A.y1 + 0.25, headCol);
     if (A.neck) {
       const [nx, nz] = at(A.hl, 0);
-      ctx.propMatte.orientedBox(nx, nz, 0.14, 0.3, yaw, y + (grazing ? 0.5 : A.y1 - 0.2), y + A.y1 + (grazing ? -0.2 : 0.3), body);
+      ctx.detailMatte.orientedBox(nx, nz, 0.14, 0.3, yaw, y + (grazing ? 0.5 : A.y1 - 0.2), y + A.y1 + (grazing ? -0.2 : 0.3), body);
     }
     // From the tail (-hl) to the nose (hl + 0.55).
     world.physics.addOrientedBox(x + 0.275 * s, z + 0.275 * c, A.hw + 0.05, A.hl + 0.275, yaw, 0, y + A.y1 + (grazing ? 0 : 0.25), 'animal', F().SOLID | F().SHOTS);
@@ -356,8 +358,8 @@
     // A galvanised water trough by the fence.
     const tx = lot.minX + 2, tz = rng.range(lot.minZ + 3, lot.maxZ - 5);
     if (!placed.some(([px, pz]) => Math.abs(px - tx) < 3 && Math.abs(pz - tz - 1.2) < 3)) {
-      ctx.prop.box(tx - 0.4, KERB, tz, tx + 0.4, KERB + 0.6, tz + 2.4, VH.col(0x9aa0a6));
-      ctx.decal.topRect(tx - 0.32, tz + 0.08, tx + 0.32, tz + 2.32, KERB + 0.58, VH.col(0x5a7f8a));
+      ctx.detail.box(tx - 0.4, KERB, tz, tx + 0.4, KERB + 0.6, tz + 2.4, VH.col(0x9aa0a6), { skip: { top: true } });
+      ctx.detail.box(tx - 0.32, KERB + 0.6 - 0.12, tz + 0.08, tx + 0.32, KERB + 0.6 - 0.1, tz + 2.32, VH.col(0x5a7f8a)); // the water, just under the rim
       world.physics.addBox(tx - 0.4, 0, tz, tx + 0.4, KERB + 0.6, tz + 2.4, 'metal');
     }
   }
@@ -396,7 +398,7 @@
   function allotmentPlot(world, r, alongX, side, rng) {
     const ctx = world.ctxAt((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2);
     // Timber edging round the bed (knee-low), then the earth.
-    ctx.wood.box(r.x0, KERB, r.z0, r.x1, KERB + 0.16, r.z1, VH.col(0x8a6a48), { skip: { top: true } });
+    ctx.detailWood.box(r.x0, KERB, r.z0, r.x1, KERB + 0.16, r.z1, VH.col(0x8a6a48), { skip: { top: true } });
     ctx.asphaltTop.topRect(r.x0 + 0.1, r.z0 + 0.1, r.x1 - 0.1, r.z1 - 0.1, KERB + 0.16, VH.col(0x6b4f35, 4.5), 6); // the asphalt grain, browned: tilled earth
     world.physics.addBox(r.x0, 0, r.z0, r.x1, KERB + 0.16, r.z1, 'dirt', F().SOLID);
     const y = KERB + 0.16;
@@ -408,19 +410,19 @@
     const along0 = alongX ? r.x0 + 0.5 : r.z0 + 0.5, along1 = alongX ? r.x1 - 0.5 : r.z1 - 0.5;
     const deep0 = pathEnd + inward * keep, deep1 = (side < 0 ? (alongX ? r.z0 : r.x0) : alongX ? r.z1 : r.x1) - inward * 0.5;
     const lo = Math.min(deep0, deep1), hi = Math.max(deep0, deep1);
-    const box = (a0, a1, d0, d1, y0, y1, col, surf) => (alongX ? (surf || ctx.hedge).box(a0, y0, d0, a1, y1, d1, col, { bottom: false }) : (surf || ctx.hedge).box(d0, y0, a0, d1, y1, a1, col, { bottom: false }));
+    const box = (a0, a1, d0, d1, y0, y1, col, surf) => (alongX ? (surf || ctx.detailMatte).box(a0, y0, d0, a1, y1, d1, col, { bottom: false }) : (surf || ctx.detailMatte).box(d0, y0, a0, d1, y1, a1, col, { bottom: false }));
     if (rng.chance(0.3)) {
       // Runner beans up a row of canes (tied in an A).
       const a = (along0 + along1) / 2;
-      for (let d = lo + 0.3; d < hi - 0.2; d += 0.5) box(a - 0.03, a + 0.03, d - 0.03, d + 0.03, y, y + 2.0, VH.col(0xb8a070), ctx.wood);
-      box(a - 0.25, a + 0.25, lo + 0.2, hi - 0.1, y + 0.3, y + 1.8, VH.col(0x4f8a3a), ctx.hedge);
+      for (let d = lo + 0.3; d < hi - 0.2; d += 0.5) box(a - 0.03, a + 0.03, d - 0.03, d + 0.03, y, y + 2.0, VH.col(0xb8a070), ctx.detailWood);
+      box(a - 0.25, a + 0.25, lo + 0.2, hi - 0.1, y + 0.3, y + 1.8, VH.col(0x4f8a3a));
       if (alongX) world.physics.addBox(a - 0.3, 0, lo + 0.2, a + 0.3, y + 2.0, hi - 0.1, 'hedge', F().SOLID);
       else world.physics.addBox(lo + 0.2, 0, a - 0.3, hi - 0.1, y + 2.0, a + 0.3, 'hedge', F().SOLID);
     } else {
       const v = VEG[rng.int(0, VEG.length - 1)];
       for (let a = along0 + 0.3; a < along1 - 0.2; a += v.rows + 0.35) {
-        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y, y + v.h, VH.col(v.side), ctx.hedge); // solidity: passable
-        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y + v.h - 0.02, y + v.h, VH.col(v.top), ctx.hedge); // solidity: passable
+        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y, y + v.h, VH.col(v.side)); // solidity: passable
+        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y + v.h - 0.02, y + v.h, VH.col(v.top)); // solidity: passable
       }
     }
     if (hasShed) {
@@ -428,16 +430,16 @@
       const a = rng.chance(0.5) ? along0 + 0.2 : along1 - 2.4;
       const d0 = side < 0 ? pathEnd - 2.6 : pathEnd + 0.4, d1 = d0 + 2.2;
       const wall = VH.col(rng.pick([0x6a8a5a, 0x8a6a48, 0x5a7a8a, 0xa8432f, 0x7a7a6a]));
-      box(a, a + 2.2, d0, d1, y, y + 2.1, wall, ctx.wood);
-      box(a - 0.15, a + 2.35, d0 - 0.15, d1 + 0.15, y + 2.1, y + 2.25, VH.col(0x3a3a3a), ctx.prop);
+      box(a, a + 2.2, d0, d1, y, y + 2.1, wall, ctx.detailWood);
+      box(a - 0.15, a + 2.35, d0 - 0.15, d1 + 0.15, y + 2.1, y + 2.25, VH.col(0x3a3a3a));
       const df = side < 0 ? d1 : d0 - 0.04;
-      box(a + 0.7, a + 1.5, df, df + 0.04, y, y + 1.9, VH.colMul(wall, 0.7), ctx.wood);
+      box(a + 0.7, a + 1.5, df, df + 0.04, y, y + 1.9, VH.colMul(wall, 0.7), ctx.detailWood);
       if (alongX) world.physics.addBox(a - 0.15, 0, d0 - 0.15, a + 2.35, y + 2.25, d1 + 0.15, 'crate');
       else world.physics.addBox(d0 - 0.15, 0, a - 0.15, d1 + 0.15, y + 2.25, a + 2.35, 'crate');
       // The water butt beside it.
       const wa = a < (along0 + along1) / 2 ? a + 2.8 : a - 0.6, wd = (d0 + d1) / 2;
       const [wx, wz] = alongX ? [wa, wd] : [wd, wa];
-      ctx.propMatte.cylinder(wx, y, wz, 0.38, 0.38, 1.0, 10, VH.col(0x2e5a3a), true, VH.col(0x24482e));
+      ctx.detailMatte.cylinder(wx, y, wz, 0.38, 0.38, 1.0, 10, VH.col(0x2e5a3a), true, VH.col(0x24482e));
       world.physics.addOrientedBox(wx, wz, 0.38, 0.38, Math.PI / 4, 0, y + 1.0, 'prop');
     }
   }
@@ -473,8 +475,12 @@
     house: ['house', 'front_door'],
     bigbox: ['retail', 'storefront', 'superstore'],
     hotel: ['hotel', 'motel'],
+    apartment: ['flats', 'apartment', 'front_door'],
+    office: ['office', 'front_door'],
+    shophouse: ['shop', 'storefront', 'cafe'],
+    lowrise: ['shop', 'storefront', 'cafe'],
   };
-  const LOT_NAMES = { farmhouse: 'Farmhouse', barn: 'Barn', silo: 'Grain silos', warehouse: 'Warehouse', depot: 'Lorry depot', terrace: 'Terraced houses', house: 'House', bigbox: 'Superstore', hotel: 'Hotel' };
+  const LOT_NAMES = { farmhouse: 'Farmhouse', barn: 'Barn', silo: 'Grain silos', warehouse: 'Warehouse', depot: 'Lorry depot', terrace: 'Terraced houses', house: 'House', bigbox: 'Superstore', hotel: 'Hotel', apartment: 'Flats', office: 'Offices', shophouse: 'Shops', lowrise: 'Shops' };
 
   /** A spot on the verge or pavement `out` metres off side s of r, facing into r. */
   function sideSpot(r, s, along, out) {

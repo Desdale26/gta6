@@ -9,7 +9,8 @@
  *   ride(speed, wind, o)       a ride's own sound while Jay is on it: track roar and rush of wind
  *                              (0..1 each); o.clank: the lift-hill chain. rideStop() silences it.
  *   one-shots: klaxon, bump, ding, clank, whoosh, cheer, buzz, win, lose, tick, nope, spark,
- *   scream, bell, pop, splash, thud — each takes { gain, pan } (all optional).
+ *   scream, bell, pop, splash, thud — each takes { gain, pan } (all optional); chip (an
+ *   arcade blip: { f, f1, len }).
  */
 (function () {
   'use strict';
@@ -306,6 +307,13 @@
       if (!this._ok()) return;
       const a = this.a, t = a.ctx.currentTime, k = (o && o.k) || 1;
       a._tone({ t, freq: 260, freqEnd: 260 + 1200 * k, wave: 'sine', attack: 0.03, peak: 0.09, decay: 0.25 + 0.6 * k, bus: a.ui });
+    }
+
+    /** An arcade blip: a square wave from o.f to o.f1 Hz over o.len seconds. */
+    chip(o) {
+      if (!this._ok()) return;
+      const a = this.a, t = a.ctx.currentTime, k = (o && o.gain) || 1;
+      a._tone({ t, freq: (o && o.f) || 660, freqEnd: (o && o.f1) || (o && o.f) || 660, wave: 'square', peak: 0.05 * k, decay: (o && o.len) || 0.08, lowpass: 3200, bus: a.ui });
     }
 
     thud(o) {

@@ -50,6 +50,7 @@
     ['Silver Mist', 0xb7bcc3],
     ['Gunmetal', 0x4a4f57],
     ['Gloss Black', 0x101113],
+    ['Wharf Gold', 0xd4a017, 'gold'], // a Prize Shack prize at Wonder Wharf (carnival-shack.js): on the card once won
   ];
   const BRAND = { sign: ['FRESH COAT', 'RESPRAY · REPAIR'], bg: ['#ff4f8b', '#7a2bd0'], fg: '#ffffff', band: 0xd23a7f, trim: 0xffd27a };
   // The roller door's timing (seconds): down, sprayed, up.
@@ -471,6 +472,9 @@
         }
       });
       this.pick = (best + 1) % PAINTS.length;
+      // Wharf Gold only once it's been won.
+      this.swatches.forEach((sw, i) => (sw.style.display = this._allowed(i) ? '' : 'none'));
+      while (!this._allowed(this.pick)) this.pick = (this.pick + 1) % PAINTS.length;
       this.card = true;
       this._shown = '';
       this.cardEl.classList.add('visible');
@@ -495,9 +499,17 @@
       this._stickX = sx;
       if (step) {
         this.pick = (this.pick + step + PAINTS.length) % PAINTS.length;
+        while (!this._allowed(this.pick)) this.pick = (this.pick + Math.sign(step) + PAINTS.length) % PAINTS.length;
         if (this.game.audio.click) this.game.audio.click();
       }
       this._refresh(v);
+    }
+
+    /** A colour on the card (a prize colour only once Jay has won it). */
+    _allowed(i) {
+      const need = PAINTS[i][2];
+      const c = this.game.carnival;
+      return !need || !!(c && c.prizes && c.prizes[need] > 0);
     }
 
     /** What it costs: the paint, the repairs, and the heat. */

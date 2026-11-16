@@ -798,6 +798,17 @@
     const at = list.findIndex((d) => d.id === 'outskirts');
     list.splice(at, 0, ...FILL_DISTRICTS);
   }
+  // Where an older district's rectangle runs on over land only a 4.0
+  // district uses (the airport's corners outside its fence, Vista Verde's
+  // edge north of Southbay Road), districtAt looks here first, so the HUD
+  // names the farm or the street you are on. Nothing older stands in them.
+  VH.Data.districtOver = [
+    ['haverly', -1110, 400, -1600, -1512], //      north of the airport fence (z -1510)
+    ['haverly', -1110, -1032, -1512, -1189], //    west of its west end, down to Airport Road
+    ['gateway', -1110, -60.01, -1171, -1100], //   between Airport Road and College Road
+    ['gateway', 60.01, 384, -1134, -1100],
+    ['southgate', -640, -12.01, 640.99, 651], //   Southgate's south pavements (Southbay Road stays Vista Verde's)
+  ].map(([id, minX, maxX, minZ, maxZ]) => ({ minX, maxX, minZ, maxZ, district: FILL_DISTRICTS.find((d) => d.id === id) }));
 
   /**
    * Archetype sets a 4.0 cell can ask for (cells4 `arch`) instead of its
@@ -973,7 +984,7 @@
     C4('outskirts', [-636, -320, 1760, 1800], { strip: true, kind: 'park' }),
     C4('outskirts', [-320, 0, 1760, 1800], { strip: true, kind: 'park' }),
     C4('outskirts', [0, 330, 1760, 1800], { strip: true, kind: 'park' }),
-    C4('haverly', [384, 424, -1800, -1076], { strip: true, kind: 'park', low: [-1570, -1330] }), // the Seawall Walk, past the airport
+    C4('outskirts', [384, 424, -1800, -1076], { strip: true, kind: 'park', low: [-1570, -1330] }), // the Seawall Walk, past the airport
     C4('outskirts', [384, 424, -745, -390], { strip: true, kind: 'park' }),
     C4('outskirts', [288, 384, -664, -384], { strip: true, kind: 'park' }), //           Northgate Gardens
     C4('gateway', [-636, -410, -1134, -1070], { strip: true, arch: 'carhire' }), //      behind Airport Road, north of the university
@@ -985,6 +996,13 @@
     C4('outskirts', [-1088, -1050, -193, -46], { strip: true, kind: 'park' }), //       either side of the fort's road in
     C4('outskirts', [-1088, -1050, 46, 193], { strip: true, kind: 'park' }),
     C4('outskirts', [330, 424, 1760, 1784], { strip: true, kind: 'park' }), //           by the Cove Causeway
+    // Round the fort's walls (x -1500..-1120, z -400..400), outside them: a
+    // green either side of the gate's greens, allotments along the north
+    // and south walls (low: nothing tall near the airstrip's ends).
+    C4('outskirts', [-1118, -1050, -440, -200], { strip: true, kind: 'park' }),
+    C4('outskirts', [-1118, -1050, 200, 440], { strip: true, kind: 'park' }),
+    C4('outskirts', [-1500, -1118, -440, -401], { strip: true, kind: 'allotments', low: [-445, -395] }),
+    C4('outskirts', [-1500, -1118, 401, 440], { strip: true, kind: 'allotments', low: [395, 445] }),
   ];
 
   // Open ground on purpose (tools/emptiness.mjs counts it as a place, see
@@ -992,7 +1010,6 @@
   VH.Data.open4 = [
     { minX: -1582, maxX: -1039, minZ: -1478, maxZ: -1422, label: 'Runway 09 approach lights', track: true },
     { minX: 13, maxX: 200, minZ: -853, maxZ: -747, label: 'The stunt ramps field' },
-    { minX: -630, maxX: -392, minZ: -382, maxZ: 382, label: 'Crestline estate gardens (walled lawns)' },
   ];
 
   // The 4.0 landmarks, after the 3.0 ones (so nothing there changes): built-in
@@ -1023,7 +1040,7 @@
     // The strips' names on the full map (points, no plot).
     { id: 'breakwater_allotments', name: 'Breakwater Allotments', district: 'outskirts', x: -1546, z: -296, kind: 'allotments' },
     { id: 'south_coast_greenway', name: 'South Coast Greenway', district: 'redwater', x: -760, z: 1784, kind: 'park' },
-    { id: 'seawall_walk', name: 'Seawall Walk', district: 'haverly', x: 406, z: -1250, kind: 'park' },
+    { id: 'seawall_walk', name: 'Seawall Walk', district: 'outskirts', x: 406, z: -1250, kind: 'park' },
     { id: 'northgate_gardens', name: 'Northgate Gardens', district: 'outskirts', x: 336, z: -526, kind: 'park' },
   ]) VH.Data.landmarks3.push(Object.assign(lm, { v4: true }));
 })();

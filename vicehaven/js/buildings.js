@@ -811,7 +811,7 @@
   /** A round hay bale standing on end (solid: Jay climbs it, cars stop). */
   function hayBale(ctx, x, z, y, s) {
     const r = 0.8 * (s || 1);
-    ctx.propMatte.cylinder(x, y, z, r, r, 1.2, 10, VH.col(0xd8be6a), true, VH.col(0xc9a94e)); // (matte paint: the wood grain needs UVs a cylinder has not got)
+    ctx.detailMatte.cylinder(x, y, z, r, r, 1.2, 10, VH.col(0xd8be6a), true, VH.col(0xc9a94e)); // (matte paint: the wood grain needs UVs a cylinder has not got; hidden far off)
     roundCollider(ctx.physics, x, z, r, y - 0.1, y + 1.2, 'crate');
   }
 
@@ -872,14 +872,14 @@
     for (const [p0, p1] of [[a0, gate - 1.6], [gate + 1.6, a1]]) {
       if (p1 - p0 < 1) continue;
       if (horiz) {
-        ctx.wood.box(p0, KERB + 0.35, c - 0.04, p1, KERB + 0.45, c + 0.04, white);
-        ctx.wood.box(p0, KERB + 0.75, c - 0.04, p1, KERB + 0.85, c + 0.04, white);
-        for (let p = p0; p <= p1; p += 0.6) ctx.wood.box(p - 0.05, KERB, c - 0.05, p + 0.05, KERB + 0.95, c + 0.05, white);
+        ctx.detailWood.box(p0, KERB + 0.35, c - 0.04, p1, KERB + 0.45, c + 0.04, white);
+        ctx.detailWood.box(p0, KERB + 0.75, c - 0.04, p1, KERB + 0.85, c + 0.04, white);
+        for (let p = p0; p <= p1; p += 0.6) ctx.detailWood.box(p - 0.05, KERB, c - 0.05, p + 0.05, KERB + 0.95, c + 0.05, white);
         ctx.physics.addBox(p0, 0, c - 0.1, p1, KERB + 0.95, c + 0.1, 'fence', VH.COLLIDE.SOLID);
       } else {
-        ctx.wood.box(c - 0.04, KERB + 0.35, p0, c + 0.04, KERB + 0.45, p1, white);
-        ctx.wood.box(c - 0.04, KERB + 0.75, p0, c + 0.04, KERB + 0.85, p1, white);
-        for (let p = p0; p <= p1; p += 0.6) ctx.wood.box(c - 0.05, KERB, p - 0.05, c + 0.05, KERB + 0.95, p + 0.05, white);
+        ctx.detailWood.box(c - 0.04, KERB + 0.35, p0, c + 0.04, KERB + 0.45, p1, white);
+        ctx.detailWood.box(c - 0.04, KERB + 0.75, p0, c + 0.04, KERB + 0.85, p1, white);
+        for (let p = p0; p <= p1; p += 0.6) ctx.detailWood.box(c - 0.05, KERB, p - 0.05, c + 0.05, KERB + 0.95, p + 0.05, white);
         ctx.physics.addBox(c - 0.1, 0, p0, c + 0.1, KERB + 0.95, p1, 'fence', VH.COLLIDE.SOLID);
       }
     }
@@ -956,7 +956,7 @@
     if (rng.chance(0.5)) {
       const x = rng.range(x0 + 3, x1 - 4), z = rng.range(z0 + 3, z1 - 3);
       if (clear(x, z)) {
-        ctx.prop.box(x, KERB, z - 0.4, x + 2.4, KERB + 0.6, z + 0.4, VH.col(0x8a9096));
+        ctx.detail.box(x, KERB, z - 0.4, x + 2.4, KERB + 0.6, z + 0.4, VH.col(0x8a9096));
         ctx.physics.addBox(x, 0, z - 0.4, x + 2.4, KERB + 0.6, z + 0.4, 'metal');
       }
     }

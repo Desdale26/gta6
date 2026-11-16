@@ -66,20 +66,25 @@
     if (!GB) return fn();
     const LOW = KERB + 0.3;
     const { box, orientedBox, cylinder } = GB;
-    GB.box = function (x0, y0, z0, x1, y1, z1, color, opts) {
+    // The wrappers are compiled with new Function so their frames carry no file
+    // name: the collision audit (tools/solidity.mjs) then credits what they draw
+    // to the district line that asked for it (whose `// solidity: passable` mark
+    // still counts), not to this file.
+    const make = (body, ...deps) => new Function(...deps.map((d) => d[0]), 'return ' + body)(...deps.map((d) => d[1]));
+    GB.box = make(`function (x0, y0, z0, x1, y1, z1, color, opts) {
       if (y0 > LOW && (!opts || opts.bottom === undefined)) opts = Object.assign({}, opts, { bottom: true });
       return box.call(this, x0, y0, z0, x1, y1, z1, color, opts);
-    };
-    GB.orientedBox = function (cx, cz, hx, hz, yaw, y0, y1, color, topColor) {
+    }`, ['box', box], ['LOW', LOW]);
+    GB.orientedBox = make(`function (cx, cz, hx, hz, yaw, y0, y1, color, topColor) {
       const r = orientedBox.apply(this, arguments);
       if (y0 > LOW) under(this, cx, cz, hx, hz, yaw, y0, color);
       return r;
-    };
-    GB.cylinder = function (cx, y0, cz, rBottom, rTop, h, segments, color) {
+    }`, ['orientedBox', orientedBox], ['LOW', LOW], ['under', under]);
+    GB.cylinder = make(`function (cx, y0, cz, rBottom, rTop, h, segments, color) {
       const r = cylinder.apply(this, arguments);
       if (y0 > LOW && rBottom > 0.04 && h > 0.01) cylinder.call(this, cx, y0 - 0.002, cz, 0, rBottom, 0.002, segments, color, false);
       return r;
-    };
+    }`, ['cylinder', cylinder], ['LOW', LOW]);
     try {
       return fn();
     } finally {

@@ -6,7 +6,9 @@ builders. Everything here is generated from data: `js/data/districts.js`
 new blocks `VH.Data.cells3`, the new landmarks `VH.Data.landmarks3`) and
 `js/citygen.js` (`layout.blocks3`, `layout.plots`). The numbers below were
 printed from the generator, so they are the truth; if you change the data,
-re-check them.
+re-check them. The 4.0 fill (six more districts, the strips along the
+edges and Paloma Cove's islet) is at the end: "VICEHAVEN 4.0 — no empty
+spaces".
 
 ## Conventions
 
@@ -359,6 +361,9 @@ Useful game APIs: `game.vehicles.addFixedSpot({ type, x, z, yaw })`
   streams. Never change `VH.Data.districts` entries that aren't yours, the
   order of the lists in districts.js, the road data or `cells3` (block ids
   feed the generator; changing one moves things).
+- The 4.0 data the same way: `FILL_DISTRICTS`, `districtOver`, `roads4`,
+  `extend4`, `cells4` (append new cells at the end; an index is a block
+  id and an RNG stream) and `open4`.
 - Other builders' plots and districts; js/island.js's deck, shore and
   colliders; the stunt ramps' field; the lighthouse water rectangle is
   ISLAND/WEST-NORTH's only.
@@ -456,3 +461,285 @@ orange = unclaimed plot, grey = built, dark = road, blue = water, white
 district outlines with their ids, gold dashed plot outlines, the listed
 rectangles numbered in yellow. It is a report, not a test (exit code 0).
 One browser, about a minute; not while the smoke test runs.
+
+## VICEHAVEN 4.0 — no empty spaces (the fill, as built)
+
+The countryside ring round the city and the gaps between the old districts
+are now six more districts, strips of greens and allotments along the
+edges, and a new islet. Strictly additive again: nothing older moved (a
+dump of every block, lot, road, place, prop and collider before and after
+compares equal outside the new land; the only things gone are the
+scattered countryside trees that stood where the new blocks are, and
+junction splits and median palms where a new road meets an old one).
+
+Where it lives:
+
+- `js/data/districts.js`, the 4.0 block at its end: the districts
+  (`FILL_DISTRICTS`, inserted before `outskirts`, flagged `v3` and `v4`),
+  `VH.Data.districtOver`, `VH.Data.archSets4`, `VH.Data.roads4`,
+  `VH.Data.extend4`, the islet and its causeway (pushed onto
+  `VH.Data.island`), `VH.Data.cells4`, `VH.Data.open4` and the landmarks
+  (pushed onto `VH.Data.landmarks3` with `v4: true`).
+- `js/citygen.js`: blocks `f_<district>_<n>` (n = the index in cells4)
+  after the 3.0 blocks in `layout.blocks3`, RNG `'vicehaven-4'` forked per
+  block id, `block.v4`, `block.arch`, `block.low`, `block.strip`; the old
+  roads' former ends are kept as `v3From`/`v3To` so nothing laid out
+  against them moves; `districtAt` checks `VH.Data.districtOver` first.
+- `js/fill4.js` builds the country blocks (fields, farms, paddocks,
+  allotments, greens) and registers their story spots; the town blocks
+  use the generic fill in world.js like 3.0.
+- `js/buildings.js`: the new archetypes `farmhouse`, `barn`, `silo`,
+  `warehouse`, `depot`, `terrace`, `bigbox` and `VH.Buildings.hayBale`.
+- `js/world.js`: the chunk builders' detail surfaces (below).
+
+### The 4.0 districts
+
+`districtAt` takes the first match: the `first:` rectangles
+(`VH.Data.districtOver`, land inside an older district's rectangle that
+only a 4.0 district uses), then every district's rectangles in list order.
+`ambient.mix` in districts.js is each district's traffic ([type, weight]):
+types that don't exist yet (`bus`, `tractor`) are skipped until a
+vehicles builder adds them under those ids.
+
+| id | Name | rects (districtAt) x0..x1, z0..z1 | lots | archetypes (floors) | ambient peds/cars |
+|---|---|---|---|---|---|
+| `haverly` | Haverly Farms | -1600..470, -1800..-1600; -1600..-1110, -1600..-1180; first: -1110..400, -1600..-1512; -1110..-1032, -1512..-1189 | 34–60 | farmhouse 1–2, barn 1–1, silo 1–1 | 0.15 / 0.3 |
+| `gateway` | Gateway Park | -1600..-640, -1180..-700; -1600..-1080, -700..-430; first: -1110..-60, -1171..-1100; 60..384, -1134..-1100 | 34–60 | warehouse 1–2, depot 1–1, shed 1–2, lowrise 1–2 | 0.4 / 0.9 |
+| `lantern` | Lantern Heights | -640..-96, -680..-392; -80..-60, -1100..-655 | 12–22 | terrace 2–3, apartment 4–5, shophouse 2–3 | 1.2 / 0.8 |
+| `southgate` | Southgate | -640..-12, 392..641; first: -640..-12, 641..651 | 20–34 | apartment 5–9, shophouse 2–4, office 4–7 | 1.3 / 1 |
+| `redwater` | Redwater | -1600..-640, 680..1800; -1600..-1080, 430..680 | 26–44 | house 1–1, farmhouse 1–2, shophouse 1–2, barn 1–1 | 0.3 / 0.4 |
+| `palomacove` | Paloma Cove | 470..1100, 1440..1800 | 18–30 | lowrise 1–2, shophouse 1–2 | 0.9 / 0.4 |
+
+Archetype sets a block can ask for instead of its district's own
+(`archSets4`, cells4 `arch`): `farm` (farmhouse, barn, silo; an empty lot
+is a dirt yard or, inside the block, a paddock), `hotels`, `carhire`
+(mostly car-park lots), `trade` (bigbox and warehouses).
+
+### Roads
+
+Country lanes are 10–12 m (one lane each way, no parked cars: parking is
+only on roads 14 m and wider), town streets 14 m. Every road starts and
+ends on another road; four-leg crossroads get traffic lights like 3.0.
+The roads' names show in the HUD, on the maps and in the GPS.
+
+| Road | id | axis | at | from .. to | width |
+|---|---|---|---|---|---|
+| Haverly Lane | `haverly_ln` | x | -1700 | -1588 .. 384 | 10 |
+| Westfield Road | `westfield_rd` | z | -1588 | -1700 .. 1760 | 12 |
+| Mill Lane | `mill_ln` | z | -1300 | -1700 .. -440 | 12 |
+| Thresher Lane | `thresher_ln` | x | -1560 | -1588 .. -1300 | 10 |
+| Hayrick Lane | `hayrick_ln` | x | -1320 | -1588 .. -1300 | 10 |
+| Freight Road | `freight_rd` | x | -870 | -1588 .. -636 | 14 |
+| School Lane | `school_ln` | z | -510 | -660 .. -530 | 14 |
+| Lamplighter Street | `lamplighter_st` | x | -530 | -636 .. -96 | 14 |
+| Tramway Street | `tramway_w` | x | 520 | -384 .. -320 | 14 |
+| Tramway Street | `tramway_e` | x | 520 | -160 .. 0 | 14 |
+| Redwater High Street | `redwater_high` | z | -1300 | 440 .. 660 | 12 |
+| Willow Lane | `willow_ln` | z | -1300 | 1190 .. 1760 | 10 |
+| Tipper Lane | `tipper_ln` | z | -870 | 1470 .. 1760 | 14 |
+| Cove Road (Cove Causeway 424..600) | `cove_rd` | x | 1784 | 330 .. 940 | 14 |
+| Lagoon Road | `lagoon_rd` | z | 760 | 1600 .. 1784 | 14 |
+| Shell Street | `shell_st` | x | 1600 | 760 .. 940 | 14 |
+| Dolphin Road | `dolphin_rd` | z | 940 | 1600 .. 1784 | 14 |
+
+| Older road, now longer | id | old from .. to | new from .. to |
+|---|---|---|---|
+| Seawall Drive | `ave384` | -1070 .. 384 | -1700 .. 384 |
+| Airport Road | `airport_rd` | -760 .. 340 | -1588 .. 340 |
+| College Road | `college_rd` | -636 .. -96 | -1588 .. -96 |
+| Cinder Road | `cinder_rd` | -1050 .. -636 | -1588 .. -96 |
+| Starview Road | `starview_rd` | -1050 .. -636 | -1588 .. -636 |
+| Dustbowl Lane | `dustbowl_ln` | -660 .. -200 | -1180 .. -200 |
+| Juniper Avenue | `juniper_ave` | -660 .. -200 | -1180 .. -200 |
+| Cypress Parkway | `ave-384` | -384 .. 384 | -660 .. 660 |
+| Tannery Avenue | `ave-288` | -384 .. 384 | -660 .. 384 |
+| Market Avenue | `ave-192` | -384 .. 384 | -660 .. 384 |
+| Coral Avenue | `ave-96` | -1070 .. 384 | -1070 .. 520 |
+| Birchwood Avenue | `birchwood` | 660 .. 1760 | 384 .. 1760 |
+| Hollyhock Avenue | `hollyhock` | 660 .. 1190 | 384 .. 1190 |
+| Klieg Street | `klieg_st` | -1050 .. -636 | -1588 .. -636 |
+| Southbay Road | `southbay_rd` | -1050 .. 330 | -1588 .. 330 |
+| Dune Street | `dune_st` | -636 .. 330 | -1050 .. 330 |
+| Mariner Way | `mariner_way` | -636 .. 330 | -1588 .. 330 |
+| Foundry Road | `foundry_rd` | -636 .. 330 | -1588 .. 330 |
+| South Coast Highway | `southcoast` | -636 .. 330 | -1588 .. 330 |
+| Backlot Avenue | `backlot_ave` | 200 .. 660 | 200 .. 1760 |
+| Sandpiper Drive | `sandpiper_dr` | 660 .. 1760 | 660 .. 1784 |
+
+The Cove Causeway (on Cove Road, x 424..600, 14 m) is a bridge
+(`VH.Data.island.bridges`, id `cove_causeway`) from Sandpiper Drive's new
+south end to the islet; the seawall railing is open where it leaves the mainland.
+
+### Paloma Cove's islet
+
+The island's south end could not take Paloma Cove: Paloma Field's runway
+runs to z 545 and Old Paloma's blocks and plots reach the shore, and
+x 1160..1520, z 580..840 is water. So Paloma Cove is an islet of its own,
+land x 600..1040, z 1480..1796 (`VH.Data.island.land`, 'Paloma Cove'),
+south of Isla Paloma and clear of it (Isla Paloma's shore is unchanged),
+with its own shore edges from island.js.
+
+### Landmark plots (for FILL-COUNTRY and FILL-TOWN)
+
+Each plot is a kerbed block (the pavement slab, y 0.15) with a placeholder
+lawn and sign until a builder claims it (`plots: [...]` in
+`VH.Districts.register`). The rectangle is the slab's edge. "front" is the
+side on the widest road: the landmark's default place stands on the
+pavement in the middle of that side (`places._plotFront`); register your
+own with `places.add(id, ...)` to move it. "open" means no road on that
+side (a neighbour block, the shore or open ground).
+
+| Plot (landmark id) | block | x0 .. x1 | z0 .. z1 | size (m) | sides (road, width) | front | place |
+|---|---|---|---|---|---|---|---|
+| `haverly_windfarm` Haverly Wind Farm | f_haverly_2 | -1067 .. 381 | -1797 .. -1705 | 1448 x 92 | N: open; S: Haverly Lane (10); W: open; E: open | S | windfarm |
+| `corn_maze` Haverly Corn Maze | f_haverly_10 | -1582 .. -1306 | -1422 .. -1325 | 276 x 97 | N: open; S: Hayrick Lane (10); W: Westfield Road (12); E: Mill Lane (12) | W | maze; low z -1505..-1395 |
+| `haverly_farm_shop` Haverly Farm Shop | f_haverly_12 | -1582 .. -1306 | -1315 .. -1189 | 276 x 126 | N: Hayrick Lane (10); S: Airport Road (18); W: Westfield Road (12); E: Mill Lane (12) | S | farmshop |
+| `longstay_parking` Gateway Long Stay | f_gateway_20 | -1294 .. -1057 | -1063 .. -877 | 237 x 186 | N: College Road (14); S: Freight Road (14); W: Mill Lane (12); E: Dustbowl Lane (14) | N | parking |
+| `gateway_cargo` Gateway Cargo Terminal | f_gateway_21 | -1043 .. -857 | -1063 .. -877 | 186 x 186 | N: College Road (14); S: Freight Road (14); W: Dustbowl Lane (14); E: Juniper Avenue (14) | N | cargo |
+| `redline_mx` Redline MX | f_gateway_23 | -1582 .. -1306 | -863 .. -667 | 276 x 196 | N: Freight Road (14); S: Cinder Road (14); W: Westfield Road (12); E: Mill Lane (12) | N | motocross |
+| `gateway_pound` Gateway Vehicle Pound | f_gateway_27 | -1582 .. -1306 | -653 .. -447 | 276 x 206 | N: Cinder Road (14); S: Starview Road (14); W: Westfield Road (12); E: Mill Lane (12) | N | pound |
+| `lantern_school` Lantern Heights Primary School | f_lantern_31 | -503 .. -391 | -653 .. -537 | 112 x 116 | N: Cinder Road (14); S: Lamplighter Street (14); W: School Lane (14); E: Cypress Parkway (14) | N | school |
+| `kingfisher_park` Kingfisher Park | f_lantern_35 | -625 .. -391 | -523 .. -395 | 234 x 128 | N: Lamplighter Street (14); S: open; W: Westgate Parkway (22); E: Cypress Parkway (14) | W | park |
+| `lantern_fire_station` Lantern Heights Fire Station | f_lantern_38 | -185 .. -103 | -523 .. -391 | 82 x 132 | N: Lamplighter Street (14); S: Northgate Street (14); W: Market Avenue (14); E: Coral Avenue (14) | N | firestation |
+| `southgate_retail` Southgate Retail Park | f_southgate_39 | -625 .. -391 | 395 .. 651 | 234 x 256 | N: open; S: Southbay Road (18); W: Westgate Parkway (22); E: Cypress Parkway (14) | W | retail |
+| `southgate_market` Southgate Market Hall | f_southgate_42 | -313 .. -167 | 391 .. 651 | 146 x 260 | N: Southshore Boulevard (14); S: Southbay Road (18); W: Birchwood Avenue (14); E: Hollyhock Avenue (14) | S | market |
+| `southgate_cinema` Southgate Multiplex | f_southgate_44 | -89 .. -13 | 391 .. 513 | 76 x 122 | N: Southshore Boulevard (14); S: Tramway Street (14); W: Coral Avenue (14); E: Grand Avenue (26) | E | cinema |
+| `southgate_depot` Southgate Bus and Tram Depot | f_southgate_45 | -153 .. -13 | 527 .. 651 | 140 x 124 | N: Tramway Street (14); S: Southbay Road (18); W: Hollyhock Avenue (14); E: Grand Avenue (26) | E | depot |
+| `pelican_links` Pelican Links | f_redwater_48 | -1582 .. -1057 | 669 .. 1181 | 525 x 512 | N: Southbay Road (18); S: Mariner Way (18); W: Westfield Road (12); E: Backlot Avenue (14) | N | golf |
+| `redwater_ranch` Redwater Ranch | f_redwater_49 | -1043 .. -647 | 669 .. 913 | 396 x 244 | N: Southbay Road (18); S: Dune Street (14); W: Backlot Avenue (14); E: Westgate Parkway (22) | E | ranch |
+| `willow_lake` Willow Lake | f_redwater_51 | -1582 .. -1305 | 1199 .. 1463 | 277 x 264 | N: Mariner Way (18); S: Foundry Road (14); W: Westfield Road (12); E: Willow Lane (10) | N | lake |
+| `redwater_solar` Redwater Solar Farm | f_redwater_54 | -1582 .. -1305 | 1477 .. 1749 | 277 x 272 | N: Foundry Road (14); S: South Coast Highway (22); W: Westfield Road (12); E: Willow Lane (10) | S | solar |
+| `redwater_recycling` Redwater Recycling Centre | f_redwater_57 | -863 .. -647 | 1477 .. 1749 | 216 x 272 | N: Foundry Road (14); S: South Coast Highway (22); W: Tipper Lane (14); E: Westgate Parkway (22) | S | recycling |
+| `cove_campsite` Cove Campsite | f_palomacove_58 | 603 .. 753 | 1483 .. 1777 | 150 x 294 | N: open; S: Cove Road (14); W: open; E: Lagoon Road (14) | S | campsite |
+| `cove_beach_club` Cove Beach Club | f_palomacove_59 | 763 .. 937 | 1483 .. 1593 | 174 x 110 | N: open; S: Shell Street (14); W: open; E: open | S | club |
+| `paloma_cove` Paloma Cove | f_palomacove_60 | 947 .. 1037 | 1483 .. 1781 | 90 x 298 | N: open; S: open; W: Dolphin Road (14); E: open | W | beach |
+
+What must stay as it is on and round the plots:
+
+- **Stunt ramps** (activities.js) already stand on four plots; keep each
+  ramp, its run-up (about 60 m before it, along its heading) and its
+  landing (about 50 m after it) clear and driveable: 'Outskirts rodeo'
+  (−560, −470, heading east) in `kingfisher_park`; 'Estate lawn'
+  (−560, 470, heading west) and 'The long field' (−470, 470, heading
+  east) in `southgate_retail` (in the car park is fine); 'Hedge jumper'
+  (−250, 520, heading south) in `southgate_market`.
+- **Runway 09's approach**: arrivals come in from the west along z −1450,
+  descending (airside.js), over the approach lights (x −1360..−1090) that
+  stand in the open strip x −1582..−1039, z −1478..−1422 (`open4`, with a
+  farm track). In z −1505..−1395 nothing may stand taller than the corn
+  (about 3 m); `corn_maze` reaches into that band. Keep the wind farm's
+  turbines on `haverly_windfarm` (250 m north of the approach line) under
+  about 70 m to the blade tips.
+- The fort's airstrip ends at z ±380 inside the walls: the allotments
+  along the fort's north and south walls are `low` (no trees or lamps).
+- `paloma_cove`, `cove_campsite` and `cove_beach_club` reach the islet's
+  shore (3 m in): every edge over water needs a railing or an invisible
+  wall (`VH.Landmarks.railing` / `invisibleWall`). The toll plaza goes at
+  the causeway's island end on Cove Road (x 600..640): booths and a
+  canopy on the verges and over the road, never blocking a lane (traffic
+  drives through). Cove Crazy Golf and the lifeguard station go on the
+  `paloma_cove` beach plot or the campsite.
+
+### Generic blocks
+
+The blocks the generic fill built (block id `f_<district>_<n>` shortened to
+#n; rectangle = pavement or verge edge). Town blocks have lots like 3.0;
+`farm`/`hotels`/`carhire`/`trade` use those archetype sets; `fields` are
+crop strips; `park` a green; `allotments` plots of veg beds and sheds.
+`low` blocks keep trees and lamps out of their low z band; `strip` blocks
+are the greens and allotments along the edges (not where the maps write a
+district's name).
+
+| District | blocks (id, x0,z0..x1,z1, what: fields / park / allotments / farm, hotels, carhire, trade or town + lot count) |
+|---|---|
+| haverly | #0 -1585,-1797..-1303,-1705 farm 10; #1 -1297,-1797..-1073,-1705 fields; #3 -1582,-1695..-1306,-1565 farm 17; #4 -1294,-1695..-1039,-1563 fields; #5 -1033,-1695..-563,-1519 fields low; #6 -557,-1695..-83,-1519 fields low; #7 -77,-1695..377,-1519 fields low; #8 -1582,-1555..-1306,-1478 fields low; #9 -1294,-1557..-1039,-1478 fields low; #11 -1294,-1422..-1039,-1323 fields low; #13 -1294,-1317..-1039,-1189 farm 13 |
+| gateway | #14 -1582,-1171..-1306,-1077 town 12; #15 -1294,-1171..-1057,-1077 hotels 8; #16 -1043,-1171..-857,-1077 carhire 8; #17 -843,-1171..-763,-1077 carhire 4; #18 -757,-1131..-639,-1077 town 2; #19 -1582,-1063..-1306,-877 town 24; #22 -843,-1063..-647,-877 town 16; #24 -1294,-863..-1057,-667 trade 7; #25 -1043,-863..-857,-667 town 16; #26 -843,-863..-647,-667 town 16; #28 -1294,-653..-1057,-447 town 22; #74 -633,-1131..-413,-1077 carhire 6 strip; #75 -407,-1105..-99,-1077 carhire 7 strip; #76 -93,-1159..-53,-1073 carhire 2 strip; #77 50,-1131..285,-1073 carhire 6 strip; #78 291,-1131..377,-1077 carhire 2 strip |
+| lantern | #29 -625,-683..-103,-667 park; #30 -625,-653..-517,-537 town 40; #32 -377,-653..-295,-537 town 34; #33 -281,-653..-199,-537 town 26; #34 -185,-653..-103,-537 town 26; #36 -377,-523..-295,-391 town 34; #37 -281,-523..-199,-391 town 34; #79 -89,-1067..-53,-663 town 48 strip |
+| southgate | #40 -377,391..-327,513 town 8; #41 -377,527..-327,651 town 8; #43 -153,391..-103,513 town 9 |
+| redwater | #46 -1582,447..-1306,651 town 37; #47 -1294,447..-1057,651 town 35; #50 -1043,927..-647,1181 farm 47; #52 -1295,1199..-1057,1463 farm 21; #53 -1043,1199..-647,1463 town 74; #55 -1295,1477..-1057,1749 fields; #56 -1043,1477..-877,1749 town 24; #65 -1585,1771..-1303,1797 park strip; #66 -1297,1771..-873,1797 park strip; #67 -867,1771..-639,1797 park strip |
+| palomacove | #61 767,1607..933,1777 town 42 |
+| outskirts | #62 -1582,-433..-1506,-153 allotments strip; #63 -1582,-147..-1506,147 park strip; #64 -1582,153..-1506,433 allotments strip; #68 -633,1771..-323,1797 park strip; #69 -317,1771..-3,1797 park strip; #70 3,1771..321,1797 park strip; #71 391,-1797..421,-1079 park low strip; #72 391,-742..421,-393 park strip; #73 295,-661..377,-391 park strip; #80 -1085,-190..-1053,-49 park strip; #81 -1085,49..-1053,190 park strip; #82 339,1763..421,1777 park strip; #83 -1115,-433..-1057,-203 park strip; #84 -1115,203..-1057,433 park strip; #85 -1497,-433..-1121,-404 allotments low strip; #86 -1497,404..-1121,433 allotments low strip |
+
+Open ground on purpose (`VH.Data.open4`, declared with
+`VH.Districts.open` by fill4.js so the emptiness scan counts it as a
+place): the runway 09 approach-light strip (x −1582..−1039,
+z −1478..−1422) and the stunt ramps' field north of Northgate
+(x 13..200, z −853..−747).
+
+### The generic fill (what the blocks are made of)
+
+- **Fields** (`fields` blocks): crop strips 14–24 m wide across the
+  block with grass tractor tracks between them: wheat, barley, oilseed,
+  lettuce, cabbage, ploughed furrows, hay with round bales (solid), corn
+  and sunflowers taller than Jay, lavender. Crops are drawn as rows on
+  tilled earth and are walk-through (marked `// solidity: passable`). A
+  hedge (solid, 1.55 m) runs round each field 3.2 m in, with open field
+  gates (posts and a swung-back steel gate) every ~110 m on the lane
+  sides; hedgerow trees in the hedge line.
+- **Farms** (`farm` blocks): farmhouses (porch, lawn, picket fence),
+  barns (gambrel roof, great doors, a dirt yard with bales and a trough),
+  silos (round bins with caged ladders on a pad, a machine shed), dirt
+  yards; the block's inner lots are paddocks (post-and-rail fence, cows,
+  sheep or horses grazing (static, solid), a water trough). A
+  post-and-rail fence round the block with gates on the lanes.
+- **Greens** (`park`): lawn on a kerbed slab, a paved path down the
+  middle, trees both sides, benches, bins, lamps.
+- **Allotments**: plots either side of a gravel path, timber-edged beds
+  of veg rows or bean canes, sheds and water butts, a fence and gates.
+- Country blocks stand on a raised grass verge (kerbed, 0.15 m) instead
+  of a concrete pavement, with a lamp every 60 m on the sides that face a
+  lane. Town blocks are the 3.0 fill (pavements, street trees, lamps,
+  bins, hydrants, car parks with bays).
+- **Detail surfaces** (world.js): `ctx.detail` (prop paint),
+  `ctx.detailMatte`, `ctx.detailWood` draw like `prop`, `propMatte` and
+  `wood` but are hidden when the camera is more than 320 m from the chunk
+  (`DETAIL_FAR`). Put fences, gates, animals, bales, troughs, small
+  sheds, crates and clutter on them: a chunk seen from the air then costs
+  a handful of draw calls. Keep anything you can see from far (buildings,
+  big roofs, towers, turbines, hedges, crops) on the ordinary surfaces.
+
+### Life, places and the maps
+
+- Pedestrians and traffic per district come from `ambient` (crowd.js and
+  traffic.js read `peds` and `cars` for every v3 district; traffic.js also
+  picks from `mix` in v4 districts). Parked cars stand on the 14 m+
+  streets. Police, the GPS and road names work everywhere (the roads are
+  ordinary `layout.roads`).
+- The HUD names the district from `districtAt`; the full map writes each
+  district's name over its blocks (strips left out) and badges the
+  `major` landmarks; the minimap and the full map paint fields and
+  allotments as strips of colour.
+- Story spots registered by fill4.js in `places.extra[<district>]`:
+  field gates (`fields`, `field`, `farm`, `lane`), the allotments gate
+  (`allotments`, `garden`, `park`), the end of each green (`park`,
+  `garden`, `bench`), and a spot in front of each lot by archetype:
+  farmhouse (`farmhouse`, `farm`, `house`, `front_door`), barn (`barn`,
+  `farm`, `garage`, `storage`), silo (`farm`, `yard`, `silo`), warehouse
+  (`warehouse`, `loading_bay`, `cargo`, `depot`), depot (`depot`, `yard`,
+  `truckstop`, `garage`), terrace (`house`, `front_door`, `terrace`),
+  house, bigbox (`retail`, `storefront`, `superstore`), hotel (`hotel`,
+  `motel`), apartment (`flats`, `apartment`, `front_door`), office
+  (`office`, `front_door`), shophouse and lowrise (`shop`, `storefront`,
+  `cafe`). Builders add the landmark kinds (`maze`, `golf`, `ranch`,
+  `lake`, `motocross`, `market`, `beach` ...) on their plots.
+- The landmarks' place ids are in the plot table; all 26 resolve inside
+  their own district and the GPS reaches each from Civic Plaza.
+
+### What is left for the builders
+
+From the emptiness scan after this step (`node vicehaven/tools/emptiness.mjs`):
+the six new districts have no empty land; what remains is the reserved
+plots (orange) and these dressing jobs:
+
+| Job | Where (x0..x1, z0..z1) | Empty cells (24 m) | Who |
+|---|---|---|---|
+| Every 4.0 landmark plot | the plot table above | 2,072 plot cells | FILL-COUNTRY: Haverly Farms and Redwater; FILL-TOWN: Gateway Park, Lantern Heights, Southgate, Paloma Cove |
+| Fort Breakwater interior (read js/fort.js first, only add) | inside the walls, x −1500..−1120, z −400..400: the biggest gaps −1384..−1312, −96..240; −1480..−1432, −312..120; −1168..−1096, −384..−120; −1384..−1264, 264..384; −1240..−1096, 72..144; the strips just inside the north and south walls | 311 | FILL-TOWN |
+| Airport infield and edges (read js/airfield.js and js/airside.js first) | −1024..−760, −1344..−1200; the strip inside the north fence −1024..368, −1512..−1488; −760..−448, −1248..−1200; the grass beside the taxiways at z −1416..−1392 (x −928..80); the strip between the fence's east end and Seawall Drive, x 344..368, z −1416..−1128; small bits of landside west of Grand Avenue North (z −1176..−1104) | 232 + 2 | FILL-TOWN |
+| Crestline estate gardens (read js/outskirts.js `Estates` first, only add inside the garden walls) | the walled lawns of the mansions, x −640..−392, z −392..392 | 110 | FILL-TOWN |
+| The bay (moving scenery) | the water east of the seawall | — | FILL-TOWN |
+
+Run the scan on your own districts (`emptiness.mjs haverly redwater`,
+`... gateway lantern southgate palomacove`, `... fort airport crestline`)
+until only deliberate open ground is left; declare that with
+`VH.Districts.open` and a label that says what it is.

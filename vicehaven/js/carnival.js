@@ -1200,7 +1200,10 @@
     // -------------------------------------------------------------- state
     stats() {
       const rides = DEFS.filter((d) => d.kind === 'ride').reduce((n, d) => n + (this.counts[d.id] || 0), 0);
-      return [['Wonder Wharf rides', rides], ['Fair tickets', this.tickets + ' (' + this.earned + ' won)']];
+      // Plush toys won (the Prize Shack's, and the Golden Grabber's teddies): Jay's shelf.
+      const M = Carnival.Midway;
+      const plush = (M ? M.PRIZES.filter((P) => P.kind === 'plush').reduce((n, P) => n + (this.prizes[P.id] || 0), 0) : 0) + (this.prizes.teddy || 0);
+      return [['Wonder Wharf rides', rides], ['Fair tickets', this.tickets + ' (' + this.earned + ' won)'], ['Plush toys won', plush]];
     }
 
     get saveKey() {

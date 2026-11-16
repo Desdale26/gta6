@@ -16,6 +16,7 @@
   const VH = window.VH;
   const CHUNK = 192;
   const ORIGIN = -768;
+  const DETAIL_FAR = 320; // the detail surfaces' reach (m from the chunk's nearest edge)
   const KERB = 0.15;
 
   /** Which builder channels each surface uses, and how its mesh is drawn. */
@@ -38,6 +39,12 @@
     screen: { opts: {}, mat: 'emissiveScreen', cast: false, receive: false },
     // Inside a roofed room (the corner shops): lit like the street, never in the roof's shadow.
     interior: { opts: {}, mat: 'prop', cast: false, receive: false },
+    // 4.0: small things (fences, gates, animals, bales, sheds) on the usual
+    // materials, hidden beyond DETAIL_FAR so the countryside seen from the
+    // air costs a few draw calls a chunk.
+    detail: { opts: {}, mat: 'prop', cast: true, receive: true, far: true },
+    detailMatte: { opts: {}, mat: 'propMatte', cast: true, receive: true, far: true },
+    detailWood: { opts: { uv: true, uvScale: 2 }, mat: 'wood', cast: true, receive: true, far: true },
   };
 
   function chunkIndex(v) {
@@ -145,6 +152,9 @@
         hedge: lazy('hedge'),
         screen: lazy('screen'),
         interior: lazy('interior'),
+        detail: lazy('detail'),
+        detailMatte: lazy('detailMatte'),
+        detailWood: lazy('detailWood'),
       });
       chunk.ctx = ctx;
       return ctx;
@@ -296,6 +306,7 @@
           mesh.matrixAutoUpdate = false;
           mesh.updateMatrix();
           chunk.group.add(mesh);
+          if (spec.far) (chunk.detail || (chunk.detail = [])).push(mesh);
           meshes++;
           tris += geo.index.count / 3;
           chunk.builders[surface] = null;
@@ -884,6 +895,10 @@
           const dx = Math.max(0, Math.abs(camPos.x - c.center.x) - h);
           const dz = Math.max(0, Math.abs(camPos.z - c.center.z) - h);
           c.group.visible = dx * dx + dz * dz < far * far;
+          if (c.detail) {
+            const near = c.group.visible && dx * dx + dz * dz < DETAIL_FAR * DETAIL_FAR;
+            if (c.detail[0].visible !== near) for (const m of c.detail) m.visible = near;
+          }
         }
       }
 

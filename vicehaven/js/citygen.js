@@ -62,6 +62,13 @@
 
   function districtAt(x, z) {
     const list = VH.Data.districts;
+    const over = VH.Data.districtOver; // 4.0: new districts' land inside an older district's rectangle
+    if (over) {
+      for (let i = 0; i < over.length; i++) {
+        const r = over[i];
+        if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.district;
+      }
+    }
     for (let i = 0; i < list.length; i++) {
       const rs = list[i].rects; // 4.0: a district can be more than one rectangle
       if (rs) {

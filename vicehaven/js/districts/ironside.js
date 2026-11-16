@@ -563,9 +563,10 @@
       const low = yPrev < 2.6; // a flight over a block tread: solid to the ground
       world.physics.addRamp((ax + sx) / 2, (az + sz) / 2, 0.5, len / 2 + 0.05, yaw, low ? 0 : yPrev - 0.4, yPrev, yy, 'metal', F().SOLID | F().SHOTS);
       const [rx0, rz0] = at(a0 - da, r + 1.0), [rx1, rz1] = at(a0, r + 1.0);
-      world.physics.addOrientedBox((rx0 + rx1) / 2, (rz0 + rz1) / 2, 0.05, len / 2 + 0.06, yaw, low ? 0 : yPrev - 0.4, yy + 1.0, 'metal', F().ALL);
+      world.physics.addRamp((rx0 + rx1) / 2, (rz0 + rz1) / 2, 0.05, len / 2 + 0.06, yaw, low ? 0 : yPrev - 0.4, yPrev + 1.0, yy + 1.0, 'metal', F().ALL); // its top follows the handrail
       // The balustrade: a mesh panel under the handrail (what the rail collider is).
-      const pan = [[rx0, yPrev - 0.1, rz0], [rx1, yy - 0.1, rz1], [rx1, yy + 1.0, rz1], [rx0, yPrev + 1.0, rz0]];
+      const yb0 = low ? KERB : yPrev - 0.1, yb1 = low ? KERB : yy - 0.1; // over the block treads the panel skirts down to the ground, like its collider
+      const pan = [[rx0, yb0, rz0], [rx1, yb1, rz1], [rx1, yy + 1.0, rz1], [rx0, yPrev + 1.0, rz0]];
       S().face(ctx.prop, pan, col(0x5a5e63), [x, yy, z]);
       S().face(ctx.prop, pan, col(0x5a5e63), [2 * rx1 - x, yy, 2 * rz1 - z]);
     }
@@ -1398,16 +1399,17 @@
     _build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !VH.WNKit || !VH.SouthKit) return;
+      const part = (k, fn) => { const t = performance.now(); fn(world); (this.partMs || (this.partMs = {}))[k] = Math.round(performance.now() - t); };
       if (layout.plots.ironside_scrapyard) {
-        buildScrapyard(world);
+        part('scrapyard', buildScrapyard);
         world.ironScrap = true;
       }
       if (layout.plots.ironside_power) {
-        buildPower(world);
+        part('power', buildPower);
         world.ironPower = true;
       }
       if (layout.plots.ironside_railyard) {
-        buildRailyard(world);
+        part('railyard', buildRailyard);
         world.ironRail = true;
       }
       this.buildMs = Math.round(performance.now() - t0);

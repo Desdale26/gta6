@@ -96,6 +96,10 @@
     ['landlord', 'Life', '🏢', 'Landlord', 'Buy a property.'],
     ['mogul', 'Life', '🏦', 'Mogul', 'Own every property in town.'],
     ['photo', 'Life', '📷', 'Shutterbug', 'Take a picture in photo mode.'],
+    ['fair_rides', 'Life', '🎡', 'All the Fun of the Fair', 'Ride every ride at Wonder Wharf.'],
+    ['fair_midway', 'Life', '🎯', 'Midway Master', 'Win tickets at every stall game and arcade cabinet at Wonder Wharf.'],
+    ['fair_arcade', 'Life', '🕹', 'Top of the Table', 'Beat the top score on an Arcade Row cabinet.'],
+    ['fair_giant', 'Life', '🦀', 'Crab Champion', 'Win the giant plush crab at the Prize Shack.'],
     ['hundred', 'Life', '🏆', 'Vicehaven 100%', 'Reach 100% completion.'],
   ].map(([id, cat, icon, title, how]) => ({ id, cat, icon, title, how }));
   const BY_ID = new Map(LIST.map((a) => [a.id, a]));

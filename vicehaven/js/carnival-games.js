@@ -2686,8 +2686,8 @@
     seconds: 45,
     ring: { y: KERB + 2.05, v: -1.95, R: 0.23, tube: 0.016 },
     board: { v: -2.3, hw: 0.56, y0: KERB + 1.88, y1: KERB + 2.72 }, // the backboard's face and its size
-    rail: 2.2, //              the hoop slides u -rail..rail
-    still: 6, //               seconds before it starts to slide
+    rail: 1.9, //              the hoop slides u -rail..rail
+    still: 8, //               seconds before it starts to slide
     rb: 0.115, //              the ball
     hand: [0.16, KERB + 1.6, 2.95], // where a throw leaves Jay's hands
     peak: KERB + 3.05, //      every throw's top (just under the canopy)
@@ -2702,13 +2702,33 @@
     floor: KERB + 0.02,
   };
 
-  /** The hoop's place across the rail at go time t (still, then sliding faster). */
+  // The hoop's run, the same every go: still for a while, then end to end along the rail, stopping at
+  // each end; the runs get quicker and the stops shorter. [t0, t1, u0, u1]: a slide, or a stop (u0 = u1).
+  const HOOP_RUN = [];
+  (function () {
+    let t = HO.still, u = 0, to = 1;
+    while (t < HO.seconds + 5) {
+      const k = clamp((t - HO.still) / (HO.seconds - HO.still), 0, 1);
+      const u1 = to * HO.rail, run = (3.4 - 1.3 * k) * (Math.abs(u1 - u) / (2 * HO.rail)), stop = 2.3 - 1.4 * k;
+      HOOP_RUN.push([t, t + run, u, u1], [t + run, t + run + stop, u1, u1]);
+      t += run + stop;
+      u = u1;
+      to = -to;
+    }
+  })();
+
+  /** The hoop's place across the rail at go time t. */
   function hoopAt(t) {
     if (t < HO.still) return 0;
-    const x = t - HO.still;
-    // The phase: a slow start, then up to about 1.3 m/s along the rail.
-    const ph = 0.35 * x + 0.0045 * x * x;
-    return Math.sin(ph) * HO.rail;
+    for (let i = 0; i < HOOP_RUN.length; i++) {
+      const R = HOOP_RUN[i];
+      if (t < R[1]) {
+        if (R[2] === R[3]) return R[2];
+        const k = (t - R[0]) / (R[1] - R[0]);
+        return R[2] + (R[3] - R[2]) * k * k * (3 - 2 * k);
+      }
+    }
+    return 0;
   }
 
   function basketballGeometry() {
@@ -2793,7 +2813,7 @@
     for (const u of [-3.0, 0, 3.0]) put('prop', u - 0.05, KERB + 2.18, -2.71, u + 0.05, KERB + 2.4, -2.6, 0x5a6470);
     // The ball rack on the counter, by Jay's left hand.
     put('wood', -1.3, KERB + 1.04, 2.5, -0.5, KERB + 1.1, 2.95, 0x6b4a32);
-    K.wantSign('hoops_board', ['BASKET 20 · SWISH 30', 'The hoop moves after 6 seconds'], 0xff8a3c, 0xffffff);
+    K.wantSign('hoops_board', ['BASKET 20 · SWISH 30', 'The hoop moves after 8 seconds'], 0xff8a3c, 0xffffff);
     K.QUADS.push(['hoops_board', put.F.wx(-2.4, -2.68), KERB + 1.2, put.F.wz(-2.4, -2.68), put.F.yaw, 2.2, 0.55]);
   });
 
@@ -2812,17 +2832,17 @@
     holder: [-3.0, 1.6, 0.4],
     tint: 4,
     howto: [
-      'Move the ring marker over the hoop. Hold to swing the power; let go in the middle for a throw that reaches the ring.',
+      'Move the ring marker over the hoop. Hold to swing the power; let go in the green for a throw that reaches the ring.',
       'A basket is 20 points; a swish that touches nothing is 30.',
-      'The hoop starts to slide after six seconds, faster and faster: aim where it will be, not where it is.',
+      'After eight seconds the hoop starts to slide from end to end, stopping at each end: aim where it will be, not where it is.',
     ],
     keys: 'Mouse / A D / left stick  aim   ·   Hold click / Space / RT  power, let go to throw',
-    prize: 'One for every 15 points',
+    prize: 'One for every 20 points',
     barks: ['Boardwalk Hoops! Sink it, win it!', 'Three dollars, all the balls you can throw!', 'Swish pays thirty! Step up, shooter!'],
     statKeys: { baskets: 1 },
 
     tickets(score) {
-      return score / 15;
+      return score / 20;
     },
 
     verdict(g) {
@@ -2854,7 +2874,6 @@
       g.dir = 1;
       g.charging = false;
       g.ready = 0.3;
-      g.last = null;
       g.shots = 0;
       g.baskets = 0;
       g.swishes = 0;
@@ -2897,7 +2916,7 @@
       }
       // The gauge: the power, with a tick where the last throw was.
       const ui = Carnival.Midway.ui;
-      if (g.charging) ui.gauge(g.power, g.last === null ? -1 : g.last - 0.008, g.last === null ? -1 : g.last + 0.008, 'Power');
+      if (g.charging) ui.gauge(g.power, 0.4, 0.6, 'Power');
       else ui.gauge(null);
       this.flight(dt, g, s);
       this.kit.reticle(g.cx, HO.ring.y, HO.ring.v, 'hole');
@@ -2928,9 +2947,8 @@
       b.touched = false;
       b.scored = false;
       b.rest = 0;
-      g.last = g.power;
       g.shots++;
-      g.ready = 0.45;
+      g.ready = 0.6;
       g.since = 0;
       s.sound('whoosh', { gain: 0.3 });
     },

@@ -576,3 +576,201 @@ body.at-attraction .hud .hud-banner {
 .cv-reticle.hole::after {
   display: none;
 }
+
+/* ------------------------------------- arcade cabinets (carnival-arcade.js) */
+/* The cabinet's own canvas, shown large while Jay plays it: a bezel, a glow. */
+.cv-arcade {
+  position: absolute;
+  top: 53%;
+  left: 50%;
+  display: none;
+  transform: translate(-50%, -50%);
+  padding: 0.7rem;
+  border-radius: 1.1rem;
+  background: #15131c;
+  box-shadow: 0 0 0 3px #37e8ff, 0 0 40px rgba(55, 232, 255, 0.45), 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.cv-arcade.on {
+  display: block;
+}
+
+.cv-arcade-screen {
+  display: block;
+  width: min(80vw, 96vh, 60rem);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  max-height: 72vh;
+  max-width: calc(72vh * 4 / 3);
+  border-radius: 0.5rem;
+  image-rendering: pixelated;
+}
+
+/* --------------------------------------------- the Prize Shack (carnival-shack.js) */
+.cv-shack {
+  position: absolute;
+  top: 50%;
+  right: 3vw;
+  display: none;
+  width: min(27rem, 46vw);
+  max-height: 80vh;
+  transform: translateY(-50%);
+  flex-direction: column;
+  padding: 0.9rem 1rem 0.7rem;
+  border-radius: 0.9rem;
+  border: 2px solid #ffd24a;
+  background: rgba(24, 12, 44, 0.92);
+  box-shadow: 0 0 34px rgba(180, 92, 255, 0.5);
+}
+
+.cv-shack.on {
+  display: flex;
+  animation: cv-card 0.25s ease-out;
+}
+
+.cv-shack-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.cv-shack-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffd24a;
+}
+
+.cv-shack-have {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffd24a;
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-shack-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cv-shack-row {
+  display: grid;
+  grid-template-columns: 0.9rem 1fr auto auto;
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.98rem;
+}
+
+.cv-shack-row.sel {
+  background: rgba(255, 210, 74, 0.18);
+  box-shadow: inset 0 0 0 2px #ffd24a;
+}
+
+.cv-shack-row.poor .cv-shack-cost {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.cv-shack-row.got .cv-shack-name {
+  color: #7dff9a;
+}
+
+.cv-shack-sw {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+.cv-shack-own {
+  font-size: 0.85rem;
+  color: #7dff9a;
+}
+
+.cv-shack-cost {
+  color: #ffd24a;
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-shack-line {
+  display: none;
+  grid-column: 2 / 5;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.cv-shack-row.sel .cv-shack-line {
+  display: block;
+}
+
+.cv-shack-foot {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* The phone's Wonder Wharf app (carnival-shack.js phonePage). */
+.ph-wharf-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0.2rem 0 0.6rem;
+}
+
+.ph-wharf-top b {
+  font-size: 1.6rem;
+  color: #ffd24a;
+}
+
+.ph-wharf-top span {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.ph-wharf-h {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ff7ab0;
+}
+
+.ph-wharf-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.5rem;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+}
+
+.ph-wharf-mid {
+  opacity: 0.75;
+}
+
+.ph-wharf-row.done .ph-wharf-name {
+  color: #7dff9a;
+}
+
+.ph-wharf-row.can .ph-wharf-right {
+  color: #ffd24a;
+}
+
+.ph-wharf-foot {
+  margin: 0.8rem 0 0.4rem;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.is-wharf .ph-tile { background: linear-gradient(145deg, #ffd24a, #ff7ab0 50%, #b45cff); }
+
+.ph-wharf-row.is-sel {
+  margin: 0 -0.4rem;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.14);
+}

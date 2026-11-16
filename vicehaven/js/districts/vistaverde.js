@@ -548,6 +548,23 @@
       else box(world, 'wood', x0 + 0.25, KERB, z0 + 0.5, x0 + 0.8, KERB + 0.45, z1 - 0.5, 0x8a6a48, 'wood');
     }
     for (let i = 0; i < 4; i++) box(world, 'prop', Fd.x0 + 31, KERB, Fd.z1 - 1.2 - i * 0.9 - 0.9, Fd.x0 + 57, KERB + 0.45 * (4 - i), Fd.z1 - 1.2 - i * 0.9, i % 2 ? 0x9aa6b2 : 0xb8c2cc, 'metal');
+    {
+      // Rails round the bleachers: along the back of the top row (posts + top rail, a team banner on the street side)
+      // and down both ends, stepping with the rows, so nobody walks off the 1.8 m back; the front stays open to climb.
+      const bx0 = Fd.x0 + 31, bx1 = Fd.x0 + 57, zb = Fd.z1 - 1.2, top = KERB + 1.8, c = world.ctxAt((bx0 + bx1) / 2, zb);
+      const rail = 0xdfe4e8;
+      for (let x = bx0 + 0.05; x <= bx1 - 0.05 + 1e-6; x += (bx1 - bx0 - 0.1) / 8) c.prop.box(x - 0.04, top, zb - 0.12, x + 0.04, top + 1.05, zb - 0.04, col(rail));
+      box(world, 'prop', bx0, top + 0.98, zb - 0.13, bx1, top + 1.06, zb - 0.03, rail, 'metal');
+      box(world, 'prop', bx0, top + 0.45, zb - 0.11, bx1, top + 0.5, zb - 0.05, rail, 'metal');
+      world.physics.addBox(bx0, top, zb - 0.13, bx1, top + 1.06, zb - 0.03, 'metal', F().ALL);
+      for (const ex of [bx0 + 0.04, bx1 - 0.04]) for (let i = 0; i < 4; i++) {
+        const zf = zb - i * 0.9 - 0.9, h = KERB + 0.45 * (4 - i);
+        c.prop.box(ex - 0.04, h, zf + 0.4, ex + 0.04, h + 1.0, zf + 0.48, col(rail));
+        box(world, 'prop', ex - 0.04, h + 0.94, zf, ex + 0.04, h + 1.0, zf + 0.9, rail, 'metal');
+        world.physics.addBox(ex - 0.06, h, zf, ex + 0.06, h + 1.0, zf + 0.9, 'metal', F().ALL);
+      }
+      W.sign(world, { x: (bx0 + bx1) / 2, y: KERB + 1.1, z: zb + 0.02, yaw: 0, w: 12, h: 0.9, lines: ['HOME OF THE VERDE VIPERS'], style: 'plaque', oneSided: true, colors: { bg: ['#1c3a1c', '#1c3a1c'], fg: '#f2c230', border: '#f2c230' } });
+    }
     // The outfield fence (low chain) along the north and east, a gate at each end; the plot's west side is the close's fence.
     W.fence(world, Fd.x0, Fd.z0, Fd.x1, Fd.z0, [[Fd.x0 + 2, Fd.x0 + 6]], 'chain', 1.6);
     W.fence(world, Fd.x1, Fd.z0, Fd.x1, Fd.z1, [[Fd.z1 - 8, Fd.z1 - 3]], 'chain', 1.6);

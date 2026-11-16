@@ -521,7 +521,7 @@
     // Podium steps 1-2-3 (people step up them).
     const cxE = (E.x0 + E.x1) / 2;
     const zp0 = E.z1 - 5.5, zp1 = E.z1 - 3.0;
-    for (const [x0, x1, h, c] of [[cxE - 1.4, cxE + 1.4, 0.75, 0xd9b45a], [cxE - 4.2, cxE - 1.4, 0.5, 0xc8ccd0], [cxE + 1.4, cxE + 4.2, 0.35, 0xb87333]]) {
+    for (const [x0, x1, h, c] of [[cxE - 1.4, cxE + 1.4, 0.75, 0xd9b45a], [cxE - 4.2, cxE - 1.4, 0.5, 0xc8ccd0], [cxE + 1.4, cxE + 4.2, 0.42, 0xb87333]]) {
       ctxE.prop.box(x0, KERB, zp0, x1, KERB + h, zp1, col(c));
       world.physics.addBox(x0, 0, zp0, x1, KERB + h, zp1, 'stone', F().ALL);
     }

@@ -24,6 +24,8 @@
  *              next with Set GPS, the last three jobs in a line each, the
  *              acts with their jobs (choose one for its recap), who's who
  *   Map        the full map
+ *   Wharf      Wonder Wharf: tickets, every attraction's price and Jay's best,
+ *              prizes won and still to win (carnival-shack.js fills it)
  *
  * Keys: arrows or WASD move, Enter, E or Space choose, Esc or Backspace go
  * back (and put it away from the home screen), P puts it away, M opens the
@@ -87,6 +89,7 @@
     rain: '<path d="M7.2 14.6a4.4 4.4 0 0 1-.6-8.8 5.7 5.7 0 0 1 10.9 1.5 3.7 3.7 0 0 1-.2 7.3zM8 16.4l1.6.6-1.4 4-1.6-.6zm4.4 0l1.6.6-1.4 4-1.6-.6zm4.4 0l1.6.6-1.4 4-1.6-.6z"/>',
     book: '<path d="M11.1 6.3C9.2 4.9 6.7 4.2 3.6 4.1c-.5 0-.9.4-.9.9v12.2c0 .5.4.9.9.9 3 .1 5.4.8 7.5 2.2zM12.9 6.3c1.9-1.4 4.4-2.1 7.5-2.2.5 0 .9.4.9.9v12.2c0 .5-.4.9-.9.9-3 .1-5.4.8-7.5 2.2z"/>',
     bolt: '<path d="M7.2 13.8a4.4 4.4 0 0 1-.6-8.8 5.7 5.7 0 0 1 10.9 1.5 3.7 3.7 0 0 1-.2 7.3h-3.7l1.2-3.2H11l-2 5.5h2.5L10 21.4l5.8-7.6z"/>',
+    wheel: '<path fill-rule="evenodd" d="M12 2.4a7.6 7.6 0 1 0 0 15.2 7.6 7.6 0 0 0 0-15.2zm0 2a5.6 5.6 0 1 1 0 11.2 5.6 5.6 0 0 1 0-11.2z"/><path d="M11.2 4.4h1.6v11.2h-1.6zM6.4 9.2h11.2v1.6H6.4zM11 10l1-.4 1 .4 3.6 11h-2.1L12 13.6 9.5 21H7.4z"/>',
   };
 
   function svg(name, cls) {
@@ -119,8 +122,9 @@
     messages: { name: 'Messages', title: 'Messages', icon: 'chat' },
     story: { name: 'Story', title: 'Story so far', icon: 'book' },
     map: { name: 'Map', title: 'Map', icon: 'map' },
+    wharf: { name: 'Wharf', title: 'Wonder Wharf', icon: 'wheel' },
   };
-  const GRID = ['hustles', 'rep', 'jobs', 'bank'];
+  const GRID = ['hustles', 'rep', 'jobs', 'bank', 'wharf'];
   const DOCK = ['messages', 'story', 'map'];
   // Views inside an app: the app they belong to.
   const SUBVIEW = { thread: 'messages', storyjob: 'story' };
@@ -830,6 +834,7 @@
         thread: () => this._appThread(box),
         story: () => this._appStory(box),
         storyjob: () => this._appStoryJob(box),
+        wharf: () => VH.Carnival.phonePage(this, box), // the fair's page (carnival-shack.js)
       }[view];
       try {
         if (fill) fill();
