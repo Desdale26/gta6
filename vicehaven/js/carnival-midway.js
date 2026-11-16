@@ -204,7 +204,7 @@
       const u0 = ((slot % 2) * ATLAS.cw) / ATLAS.w, u1 = u0 + ATLAS.cw / ATLAS.w;
       const v1 = 1 - (Math.floor(slot / 2) * ATLAS.ch) / ATLAS.h, v0 = v1 - ATLAS.ch / ATLAS.h;
       // Right along the face (as you look at it), up.
-      const rx = -Math.cos(yaw), rz = Math.sin(yaw);
+      const rx = Math.cos(yaw), rz = -Math.sin(yaw);
       const fx = Math.sin(yaw) * 0.01, fz = Math.cos(yaw) * 0.01;
       const n = pos.length / 3;
       for (const [su, sv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
@@ -341,6 +341,13 @@
       this.card = el('div', 'cv-howto');
       this.reticle = el('div', 'cv-reticle');
       this.tag = el('div', 'cv-player');
+      this.pops = [];
+      for (let i = 0; i < 8; i++) {
+        const d = el('div', 'cv-pop');
+        this.pops.push(d);
+        this.root.append(d);
+      }
+      this._popI = 0;
       this.root.append(this.card, this.reticle, this.tag);
       overlay.root.append(this.root);
       this._rx = -1;
@@ -402,6 +409,17 @@
       } else if (!this.reticle.classList.contains('on')) this.reticle.classList.add('on');
     }
 
+    /** A score that floats up from a point on screen and fades ('+10'). */
+    pop(x, y, text, cls) {
+      const d = this.pops[this._popI++ % this.pops.length];
+      d.textContent = text;
+      d.className = 'cv-pop';
+      d.style.left = Math.round(x) + 'px';
+      d.style.top = Math.round(y) + 'px';
+      void d.offsetWidth;
+      d.className = 'cv-pop on' + (cls ? ' ' + cls : '');
+    }
+
     player(n) {
       this.tag.textContent = n ? 'Player ' + n : '';
       this.tag.classList.toggle('on', !!n);
@@ -412,6 +430,7 @@
       this.hideCard();
       this.ring(null);
       this.player(0);
+      for (const d of this.pops) d.className = 'cv-pop';
     }
   }
 
@@ -423,6 +442,8 @@
   const _s = new THREE.Vector3(1, 1, 1);
   const _p = new THREE.Vector3();
   let SHARED_MAT = null;
+  let UNIT_BOX = null;
+  const _sp = { x: 0, y: 0 };
   const sharedMat = () => SHARED_MAT || (SHARED_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }));
 
   /** The helpers a stall game builds and plays with (one per stall). */
@@ -493,6 +514,54 @@
       m.setMatrixAt(i, _m);
     }
 
+    /**
+     * A set of tinted boxes, one instanced mesh (one draw call) for a stall's
+     * blocky parts, still or moving: set.box(i, u0, y0, v0, u1, y1, v1, colour)
+     * places one by its corners; set.part(i, u, y, v, sx, sy, sz, rx, ry, rz,
+     * colour) by its middle, size and turn (colour optional after the first time).
+     * Call set.done() after moving any.
+     */
+    boxes(max) {
+      if (!UNIT_BOX) UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+      const m = this.mesh(UNIT_BOX.clone(), max, this.flatMat || (this.flatMat = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.1 })));
+      const kit = this;
+      const col = new THREE.Color();
+      for (let i = 0; i < max; i++) {
+        m.setColorAt(i, col.set(0xffffff));
+        kit.hide(m, i);
+      }
+      return {
+        mesh: m,
+        box(i, u0, y0, v0, u1, y1, v1, c) {
+          this.part(i, (u0 + u1) / 2, (y0 + y1) / 2, (v0 + v1) / 2, Math.abs(u1 - u0), Math.abs(y1 - y0), Math.abs(v1 - v0), 0, 0, 0, c);
+        },
+        part(i, u, y, v, sx, sy, sz, rx, ry, rz, c) {
+          _p.set(u, y, v);
+          _q.setFromEuler(_e.set(rx || 0, ry || 0, rz || 0));
+          _s.set(sx, sy, sz);
+          _m.compose(_p, _q, _s);
+          m.setMatrixAt(i, _m);
+          if (c !== undefined && c !== null) {
+            m.setColorAt(i, col.set(c));
+            m.instanceColor.needsUpdate = true;
+          }
+        },
+        /** By a quaternion. */
+        partQ(i, u, y, v, sx, sy, sz, q) {
+          _p.set(u, y, v);
+          _s.set(sx, sy, sz);
+          _m.compose(_p, q, _s);
+          m.setMatrixAt(i, _m);
+        },
+        hide(i) {
+          kit.hide(m, i);
+        },
+        done() {
+          m.instanceMatrix.needsUpdate = true;
+        },
+      };
+    }
+
     /** World position of a frame point, into out (a Vector3). */
     world(u, y, v, out) {
       const F = this.frame;
@@ -532,17 +601,39 @@
       this.game.cameraRig.pitch = 0;
     }
 
+    /** A frame point on screen: into out { x, y } (px); false if behind the camera. */
+    screen(u, y, v, out) {
+      const cam = this.game.renderer.camera;
+      this.world(u, y, v, _v).project(cam);
+      if (_v.z > 1) return false;
+      const r = this.game.renderer.canvas;
+      const W = (r && r.clientWidth) || innerWidth, H = (r && r.clientHeight) || innerHeight;
+      out.x = (_v.x * 0.5 + 0.5) * W;
+      out.y = (-_v.y * 0.5 + 0.5) * H;
+      return true;
+    }
+
     /** The aiming ring over a frame point; null hides it. */
     reticle(u, y, v, style) {
       const ui = Midway.ui;
       if (!ui) return;
-      if (u === null) return ui.ring(null);
-      const cam = this.game.renderer.camera;
-      this.world(u, y, v, _v).project(cam);
-      if (_v.z > 1) return ui.ring(null);
-      const r = this.game.renderer.renderer ? this.game.renderer.renderer.domElement : null;
-      const W = r ? r.clientWidth : innerWidth, H = r ? r.clientHeight : innerHeight;
-      ui.ring((_v.x * 0.5 + 0.5) * W, (-_v.y * 0.5 + 0.5) * H, style);
+      if (u === null || !this.screen(u, y, v, _sp)) return ui.ring(null);
+      ui.ring(_sp.x, _sp.y, style);
+    }
+
+    /** A score floating up from a frame point ('+10'; cls 'gold', 'bad'). */
+    pop(u, y, v, text, cls) {
+      const ui = Midway.ui;
+      if (ui && this.screen(u, y, v, _sp)) ui.pop(_sp.x, _sp.y, text, cls);
+    }
+
+    /** A world point (x, z) in the frame: into out { u, v }. */
+    local(x, z, out) {
+      const F = this.frame;
+      const dx = x - F.x, dz = z - F.z;
+      out.u = dx * F.c - dz * F.s;
+      out.v = dx * F.s + dz * F.c;
+      return out;
     }
 
     /** Confetti from a frame point. */
@@ -566,7 +657,7 @@
     /** The night's glow (0 day .. 1 night), for lamps in a stall. */
     get night() {
       const env = this.game.environment;
-      return env && env.nightK !== undefined ? env.nightK : env && env.isNight ? 1 : 0;
+      return env && env.nightFactor ? env.nightFactor : 0;
     }
   }
 
@@ -592,6 +683,12 @@
       if (this.build) this.build(this.kit);
       this.group.visible = false;
       Midway.games.push(this);
+      // The prompt at the counter's front (unless the game says otherwise).
+      if (this.x === undefined) {
+        const pv = this.promptV === undefined ? this.F.d / 2 + 0.25 : this.promptV;
+        this.x = this.F.wx(0, pv);
+        this.z = this.F.wz(0, pv);
+      }
     },
 
     idle(dt, c) {
@@ -668,6 +765,7 @@
       const D = s.data;
       D.t += dt;
       this.group.visible = true;
+      this._seen = s.game.time || 0;
       this.figure();
       const g = D.go;
       switch (D.phase) {
@@ -911,6 +1009,28 @@
       VH.events.emit('midway:won', { id, tickets });
     },
   };
+
+  // The midway's housekeeping: a stall Jay has walked away from stops drawing its moving parts.
+  Carnival.define({
+    id: 'midway_life',
+    name: 'the midway',
+    kind: 'life',
+    sleep: 0,
+    setup(c) {
+      this.c = c;
+    },
+    idle() {
+      const c = this.c;
+      const t = c.game.time || 0;
+      const s = c.session;
+      for (const d of Midway.games) {
+        if (d.group.visible && t - (d._seen || 0) > 0.5 && !(s && s.def === d)) d.group.visible = false;
+      }
+    },
+    sleepNow() {
+      for (const d of Midway.games) d.group.visible = false;
+    },
+  });
 
   /** Define a stall game on the shared flow (see the header). */
   Carnival.stall = function (def) {
