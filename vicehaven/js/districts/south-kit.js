@@ -10,13 +10,16 @@
   const F = () => VH.COLLIDE;
 
   /**
-   * A round collider: four oriented boxes turned 45 degrees apart, which
-   * together make an octagon hugging a circle of radius r (no square corners
+   * A round collider: 4, 6 or 12 oriented boxes turned evenly round, which
+   * together make a polygon hugging a circle of radius r (no square corners
    * sticking out past the drawn cylinder, no gaps inside it).
    */
   function disc(world, cx, cz, r, y0, y1, tag, flags) {
-    const hx = r * 0.97, hz = r * 0.4;
-    for (let k = 0; k < 4; k++) world.physics.addOrientedBox(cx, cz, hx, hz, k * PI / 4, y0, y1, tag || 'metal', flags === undefined ? F().ALL : flags);
+    // More boxes for bigger drums, so the polygon stays within a few cm of the
+    // drawn circle (a 10 m tank with four boxes left 0.3 m of walk-in on the diagonals).
+    const n = r < 1.5 ? 4 : r < 4 ? 6 : 12;
+    const hx = r * 0.995, hz = r * Math.sin(PI / (2 * n)) * 1.02;
+    for (let k = 0; k < n; k++) world.physics.addOrientedBox(cx, cz, hx, hz, k * PI / n, y0, y1, tag || 'metal', flags === undefined ? F().ALL : flags);
   }
 
   /** A solid upright cylinder drawn on `surf` with a round collider. */

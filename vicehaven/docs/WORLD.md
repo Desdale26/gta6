@@ -422,3 +422,37 @@ machinery may be scenery). Output, per area:
   `// solidity: passable` at the end of the line that draws it and the audit
   skips it (the summary counts those as "marked passable").
 - Re-run until your district says `0 ghost, 0 invisible`.
+
+### Emptiness scan (`tools/emptiness.mjs`)
+
+Is any of the world still plain empty land? The scan boots the game
+headless, looks straight down through a grid of cells (24 m by default) and
+lays everything static that is drawn (chunk meshes, builders' own meshes,
+instanced props) onto a 4 m sub-grid, leaving out the plain ground grass,
+the bare pavement slab under a block and the trees (scattered trees on
+grass are exactly what "empty" looks like). A cell is
+
+- `EMPTY`: land with less than a quarter of it covered by anything;
+- `OPEN`: empty, but inside ground a builder declared deliberate open space
+  with `VH.Districts.open(x0, z0, x1, z1, label)` (call it from `build()`:
+  a runway's grass strips, a pitch, a fairway left as plain grass);
+- `PLOT`: a reserved landmark plot nobody has claimed yet (the placeholder);
+- `BUILT`, `ROAD`, `WATER`.
+
+```
+cd /home/user/gta6
+node vicehaven/tools/emptiness.mjs                          # the whole world
+node vicehaven/tools/emptiness.mjs haverly redwater         # district ids ('new' = the six 4.0 districts)
+node vicehaven/tools/emptiness.mjs --region -1600,-1800,-1100,-1100
+  --cell 24      cell size (m)          --cover 0.25  share of a cell that must be covered
+  --png out.png  the picture (default emptiness.png in the current folder; --png none)
+  --json out.json   --top 15  largest empty rectangles to list   --min 4  their least cells
+```
+
+It prints a summary, a table per district (land, empty, open, plot, built,
+road cells and % empty) and the largest empty rectangles in world metres
+(x0, z0 .. x1, z1), largest first. The PNG: red = empty, green = open,
+orange = unclaimed plot, grey = built, dark = road, blue = water, white
+district outlines with their ids, gold dashed plot outlines, the listed
+rectangles numbered in yellow. It is a report, not a test (exit code 0).
+One browser, about a minute; not while the smoke test runs.

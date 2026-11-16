@@ -608,14 +608,15 @@
       this.game = game;
       const W = K();
       if (!W || !game.world || !game.world.verdeMall) return;
-      // Shoppers' cars, about one bay in two (the lesson corner and the parallel bay left as they are).
+      // Shoppers' cars, about two bays in five (the lesson corner and the parallel bay left as they are;
+      // fewer than half, since every parked car costs draw calls in a view that already has the mall in it).
       const list = [];
       let seed = 5501;
       const zA = MA.park.z0 + 8, zB = MA.park.z1 - 9;
       for (const [x0, x1, heading] of ROWS) {
         for (let z = zA + 1.3; z < zB; z += 2.6) {
           seed++;
-          if (VH.math.hash2(seed, 7) < 0.48) continue;
+          if (VH.math.hash2(seed, 7) < 0.6) continue;
           list.push(W.parkedSpot((x0 + x1) / 2, z, heading, seed));
         }
       }

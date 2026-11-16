@@ -14,6 +14,11 @@
  *   cans      Tin Can Tumble: three balls at a pyramid of six tins, three
  *             pyramids a go; the tins fly, bounce and fall (a small physics
  *             sim: a tin counts when it's off the shelf)
+ *   striker   the Bell Ringer: seven swings of the mallet; hold to lift (the
+ *             power runs up and back), let go at the top, press again as the
+ *             head lands; the puck flies up the scale and maybe rings the bell
+ *   crab      Crab Bonkers: nine holes, crabs popping up (gold ones quick),
+ *             and gulls you mustn't bonk; pick a hole, bonk
  *
  * Every game: a fixed price, 30–60 seconds, tickets by the score (a go played
  * to the end always wins at least one), and "challenge a friend" (two players
@@ -1198,8 +1203,8 @@
     put('prop', -3.85, KERB + 0.04, CN.back - 0.03, 3.85, KERB + 3.2, CN.back, 0x8a1c2c);
     for (let u = -3.6; u < 3.7; u += 0.5) put('prop', u, KERB + 0.04, CN.back, u + 0.08, KERB + 3.2, CN.back + 0.03, 0x6e1422);
     put('prop', -3.85, KERB + 0.02, CN.back, 3.85, KERB + 0.05, 1.8, 0xa08a62);
-    // A rack of balls on the counter.
-    for (let i = 0; i < 4; i++) put('prop', 1.6 + i * 0.13 - 0.05, KERB + 1.04, 2.7 - 0.05, 1.6 + i * 0.13 + 0.05, KERB + 1.13, 2.7 + 0.05, 0xf6f1e4);
+    // A tray for the balls on the counter.
+    put('prop', 1.45, KERB + 1.0, 2.52, 1.92, KERB + 1.045, 2.72, 0x6b4a32);
   });
 
   const _cv = new THREE.Vector3();
@@ -1214,7 +1219,7 @@
     price: 3,
     unit: 'points',
     stand: [0, 3.7],
-    cam: [0.45, 1.95, 5.0, 0, 1.3, -0.8, 40],
+    cam: [0.85, 2.2, 5.5, 0, 1.35, -0.8, 38],
     seconds: CN.seconds,
     holder: [3.0, 1.9],
     tint: 3,
@@ -1504,5 +1509,751 @@
     },
 
     idleGame() {},
+  });
+
+  // ======================================================= THE BELL RINGER
+  // The strongman's tower (STANDS.striker, open air): a 4.6 m scale with a bell on top, a puck on a
+  // rail, and the pad Jay hits with the mallet. In the frame Jay faces -v; the tower is behind the pad.
+  const ST = {
+    swings: 7,
+    seconds: 60,
+    pivot: [0, KERB + 1.42, 1.15], // Jay's shoulders: the mallet swings about here
+    grip: 0.55, //                    his hands along it
+    reach: 1.38, //                   the head's middle
+    aRest: -0.4, //                   the mallet over his shoulder (radians from straight up, + forwards)
+    aWind: -1.0, //                   lifted right back
+    padV: 0.25,
+    padTop: KERB + 0.3,
+    railV: -0.4,
+    y0: KERB + 0.42, //               the puck at rest, and the scale's foot
+    y1: KERB + 4.75, //               the bell's rim: the top of the scale
+    sweep: 0.7, //                    the power runs up (and back down) in this long
+    fall: 0.42, //                    the mallet's swing down
+    hitAt: 0.8, //                    where on the timing gauge the head meets the pad
+    zone: 0.09, //                    half the green zone either side of it
+    perfect: 0.045, //                inside this, a clean strike
+    boost: 1.12, //                   full power, clean strike: over the top (rings at 1)
+    grav: 15,
+    bands: [['TIDDLER', '#2fb7b0'], ['WEAKLING', '#3fae5a'], ['NOT BAD', '#e8b820'], ['STRONG', '#ff8a3c'], ['MIGHTY', '#e0403a']],
+  };
+  ST.aHit = Math.acos((ST.padTop + 0.08 - ST.pivot[1]) / ST.reach);
+  const BULBS = 13;
+
+  /** The scale painted up the board (an upright slot of the sign atlas). */
+  function paintScale(g, x, y, w, h) {
+    // Board pixels: X across (70 = the board's width), Y down from the top (w = the scale's height).
+    const BW = 70, k = h / BW;
+    g.setTransform(0, k, -1, 0, x + w, y);
+    const n = ST.bands.length, bh = w / n;
+    ST.bands.forEach(([name, col], i) => {
+      const top = w - (i + 1) * bh;
+      g.fillStyle = col;
+      g.fillRect(0, top, BW, bh);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(0, top, BW, bh * 0.4);
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, top, BW, 2);
+      // Little ticks up both edges.
+      for (let t = 1; t < 4; t++) {
+        g.fillRect(0, top + (t * bh) / 4, 9, 1.5);
+        g.fillRect(BW - 9, top + (t * bh) / 4, 9, 1.5);
+      }
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      let size = 17;
+      do {
+        g.font = '900 ' + size + 'px "Arial Black", Impact, sans-serif';
+        size--;
+      } while (g.measureText(name).width > BW - 12 && size > 8);
+      g.lineWidth = 3;
+      g.strokeStyle = 'rgba(26,15,46,0.85)';
+      g.strokeText(name, BW / 2, top + bh / 2);
+      g.fillStyle = '#ffffff';
+      g.fillText(name, BW / 2, top + bh / 2);
+    });
+    g.fillStyle = '#ffd24a';
+    g.fillRect(0, 0, BW, 4);
+  }
+
+  decorate((world, K) => {
+    const put = deco(world, K, 'striker');
+    const F = put.F;
+    const B = K.STANDS.striker;
+    const C = VH.COLLIDE;
+    const red = 0xe0403a, dark = 0x2a1d33, steel = 0xc8ccd2;
+    // A rubber mat, the board on its posts, the rail, the lever, the crossbar the sign hangs on.
+    put('wood', -1.0, KERB, -0.95, 1.0, KERB + 0.03, 0.75, 0x6b4a32);
+    put('prop', -0.32, KERB, -0.64, 0.32, ST.y1 + 0.25, -0.5, 0xf6f1e4);
+    for (const s of [-1, 1]) {
+      put('prop', s * 0.32 - 0.06, KERB, -0.66, s * 0.32 + 0.06, ST.y1 + 0.5, -0.48, red);
+      put('prop', s * 0.32 - 0.2, KERB, -0.8, s * 0.32 + 0.2, KERB + 0.12, -0.34, dark);
+    }
+    put('prop', -0.016, ST.y0 - 0.1, ST.railV - 0.03, 0.016, ST.y1, ST.railV, steel);
+    put('prop', -0.07, KERB + 0.03, -0.5, 0.07, KERB + 0.16, ST.padV, dark);
+    put('prop', -0.16, KERB + 0.03, ST.padV - 0.14, 0.16, KERB + 0.18, ST.padV + 0.14, dark);
+    put('prop', -0.05, ST.y1 + 0.18, -0.52, 0.05, ST.y1 + 0.55, -0.42, dark);
+    put('prop', -1.05, ST.y1 + 0.55, -0.66, 1.05, ST.y1 + 1.15, -0.54, dark);
+    // A strip light under the crossbar for the night.
+    put('screen', -0.9, ST.y1 + 0.52, -0.6, 0.9, ST.y1 + 0.55, -0.5, 0xfff4dc);
+    // The board's face: the painted scale (up the board) and the name across the top.
+    K.wantSign('striker_scale', paintScale);
+    K.QUADS.push(['striker_scale', F.wx(0, -0.495), (ST.y0 + ST.y1) / 2, F.wz(0, -0.495), B.yaw, 0.56, ST.y1 - ST.y0, true]);
+    K.wantSign('striker', B.sign, B.a, B.b);
+    K.QUADS.push(['striker', F.wx(0, -0.535), ST.y1 + 0.85, F.wz(0, -0.535), B.yaw, 2.2, 0.55]);
+    // Solid: the tower and its feet (the mat and the pad Jay can stand by).
+    const r = [0, 0, 0, 0];
+    F.box(-0.52, -0.82, 0.52, -0.32, r);
+    world.physics.addBox(r[0], 0, r[1], r[2], ST.y1 + 1.15, r[3], 'pole', C.SOLID | C.SHOTS | C.CAMERA);
+  });
+
+  const _sq = new THREE.Quaternion();
+
+  Carnival.stall({
+    id: 'striker',
+    name: 'The Bell Ringer',
+    tagline: 'Seven swings of the mallet. Ring the bell!',
+    price: 3,
+    unit: 'points',
+    stand: [0, ST.pivot[2]],
+    promptV: 1.6,
+    cam: [-3.5, 2.3, 4.7, 0.25, 2.9, -0.3, 57],
+    seconds: ST.seconds,
+    holder: [-1.5, -0.6, 0.6],
+    tint: 4,
+    howto: [
+      'Hold to lift the mallet: the power runs up and back down. Let go at the top.',
+      'Then, as the mallet comes down, press again when the needle crosses the green: a clean strike.',
+      'Full power and a clean strike rings the bell: 100 points. Seven swings.',
+    ],
+    keys: 'Hold click / Space / RT  lift, let go to swing   ·   Press again on the green  strike',
+    prize: 'One for every 20 points',
+    barks: ['Ring the bell, win a prize! Test your strength!', 'Step up, step up! Who\'s the strongest on the wharf?', 'The Bell Ringer! Seven swings, three dollars!'],
+    statKeys: { swings: 1 },
+    countIdle: false,
+
+    tickets(score) {
+      return score / 20;
+    },
+
+    verdict(g) {
+      return g.bells + (g.bells === 1 ? ' bell' : ' bells') + ' in ' + ST.swings + ' swings';
+    },
+
+    build(kit) {
+      // Mallet handle, mallet head, the pad, the puck (one draw call).
+      this.parts = kit.boxes(4);
+      this.parts.part(0, 0, 0, 0, 0.045, ST.reach - ST.grip + 0.12, 0.045, 0, 0, 0, 0x9b6a3c);
+      this.parts.part(1, 0, 0, 0, 0.34, 0.17, 0.17, 0, 0, 0, 0x5a3a8a);
+      this.parts.part(2, 0, 0, 0, 0.3, 0.08, 0.3, 0, 0, 0, 0xe0403a);
+      this.parts.part(3, 0, 0, 0, 0.16, 0.11, 0.09, 0, 0, 0, 0xffd24a);
+      // The bell: a brass dome that glows when it rings.
+      const bell = new THREE.SphereGeometry(0.21, 14, 6, 0, TAU, 0, PI / 2);
+      this.bellMat = new THREE.MeshStandardMaterial({ color: 0xd4a017, metalness: 0.7, roughness: 0.3, emissive: 0xffd24a, emissiveIntensity: 0 });
+      this.bell = kit.single(bell, this.bellMat);
+      this.bell.position.set(0, ST.y1, -0.38);
+      // Bulbs up both posts: they light up to where the puck is.
+      this.bulbs = kit.mesh(new THREE.SphereGeometry(0.06, 6, 4), BULBS * 2, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      for (let i = 0; i < BULBS * 2; i++) {
+        const side = i < BULBS ? -1 : 1, j = i % BULBS;
+        kit.set(this.bulbs, i, side * 0.32, ST.y0 + ((ST.y1 + 0.3 - ST.y0) * j) / (BULBS - 1), -0.45, 0, 0, 0);
+      }
+      this.bulbs.instanceMatrix.needsUpdate = true;
+      this._lit = -1;
+      this._col = new THREE.Color();
+      this.ST = ST;
+      this.reset();
+    },
+
+    reset() {
+      this.puckY = ST.y0;
+      this.puckV = 0;
+      this.dip = 0;
+      this.ringT = 0;
+      this.mallet(null);
+      this.lights(-1);
+      if (this.bellMat) this.bellMat.emissiveIntensity = 0;
+    },
+
+    /** The mallet at angle a (from straight up, + towards the tower; null: leant on the tower), the pad and the puck. */
+    mallet(a) {
+      if (!this.parts) return;
+      if (a === null) {
+        // Head down on the mat, handle against the post.
+        this.parts.part(0, 0.62, KERB + 0.5, -0.4, 0.045, 0.95, 0.045, 0, 0, 0.32);
+        this.parts.part(1, 0.79, KERB + 0.12, -0.4, 0.17, 0.17, 0.34, 0, 0, 0);
+      } else {
+        const [pu, py, pv] = ST.pivot;
+        const dy = Math.cos(a), dv = -Math.sin(a);
+        const mid = (ST.grip + ST.reach) / 2 - 0.02;
+        this.parts.part(0, pu, py + dy * mid, pv + dv * mid, 0.045, ST.reach - ST.grip + 0.12, 0.045, -a, 0, 0);
+        this.parts.part(1, pu, py + dy * ST.reach, pv + dv * ST.reach, 0.34, 0.17, 0.17, -a, 0, 0);
+      }
+      this.parts.part(2, 0, ST.padTop - 0.04 - this.dip, ST.padV, 0.3, 0.08, 0.3, 0, 0, 0);
+      this.parts.part(3, 0, this.puckY, ST.railV + 0.055, 0.16, 0.11, 0.09, 0, 0, 0);
+      this.parts.done();
+      this.malletA = a === null ? ST.aRest : a;
+    },
+
+    /** Light the bulbs up to height fraction h (-1: all dim; 2: all bright, the bell rang). */
+    lights(h) {
+      if (!this.bulbs) return;
+      const n = h < 0 ? 0 : Math.min(BULBS, Math.ceil(h * (BULBS - 1) + 0.01));
+      const key = h >= 2 ? 99 : n;
+      if (key === this._lit) return;
+      this._lit = key;
+      const c = this._col;
+      for (let i = 0; i < BULBS * 2; i++) {
+        const j = i % BULBS;
+        if (key === 99) c.set(0xfff6c8);
+        else if (j < n) c.setHSL(0.33 - (0.33 * j) / (BULBS - 1), 1, 0.6);
+        else c.set(0x4a3a2a);
+        this.bulbs.setColorAt(i, c);
+      }
+      this.bulbs.instanceColor.needsUpdate = true;
+    },
+
+    begin(g, s) {
+      g.left = ST.swings;
+      g.bells = 0;
+      g.st = 'ready';
+      g.cool = 0.4;
+      g.power = 0;
+      g.dir = 1;
+      g.p = 0;
+      g.k = 0;
+      g.press = null;
+      g.a0 = ST.aRest;
+      g.h = 0;
+      g.gaugeT = 0;
+      s.ui.stat('swings', 'Swings left', g.left);
+      s.ui.caption('Hold to lift the mallet', 2200);
+      this.mallet(ST.aRest);
+    },
+
+    pose(g) {
+      const a = this.malletA === undefined ? ST.aRest : this.malletA;
+      const sh = clamp(PI - a, 0.55, PI + 0.7);
+      const bend = a < 0 ? 0.3 : clamp(0.5 - a * 0.25, 0.05, 0.5);
+      return { w: 1, shoulderL: sh, shoulderR: sh, elbowL: bend, elbowR: bend, splayL: 0.05, splayR: 0.05, lean: a > 1.6 ? 0.3 : a < -0.6 ? -0.12 : 0.05, kneeL: a > 2 ? 0.25 : 0.05, kneeR: a > 2 ? 0.25 : 0.05 };
+    },
+
+    play(dt, g, s) {
+      const ui = Carnival.Midway.ui;
+      const hold = s.down('fire') || s.down('jump');
+      const tap = s.pressed('fire') || s.pressed('jump') || s.pressed('interact');
+      g.cool -= dt;
+      switch (g.st) {
+        case 'ready':
+          this.mallet(ST.aRest);
+          if (g.left > 0 && g.cool <= 0 && hold) {
+            g.st = 'lift';
+            g.power = 0;
+            g.dir = 1;
+          }
+          break;
+        case 'lift': {
+          g.power += (g.dir * dt) / ST.sweep;
+          if (g.power >= 1) {
+            g.power = 2 - g.power;
+            g.dir = -1;
+          } else if (g.power <= 0) {
+            g.power = -g.power;
+            g.dir = 1;
+          }
+          const k = g.power * g.power * (3 - 2 * g.power);
+          this.mallet(ST.aRest + (ST.aWind - ST.aRest) * k);
+          ui.gauge(g.power, 0.9, 1, 'Power');
+          if (!hold) {
+            g.st = 'swing';
+            g.p = g.power;
+            g.k = 0;
+            g.press = null;
+            g.a0 = this.malletA;
+            s.sound('whoosh', { gain: 0.3 + 0.4 * g.p });
+          }
+          break;
+        }
+        case 'swing': {
+          g.k += dt;
+          const n = (g.k / ST.fall) * ST.hitAt;
+          const f = Math.min(1, g.k / ST.fall);
+          this.mallet(g.a0 + (ST.aHit - g.a0) * f * f);
+          if (tap && g.press === null) g.press = n;
+          const hit = g.press !== null && Math.abs(g.press - ST.hitAt) <= ST.zone;
+          ui.gauge(g.press === null ? n : g.press, ST.hitAt - ST.zone, ST.hitAt + ST.zone, 'Strike!', g.press === null ? '' : hit ? 'hit' : 'miss');
+          if (f >= 1) this.strike(g, s);
+          break;
+        }
+        case 'fly':
+          this.fly(dt, g, s);
+          break;
+        case 'rest':
+          // The mallet back up on his shoulder.
+          this.mallet(this.malletA + (ST.aRest - this.malletA) * Math.min(1, dt * 7));
+          if (g.cool <= 0) {
+            if (g.left <= 0) g.over = 'DONE!';
+            else {
+              g.st = 'ready';
+              this.lights(-1);
+            }
+          }
+          break;
+      }
+      if (g.st !== 'lift' && g.st !== 'swing') {
+        g.gaugeT -= dt;
+        if (g.gaugeT <= 0) ui.gauge(null);
+      }
+      this.dip = Math.max(0, this.dip - dt * 0.25);
+      this.bellGlow(dt);
+    },
+
+    after(dt, g, s) {
+      if (g.st === 'fly') this.fly(dt, g, s);
+      Carnival.Midway.ui.gauge(null);
+      this.bellGlow(dt);
+    },
+
+    bellGlow(dt) {
+      if (this.ringT > 0) {
+        this.ringT -= dt;
+        this.bellMat.emissiveIntensity = Math.max(0, this.ringT) * 2.2 * (0.6 + 0.4 * Math.sin(this.ringT * 40));
+        this.bell.rotation.z = Math.sin(this.ringT * 32) * 0.08 * this.ringT;
+        if (this.ringT <= 0) this.bell.rotation.z = 0;
+      }
+    },
+
+    /** The head meets the pad: how clean, how hard, and up goes the puck. */
+    strike(g, s) {
+      const d = g.press === null ? 1 : Math.abs(g.press - ST.hitAt);
+      const acc = d <= ST.perfect ? 1 : clamp(1 - (d - ST.perfect) * 3, 0.4, 1);
+      g.h = g.p * acc * ST.boost;
+      g.left--;
+      s.ui.stat('swings', 'Swings left', g.left);
+      g.st = 'fly';
+      g.gaugeT = 0.5;
+      g.top = false;
+      this.dip = 0.05;
+      const rise = Math.min(1, g.h) * (ST.y1 - ST.y0);
+      this.puckV = Math.sqrt(2 * ST.grav * Math.max(0.02, rise + (g.h >= 1 ? 0.3 : 0)));
+      s.sound('thud', { gain: 0.5 + 0.6 * g.p });
+      s.sound('clank', { gain: 0.4 + 0.6 * g.p });
+      s.sound('slide', { k: Math.min(1, g.h) });
+      if (d <= ST.perfect) s.ui.caption('Clean strike!', 1200);
+      else if (g.press === null) s.ui.caption('Press again as the mallet lands!', 1800);
+      else s.ui.caption(g.press < ST.hitAt ? 'A touch early' : 'A touch late', 1200);
+    },
+
+    /** The puck up the rail and down again; the bell if it gets there. */
+    fly(dt, g, s) {
+      this.puckY += this.puckV * dt;
+      this.puckV -= ST.grav * dt;
+      const top = ST.y1 - 0.06;
+      if (this.puckY >= top) {
+        this.puckY = top;
+        if (!g.top) this.peak(g, s, true);
+        this.puckV = -1.5;
+      } else if (this.puckV <= 0 && !g.top) this.peak(g, s, false);
+      this.lights(g.top && g.h >= 1 ? 2 : (this.puckY - ST.y0) / (ST.y1 - ST.y0));
+      if (this.puckY <= ST.y0) {
+        this.puckY = ST.y0;
+        this.puckV = 0;
+        s.sound('clank', { gain: 0.35 });
+        g.st = 'rest';
+        g.cool = g.h >= 1 ? 1.1 : 0.6;
+      }
+      this.mallet(this.malletA);
+    },
+
+    peak(g, s, rang) {
+      g.top = true;
+      const u = 0, v = ST.railV + 0.1;
+      if (rang) {
+        g.bells++;
+        g.score += 100;
+        this.ringT = 1.4;
+        s.sound('bell', { gain: 1.2 });
+        s.sound('cheer');
+        s.ui.big('DING!', 1000);
+        this.kit.pop(u, ST.y1 + 0.3, v, '+100', 'gold');
+        this.kit.burst(u, ST.y1 + 0.1, v, 0xffd24a, 26);
+        return;
+      }
+      const h = Math.max(0, (this.puckY - ST.y0) / (ST.y1 - ST.y0));
+      const pts = Math.max(5, Math.min(65, Math.round(h * 14) * 5));
+      g.score += pts;
+      const band = ST.bands[Math.min(ST.bands.length - 1, Math.floor(h * ST.bands.length))][0];
+      this.kit.pop(u, this.puckY + 0.25, v, (h > 0.93 ? 'SO CLOSE! ' : band + '  ') + '+' + pts, h > 0.6 ? 'gold' : '');
+      s.sound(h > 0.6 ? 'ding' : 'tick', { gain: 0.6 });
+    },
+
+    idleGame(dt) {
+      // The bulbs chase up the posts while nobody's playing.
+      this._chase = ((this._chase || 0) + dt * 0.9) % 1.4;
+      this.lights(this._chase > 1 ? -1 : this._chase);
+    },
+  });
+
+  // ========================================================== CRAB BONKERS
+  // A sandy table of nine holes behind the counter (booth 'crab', 7 wide, 6 deep). Crabs pop up; so do gulls.
+  const CB = {
+    seconds: 40,
+    top: KERB + 1.06, //               the table's sand (level with the counter)
+    cols: [-0.7, 0, 0.7],
+    rows: [1.3, 1.78, 2.22], //        far to near
+    r: 0.155, //                       a hole
+    hands: [0.18, KERB + 1.32, 3.0], // where Jay holds the bonker
+    hover: 0.34, //                    the bonker's head over a hole
+    swing: 0.09, //                    down onto it
+    back: 0.16, //                     and up again
+    pts: { crab: 10, gold: 25, gull: -20 },
+  };
+  const HOLES = [];
+  CB.rows.forEach((v, r) => CB.cols.forEach((u, c) => HOLES.push({ u, v, r, c })));
+
+  function crabGeometry() {
+    // Facing +v (Jay), white so the instance colour tints it (red, or gold); black eyes.
+    const g = new VH.GeometryBuilder({});
+    const W = VH.col(0xffffff), L = VH.col(0xffe0d0), K = VH.col(0x111111);
+    g.box(-0.13, 0.0, -0.08, 0.13, 0.085, 0.08, W); //   the shell
+    g.box(-0.1, 0.085, -0.06, 0.1, 0.11, 0.06, W);
+    g.box(-0.08, 0.005, 0.08, 0.08, 0.05, 0.095, L); //  mouth parts
+    for (const s of [-1, 1]) {
+      // Claws up and open, legs out to the side, eyes on stalks.
+      g.box(s * 0.13, 0.03, 0.02, s * 0.2, 0.06, 0.06, W);
+      g.box(s * 0.16, 0.06, 0.04, s * 0.24, 0.14, 0.1, W);
+      g.box(s * 0.17, 0.14, 0.06, s * 0.2, 0.18, 0.1, W);
+      g.box(s * 0.21, 0.14, 0.06, s * 0.24, 0.2, 0.1, W);
+      for (let i = 0; i < 3; i++) g.box(s * 0.12, 0.0 + i * 0.002, -0.06 + i * 0.045, s * 0.19, 0.025, -0.04 + i * 0.045, W);
+      g.box(s * 0.045 - 0.008, 0.11, 0.02, s * 0.045 + 0.008, 0.17, 0.035, W);
+      g.box(s * 0.045 - 0.02, 0.165, 0.015, s * 0.045 + 0.02, 0.2, 0.05, L);
+      g.box(s * 0.045 - 0.012, 0.172, 0.05, s * 0.045 + 0.012, 0.195, 0.056, K);
+    }
+    return g.build();
+  }
+
+  function gullGeometry() {
+    // The top half of a gull sticking out of a hole: white, grey wings, a yellow beak with the red spot.
+    const g = new VH.GeometryBuilder({});
+    const W = VH.col(0xf6f4ee), G = VH.col(0x9aa3ad), Y = VH.col(0xf3c13a), R = VH.col(0xd8342c), K = VH.col(0x111111);
+    g.box(-0.08, 0.0, -0.1, 0.08, 0.17, 0.08, W); //   the body
+    g.box(-0.1, 0.06, -0.12, -0.07, 0.16, 0.05, G); // wings folded
+    g.box(0.07, 0.06, -0.12, 0.1, 0.16, 0.05, G);
+    g.box(-0.06, 0.17, -0.05, 0.06, 0.28, 0.07, W); // the head
+    g.box(-0.02, 0.21, 0.07, 0.02, 0.24, 0.16, Y); //  the beak
+    g.box(-0.021, 0.205, 0.12, 0.021, 0.218, 0.14, R);
+    g.box(-0.062, 0.24, 0.02, -0.055, 0.258, 0.04, K); // eyes
+    g.box(0.055, 0.24, 0.02, 0.062, 0.258, 0.04, K);
+    return g.build();
+  }
+
+  decorate((world, K) => {
+    const put = deco(world, K, 'crab');
+    const F = put.F, ctx = put.ctx;
+    // Sand on the floor; the table: wooden sides, sand on top; a painted beach behind.
+    put('prop', -3.3, KERB + 0.02, -2.7, 3.3, KERB + 0.05, 2.42, 0xf2d48a);
+    put('prop', -1.2, KERB + 0.02, 0.98, 1.2, CB.top - 0.04, 2.45, 0x8a5a3a);
+    put('prop', -1.24, CB.top - 0.06, 0.94, 1.24, CB.top, 2.45, 0xf6dc96);
+    for (const s of [-1, 1]) put('wood', s * 1.24 - 0.04, CB.top - 0.06, 0.94, s * 1.24 + 0.04, CB.top + 0.06, 2.45, 0xb8874f);
+    put('wood', -1.24, CB.top - 0.06, 0.9, 1.24, CB.top + 0.06, 0.98, 0xb8874f);
+    put('prop', -3.3, KERB + 0.04, -2.74, 3.3, KERB + 1.2, -2.71, 0xe8d29a);
+    put('prop', -3.3, KERB + 1.2, -2.74, 3.3, KERB + 2.1, -2.71, 0x2fb7b0);
+    put('prop', -3.3, KERB + 2.1, -2.74, 3.3, KERB + 3.2, -2.71, 0x9fdcf5);
+    put('prop', -3.3, KERB + 1.18, -2.71, 3.3, KERB + 1.24, -2.69, 0xffffff);
+    // Cut-out crabs on the beach behind.
+    for (const [u, y, sz] of [[-2.2, 0.55, 0.5], [2.3, 0.75, 0.4], [-0.6, 0.3, 0.3]]) {
+      put('prop', u - sz, KERB + y, -2.71, u + sz, KERB + y + sz * 0.5, -2.68, 0xff5a3c);
+      put('prop', u - sz * 1.25, KERB + y + sz * 0.3, -2.71, u - sz * 0.85, KERB + y + sz * 0.75, -2.68, 0xff5a3c);
+      put('prop', u + sz * 0.85, KERB + y + sz * 0.3, -2.71, u + sz * 1.25, KERB + y + sz * 0.75, -2.68, 0xff5a3c);
+    }
+    // The holes: a yellow rim, black inside.
+    for (const H of HOLES) {
+      const x = F.wx(H.u, H.v), z = F.wz(H.u, H.v);
+      ctx.prop.cylinder(x, CB.top, z, CB.r + 0.035, CB.r + 0.035, 0.012, 16, VH.col(0xffd24a), true);
+      ctx.prop.cylinder(x, CB.top + 0.004, z, CB.r, CB.r, 0.012, 16, VH.col(0x140e18), true);
+    }
+  });
+
+  const _cbCol = new THREE.Color();
+  const _cbM = new THREE.Matrix4();
+  const _cbS = new THREE.Vector3();
+
+  Carnival.stall({
+    id: 'crab',
+    name: 'Crab Bonkers',
+    booth: 'crab',
+    tagline: 'Forty seconds. Bonk the crabs, spare the gulls.',
+    price: 3,
+    unit: 'points',
+    stand: [0, 3.3],
+    cam: [0.62, 3.0, 4.3, 0.05, KERB + 0.95, 1.62, 54],
+    seconds: CB.seconds,
+    holder: [-2.9, -0.4, 0.6],
+    tint: 5,
+    howto: [
+      'Crabs pop out of the holes. Bonk them before they hide again: 10 points.',
+      'A gold crab is quick: 25 points. Gulls pop up too: leave them alone, a bonked gull costs 20.',
+      'Point at a hole and click, or step between the holes with W A S D and bonk with Space.',
+    ],
+    keys: 'Mouse / W A S D / left stick  pick a hole   ·   Click / Space / A  bonk',
+    prize: 'One for every 25 points',
+    barks: ['Crab Bonkers! Bonk a crab, spare the gulls!', 'They\'re quick, these crabs! Three dollars a go!', 'Gold crab pays twenty-five! Step up and bonk!'],
+    statKeys: { crabs: 1 },
+    countIdle: false,
+
+    tickets(score) {
+      return score / 25;
+    },
+
+    verdict(g) {
+      return g.crabs + (g.crabs === 1 ? ' crab' : ' crabs') + ' bonked' + (g.gulls ? ', ' + g.gulls + (g.gulls === 1 ? ' gull' : ' gulls') + ' upset' : '');
+    },
+
+    build(kit) {
+      this.crabMesh = kit.mesh(crabGeometry(), HOLES.length);
+      this.gullMesh = kit.mesh(gullGeometry(), HOLES.length);
+      this.bonker = kit.boxes(2);
+      this.bonker.part(0, 0, 0, 0, 0.04, 1, 0.04, 0, 0, 0, 0xffd24a);
+      this.bonker.part(1, 0, 0, 0, 0.27, 0.15, 0.15, 0, 0, 0, 0xe0403a);
+      const col = new THREE.Color(0xff5a3c);
+      for (let i = 0; i < HOLES.length; i++) this.crabMesh.setColorAt(i, col);
+      this.holes = HOLES.map((H, i) => ({ i, H, kind: null, h: 0, t: 0, up: 0, state: 'down', squash: 0 }));
+      this._hp = new THREE.Vector3();
+      this._hd = new THREE.Vector3();
+      this._hq = new THREE.Quaternion();
+      this._y = new THREE.Vector3(0, 1, 0);
+      this.CB = CB;
+      this.HOLES = HOLES;
+      this.reset();
+    },
+
+    reset() {
+      for (const o of this.holes) {
+        o.kind = null;
+        o.state = 'down';
+        o.h = 0;
+      }
+      this.bonkT = 9;
+      this.sel = 4;
+      this.place();
+    },
+
+    begin(g, s) {
+      g.crabs = 0;
+      g.gulls = 0;
+      g.missed = 0;
+      g.next = 0.6;
+      g.cx = 0;
+      g.cy = 0.5;
+      g.last = -1;
+      g.cool = 0;
+      this.sel = 4;
+      s.ui.stat('crabs', 'Crabs', 0);
+    },
+
+    pose(g) {
+      const H = HOLES[this.sel];
+      const k = this.bonkT < CB.swing ? this.bonkT / CB.swing : this.bonkT < CB.swing + CB.back ? 1 - (this.bonkT - CB.swing) / CB.back : 0;
+      const far = (2.4 - H.v) / 1.1;
+      return { w: 1, shoulderL: 1.0 + far * 0.4, shoulderR: 1.15 + far * 0.45 - k * 0.35, elbowL: 0.45, elbowR: 0.3, lean: 0.25 + far * 0.15 + k * 0.1, twist: -H.u * 0.18, splayR: 0.1 };
+    },
+
+    /** Pop something up in an empty hole. */
+    spawn(g, idle) {
+      let pick = -1;
+      for (let tries = 0; tries < 12 && pick < 0; tries++) {
+        const i = Math.floor(Math.random() * HOLES.length);
+        if (this.holes[i].state === 'down' && i !== g.last) pick = i;
+      }
+      if (pick < 0) return;
+      const o = this.holes[pick];
+      const k = idle ? 0 : clamp(g.t / CB.seconds, 0, 1);
+      const roll = Math.random();
+      o.kind = roll < (idle ? 0.25 : 0.17) ? 'gull' : roll < 0.25 && !idle ? 'gold' : 'crab';
+      o.state = 'rise';
+      o.t = 0;
+      o.up = o.kind === 'gull' ? 1.35 : o.kind === 'gold' ? 0.62 : 1.3 - 0.5 * k;
+      o.squash = 0;
+      this.crabMesh.setColorAt(pick, _cbCol.set(o.kind === 'gold' ? 0xffc21a : 0xff5a3c));
+      this.crabMesh.instanceColor.needsUpdate = true;
+      g.last = pick;
+    },
+
+    /** The holes' life: up, wait, down; a bonked one squashes and drops; a bonked gull flies off. */
+    holesStep(dt) {
+      for (const o of this.holes) {
+        if (o.state === 'down') continue;
+        o.t += dt;
+        if (o.state === 'rise') {
+          o.h = Math.min(1, o.t / 0.12);
+          if (o.h >= 1) {
+            o.state = 'up';
+            o.t = 0;
+          }
+        } else if (o.state === 'up') {
+          if (o.t >= o.up) {
+            o.state = 'sink';
+            o.t = 0;
+          }
+        } else if (o.state === 'sink' || o.state === 'bonked') {
+          o.h = Math.max(0, o.h - dt / (o.state === 'bonked' ? 0.22 : 0.15));
+          if (o.state === 'bonked') o.squash = Math.min(1, o.squash + dt * 12);
+          if (o.h <= 0) {
+            o.state = 'down';
+            o.kind = null;
+          }
+        } else if (o.state === 'flee' && o.t > 0.8) {
+          o.state = 'down';
+          o.kind = null;
+        }
+      }
+    },
+
+    play(dt, g, s) {
+      // Pick a hole: the mouse moves a point over the table (the nearest hole is picked), the keys step.
+      this.kit.cursor(g, dt, 0, -1.05, 1.05, 0, 1.1, 1.6);
+      const inp = s.game.input, pad = inp.pad;
+      let H = HOLES[this.sel];
+      let c = H.c, r = H.r;
+      if (s.pressed('moveLeft')) c = Math.max(0, c - 1);
+      if (s.pressed('moveRight')) c = Math.min(2, c + 1);
+      if (s.pressed('moveForward')) r = Math.max(0, r - 1);
+      if (s.pressed('moveBack')) r = Math.min(2, r + 1);
+      if (pad && pad.connected && Math.hypot(pad.move.x, pad.move.y) > 0.55) {
+        c = pad.move.x < -0.4 ? 0 : pad.move.x > 0.4 ? 2 : 1;
+        r = pad.move.y > 0.4 ? 0 : pad.move.y < -0.4 ? 2 : 1;
+      }
+      if (c !== H.c || r !== H.r) {
+        this.sel = r * 3 + c;
+        H = HOLES[this.sel];
+        g.cx = H.u;
+        g.cy = (2.42 - H.v) / 0.95 - 0.06;
+      } else {
+        // The point under the mouse: nearest hole.
+        const pv = 2.42 - (g.cy + 0.06) * 0.95;
+        let best = this.sel, bd = 1e9;
+        for (let i = 0; i < HOLES.length; i++) {
+          const d = (HOLES[i].u - g.cx) ** 2 + ((HOLES[i].v - pv) * 1.3) ** 2;
+          if (d < bd) {
+            bd = d;
+            best = i;
+          }
+        }
+        if (this.bonkT > CB.swing) this.sel = best;
+      }
+      // Spawning: quicker and busier as the clock runs down.
+      const k = clamp(g.t / CB.seconds, 0, 1);
+      g.next -= dt;
+      let upNow = 0;
+      for (const o of this.holes) if (o.state === 'rise' || o.state === 'up') upNow++;
+      if (g.next <= 0 && upNow < (g.t < 10 ? 2 : 3)) {
+        this.spawn(g, false);
+        g.next = (0.82 - 0.4 * k) * (0.75 + Math.random() * 0.5);
+      }
+      this.holesStep(dt);
+      // The bonk: a press swings the bonker down onto the picked hole; it lands a beat later.
+      this.bonkT += dt;
+      g.cool -= dt;
+      if (g.cool <= 0 && (s.pressed('fire') || s.pressed('jump') || s.pressed('interact'))) {
+        this.bonkT = 0;
+        g.cool = CB.swing + CB.back * 0.8;
+        g.hitDone = false;
+        s.sound('whoosh', { gain: 0.25 });
+      }
+      if (!g.hitDone && this.bonkT >= CB.swing) {
+        g.hitDone = true;
+        this.bonk(g, s);
+      }
+      const P = HOLES[this.sel];
+      this.kit.reticle(P.u, CB.top + 0.03, P.v, 'hole');
+      this.place();
+    },
+
+    after(dt, g, s) {
+      this.bonkT += dt;
+      this.holesStep(dt);
+      this.place();
+    },
+
+    bonk(g, s) {
+      const o = this.holes[this.sel], H = HOLES[this.sel];
+      if (!o.kind || o.state === 'bonked' || o.state === 'flee' || o.h < 0.45) {
+        s.sound('thud', { gain: 0.35 });
+        return;
+      }
+      if (o.kind === 'gull') {
+        g.gulls++;
+        g.score = Math.max(0, g.score + CB.pts.gull);
+        o.state = 'flee';
+        o.t = 0;
+        this.kit.pop(H.u, CB.top + 0.45, H.v, CB.pts.gull + ' not the gulls!', 'bad');
+        s.sound('buzz', { gain: 0.7 });
+        s.ui.caption('Squawk! Leave the gulls be!', 1400);
+        return;
+      }
+      const pts = CB.pts[o.kind];
+      g.crabs++;
+      g.score += pts;
+      o.state = 'bonked';
+      o.t = 0;
+      s.ui.stat('crabs', 'Crabs', g.crabs);
+      this.kit.pop(H.u, CB.top + 0.4, H.v, '+' + pts, o.kind === 'gold' ? 'gold' : '');
+      this.kit.burst(H.u, CB.top + 0.15, H.v, o.kind === 'gold' ? 0xffd24a : 0xfff1a8, o.kind === 'gold' ? 18 : 8);
+      s.sound('bump', { gain: 0.7 });
+      s.sound(o.kind === 'gold' ? 'ding' : 'pop', { gain: 0.6 });
+    },
+
+    place() {
+      const kit = this.kit;
+      for (const o of this.holes) {
+        const H = o.H;
+        const showCrab = o.kind === 'crab' || o.kind === 'gold';
+        if (!showCrab || o.state === 'down') kit.hide(this.crabMesh, o.i);
+        else {
+          const sq = 1 - o.squash * 0.55;
+          kit.set(this.crabMesh, o.i, H.u, CB.top - 0.22 + o.h * 0.23, H.v, 0, 0, 0, 1);
+          if (o.squash) {
+            this.crabMesh.getMatrixAt(o.i, _cbM);
+            _cbM.scale(_cbS.set(1 + o.squash * 0.25, sq, 1 + o.squash * 0.25));
+            this.crabMesh.setMatrixAt(o.i, _cbM);
+          }
+        }
+        if (o.kind !== 'gull' || o.state === 'down') kit.hide(this.gullMesh, o.i);
+        else if (o.state === 'flee') {
+          // Up and away over the back of the stall.
+          const f = o.t / 0.8;
+          kit.set(this.gullMesh, o.i, H.u + f * 0.6, CB.top + 0.05 + f * 2.2, H.v - f * 2.5, -0.5 * f, f * 2, 0.3 * Math.sin(o.t * 30));
+        } else kit.set(this.gullMesh, o.i, H.u, CB.top - 0.3 + o.h * 0.3, H.v, 0, Math.sin(o.t * 5) * 0.4, 0);
+      }
+      this.crabMesh.instanceMatrix.needsUpdate = true;
+      this.gullMesh.instanceMatrix.needsUpdate = true;
+      // The bonker: the head over the picked hole (down onto it mid-bonk), the handle back to Jay's hands.
+      const H = HOLES[this.sel];
+      const t = this.bonkT;
+      const k = t < CB.swing ? t / CB.swing : t < CB.swing + CB.back ? 1 - (t - CB.swing) / CB.back : 0;
+      const o = this.holes[this.sel];
+      const low = o.kind && o.state !== 'down' && o.state !== 'flee' ? 0.08 + o.h * 0.18 : 0.08;
+      const hp = this._hp.set(H.u, CB.top + CB.hover + (low - CB.hover) * k, H.v);
+      const [hu, hy, hv] = CB.hands;
+      const d = this._hd.set(hu - hp.x, hy - hp.y, hv - hp.z);
+      const len = d.length();
+      d.multiplyScalar(1 / len);
+      this._hq.setFromUnitVectors(this._y, d);
+      this.bonker.partQ(1, hp.x, hp.y, hp.z, 0.27, 0.15, 0.15, this._hq);
+      this.bonker.partQ(0, (hp.x + hu) / 2, (hp.y + hy) / 2, (hp.z + hv) / 2, 0.04, len, 0.04, this._hq);
+      this.bonker.done();
+    },
+
+    idleGame(dt) {
+      // The crabs (and the odd gull) keep popping up while nobody plays.
+      const g = this._idle || (this._idle = { t: 0, next: 1, last: -1 });
+      g.next -= dt;
+      if (g.next <= 0) {
+        this.spawn(g, true);
+        g.next = 0.9 + Math.random() * 1.2;
+      }
+      this.holesStep(dt);
+      this.bonkT = 9;
+      this.place();
+    },
   });
 })();

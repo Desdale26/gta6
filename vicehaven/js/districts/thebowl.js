@@ -541,6 +541,13 @@
     track: 5.2,
   };
   ST.dF = ST.tiers * ST.tierD; // the front of the lowest tier, in from the outer wall
+  // Walk-through tunnels under the stand on the short axis, out to the track:
+  // the players' tunnel on the south side (s = 1), the fans' turnstile gate on the north (s = -1).
+  ST.tunnels = [{ s: 1, hw: 2.6, top: 3.1 }, { s: -1, hw: 3.4, top: 3.1 }];
+  function tunnelAt(x, z) {
+    for (const T of ST.tunnels) if ((z - ST.cz) * T.s > 0 && Math.abs(x - ST.cx) < T.hw) return T;
+    return null;
+  }
   const BJ = { z: 1425, hw: 3.2, x0: 124.3, lip: 135.7, h: 4.6, bus0: 136.5, busW: 2.6, gap: 0.7, land0: 156.4, land1: 186 };
   BJ.bus1 = BJ.bus0 + 6 * BJ.busW + 5 * BJ.gap;
 
@@ -563,6 +570,22 @@
     ell(t0, dm, _e0);
     ell(t1, dm, _e1);
     const pieces = [[_e0.x, _e0.z, _e1.x, _e1.z]];
+    // The tunnels (north and south): pieces in the corridor keep only what is above its ceiling.
+    const T0 = tunnelAt(_e0.x, _e0.z), T1 = tunnelAt(_e1.x, _e1.z), Tn = T0 || T1;
+    if (Tn && y0 < KERB + Tn.top - 1e-6) {
+      const top = KERB + Tn.top;
+      const [ax, az, bx, bz] = pieces[0];
+      if (T0 && T1) {
+        if (y1 > top) box4(world, surfName, pieces[0], d1 - d0, top, y1, hex, tag, flags, noCol);
+        return;
+      }
+      const edge = ST.cx + Math.sign((T0 ? bx : ax) - ST.cx) * Tn.hw;
+      const u = (edge - ax) / (bx - ax);
+      const ez = az + (bz - az) * u;
+      box4(world, surfName, T0 ? [edge, ez, bx, bz] : [ax, az, edge, ez], d1 - d0, y0, y1, hex, tag, flags, noCol);
+      if (y1 > top) box4(world, surfName, T0 ? [ax, az, edge, ez] : [edge, ez, bx, bz], d1 - d0, top, y1, hex, tag, flags, noCol);
+      return;
+    }
     const inGate = (z) => Math.abs(z - ST.cz) < ST.gateHW;
     // The gates are where the ellipse crosses z = cz (t = 0 and t = PI).
     if (inGate(_e0.z) || inGate(_e1.z)) {
@@ -677,7 +700,7 @@
       ringPiece(world, 'screen', t0, t1, -0.7, -0.55, yW - 2.0, yW - 1.5, VH.col(0xfff2d0, 2.0), 'building', F().SOLID, true);
       if (i % 2 === 0) {
         ell(t0, -0.9, _a);
-        if (Math.abs(_a.z - ST.cz) > ST.gateHW + 1) {
+        if (Math.abs(_a.z - ST.cz) > ST.gateHW + 1 && !(Math.abs(_a.x - ST.cx) < 4.5)) {
           world.ctxAt(_a.x, _a.z).prop.box(_a.x - 0.35, 0, _a.z - 0.35, _a.x + 0.35, ST.roofY + 0.4, _a.z + 0.35, col(0xeef0f2));
           world.physics.addBox(_a.x - 0.35, 0, _a.z - 0.35, _a.x + 0.35, ST.roofY + 0.4, _a.z + 0.35, 'pole', F().ALL);
         }
@@ -712,22 +735,8 @@
     W.sign(world, { x: ST.cx - ST.a - 1.2, y: KERB + 10.5, z: ST.cz, yaw: -PI / 2, w: 30, h: 4.2, lines: ['MARINER STADIUM', 'HOME OF THE SOUTHBAY MARINERS'], style: 'neon', oneSided: true, flat: false, colors: { bg: ['#0e2a44', '#1f4f7a'], fg: '#ffffff', glow: '#7fd0ff', outline: '#7fd0ff' } });
     W.sign(world, { x: ST.cx - ST.a - 1.0, y: KERB + ST.gateTop + 0.6, z: ST.cz, yaw: -PI / 2, w: 11, h: 0.9, lines: ['MARATHON GATE'], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#1f4f7a'], fg: '#f2c230', border: '#f2c230' } });
 
-    // --- the players' entrance on the south side: a canopy, glass doors, a plaque
-    {
-      const t = PI / 2;
-      ell(t, -0.6, _a);
-      const z = _a.z, x = ST.cx;
-      const ctx = world.ctxAt(x, z);
-      ctx.screen.box(x - 3.2, KERB, z + 0.02, x + 3.2, KERB + 2.8, z + 0.12, VH.col(0x9fc8dc, 1.2));
-      for (const dx of [-3.25, -0.05, 3.15]) ctx.prop.box(x + dx, KERB, z + 0.02, x + dx + 0.1, KERB + 2.9, z + 0.2, col(0x3a3f45));
-      ctx.prop.box(x - 4.5, KERB + 3.4, z, x + 4.5, KERB + 3.7, z + 4.5, col(0x1f4f7a), { bottom: true });
-      for (const dx of [-4.2, 4.2]) {
-        ctx.prop.box(x + dx - 0.1, KERB, z + 4.2, x + dx + 0.1, KERB + 3.4, z + 4.4, col(0xc8ccd0));
-        world.physics.addBox(x + dx - 0.12, 0, z + 4.18, x + dx + 0.12, KERB + 3.4, z + 4.42, 'pole', F().ALL);
-      }
-      world.physics.addBox(x - 4.5, KERB + 3.4, z, x + 4.5, KERB + 3.7, z + 4.5, 'building', F().SOLID | F().SHOTS);
-      W.sign(world, { x, y: KERB + 4.3, z: z + 0.25, yaw: 0, w: 7, h: 0.9, lines: ["PLAYERS' ENTRANCE"], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#1f4f7a'], fg: '#ffffff', border: '#f2c230' } });
-    }
+    // --- the players' tunnel (south) and the fans' turnstile gate (north), through the stand
+    buildStadiumTunnels(world);
 
     // --- the apron road: a dashed centre line round the bowl, ticket booths by the west gate, lamps
     for (let i = 0; i < 96; i += 2) {
@@ -747,6 +756,122 @@
     // Floodlight pools on the pitch and the apron, from the roof lights.
     const pools = world.floodlights || (world.floodlights = []);
     for (const [dx, dz] of [[0, 0], [-30, -12], [30, -12], [-30, 12], [30, 12], [-55, 0], [55, 0], [0, -32], [0, 32]]) pools.push({ x: ST.cx + dx, z: ST.cz + dz, r: 22, y: KERB + 0.04, strength: 0.7, tint: [1.1, 1.1, 1.0] });
+  }
+
+  /**
+   * The two tunnels ringPiece cuts through the stand, out to the running
+   * track: the players' tunnel on the south side (glass doors folded back
+   * under a canopy, a blue runner, THIS IS MARINER STADIUM on the wall) and
+   * the fans' gate on the north (a bank of turnstiles you walk through but
+   * can't drive through, off a forecourt with the club's anchor on a plinth).
+   */
+  function buildStadiumTunnels(world) {
+    const W = K(), Sk = VH.SouthKit;
+    const pools = world.floodlights || (world.floodlights = []);
+    const x = ST.cx;
+    for (const T of ST.tunnels) {
+      const s = T.s, hw = T.hw, top = KERB + T.top;
+      const zAt = (d) => ST.cz + s * (ST.b - d);
+      const zo = zAt(-0.75), zf = zAt(ST.dF + 0.4), zm = zAt(ST.dF - ST.tierD), zw = zAt(-0.6);
+      const z0 = Math.min(zo, zf), z1 = Math.max(zo, zf);
+      const ctx = world.ctxAt(x, (z0 + z1) / 2);
+      // The ceiling, lit strips under it; walls either side of the mouth, where the front tier was cut.
+      ctx.concrete.box(x - hw - 0.3, top - 0.3, z0, x + hw + 0.3, top, z1, col(0xcfcabd), { bottom: true });
+      world.physics.addBox(x - hw - 0.3, top - 0.3, z0, x + hw + 0.3, top, z1, 'building', F().ALL);
+      for (let z = z0 + 1.5; z < z1 - 1; z += 3.5) ctx.screen.box(x - 0.5, top - 0.34, z, x + 0.5, top - 0.3, z + 1.2, VH.col(0xfff2d0, 2.2));
+      const ma = Math.min(zm, zf), mb = Math.max(zm, zf);
+      for (const sx of [-1, 1]) {
+        const xa = Math.min(x + sx * hw, x + sx * (hw + 0.4)), xb = Math.max(x + sx * hw, x + sx * (hw + 0.4));
+        ctx.concrete.box(xa, 0, ma, xb, top, mb, col(0xd6d1c4));
+        world.physics.addBox(xa, 0, ma, xb, top, mb, 'wall', F().ALL);
+        // A steel jamb either side of the outer opening.
+        const ja = Math.min(x + sx * (hw - 0.12), x + sx * (hw + 0.1)), jb = Math.max(x + sx * (hw - 0.12), x + sx * (hw + 0.1));
+        const jz0 = Math.min(zw + s * 0.12, zAt(0.3)), jz1 = Math.max(zw + s * 0.12, zAt(0.3));
+        ctx.prop.box(ja, KERB, jz0, jb, top, jz1, col(0x3a3f45));
+        world.physics.addBox(ja, 0, jz0, jb, top, jz1, 'metal', F().ALL);
+      }
+      // A canopy over the outer opening on two posts.
+      const cz0 = Math.min(zw, zw + s * 4.5), cz1 = Math.max(zw, zw + s * 4.5), pz = zw + s * 4.3;
+      const cw = hw + 1.9;
+      ctx.prop.box(x - cw, KERB + 3.4, cz0, x + cw, KERB + 3.7, cz1, col(0x1f4f7a), { bottom: true });
+      world.physics.addBox(x - cw, KERB + 3.4, cz0, x + cw, KERB + 3.7, cz1, 'building', F().SOLID | F().SHOTS);
+      for (const dx of [-cw + 0.3, cw - 0.3]) Sk.air(world, ctx.prop, x + dx - 0.1, KERB, pz - 0.1, x + dx + 0.1, KERB + 3.4, pz + 0.1, 0xc8ccd0, 'pole');
+      ctx.screen.box(x - cw + 0.4, KERB + 3.36, cz0 + 0.4, x + cw - 0.4, KERB + 3.4, cz0 + 0.6, VH.col(0xfff2d0, 2.0));
+      ctx.screen.box(x - cw + 0.4, KERB + 3.36, cz1 - 0.6, x + cw - 0.4, KERB + 3.4, cz1 - 0.4, VH.col(0xfff2d0, 2.0));
+      pools.push({ x, z: zw + s * 4, r: 8, y: KERB + 0.04, strength: 0.75, tint: [1.1, 1.05, 0.95] });
+      pools.push({ x, z: (zm + zf) / 2, r: 6, y: KERB + 0.04, strength: 0.6, tint: [1.1, 1.05, 0.95] });
+
+      if (s === 1) {
+        // Players: the glass doors folded back flat against the wall either side, a blue runner, the sign.
+        for (const sx of [-1, 1]) {
+          const xa = Math.min(x + sx * (hw + 0.15), x + sx * (hw + 1.55)), xb = Math.max(x + sx * (hw + 0.15), x + sx * (hw + 1.55));
+          const ga = Math.min(zw + s * 0.02, zw + s * 0.1), gb = Math.max(zw + s * 0.02, zw + s * 0.1);
+          ctx.screen.box(xa + 0.08, KERB + 0.08, ga, xb - 0.08, KERB + 2.87, gb, VH.col(0x9fc8dc, 1.2));
+          for (const [ya, yb] of [[KERB, KERB + 0.08], [KERB + 2.87, KERB + 2.95]]) ctx.prop.box(xa, ya, ga, xb, yb, gb, col(0x3a3f45));
+          for (const xx of [xa, xb - 0.08]) ctx.prop.box(xx, KERB, ga, xx + 0.08, KERB + 2.95, gb, col(0x3a3f45));
+          ctx.prop.box(xa + 0.3, KERB + 1.0, Math.min(gb, gb + s * 0.06), xa + 0.36, KERB + 1.6, Math.max(gb, gb + s * 0.06), col(0xc8ccd0)); // a pull handle
+        }
+        W.pave(world, x - hw + 0.4, z0 + 0.2, x + hw - 0.4, mb - 0.2, 0x1f4f7a, 'marks', KERB + 0.02, 0);
+        W.sign(world, { x, y: KERB + 4.6, z: zw + s * 0.25, yaw: 0, w: 7, h: 0.8, lines: ["PLAYERS' ENTRANCE"], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#1f4f7a'], fg: '#ffffff', border: '#f2c230' } });
+        W.sign(world, { x: x - hw + 0.3, y: KERB + 1.9, z: (zw + zm) / 2, yaw: PI / 2, w: 5.2, h: 0.9, lines: ['THIS IS MARINER STADIUM'], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#163e60'], fg: '#ffffff', border: '#f2c230' } });
+      } else {
+        // Fans: a bank of turnstiles across the opening (lanes for people, too narrow for a car).
+        const ta = Math.min(zAt(0.7), zAt(1.9)), tb = Math.max(zAt(0.7), zAt(1.9));
+        const n = 5, cwid = 0.42, lane = (2 * hw - n * cwid) / (n - 1);
+        for (let k = 0; k < n; k++) {
+          const xc = x - hw + cwid / 2 + k * (cwid + lane);
+          ctx.prop.box(xc - cwid / 2, KERB, ta, xc + cwid / 2, KERB + 1.0, tb, col(0x5a6068));
+          ctx.prop.box(xc - cwid / 2 - 0.02, KERB + 1.0, ta - 0.02, xc + cwid / 2 + 0.02, KERB + 1.08, tb + 0.02, col(0x1f4f7a));
+          ctx.screen.box(xc - 0.08, KERB + 1.08, ta + 0.15, xc + 0.08, KERB + 1.12, ta + 0.35, VH.col(0x3fe07a, 2.0));
+          // The arms, dropped (the gate's on free entry): bars hanging down the cabinet's sides.
+          for (const sx of [-1, 1]) if ((k > 0 || sx > 0) && (k < n - 1 || sx < 0)) ctx.prop.box(xc + sx * (cwid / 2) - 0.03, KERB + 0.3, (ta + tb) / 2 - 0.03, xc + sx * (cwid / 2 + 0.06), KERB + 0.92, (ta + tb) / 2 + 0.03, col(0xc8ccd0));
+          world.physics.addBox(xc - cwid / 2 - 0.08, 0, ta, xc + cwid / 2 + 0.08, KERB + 1.08, tb, 'metal', F().ALL);
+        }
+        W.sign(world, { x, y: KERB + 5.2, z: zw + s * 0.25, yaw: PI, w: 9, h: 1.1, lines: ['GATE N · TURNSTILES 1–4', 'ALL TICKETS · SEASON CARDS · NO VEHICLES'], style: 'plaque', oneSided: true, colors: { bg: ['#1f4f7a', '#163e60'], fg: '#ffffff', border: '#f2c230' } });
+        buildFansForecourt(world, zw);
+      }
+    }
+  }
+
+  /** The fans' forecourt north of the gate: paving, bollards, a crossing over the apron road, the anchor. */
+  function buildFansForecourt(world, zw) {
+    const W = K(), Sk = VH.SouthKit;
+    const x = ST.cx;
+    const P = { x0: x - 18, x1: x + 18, z0: 1224, z1: 1240 };
+    W.pave(world, P.x0, P.z0, P.x1, P.z1, 0xd8cfbf, 'plazaTop', KERB + 0.016, 4);
+    // A zebra across the apron road from the forecourt to the gate.
+    for (let xx = x - 3; xx < x + 3; xx += 1.2) W.mark(world, xx, P.z1 + 0.5, xx + 0.6, zw - 1.2, 0xf4f4ef, KERB + 0.02);
+    // Bollards along the road edge (people walk between them; cars don't).
+    for (let xx = P.x0 + 0.5; xx <= P.x1 - 0.4; xx += 1.8) world.addProp('bollard', xx, KERB, P.z1 + 0.3, 0, 1);
+    for (let zz = P.z0 + 1; zz < P.z1; zz += 1.8) for (const xx of [P.x0 - 0.3, P.x1 + 0.3]) world.addProp('bollard', xx, KERB, zz, 0, 1);
+    // The anchor on its plinth.
+    const ax = x, az = (P.z0 + P.z1) / 2;
+    const c = world.ctxAt(ax, az);
+    const brz = col(0x8a6a3a);
+    Sk.obox(world, c.concrete, ax, az, 1.6, 1.6, 0, KERB, KERB + 1.2, 0xd9d4c8, 'stone');
+    c.concrete.box(ax - 1.75, KERB + 1.2, az - 1.75, ax + 1.75, KERB + 1.35, az + 1.75, col(0xc8c2b4));
+    world.physics.addBox(ax - 1.75, KERB + 1.2, az - 1.75, ax + 1.75, KERB + 1.35, az + 1.75, 'stone', F().ALL);
+    const yb = KERB + 1.35;
+    c.prop.box(ax - 0.18, yb + 0.6, az - 0.18, ax + 0.18, yb + 4.6, az + 0.18, brz); // the shank
+    c.prop.box(ax - 1.3, yb + 4.0, az - 0.14, ax + 1.3, yb + 4.3, az + 0.14, brz); // the stock
+    c.prop.cylinder(ax, yb + 4.6, az, 0.42, 0.42, 0.14, 12, brz, true); // the ring (a disc)
+    for (const sx of [-1, 1]) {
+      K().beam(c.prop, ax, yb + 0.7, az, ax + sx * 1.3, yb + 1.6, az, 0.22, brz); // the arms
+      c.prop.orientedBox(ax + sx * 1.35, az, 0.32, 0.16, 0, yb + 1.3, yb + 2.0, brz); // the flukes
+    }
+    world.physics.addBox(ax - 1.7, yb, az - 0.25, ax + 1.7, yb + 2.0, az + 0.25, 'metal', F().ALL);
+    world.physics.addBox(ax - 0.25, yb + 2.0, az - 0.25, ax + 0.25, yb + 4.7, az + 0.25, 'metal', F().ALL);
+    W.sign(world, { x: ax, y: KERB + 0.65, z: az - 1.62, yaw: PI, w: 2.8, h: 0.7, lines: ['SOUTHBAY MARINERS', 'EST. 1931 · HOLD FAST'], style: 'plaque', oneSided: true, colors: { bg: ['#2a2418', '#1e1a12'], fg: '#e8d080', border: '#b8964a' } });
+    // Flags at the corners, benches facing the anchor.
+    for (const [fx, fz] of [[P.x0 + 1.5, P.z0 + 1.5], [P.x1 - 1.5, P.z0 + 1.5]]) {
+      const cf = world.ctxAt(fx, fz);
+      Sk.drum(world, cf.prop, fx, KERB, fz, 0.08, 10, 8, 0xcfd3d6, 'pole');
+      cf.prop.box(fx + 0.08, KERB + 8.2, fz - 0.02, fx + 2.6, KERB + 9.7, fz + 0.02, col(0x1f4f7a));
+      cf.prop.box(fx + 0.08, KERB + 8.75, fz - 0.025, fx + 2.6, KERB + 9.15, fz + 0.025, col(0xf2c230));
+    }
+    for (const [bx, bz, yaw] of [[ax - 6, az - 3, 0], [ax + 6, az - 3, 0], [ax - 6, az + 3, PI], [ax + 6, az + 3, PI]]) world.addProp('bench', bx, KERB, bz, yaw, 1);
+    const pools = world.floodlights || (world.floodlights = []);
+    pools.push({ x: ax, z: az, r: 12, y: KERB + 0.04, strength: 0.55, tint: [1.1, 1.0, 0.85] });
   }
 
   /** The car parks: bays, islands with palms and lamps, and the stunt crew's bus jump along the south. */
@@ -1429,6 +1554,8 @@
             { x: 44, z: 1250, yaw: 0, kinds: ['parking', 'street'], name: 'Car park A, Mariner Stadium' },
             { x: 100, z: 1380, yaw: PI, kinds: ['parking', 'corner'], name: 'Car park D, Mariner Stadium' },
             { x: 225, z: 1214, yaw: PI / 2, kinds: ['parking', 'street'], name: 'The coach bays, Mariner Way' },
+            { x: ST.cx - 8, z: 1232, yaw: 0, kinds: ['plaza', 'street', 'corner'], name: "The fans' forecourt, Mariner Stadium" },
+            { x: ST.cx, z: ST.cz + ST.b - 6, yaw: 0, kinds: ['alley'], name: "The players' tunnel, Mariner Stadium" },
             { x: ST.cx + ST.a + 6, z: ST.cz + 20, yaw: PI, kinds: ['street', 'alley', 'corner'], name: 'The apron road, east side' },
             { x: ST.cx, z: ST.cz, yaw: PI / 2, kinds: ['park', 'overlook'], name: 'The pitch, Mariner Stadium' },
           );

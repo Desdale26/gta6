@@ -117,7 +117,12 @@
     SIGNS.forEach(([key, lines, a, b], i) => {
       SIGN_SLOTS[key] = i;
       const x = (i % 2) * ATLAS.cw, y = Math.floor(i / 2) * ATLAS.ch;
-      paintSign(g, x, y, ATLAS.cw, ATLAS.ch, lines, a, b);
+      if (typeof lines === 'function') {
+        // A painter of its own (the strongman's scale): it draws into the slot.
+        g.save();
+        lines(g, x, y, ATLAS.cw, ATLAS.ch);
+        g.restore();
+      } else paintSign(g, x, y, ATLAS.cw, ATLAS.ch, lines, a, b);
     });
     atlasTex = new THREE.CanvasTexture(cv);
     atlasTex.colorSpace = THREE.SRGBColorSpace;
@@ -183,14 +188,18 @@
     g.restore();
   }
 
-  /** Ask for a sign: [key, lines, a, b]; returns the key (painted when the atlas is built). */
+  /**
+   * Ask for a sign: [key, lines, a, b]; returns the key (painted when the atlas is built).
+   * lines may be a painter instead, f(ctx, x, y, w, h), for a slot drawn some other way.
+   */
   function wantSign(key, lines, a, b) {
     if (!SIGNS.find((s) => s[0] === key)) SIGNS.push([key, lines, a, b]);
     return key;
   }
 
   /**
-   * The signs' one mesh: quads [key, x, y, z, yaw, w, h] (the quad's middle, facing yaw).
+   * The signs' one mesh: quads [key, x, y, z, yaw, w, h, upright] (the quad's middle, facing
+   * yaw); upright: the slot runs up the quad (its left edge at the bottom), for a tall board.
    * Built at the end of the world's build, once every quad is known.
    */
   const QUADS = [];
@@ -198,7 +207,7 @@
     if (!QUADS.length) return null;
     const tex = paintAtlas();
     const pos = [], uv = [], idx = [];
-    for (const [key, x, y, z, yaw, w, h] of QUADS) {
+    for (const [key, x, y, z, yaw, w, h, upright] of QUADS) {
       const slot = SIGN_SLOTS[key];
       if (slot === undefined) continue;
       const u0 = ((slot % 2) * ATLAS.cw) / ATLAS.w, u1 = u0 + ATLAS.cw / ATLAS.w;
@@ -209,7 +218,8 @@
       const n = pos.length / 3;
       for (const [su, sv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
         pos.push(x + fx + (rx * su * w) / 2, y + (sv * h) / 2, z + fz + (rz * su * w) / 2);
-        uv.push(su < 0 ? u0 : u1, sv < 0 ? v0 : v1);
+        if (upright) uv.push(sv < 0 ? u0 : u1, su < 0 ? v1 : v0);
+        else uv.push(su < 0 ? u0 : u1, sv < 0 ? v0 : v1);
       }
       // Face the quad towards yaw.
       idx.push(n, n + 2, n + 1, n, n + 3, n + 2);
@@ -348,7 +358,14 @@
         this.root.append(d);
       }
       this._popI = 0;
-      this.root.append(this.card, this.reticle, this.tag);
+      // A timing gauge: a bar with a zone to hit and a needle running along it.
+      this.gaugeEl = el('div', 'cv-gauge');
+      this.gaugeZone = el('div', 'cv-gauge-zone');
+      this.gaugeNeedle = el('div', 'cv-gauge-needle');
+      this.gaugeLabel = el('div', 'cv-gauge-label');
+      this.gaugeEl.append(this.gaugeZone, this.gaugeNeedle, this.gaugeLabel);
+      this._g = { k: -1, z0: -1, z1: -1, label: null, cls: null };
+      this.root.append(this.card, this.reticle, this.tag, this.gaugeEl);
       overlay.root.append(this.root);
       this._rx = -1;
       this._ry = -1;
@@ -420,6 +437,38 @@
       d.className = 'cv-pop on' + (cls ? ' ' + cls : '');
     }
 
+    /**
+     * The timing gauge: the needle at k (0..1), the zone z0..z1 to stop it in, a label; cls
+     * 'hit' / 'miss' colours it for a moment. gauge(null) hides it.
+     */
+    gauge(k, z0, z1, label, cls) {
+      const G = this._g;
+      if (k === null || k === undefined) {
+        if (G.k !== -1) {
+          this.gaugeEl.classList.remove('on');
+          G.k = -1;
+        }
+        return;
+      }
+      const kk = Math.round(clamp(k, 0, 1) * 1000) / 10;
+      if (kk !== G.k) {
+        this.gaugeNeedle.style.left = kk + '%';
+        if (G.k === -1) this.gaugeEl.classList.add('on');
+        G.k = kk;
+      }
+      if (z0 !== G.z0 || z1 !== G.z1) {
+        G.z0 = z0;
+        G.z1 = z1;
+        this.gaugeZone.style.left = (z0 * 100).toFixed(1) + '%';
+        this.gaugeZone.style.width = ((z1 - z0) * 100).toFixed(1) + '%';
+      }
+      if (label !== G.label) this.gaugeLabel.textContent = G.label = label || '';
+      if ((cls || '') !== G.cls) {
+        G.cls = cls || '';
+        this.gaugeEl.className = 'cv-gauge on' + (G.cls ? ' ' + G.cls : '');
+      }
+    }
+
     player(n) {
       this.tag.textContent = n ? 'Player ' + n : '';
       this.tag.classList.toggle('on', !!n);
@@ -430,6 +479,7 @@
       this.hideCard();
       this.ring(null);
       this.player(0);
+      this.gauge(null);
       for (const d of this.pops) d.className = 'cv-pop';
     }
   }

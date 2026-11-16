@@ -492,3 +492,87 @@
   15% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
   100% { opacity: 0; transform: translate(-50%, -220%) scale(1); }
 }
+
+/* While an attraction runs, the HUD panels that sit where the fair's do step aside. */
+body.at-attraction .hud .hud-hints,
+body.at-attraction .hud .hud-notify-stack,
+body.at-attraction .hud .hud-banner {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0s 0.2s;
+}
+
+/* The timing gauge (the Bell Ringer): a bar, the zone to stop in, a needle. */
+.cv-gauge {
+  position: absolute;
+  bottom: 5rem;
+  left: 50%;
+  width: min(26rem, 80vw);
+  height: 1.5rem;
+  transform: translateX(-50%);
+  display: none;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, rgba(55, 232, 255, 0.35), rgba(255, 210, 74, 0.35) 60%, rgba(255, 61, 139, 0.45));
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.45);
+}
+
+.cv-gauge.on {
+  display: block;
+}
+
+.cv-gauge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(125, 255, 120, 0.75);
+  box-shadow: 0 0 10px rgba(125, 255, 120, 0.8);
+}
+
+.cv-gauge-needle {
+  position: absolute;
+  top: -0.35rem;
+  bottom: -0.35rem;
+  width: 0.3rem;
+  margin-left: -0.15rem;
+  border-radius: 0.15rem;
+  background: #fff;
+  box-shadow: 0 0 6px #000;
+}
+
+.cv-gauge-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1.9rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px #000;
+}
+
+.cv-gauge.hit .cv-gauge-zone {
+  background: #fff36a;
+  box-shadow: 0 0 18px #fff36a;
+}
+
+.cv-gauge.miss .cv-gauge-needle {
+  background: #ff5c5c;
+}
+
+/* Crab Bonkers: the picked hole. */
+.cv-reticle.hole {
+  top: -1.2rem;
+  left: -2.3rem;
+  width: 4.6rem;
+  height: 2.4rem;
+  border-color: #ffd24a;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 14px rgba(255, 210, 74, 0.7);
+}
+
+.cv-reticle.hole::before,
+.cv-reticle.hole::after {
+  display: none;
+}

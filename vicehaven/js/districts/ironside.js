@@ -272,7 +272,7 @@
       const kx = O.x0 + 2, kz = O.z1 + 2.2;
       box(world, 'wood', kx - 0.6, KERB, kz - 0.7, kx + 0.6, KERB + 0.8, kz + 0.7, 0x8a6a48, 'wood');
       W.gable(c.wood, kx - 0.7, kz - 0.8, kx + 0.7, kz + 0.8, KERB + 0.8, 0.45, 'z', col(0xa8322c), col(0x8a6a48));
-      world.physics.addBox(kx - 0.7, KERB + 0.8, kz - 0.8, kx + 0.7, KERB + 1.25, kz + 0.8, 'wood', F().SOLID | F().SHOTS);
+      world.physics.addBox(kx - 0.9, KERB + 0.7, kz - 1.1, kx + 0.9, KERB + 1.25, kz + 1.1, 'wood', F().SOLID | F().SHOTS); // the roof, eaves and all
       c.propMatte.box(kx + 0.61, KERB + 0.05, kz - 0.25, kx + 0.62, KERB + 0.55, kz + 0.25, col(0x1c1c1e));
     }
 
@@ -698,6 +698,7 @@
         const c = world.ctxAt(x, z);
         box(world, 'prop', x - 2.2, KERB, z - 1.6, x + 2.2, KERB + 3.2, z + 1.6, 0x6a7a6a, 'metal');
         for (let k = -1.8; k <= 1.8; k += 0.45) c.prop.box(x + k - 0.05, KERB + 0.4, z + 1.6, x + k + 0.05, KERB + 2.8, z + 2.1, col(0x5a6a5a));
+        world.physics.addBox(x - 1.85, 0, z + 1.6, x + 1.85, KERB + 2.8, z + 2.1, 'metal', F().ALL); // the radiator fins
         for (const dx of [-1.2, 0, 1.2]) { c.prop.cylinder(x + dx, KERB + 3.2, z, 0.18, 0.12, 1.6, 8, col(0xa8603a), false); c.prop.cylinder(x + dx, KERB + 4.0, z, 0.3, 0.3, 0.12, 8, col(0xa8603a), false); }
       }
       // Lattice gantries carrying the lines out.

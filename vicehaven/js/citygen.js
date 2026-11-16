@@ -63,6 +63,11 @@
   function districtAt(x, z) {
     const list = VH.Data.districts;
     for (let i = 0; i < list.length; i++) {
+      const rs = list[i].rects; // 4.0: a district can be more than one rectangle
+      if (rs) {
+        for (const r of rs) if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return list[i];
+        continue;
+      }
       const r = list[i].rect;
       if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return list[i];
     }
@@ -179,6 +184,24 @@
     for (const r of VH.Data.roads3 || []) {
       layout.roads.push(Object.assign({ median: 0, kind: r.axis === 'z' ? 'avenue' : 'street' }, r, { v3: true }));
     }
+    // 4.0: the fill districts' roads (new roads to everything that knows about
+    // 3.0's), and the older roads that now run on into them. v3From / v3To
+    // keep where a road ended before 4.0.
+    for (const r of VH.Data.roads4 || []) {
+      layout.roads.push(Object.assign({ median: 0, kind: r.axis === 'z' ? 'avenue' : 'street' }, r, { v3: true, v4: true }));
+    }
+    for (const [id, f, t] of VH.Data.extend4 || []) {
+      const r = layout.roads.find((q) => q.id === id);
+      if (!r) continue;
+      const from = f === null ? r.from : f;
+      const to = t === null ? r.to : t;
+      if (from !== r.from) r.v3From = r.from;
+      if (to !== r.to) r.v3To = r.to;
+      if (r.v3) {
+        r.from = from;
+        r.to = to;
+      } else extendRoad(r, from, to); // a pre-3.0 road remembers its old ends too
+    }
     CONFIG.island = VH.Data.island || null;
     layout.zones = CONFIG.zones;
     for (const r of layout.roads) {
@@ -238,6 +261,28 @@
       return out;
     }
 
+    /** 4.0: a road's stretches between junctions as they were before 4.0 (the 4.0 roads and extensions left out). */
+    const v3Span = (q) => [q.v3From !== undefined ? q.v3From : q.from, q.v3To !== undefined ? q.v3To : q.to];
+    function v3Stops(r) {
+      if (r.v4) return [];
+      const [rf, rt] = v3Span(r);
+      const cr = (r.axis === 'z' ? streets : avenues)
+        .filter((c) => !c.v4)
+        .filter((c) => { const [cf, ct] = v3Span(c); return c.coord >= rf && c.coord <= rt && r.coord >= cf && r.coord <= ct; })
+        .sort((p, q) => p.coord - q.coord);
+      const out = [];
+      let cursor = rf;
+      let sj = false;
+      for (const c of cr) {
+        const edge0 = c.coord - c.width / 2;
+        if (edge0 > cursor + 0.01) out.push([cursor, edge0, sj, true]);
+        cursor = c.coord + c.width / 2;
+        sj = true;
+      }
+      if (rt > cursor + 0.01) out.push([cursor, rt, sj, false]);
+      return out;
+    }
+
     // --------------------------------------------------------- segments
     // The stretches of road between junctions (junction squares are drawn separately).
     for (const r of layout.roads) {
@@ -271,6 +316,12 @@
         // 3.0: the stretch this was before the new roads cut it (median palms keep their spots).
         const old = v2Stops(r).find(([oa, ob]) => (a + b) / 2 > oa && (a + b) / 2 < ob);
         if (old && (old[0] !== a || old[1] !== b)) seg.v2 = { from: old[0], to: old[1], sj: old[2], ej: old[3] };
+        // 4.0: and the stretch it was before 4.0 (lane dashes keep their spots; a 3.0 road's palms too).
+        const o3 = v3Stops(r).find(([oa, ob]) => (a + b) / 2 > oa && (a + b) / 2 < ob);
+        if (o3 && (o3[0] !== a || o3[1] !== b)) {
+          seg.v3 = { from: o3[0], to: o3[1], sj: o3[2], ej: o3[3] };
+          if (r.v3 && !seg.v2) seg.v2 = seg.v3;
+        }
         layout.segments.push(seg);
       }
     }
@@ -359,19 +410,25 @@
     const out = [];
     const cells = VH.Data.cells3 || [];
     const byId = new Map(VH.Data.districts.map((d) => [d.id, d]));
-    const roadAt = (axis, coord, along) => layout.roads.find((r) => r.axis === axis && r.coord === coord && along >= r.from - 0.01 && along <= r.to + 0.01);
-    const inset = (axis, coord, along) => {
-      const r = roadAt(axis, coord, along);
+    // pre4: the roads as they were before 4.0 (the 3.0 blocks keep their edges).
+    const roadAt = (axis, coord, along, pre4) => layout.roads.find((r) => {
+      if (r.axis !== axis || r.coord !== coord || (pre4 && r.v4)) return false;
+      const from = pre4 && r.v3From !== undefined ? r.v3From : r.from;
+      const to = pre4 && r.v3To !== undefined ? r.v3To : r.to;
+      return along >= from - 0.01 && along <= to + 0.01;
+    });
+    const inset = (axis, coord, along, pre4) => {
+      const r = roadAt(axis, coord, along, pre4);
       return r ? r.width / 2 : 3;
     };
-    cells.forEach((c, i) => {
+    const makeBlock = (c, id, pre4) => {
       const [x0, x1, z0, z1] = c.r;
       const mx = (x0 + x1) / 2;
       const mz = (z0 + z1) / 2;
       const block = {
-        id: 'n_' + c.d + '_' + i, v3: true,
-        minX: x0 + inset('z', x0, mz), maxX: x1 - inset('z', x1, mz),
-        minZ: z0 + inset('x', z0, mx), maxZ: z1 - inset('x', z1, mx),
+        id, v3: true,
+        minX: x0 + inset('z', x0, mz, pre4), maxX: x1 - inset('z', x1, mz, pre4),
+        minZ: z0 + inset('x', z0, mx, pre4), maxZ: z1 - inset('x', z1, mx, pre4),
         district: byId.get(c.d),
         kind: c.plot ? 'plot' : c.kind || 'buildings',
         plot: c.plot || null,
@@ -381,29 +438,49 @@
       };
       block.cx = (block.minX + block.maxX) / 2;
       block.cz = (block.minZ + block.maxZ) / 2;
+      return block;
+    };
+    cells.forEach((c, i) => {
+      const block = makeBlock(c, 'n_' + c.d + '_' + i, true);
       if (block.kind === 'buildings' && block.district.archetypes.length) planBlock(block, rng.fork(block.id));
       out.push(block);
     });
+    // 4.0: the fill districts' blocks, from their own RNG stream. A cell's
+    // `arch` swaps in an archetype set (VH.Data.archSets4) for its lots.
+    const n3 = out.length;
+    const rng4 = new VH.RNG('vicehaven-4');
+    (VH.Data.cells4 || []).forEach((c, i) => {
+      const block = makeBlock(c, 'f_' + c.d + '_' + i, false);
+      block.v4 = true;
+      const set = c.arch && VH.Data.archSets4 && VH.Data.archSets4[c.arch];
+      if (set) block.arch = c.arch;
+      if (block.kind === 'buildings') planBlock(block, rng4.fork(block.id), set ? Object.assign({}, block.district, set) : null);
+      out.push(block);
+    });
     // Neighbours across each road (block.nb.E/W/N/S), for the walkers in crowd.js:
-    // the next block over whose facing edges line up within 14 m.
-    for (const a of out) {
-      a.nb = {};
-      for (const b of out) {
-        if (a === b) continue;
-        const alignZ = Math.abs(a.minZ - b.minZ) < 14 && Math.abs(a.maxZ - b.maxZ) < 14;
-        const alignX = Math.abs(a.minX - b.minX) < 14 && Math.abs(a.maxX - b.maxX) < 14;
-        if (alignZ && b.minX > a.maxX && b.minX - a.maxX < 30) a.nb.E = b;
-        if (alignZ && a.minX > b.maxX && a.minX - b.maxX < 30) a.nb.W = b;
-        if (alignX && b.minZ > a.maxZ && b.minZ - a.maxZ < 30) a.nb.S = b;
-        if (alignX && a.minZ > b.maxZ && a.minZ - b.maxZ < 30) a.nb.N = b;
-      }
-    }
+    // the next block over whose facing edges line up within 14 m. (4.0: the
+    // 3.0 blocks' links are made among themselves first, as before; a 4.0
+    // block only fills a side that is still free.)
+    const link = (a, b) => {
+      const alignZ = Math.abs(a.minZ - b.minZ) < 14 && Math.abs(a.maxZ - b.maxZ) < 14;
+      const alignX = Math.abs(a.minX - b.minX) < 14 && Math.abs(a.maxX - b.maxX) < 14;
+      const set = (k) => {
+        if (!a.nb[k] || !(a.v4 || b.v4)) a.nb[k] = b;
+      };
+      if (alignZ && b.minX > a.maxX && b.minX - a.maxX < 30) set('E');
+      if (alignZ && a.minX > b.maxX && a.minX - b.maxX < 30) set('W');
+      if (alignX && b.minZ > a.maxZ && b.minZ - a.maxZ < 30) set('S');
+      if (alignX && a.minZ > b.maxZ && a.minZ - b.maxZ < 30) set('N');
+    };
+    for (const a of out) a.nb = {};
+    for (let i = 0; i < n3; i++) for (let j = 0; j < n3; j++) if (i !== j) link(out[i], out[j]);
+    for (let i = 0; i < out.length; i++) for (let j = 0; j < out.length; j++) if (i !== j && (i >= n3 || j >= n3)) link(out[i], out[j]);
     return out;
   }
 
   /** Divide a building block into lots (and maybe a service alley). */
-  function planBlock(block, rng) {
-    const d = block.district;
+  function planBlock(block, rng, dist) {
+    const d = dist || block.district;
     const inner = {
       minX: block.minX + SIDEWALK, maxX: block.maxX - SIDEWALK,
       minZ: block.minZ + SIDEWALK, maxZ: block.maxZ - SIDEWALK,

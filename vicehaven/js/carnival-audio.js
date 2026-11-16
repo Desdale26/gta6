@@ -301,6 +301,13 @@
       a._hit({ t, freq: 1200, freqEnd: 300, q: 0.6, peak: 0.25 * k, decay: 0.4 });
     }
 
+    /** A slide whistle going up (k 0..1: how far), for the strongman's puck. */
+    slide(o) {
+      if (!this._ok()) return;
+      const a = this.a, t = a.ctx.currentTime, k = (o && o.k) || 1;
+      a._tone({ t, freq: 260, freqEnd: 260 + 1200 * k, wave: 'sine', attack: 0.03, peak: 0.09, decay: 0.25 + 0.6 * k, bus: a.ui });
+    }
+
     thud(o) {
       if (!this._ok()) return;
       const a = this.a, t = a.ctx.currentTime, k = (o && o.gain) || 1;

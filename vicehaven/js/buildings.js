@@ -770,14 +770,401 @@
     return top + 1.1;
   }
 
-  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa, house, shed, lowrise };
+  // ---------------------------------------------- 4.0: the fill districts
+  /** A footprint w along the lot's front face and d deep, standing at that face of r. */
+  function atFront(r, side, w, d, along) {
+    const horiz = side === 'n' || side === 's';
+    const len = horiz ? r.x1 - r.x0 : r.z1 - r.z0;
+    w = Math.min(w, len);
+    const a0 = (horiz ? r.x0 : r.z0) + (len - w) * (along === undefined ? 0.5 : along);
+    if (side === 's') return { x0: a0, x1: a0 + w, z0: Math.max(r.z0, r.z1 - d), z1: r.z1 };
+    if (side === 'n') return { x0: a0, x1: a0 + w, z0: r.z0, z1: Math.min(r.z1, r.z0 + d) };
+    if (side === 'e') return { x0: Math.max(r.x0, r.x1 - d), x1: r.x1, z0: a0, z1: a0 + w };
+    return { x0: r.x0, x1: Math.min(r.x1, r.x0 + d), z0: a0, z1: a0 + w };
+  }
+
+  /** A pitched roof over r (ridge along the longer side, gable ends in the wall colour). Returns the ridge height. */
+  function gableRoof(b, r, top, rise, o, tile, wall, seed) {
+    const x0 = r.x0 - o, x1 = r.x1 + o, z0 = r.z0 - o, z1 = r.z1 + o;
+    const yr = top + rise;
+    if (r.x1 - r.x0 >= r.z1 - r.z0) {
+      const zm = (z0 + z1) / 2;
+      b.polygon([[x0, top, z1], [x1, top, z1], [x1, yr, zm], [x0, yr, zm]], tile);
+      b.polygon([[x1, top, z0], [x0, top, z0], [x0, yr, zm], [x1, yr, zm]], tile);
+      b.polygon([[r.x1, top, r.z1], [r.x1, top, r.z0], [r.x1, yr, zm]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x0, top, r.z0], [r.x0, top, r.z1], [r.x0, yr, zm]], wall, [0, 0, 0, seed]);
+    } else {
+      const xm = (x0 + x1) / 2;
+      b.polygon([[x1, top, z1], [x1, top, z0], [xm, yr, z0], [xm, yr, z1]], tile);
+      b.polygon([[x0, top, z0], [x0, top, z1], [xm, yr, z1], [xm, yr, z0]], tile);
+      b.polygon([[r.x0, top, r.z1], [r.x1, top, r.z1], [xm, yr, r.z1]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x1, top, r.z0], [r.x0, top, r.z0], [xm, yr, r.z0]], wall, [0, 0, 0, seed]);
+    }
+    return yr;
+  }
+
+  /** A round hay bale standing on end (solid: Jay climbs it, cars stop). */
+  function hayBale(ctx, x, z, y, s) {
+    const r = 0.8 * (s || 1);
+    ctx.wood.cylinder(x, y, z, r, r, 1.2, 10, VH.col(0xd8be6a), true, VH.col(0xc9a94e));
+    ctx.physics.addOrientedBox(x, z, r * 0.9, r * 0.9, 0, y - 0.1, y + 1.2, 'crate');
+    ctx.physics.addOrientedBox(x, z, r * 0.9, r * 0.9, Math.PI / 4, y - 0.1, y + 1.2, 'crate');
+  }
+
+  /** Farmhouse: one or two storeys under a pitched roof, a porch on the front, a lawn and a white fence. */
+  function farmhouse(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const inset = { n: 3, s: 3, e: 3, w: 3 };
+    inset[side] = rng.range(7, 10);
+    const yard = insetRect(lot, inset);
+    if (yard.x1 - yard.x0 < 9 || yard.z1 - yard.z0 < 9) return courtyard(ctx, lot, rng) || 0;
+    const r = atFront(yard, side, rng.range(11, 16), rng.range(9, 12), rng.range(0.2, 0.8));
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const wall = pick(rng, pal.walls.filter((c) => c > 0xc00000) .length ? pal.walls.filter((c) => c > 0xc00000) : pal.walls, 0.05);
+    const top = KERB + 0.5 + floors * 3.0;
+    b.box(r.x0, 0, r.z0, r.x1, KERB + 0.5, r.z1, VH.col(0x9a8f80), { skip: { top: true } });
+    facadeWalls(b, r.x0, KERB + 0.5, r.z0, r.x1, top, r.z1, { wall, style: 1, ww: 0.45, wh: 0.55, bay: rng.range(2.8, 3.4), floorH: 3.0, seed });
+    const tile = pick(rng, pal.roofs, 0.06);
+    const yr = gableRoof(b, r, top, Math.min(3.4, Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.32), 0.5, tile, wall, seed);
+    // A brick chimney at one end of the ridge.
+    const cx = r.x1 - r.x0 >= r.z1 - r.z0 ? r.x0 + 1.6 : (r.x0 + r.x1) / 2;
+    const cz = r.x1 - r.x0 >= r.z1 - r.z0 ? (r.z0 + r.z1) / 2 : r.z0 + 1.6;
+    b.box(cx - 0.5, top, cz - 0.5, cx + 0.5, yr + 1.2, cz + 0.5, VH.col(0x8a4b3a));
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + (yr - top) * 0.6);
+    // The porch: a deck along the front, a roof on four posts, a door.
+    const porchCol = VH.col(0xe8e2d6);
+    alongFace(r, side, 2.4, (x0, z0, x1, z1, ox, oz) => {
+      ctx.wood.box(x0, 0, z0, x1, KERB + 0.45, z1, VH.col(0xb08a62), { uvScale: 2 });
+      ctx.physics.addBox(x0, 0, z0, x1, KERB + 0.45, z1, 'plank');
+      b.box(x0 - 0.2, KERB + 3.2, z0 - 0.2, x1 + 0.2, KERB + 3.4, z1 + 0.2, tile, { bottom: true });
+      const alongX = oz !== 0;
+      const a0 = alongX ? x0 : z0, a1 = alongX ? x1 : z1;
+      for (const t of [0.02, 0.35, 0.65, 0.98]) {
+        const p = a0 + (a1 - a0) * t;
+        const px = alongX ? p : ox > 0 ? x1 - 0.15 : x0 + 0.15;
+        const pz = alongX ? (oz > 0 ? z1 - 0.15 : z0 + 0.15) : p;
+        b.box(px - 0.1, KERB + 0.45, pz - 0.1, px + 0.1, KERB + 3.2, pz + 0.1, porchCol);
+        ctx.physics.addBox(px - 0.12, 0, pz - 0.12, px + 0.12, KERB + 3.2, pz + 0.12, 'pole', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
+      }
+    });
+    // Lawn round the house, and a white picket fence along the street with a gate.
+    ctx.grassTop.topRect(yard.x0, yard.z0, yard.x1, yard.z1, KERB, VH.col(0xf4f8e8), 6);
+    if (ctx.addLawn) ctx.addLawn(yard.x0, yard.z0, yard.x1, yard.z1);
+    picket(ctx, lot, side, rng);
+    if (rng.chance(0.8)) ctx.addProp('tree', rng.range(yard.x0 + 2, yard.x1 - 2), rng.range(yard.z0 + 2, yard.z1 - 2), rng.range(0, 6.28), rng.range(0.9, 1.3), KERB);
+    return yr + 1.2;
+  }
+
+  /** A low white picket fence just inside a lot's street face, open in the middle for a gate. */
+  function picket(ctx, lot, side, rng) {
+    const white = VH.col(0xf2efe8);
+    const horiz = side === 'n' || side === 's';
+    const a0 = (horiz ? lot.minX : lot.minZ) + 0.6, a1 = (horiz ? lot.maxX : lot.maxZ) - 0.6;
+    const c = side === 'n' ? lot.minZ + 0.4 : side === 's' ? lot.maxZ - 0.4 : side === 'w' ? lot.minX + 0.4 : lot.maxX - 0.4;
+    const gate = a0 + (a1 - a0) * (rng ? rng.range(0.3, 0.7) : 0.5);
+    for (const [p0, p1] of [[a0, gate - 1.6], [gate + 1.6, a1]]) {
+      if (p1 - p0 < 1) continue;
+      if (horiz) {
+        ctx.wood.box(p0, KERB + 0.35, c - 0.04, p1, KERB + 0.45, c + 0.04, white);
+        ctx.wood.box(p0, KERB + 0.75, c - 0.04, p1, KERB + 0.85, c + 0.04, white);
+        for (let p = p0; p <= p1; p += 0.6) ctx.wood.box(p - 0.05, KERB, c - 0.05, p + 0.05, KERB + 0.95, c + 0.05, white);
+        ctx.physics.addBox(p0, 0, c - 0.1, p1, KERB + 0.95, c + 0.1, 'fence', VH.COLLIDE.SOLID);
+      } else {
+        ctx.wood.box(c - 0.04, KERB + 0.35, p0, c + 0.04, KERB + 0.45, p1, white);
+        ctx.wood.box(c - 0.04, KERB + 0.75, p0, c + 0.04, KERB + 0.85, p1, white);
+        for (let p = p0; p <= p1; p += 0.6) ctx.wood.box(c - 0.05, KERB, p - 0.05, c + 0.05, KERB + 0.95, p + 0.05, white);
+        ctx.physics.addBox(c - 0.1, 0, p0, c + 0.1, KERB + 0.95, p1, 'fence', VH.COLLIDE.SOLID);
+      }
+    }
+  }
+
+  /** Barn: a big gambrel-roofed shed (red, or weathered grey), white trim, the great doors on a gable end, hay bales. */
+  function barn(ctx, lot, rng) {
+    const b = ctx.b;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const yard = insetRect(lot, { n: 3, s: 3, e: 3, w: 3 });
+    if (yard.x1 - yard.x0 < 14 || yard.z1 - yard.z0 < 14) return farmyard(ctx, lot, rng) || 0;
+    const long = rng.range(22, 30);
+    const wide = rng.range(13, 17);
+    // The ridge runs away from the street, so the doors face it.
+    const r = atFront(yard, side, wide, long, rng.range(0.2, 0.8));
+    const wall = VH.col(rng.pick([0xa8432f, 0x9b3b2b, 0xb04a32, 0x8a7a66, 0xa8432f]), rng.range(0.92, 1.05));
+    const trim = VH.col(0xf2efe8);
+    const eave = KERB + rng.range(5, 6.5);
+    facadeWalls(b, r.x0, 0, r.z0, r.x1, eave, r.z1, { wall, style: 1, ww: 0.25, wh: 0.3, bay: 7, floorH: eave, seed, vStart: 0.45 });
+    // Gambrel roof: a steep lower slope and a shallow upper one each side.
+    const roofCol = VH.col(rng.pick([0x5c5f63, 0x4a4d50, 0x3f5a48]));
+    const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+    const span = alongX ? r.z1 - r.z0 : r.x1 - r.x0;
+    const e = span * 0.2, y1 = eave + span * 0.22, y2 = y1 + span * 0.16;
+    if (alongX) {
+      const zA = r.z1 - e, zB = r.z0 + e, zm = (r.z0 + r.z1) / 2;
+      b.polygon([[r.x0, eave, r.z1], [r.x1, eave, r.z1], [r.x1, y1, zA], [r.x0, y1, zA]], roofCol);
+      b.polygon([[r.x0, y1, zA], [r.x1, y1, zA], [r.x1, y2, zm], [r.x0, y2, zm]], roofCol);
+      b.polygon([[r.x1, eave, r.z0], [r.x0, eave, r.z0], [r.x0, y1, zB], [r.x1, y1, zB]], roofCol);
+      b.polygon([[r.x1, y1, zB], [r.x0, y1, zB], [r.x0, y2, zm], [r.x1, y2, zm]], roofCol);
+      b.polygon([[r.x1, eave, r.z1], [r.x1, eave, r.z0], [r.x1, y1, zB], [r.x1, y2, zm], [r.x1, y1, zA]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x0, eave, r.z0], [r.x0, eave, r.z1], [r.x0, y1, zA], [r.x0, y2, zm], [r.x0, y1, zB]], wall, [0, 0, 0, seed]);
+    } else {
+      const xA = r.x1 - e, xB = r.x0 + e, xm = (r.x0 + r.x1) / 2;
+      b.polygon([[r.x1, eave, r.z1], [r.x1, eave, r.z0], [xA, y1, r.z0], [xA, y1, r.z1]], roofCol);
+      b.polygon([[xA, y1, r.z1], [xA, y1, r.z0], [xm, y2, r.z0], [xm, y2, r.z1]], roofCol);
+      b.polygon([[r.x0, eave, r.z0], [r.x0, eave, r.z1], [xB, y1, r.z1], [xB, y1, r.z0]], roofCol);
+      b.polygon([[xB, y1, r.z0], [xB, y1, r.z1], [xm, y2, r.z1], [xm, y2, r.z0]], roofCol);
+      b.polygon([[r.x0, eave, r.z1], [r.x1, eave, r.z1], [xA, y1, r.z1], [xm, y2, r.z1], [xB, y1, r.z1]], wall, [0, 0, 0, seed]);
+      b.polygon([[r.x1, eave, r.z0], [r.x0, eave, r.z0], [xB, y1, r.z0], [xm, y2, r.z0], [xA, y1, r.z0]], wall, [0, 0, 0, seed]);
+    }
+    // White corner boards, the great doors (white frame, X braces) and the hay loft door.
+    for (const [x, z] of [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]]) b.box(x - 0.2, 0, z - 0.2, x + 0.2, eave, z + 0.2, trim);
+    alongFace(r, side, 0.12, (x0, z0, x1, z1, ox, oz) => {
+      const hx = oz !== 0;
+      const mid = hx ? (x0 + x1) / 2 : (z0 + z1) / 2;
+      const dw = Math.min(5, (hx ? x1 - x0 : z1 - z0) * 0.32);
+      const box = (a0, a1, y0, y3, col) => (hx ? b.box(a0, y0, z0, a1, y3, z1, col) : b.box(x0, y0, a0, x1, y3, a1, col));
+      box(mid - dw - 0.25, mid + dw + 0.25, KERB, KERB + 4.6, trim);
+      box(mid - dw, mid + dw, KERB, KERB + 4.35, VH.colMul(wall, 0.8));
+      for (const [a, c] of [[mid - dw, mid], [mid, mid + dw]]) {
+        box(a + 0.1, c - 0.1, KERB + 2.1, KERB + 2.35, trim);
+        box(a + 0.1, a + 0.35, KERB, KERB + 4.35, trim);
+      }
+      box(mid - 1.1, mid + 1.1, eave - 0.6, eave + 1.4, trim);
+      box(mid - 0.9, mid + 0.9, eave - 0.4, eave + 1.2, VH.col(0x3a2a20));
+    });
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, y1);
+    farmyard(ctx, { minX: yard.x0, maxX: yard.x1, minZ: yard.z0, maxZ: yard.z1, front: lot.front, district: lot.district }, rng, r);
+    return y2;
+  }
+
+  /** A dirt farmyard (the rest of a farm lot): packed earth, a few hay bales, a water trough. */
+  function farmyard(ctx, lot, rng, avoid) {
+    const x0 = lot.minX, x1 = lot.maxX, z0 = lot.minZ, z1 = lot.maxZ;
+    ctx.asphaltTop.topRect(x0, z0, x1, z1, KERB, VH.col(0xa4865c, 4.5), 6); // the asphalt grain, browned: packed earth
+    const n = rng.int(2, 6);
+    const clear = (x, z) => !avoid || x < avoid.x0 - 2 || x > avoid.x1 + 2 || z < avoid.z0 - 2 || z > avoid.z1 + 2;
+    for (let i = 0; i < n; i++) {
+      const x = rng.range(x0 + 2, x1 - 2), z = rng.range(z0 + 2, z1 - 2);
+      if (clear(x, z)) hayBale(ctx, x, z, KERB, rng.range(0.9, 1.1));
+    }
+    if (rng.chance(0.5)) {
+      const x = rng.range(x0 + 3, x1 - 4), z = rng.range(z0 + 3, z1 - 3);
+      if (clear(x, z)) {
+        ctx.prop.box(x, KERB, z - 0.4, x + 2.4, KERB + 0.6, z + 0.4, VH.col(0x8a9096));
+        ctx.physics.addBox(x, 0, z - 0.4, x + 2.4, KERB + 0.6, z + 0.4, 'metal');
+      }
+    }
+    return 0;
+  }
+
+  /** Silos: one to three tall round bins with domed caps on a concrete pad, and a machine shed. */
+  function silo(ctx, lot, rng) {
+    const yard = insetRect(lot, { n: 3, s: 3, e: 3, w: 3 });
+    if (yard.x1 - yard.x0 < 12 || yard.z1 - yard.z0 < 12) return farmyard(ctx, lot, rng) || 0;
+    const side = mainFront(lot);
+    ctx.concrete.topRect(yard.x0, yard.z0, yard.x1, yard.z1, KERB + 0.01, VH.col(0xc4c0b8), 4);
+    const n = rng.int(1, 3);
+    const rad = rng.range(3, 4);
+    const h = rng.range(15, 22);
+    const steel = VH.col(rng.pick([0xd8dcdf, 0xc9cfd4, 0xb8c0c6]));
+    // In a row along the back of the lot.
+    const back = { n: 's', s: 'n', e: 'w', w: 'e' }[side];
+    const row = atFront(yard, back, n * (rad * 2 + 1.5), rad * 2 + 1, 0.5);
+    const horiz = side === 'n' || side === 's';
+    let top = 0;
+    for (let i = 0; i < n; i++) {
+      const cx = horiz ? row.x0 + rad + 0.75 + i * (rad * 2 + 1.5) : (row.x0 + row.x1) / 2;
+      const cz = horiz ? (row.z0 + row.z1) / 2 : row.z0 + rad + 0.75 + i * (rad * 2 + 1.5);
+      ctx.prop.cylinder(cx, KERB, cz, rad, rad, h, 14, steel, false);
+      ctx.prop.cylinder(cx, KERB + h, cz, rad * 1.02, 0.4, rad * 0.7, 14, VH.colMul(steel, 0.9), true);
+      for (let y = KERB + 3; y < h; y += 3) ctx.prop.cylinder(cx, y, cz, rad + 0.06, rad + 0.06, 0.18, 14, VH.colMul(steel, 0.8), false);
+      ctx.prop.box(cx - 0.3, KERB, cz + (horiz ? -rad - 0.35 : 0), cx + 0.3, KERB + h, cz + (horiz ? -rad - 0.05 : 0.3), VH.col(0x6b6e72));
+      for (const yaw of [0, Math.PI / 4]) ctx.physics.addOrientedBox(cx, cz, rad * 0.93, rad * 0.93, yaw, 0, KERB + h + rad * 0.7, 'metal');
+      top = Math.max(top, KERB + h + rad * 0.7);
+    }
+    // A machine shed by the street.
+    const shedR = atFront(yard, side, rng.range(10, 14), rng.range(7, 9), rng.chance(0.5) ? 0.15 : 0.85);
+    const shedTop = KERB + rng.range(4, 5);
+    const wall = VH.col(rng.pick([0x8a8f96, 0xa8432f, 0x9a968e]));
+    facadeWalls(ctx.b, shedR.x0, KERB, shedR.z0, shedR.x1, shedTop, shedR.z1, { wall, style: 3, ww: 0.9, wh: 0.15, bay: 5, floorH: shedTop - KERB, seed: rng.range(0, 100), vStart: 0.7 });
+    roof(ctx.b, shedR.x0, shedR.z0, shedR.x1, shedR.z1, shedTop, VH.col(0x5a5f66), 3);
+    addCollider(ctx, shedR.x0, shedR.z0, shedR.x1, shedR.z1, shedTop);
+    return top;
+  }
+
+  /** Warehouse: a tall blank box with a raised loading dock and dock doors along the front, a lorry yard. */
+  function warehouse(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const seed = rng.range(0, 100);
+    const side = mainFront(lot);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = rng.range(12, 16); // room for a lorry to back up
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 12 || r.z1 - r.z0 < 12) return parking(ctx, lot) || 0;
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const top = KERB + 7 + floors * 2.5;
+    const wall = pick(rng, pal.walls, 0.05);
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, { wall, style: 3, ww: 0.95, wh: 0.12, bay: rng.range(6, 8), floorH: top - KERB, seed, vStart: 0.85 });
+    const roofCol = pick(rng, pal.roofs, 0.05);
+    roof(b, r.x0, r.z0, r.x1, r.z1, top, roofCol, seed);
+    parapet(b, r.x0, r.z0, r.x1, r.z1, top, 0.8, 0.3, VH.colMul(wall, 0.9));
+    // Roof lights in rows.
+    for (let x = r.x0 + 4; x < r.x1 - 4; x += 8) for (let z = r.z0 + 4; z < r.z1 - 4; z += 10) b.box(x, top, z, x + 2.2, top + 0.5, z + 3, VH.col(0xcfe0ea));
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 0.8);
+    // The loading dock: a 1.2 m concrete platform along the front with dock doors and black bumpers.
+    const accent = pick(rng, pal.accents, 0.05);
+    alongFace(r, side, 3, (x0, z0, x1, z1, ox, oz) => {
+      ctx.concrete.box(x0, 0, z0, x1, KERB + 1.05, z1, VH.col(0xb8b4ac), { uvScale: 4 });
+      ctx.physics.addBox(x0, 0, z0, x1, KERB + 1.05, z1, 'concrete');
+    });
+    alongFace(r, side, inset[side] - 3.2, (x0, z0, x1, z1) => {
+      ctx.asphaltTop.topRect(x0, z0, x1, z1, KERB, VH.col(0xbcbcbc), 6);
+    });
+    const len = side === 'n' || side === 's' ? r.x1 - r.x0 : r.z1 - r.z0;
+    const n = Math.max(1, Math.floor(len / 7));
+    for (let i = 0; i < n; i++) {
+      const c = (i + 0.5) * (len / n);
+      const w = 3;
+      const y0 = KERB + 1.05, y1 = KERB + 4.3;
+      if (side === 's') { b.box(r.x0 + c - w / 2, y0, r.z1, r.x0 + c + w / 2, y1, r.z1 + 0.1, VH.col(0x8a8f96)); b.box(r.x0 + c - w / 2 - 0.3, y1, r.z1, r.x0 + c + w / 2 + 0.3, y1 + 0.4, r.z1 + 0.15, accent); }
+      else if (side === 'n') { b.box(r.x0 + c - w / 2, y0, r.z0 - 0.1, r.x0 + c + w / 2, y1, r.z0, VH.col(0x8a8f96)); b.box(r.x0 + c - w / 2 - 0.3, y1, r.z0 - 0.15, r.x0 + c + w / 2 + 0.3, y1 + 0.4, r.z0, accent); }
+      else if (side === 'e') { b.box(r.x1, y0, r.z0 + c - w / 2, r.x1 + 0.1, y1, r.z0 + c + w / 2, VH.col(0x8a8f96)); b.box(r.x1, y1, r.z0 + c - w / 2 - 0.3, r.x1 + 0.15, y1 + 0.4, r.z0 + c + w / 2 + 0.3, accent); }
+      else { b.box(r.x0 - 0.1, y0, r.z0 + c - w / 2, r.x0, y1, r.z0 + c + w / 2, VH.col(0x8a8f96)); b.box(r.x0 - 0.15, y1, r.z0 + c - w / 2 - 0.3, r.x0, y1 + 0.4, r.z0 + c + w / 2 + 0.3, accent); }
+    }
+    return top + 0.8;
+  }
+
+  /** Depot: a yard under a big open canopy on steel columns (lorries, buses), with an office cabin at one end. */
+  function depot(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const side = mainFront(lot);
+    const yard = insetRect(lot, { n: 1.5, s: 1.5, e: 1.5, w: 1.5 });
+    if (yard.x1 - yard.x0 < 14 || yard.z1 - yard.z0 < 14) return parking(ctx, lot) || 0;
+    ctx.asphaltTop.topRect(yard.x0, yard.z0, yard.x1, yard.z1, KERB, VH.col(0xb4b4b4), 6);
+    const back = { n: 's', s: 'n', e: 'w', w: 'e' }[side];
+    const horiz = side === 'n' || side === 's';
+    const deep = horiz ? yard.z1 - yard.z0 : yard.x1 - yard.x0;
+    const c = atFront(yard, back, 999, Math.max(8, deep * 0.6), 0.5);
+    const h = KERB + rng.range(6.5, 7.5);
+    const steel = VH.col(0x6b6e72);
+    const roofCol = pick(rng, pal.roofs, 0.05);
+    b.box(c.x0 - 0.5, h, c.z0 - 0.5, c.x1 + 0.5, h + 0.6, c.z1 + 0.5, roofCol, { bottom: true });
+    b.box(c.x0 - 0.5, h - 0.8, c.z0 - 0.5, c.x1 + 0.5, h, c.z1 + 0.5, pick(rng, pal.accents, 0.05), { skip: { top: true, bottom: true } });
+    for (let x = c.x0 + 0.5; x <= c.x1 - 0.4; x += Math.max(6, (c.x1 - c.x0 - 1) / Math.max(1, Math.round((c.x1 - c.x0) / 9)))) {
+      for (const z of [c.z0 + 0.5, c.z1 - 0.5]) {
+        b.box(x - 0.2, KERB, z - 0.2, x + 0.2, h - 0.8, z + 0.2, steel);
+        ctx.physics.addBox(x - 0.22, 0, z - 0.22, x + 0.22, h - 0.8, z + 0.22, 'metal');
+      }
+    }
+    // The office: a two-storey cabin at the street end.
+    const o = atFront(yard, side, rng.range(8, 12), rng.range(5, 7), rng.chance(0.5) ? 0.08 : 0.92);
+    const wall = pick(rng, pal.walls, 0.05);
+    const oTop = KERB + 6.2;
+    facadeWalls(b, o.x0, KERB, o.z0, o.x1, oTop, o.z1, { wall, style: 1, ww: 0.6, wh: 0.5, bay: 2.6, floorH: 3.1, seed: rng.range(0, 100) });
+    roof(b, o.x0, o.z0, o.x1, o.z1, oTop, VH.col(0x5a5f66), 7);
+    addCollider(ctx, o.x0, o.z0, o.x1, o.z1, oTop);
+    return h + 0.6;
+  }
+
+  /** Terraced houses: a row of narrow two- or three-storey houses along the street, each its own colour and door. */
+  function terrace(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const side = mainFront(lot);
+    const inset = { n: 1, s: 1, e: 1, w: 1 };
+    inset[side] = rng.range(1.5, 3);
+    const yard = insetRect(lot, inset);
+    const horiz = side === 'n' || side === 's';
+    const len = horiz ? yard.x1 - yard.x0 : yard.z1 - yard.z0;
+    const deep = Math.min(horiz ? yard.z1 - yard.z0 : yard.x1 - yard.x0, rng.range(9, 11));
+    if (len < 6 || deep < 6) return courtyard(ctx, lot, rng) || 0;
+    const r = atFront(yard, side, len, deep, 0.5);
+    const floors = rng.int(lot.floorRange[0], lot.floorRange[1]);
+    const floorH = 3.0;
+    const top = KERB + 0.4 + floors * floorH;
+    const units = Math.max(1, Math.round(len / rng.range(5, 6.5)));
+    const uw = len / units;
+    const brick = rng.chance(0.6);
+    const base = pick(rng, pal.walls, 0.04);
+    const door = pick(rng, pal.accents, 0.05);
+    b.box(r.x0, 0, r.z0, r.x1, KERB + 0.4, r.z1, VH.col(0x8a8580), { skip: { top: true } });
+    for (let i = 0; i < units; i++) {
+      const wall = brick ? shade(base, rng, 0.06) : pick(rng, pal.walls, 0.05);
+      const u = horiz ? { x0: r.x0 + i * uw, x1: r.x0 + (i + 1) * uw, z0: r.z0, z1: r.z1 } : { x0: r.x0, x1: r.x1, z0: r.z0 + i * uw, z1: r.z0 + (i + 1) * uw };
+      const sides = horiz ? { e: i < units - 1 ? 'skip' : 'win', w: i > 0 ? 'skip' : 'win' } : { s: i < units - 1 ? 'skip' : 'win', n: i > 0 ? 'skip' : 'win' };
+      facadeWalls(b, u.x0, KERB + 0.4, u.z0, u.x1, top, u.z1, { wall, style: 1, ww: 0.5, wh: 0.58, bay: uw / 2, floorH, seed: rng.range(0, 100) }, sides);
+      // The front door, up a step.
+      alongFace(u, side, 0.1, (x0, z0, x1, z1, ox, oz) => {
+        const a = oz !== 0 ? (x0 + x1) / 2 : (z0 + z1) / 2;
+        if (oz !== 0) b.box(a - 0.5, KERB + 0.4, z0, a + 0.5, KERB + 2.5, z1, i % 3 === 0 ? door : VH.colMul(door, 0.85));
+        else b.box(x0, KERB + 0.4, a - 0.5, x1, KERB + 2.5, a + 0.5, i % 3 === 0 ? door : VH.colMul(door, 0.85));
+      });
+      // A chimney stack on every other party wall.
+      if (i % 2 === 0) {
+        const cx = horiz ? u.x0 + 0.1 : (u.x0 + u.x1) / 2, cz = horiz ? (u.z0 + u.z1) / 2 : u.z0 + 0.1;
+        b.box(cx - 0.45, top, cz - 0.6, cx + 0.45, top + Math.min(3, deep * 0.3) + 1.2, cz + 0.6, VH.col(0x7a3f33));
+      }
+    }
+    const yr = gableRoof(b, r, top, Math.min(3, deep * 0.3), 0.35, pick(rng, pal.roofs, 0.05), base, rng.range(0, 100));
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + (yr - top) * 0.6);
+    // Back gardens.
+    const backSide = { n: 's', s: 'n', e: 'w', w: 'e' }[side];
+    alongFace(r, backSide, (horiz ? yard.z1 - yard.z0 : yard.x1 - yard.x0) - deep, (x0, z0, x1, z1) => {
+      if (x1 - x0 < 1 || z1 - z0 < 1) return;
+      ctx.grassTop.topRect(x0, z0, x1, z1, KERB, VH.col(0xffffff), 6);
+      if (ctx.addLawn) ctx.addLawn(x0, z0, x1, z1);
+    });
+    return yr + 1.2;
+  }
+
+  /** Big-box store: a long, plain, tall box with a coloured fascia, a glazed entrance and a car park in front. */
+  function bigbox(ctx, lot, rng) {
+    const b = ctx.b;
+    const pal = lot.district.palette;
+    const side = mainFront(lot);
+    const inset = { n: 2, s: 2, e: 2, w: 2 };
+    inset[side] = Math.min(28, ((side === 'n' || side === 's' ? lot.maxZ - lot.minZ : lot.maxX - lot.minX) - 4) * 0.4);
+    const r = insetRect(lot, inset);
+    if (r.x1 - r.x0 < 16 || r.z1 - r.z0 < 14) return parking(ctx, lot) || 0;
+    const top = KERB + rng.range(7.5, 9.5);
+    const wall = VH.col(rng.pick([0xd8d4cc, 0xc9c2b2, 0xe4e0d8, 0xb8bcc2]));
+    facadeWalls(b, r.x0, KERB, r.z0, r.x1, top, r.z1, { wall, style: 0, ww: 0, wh: 0, bay: 8, floorH: top - KERB, seed: 1 });
+    roof(b, r.x0, r.z0, r.x1, r.z1, top, VH.col(0x8a8f94), 5);
+    addCollider(ctx, r.x0, r.z0, r.x1, r.z1, top + 0.4);
+    const fascia = pick(rng, pal.accents, 0.03);
+    alongFace(r, side, 0.25, (x0, z0, x1, z1, ox, oz) => {
+      // The fascia band along the top, and a glazed entrance in the middle under a canopy.
+      b.box(x0, top - 2, z0, x1, top + 0.4, z1, fascia);
+      const hx = oz !== 0;
+      const mid = hx ? (x0 + x1) / 2 : (z0 + z1) / 2;
+      if (hx) {
+        b.wall([mid - 6, KERB, oz > 0 ? z1 : z0], 1, 0, 12, 4, VH.col(0x2e3a45), null, [0, 4, 0, 1], [0.95, 0.85, 2, 3]);
+        b.box(mid - 7, KERB + 4.2, oz > 0 ? z1 : z0 - 3, mid + 7, KERB + 4.6, oz > 0 ? z1 + 3 : z0, fascia, { bottom: true });
+      } else {
+        b.wall([ox > 0 ? x1 : x0, KERB, mid + 6], 0, -1, 12, 4, VH.col(0x2e3a45), null, [0, 4, 0, 1], [0.95, 0.85, 2, 3]);
+        b.box(ox > 0 ? x1 : x0 - 3, KERB + 4.2, mid - 7, ox > 0 ? x1 + 3 : x0, KERB + 4.6, mid + 7, fascia, { bottom: true });
+      }
+    });
+    // The car park in front.
+    alongFace(r, side, inset[side] - 0.5, (x0, z0, x1, z1) => {
+      parking(ctx, { minX: x0, maxX: x1, minZ: z0, maxZ: z1, front: { n: false, s: false, e: false, w: false } });
+    });
+    return top + 0.4;
+  }
+
+  const ARCHETYPES = { tower, office, shophouse, apartment, hotel, villa, house, shed, lowrise, farmhouse, barn, silo, warehouse, depot, terrace, bigbox };
 
   const Buildings = {
     /** Build one lot. Returns the height of the tallest point. */
     buildLot(ctx, lot) {
       const rng = new VH.RNG(lot.seed);
       if (lot.kind === 'parking') {
-        parking(ctx, lot);
+        if (lot.district && lot.district.yard === 'dirt') farmyard(ctx, lot, rng); // 4.0: a farm's empty lot is its yard
+        else parking(ctx, lot);
         return 0;
       }
       if (lot.kind === 'courtyard') {
@@ -829,6 +1216,10 @@
       return y + 58;
     },
   };
+
+  /** 4.0: the archetypes themselves, for district builders: VH.Buildings.archetypes.barn(ctx, lot, rng). */
+  Buildings.archetypes = ARCHETYPES;
+  Buildings.hayBale = hayBale;
 
   VH.Buildings = Buildings;
 })();

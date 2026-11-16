@@ -304,6 +304,8 @@
 
     show(on) {
       this.root.classList.toggle('on', !!on);
+      // The tutorial checklist, tips and district banners make way for the fair's own panels.
+      document.body.classList.toggle('at-attraction', !!on);
       if (!on) this.clear();
     }
 
@@ -1130,6 +1132,9 @@
       // Anything that should never happen on a ride: stop at once.
       if (g.player.state === 'dead') return this._force('died');
       if (g.missions && g.missions.run && !s.opts.story) return this._force('mission');
+      // The camera as the attraction last placed it, so what it projects to the screen (a stall's
+      // aiming ring) matches the picture even when something else moved the camera in between.
+      if (s._cam) this._applyCam();
       try {
         s.def.update(dt, s);
       } catch (e) {

@@ -389,11 +389,14 @@
         mark(lineStart, lineEnd, -0.22, -0.1, YELLOW);
         mark(lineStart, lineEnd, 0.1, 0.22, YELLOW);
       }
-      // Dashed lane dividers.
+      // Dashed lane dividers (4.0: on a stretch a new road cut in two, where they were).
+      const o3 = seg.v3;
+      const dash0 = o3 ? o3.from + (o3.sj ? CW + 1.4 : 0) + 1 : lineStart + 1;
+      const dashStart = dash0 + Math.max(0, Math.ceil((lineStart + 1 - dash0) / 8 - 1e-6)) * 8;
       for (let k = 1; k < n; k++) {
         const off = M / 2 + k * laneW;
         for (const s of [-1, 1]) {
-          for (let p = lineStart + 1; p < lineEnd - 1; p += 8) {
+          for (let p = dashStart; p < lineEnd - 1; p += 8) {
             mark(p, Math.min(p + 3, lineEnd - 1), s * off - 0.07, s * off + 0.07, WHITE);
           }
         }
@@ -517,6 +520,8 @@
      * lots (the generic fill), a park, or a reserved landmark plot.
      */
     _buildBlock3(block) {
+      // 4.0: fields, farms and greens in the fill districts (fill4.js).
+      if (block.v4 && VH.Fill4 && VH.Fill4.block(this, block)) return;
       const ctx = this.ctxAt(block.cx, block.cz);
       const { minX, maxX, minZ, maxZ } = block;
       ctx.concrete.box(minX, 0, minZ, maxX, KERB, maxZ, VH.col(0xcfcac0), { skip: { top: true } });
@@ -665,14 +670,22 @@
      */
     onRoad(x, z, margin, skipAxis, cityOnly) {
       const m = margin || 0;
+      // cityOnly 'v3': the roads as they were before 4.0 (old ends, no 4.0 roads).
+      const pre4 = cityOnly === 'v3';
+      if (pre4) cityOnly = null;
       for (const r of this.layout.roads) {
         if (skipAxis && r.axis === skipAxis) continue;
         // cityOnly: the roads as they were inside the old city limits.
         // cityOnly 'v2': the roads as they were before 3.0 (old ends, no new roads).
-        if (cityOnly && r.isNew && cityOnly !== 'v2') continue;
-        if (cityOnly && r.v3) continue;
         let from = r.from;
         let to = r.to;
+        if (pre4) {
+          if (r.v4) continue;
+          if (r.v3From !== undefined) from = r.v3From;
+          if (r.v3To !== undefined) to = r.v3To;
+        }
+        if (cityOnly && r.isNew && cityOnly !== 'v2') continue;
+        if (cityOnly && r.v3) continue;
         if (cityOnly) {
           if (r.v2From !== undefined) from = r.v2From;
           if (r.v2To !== undefined) to = r.v2To;
@@ -738,17 +751,22 @@
         const x = rng3.range(all.minX + 4, cfg.seawallX - 40);
         const z = rng3.range(cfg.bounds.minZ + 4, cfg.bounds.maxZ - 4);
         if (v2 && x > v2.minX && x < v2.maxX && z > v2.minZ && z < v2.maxZ) continue; // the old land has its trees
-        if (inZone(x, z, 14) || this.onRoad(x, z, 6) || this._inNewLand(x, z, 8)) continue;
+        // (Judged against the world as it was before 4.0, so the same trees come out.)
+        if (inZone(x, z, 14) || this.onRoad(x, z, 6, null, 'v3') || this._inNewLand(x, z, 8, true)) continue;
         const type = rng3.chance(0.7) ? (rng3.chance(0.5) ? 'tree' : 'treeB') : 'palm';
-        this.addProp(type, x, 0, z, rng3.range(0, 6.28), rng3.range(0.8, 1.4));
+        const yaw = rng3.range(0, 6.28);
+        const scale = rng3.range(0.8, 1.4);
         more3++;
+        if (this.onRoad(x, z, 6) || this._inNewLand(x, z, 8)) continue; // 4.0: now under a new road or block
+        this.addProp(type, x, 0, z, yaw, scale);
       }
     }
 
     /** 3.0: is (x, z) on (or within `pad` of) a new block, or a reserved plot? */
-    _inNewLand(x, z, pad) {
+    _inNewLand(x, z, pad, pre4) {
       const p = pad || 0;
       for (const b of this.layout.blocks3 || []) {
+        if (pre4 && b.v4) continue; // the land as it was before 4.0
         if (x > b.minX - p && x < b.maxX + p && z > b.minZ - p && z < b.maxZ + p) return true;
       }
       return false;
