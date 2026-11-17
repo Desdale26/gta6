@@ -727,14 +727,16 @@ z −1478..−1422) and the stunt ramps' field north of Northgate
 
 ### What is left for the builders
 
-From the emptiness scan after this step (`node vicehaven/tools/emptiness.mjs`):
-the six new districts have no empty land; what remains is the reserved
-plots (orange) and these dressing jobs:
+From the emptiness scan after this step (`node vicehaven/tools/emptiness.mjs`;
+before the fill it found 6,020 empty cells of 24 m, about 3.5 km², after it
+605): the six new districts have no empty land; what remains is the
+reserved plots (orange, 2,466 cells with the Isla Paloma ones) and these
+dressing jobs:
 
 | Job | Where (x0..x1, z0..z1) | Empty cells (24 m) | Who |
 |---|---|---|---|
 | Every 4.0 landmark plot | the plot table above | 2,072 plot cells | FILL-COUNTRY: Haverly Farms and Redwater; FILL-TOWN: Gateway Park, Lantern Heights, Southgate, Paloma Cove |
-| Fort Breakwater interior (read js/fort.js first, only add) | inside the walls, x −1500..−1120, z −400..400: the biggest gaps −1384..−1312, −96..240; −1480..−1432, −312..120; −1168..−1096, −384..−120; −1384..−1264, 264..384; −1240..−1096, 72..144; the strips just inside the north and south walls | 311 | FILL-TOWN |
+| Fort Breakwater interior (read js/fort.js first, only add) | inside the walls, x −1500..−1120, z −400..400: the biggest gaps −1384..−1312, −96..240; −1480..−1432, −312..120; −1240..−1120, −240..−120; −1384..−1264, 264..384; −1240..−1096, 72..144; −1384..−1264, −384..−312; −1312..−1264, 72..240; the strips just inside the walls | 259 | FILL-TOWN |
 | Airport infield and edges (read js/airfield.js and js/airside.js first) | −1024..−760, −1344..−1200; the strip inside the north fence −1024..368, −1512..−1488; −760..−448, −1248..−1200; the grass beside the taxiways at z −1416..−1392 (x −928..80); the strip between the fence's east end and Seawall Drive, x 344..368, z −1416..−1128; small bits of landside west of Grand Avenue North (z −1176..−1104) | 232 + 2 | FILL-TOWN |
 | Crestline estate gardens (read js/outskirts.js `Estates` first, only add inside the garden walls) | the walled lawns of the mansions, x −640..−392, z −392..392 | 110 | FILL-TOWN |
 | The bay (moving scenery) | the water east of the seawall | — | FILL-TOWN |

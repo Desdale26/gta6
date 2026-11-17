@@ -36,7 +36,6 @@
   const W = 320;
   const H = 240;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-  const ROW_X = 828; // the west row of cabinets: their screens face +x, the aisle
 
   /** A small random-number generator that gives the same run for the same seed. */
   function rng(seed) {
@@ -71,10 +70,21 @@
   }
 
   // The controls this frame, the same for every game: the stick / keys (x right, y up), the main
-  // button (Space, click, E, pad A or RT) held and just pressed, and the stick's taps (the initials).
-  const IN = { x: 0, y: 0, a: false, aP: false, upP: false, downP: false, leftP: false, rightP: false };
+  // button (Space, click, E, pad A or RT) held and just pressed, the stick's taps (the initials), and
+  // how far the mouse moved (mx, my: radians of the camera's turn, right and up +).
+  const IN = { x: 0, y: 0, a: false, aP: false, upP: false, downP: false, leftP: false, rightP: false, mx: 0, my: 0 };
   const _padPrev = { x: 0, y: 0 };
+  const _mouse = { yaw: null };
   function readIn(s) {
+    // The mouse turns the camera rig while Jay is held: read the turn, then put it back.
+    const rig = s.game.cameraRig;
+    if (_mouse.yaw === null) _mouse.yaw = rig.yaw;
+    let dyaw = rig.yaw - _mouse.yaw;
+    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+    _mouse.yaw = rig.yaw;
+    IN.mx = -dyaw;
+    IN.my = rig.pitch;
+    rig.pitch = 0;
     const pad = s.game.input.pad;
     let x = (s.down('moveRight') ? 1 : 0) - (s.down('moveLeft') ? 1 : 0);
     let y = (s.down('moveForward') ? 1 : 0) - (s.down('moveBack') ? 1 : 0);
@@ -99,10 +109,11 @@
     _padPrev.y = py;
     return IN;
   }
-  function clearIn() {
-    IN.x = IN.y = 0;
-    IN.a = IN.aP = IN.upP = IN.downP = IN.leftP = IN.rightP = false;
-    return IN;
+  function clearIn(o) {
+    const I = o || IN;
+    I.x = I.y = I.mx = I.my = 0;
+    I.a = I.aP = I.upP = I.downP = I.leftP = I.rightP = false;
+    return I;
   }
 
   // ============================================================ BOARDWALK DASH
@@ -421,7 +432,7 @@
 
     /** The attract mode's runner: jumps what's coming, ducks gulls. */
     demo(I) {
-      clearIn();
+      clearIn(I);
       const rx = this.dist + DASH.x;
       let near = null, nd = 1e9;
       for (const o of this.obs) {
@@ -1001,7 +1012,7 @@
 
     /** A driver: aims at a point further round the circuit, lifts and brakes for the bends. */
     drive(I, look, care) {
-      clearIn();
+      clearIn(I);
       const N = SPRINT.N;
       const j = (this.idx + Math.round(look + this.v / 14)) % N;
       let want = Math.atan2(TY[j] - this.y, TX[j] - this.x) - this.a;
@@ -1446,7 +1457,7 @@
 
     /** The attract mode's captain: under the lowest fish, out from under falling ink, always blowing. */
     demo(I) {
-      clearIn();
+      clearIn(I);
       I.a = true;
       let tx = this.x, best = -1e9;
       for (const f of this.fish) if (f.on && f.y > best && f.y < this.y - 20) {
@@ -1639,9 +1650,2238 @@
     }
   }
 
+  // ========================================================== LIGHTHOUSE STACK
+  // Build a lighthouse on the end of the pier: a block swings from the crane, the button drops it, and
+  // whatever hangs over the floor below is sliced off and falls in the sea, so the tower gets narrower
+  // unless the drops are true. A dead-centre drop is PERFECT (bonus, a run of them more, and the block
+  // grows back a little). The swing quickens and the tower sways more the higher it gets. Three blocks
+  // in the sea or 75 seconds, whichever is first; every tenth floor is a lamp room.
+  const STACK = {
+    secs: 75,
+    w0: 84, //          the first floor's width (px) and the most a block can grow back to
+    fh: 14, //          a floor's height
+    base: 226, //       the pier's top on the screen, before the view rises
+    hookUp: 64, //      how far above the tower's top the block swings
+    g: 1100, //         a dropped block's fall
+    swing: 70, //       the swing's half-width (px)
+    period0: 3.0, //    the swing's period at the start, and what each floor takes off it (to the least)
+    periodK: 0.03,
+    periodMin: 1.4,
+    perfect: 0.03, //   a perfect drop: within this many seconds of the swing of dead centre (4 px at the least)
+    grow: 6, //         what a perfect drop gives back
+    sway: 9, //         the tower's sway (px) at 30 floors up
+    lives: 3,
+  };
+
+  class Stack {
+    constructor() {
+      this.title = 'LIGHTHOUSE STACK';
+      this.ink = '#ff9a3c';
+      this.blocks = []; //  [x (tower's own), w] per floor
+      this.bits = []; //    sliced-off pieces falling in the sea
+      for (let i = 0; i < 8; i++) this.bits.push({ on: false, x: 0, y: 0, w: 0, vy: 0, vx: 0, r: 0, lamp: false });
+      this.pops = [];
+      for (let i = 0; i < 5; i++) this.pops.push({ t: 9, x: 0, y: 0, txt: '', col: '' });
+      this._popI = 0;
+      this.stars = [];
+      const R = rng(31);
+      for (let i = 0; i < 40; i++) this.stars.push([R() * W, R() * 900, R()]);
+      this.sfx = () => {};
+      this.reset(1);
+    }
+
+    reset(seed) {
+      this.rnd = rng(seed);
+      this.t = 0;
+      this.score = 0;
+      this.over = null;
+      this.blocks.length = 0;
+      this.blocks.push([0, STACK.w0]);
+      this.w = STACK.w0; //    the block on the hook
+      this.ph = this.rnd() * TAU; // the swing's phase
+      this.falling = false;
+      this.fy = 0; //          a falling block's height above the tower's top (px) and speed
+      this.fvy = 0;
+      this.fx = 0; //          its x (screen)
+      this.wait = 0.6; //      until the next block is on the hook
+      this.lives = STACK.lives;
+      this.run = 0; //         perfect drops in a row
+      this.perfects = 0;
+      this.best = 0;
+      this.view = 0; //        how far the view has risen (px)
+      this.shake = 0;
+      this.flash = 0;
+      for (const b of this.bits) b.on = false;
+      for (const p of this.pops) p.t = 9;
+    }
+
+    get floors() {
+      return this.blocks.length - 1;
+    }
+
+    line() {
+      const bits = [this.floors + (this.floors === 1 ? ' floor' : ' floors')];
+      if (this.perfects) bits.push(this.perfects + ' perfect');
+      if (this.best > 1) bits.push('best run ' + this.best);
+      return bits.join(', ');
+    }
+
+    /** The tower's sway (px) at the top, now. */
+    swayAt(t) {
+      const k = Math.min(1.4, this.floors / 30);
+      return Math.sin(t * 1.1) * STACK.sway * k;
+    }
+    /** Where floor i is drawn across (screen x of its middle). */
+    floorX(i, t) {
+      const n = Math.max(1, this.floors);
+      return W / 2 + this.blocks[i][0] + (this.swayAt(t) * i) / n;
+    }
+    /** The swing's period now. */
+    get period() {
+      return Math.max(STACK.periodMin, STACK.period0 - this.floors * STACK.periodK);
+    }
+    /** The hook: where the block on it is (screen x) at time t. */
+    hookX(t) {
+      return W / 2 + Math.sin(this.ph + (t * TAU) / this.period) * STACK.swing;
+    }
+    /** The tower's top on the screen (y), the view risen. */
+    topY() {
+      return STACK.base - this.floors * STACK.fh + this.view;
+    }
+
+    pop(txt, x, y, col) {
+      const p = this.pops[this._popI++ % this.pops.length];
+      p.t = 0;
+      p.txt = txt;
+      p.x = x;
+      p.y = y;
+      p.col = col || '#ffffff';
+    }
+
+    piece(x, y, w, vx, lamp) {
+      let b = this.bits.find((q) => !q.on);
+      if (!b) b = this.bits[0];
+      b.on = true;
+      b.x = x;
+      b.y = y;
+      b.w = w;
+      b.vx = vx;
+      b.vy = -40;
+      b.r = 0;
+      b.lamp = lamp;
+    }
+
+    step(dt, I) {
+      if (this.over) return;
+      this.t += dt;
+      const S = STACK;
+      for (const p of this.pops) p.t += dt;
+      this.shake = Math.max(0, this.shake - dt * 3);
+      this.flash = Math.max(0, this.flash - dt * 2);
+      // The view rises with the tower (the top kept about a third of the way down).
+      const want = Math.max(0, this.floors * S.fh - 120);
+      this.view += (want - this.view) * Math.min(1, dt * 4);
+      for (const b of this.bits) {
+        if (!b.on) continue;
+        b.vy += S.g * 0.6 * dt;
+        b.y += b.vy * dt;
+        b.x += b.vx * dt;
+        b.r += b.vx * 0.02 * dt;
+        if (b.y > H + 40) {
+          b.on = false;
+          this.sfx('splash', { gain: 0.25 });
+        }
+      }
+      if (this.t >= S.secs) {
+        this.over = 'TIME!';
+        this.sfx('klaxon', { gain: 0.4 });
+        return;
+      }
+      if (this.wait > 0) {
+        this.wait -= dt;
+        return;
+      }
+      if (!this.falling) {
+        if (I.aP) {
+          this.falling = true;
+          this.fx = this.hookX(this.t);
+          this.fy = S.hookUp;
+          this.fvy = 0;
+          this.sfx('chip', { f: 520, f1: 260, len: 0.12, gain: 0.7 });
+        }
+        return;
+      }
+      // A block on its way down.
+      this.fvy += S.g * dt;
+      this.fy -= this.fvy * dt;
+      if (this.fy > 0) return;
+      this.falling = false;
+      this.wait = 0.35;
+      const n = this.floors;
+      const tx = this.floorX(n, this.t), tw = this.blocks[n][1];
+      const dx = this.fx - tx;
+      const left = Math.max(this.fx - this.w / 2, tx - tw / 2), right = Math.min(this.fx + this.w / 2, tx + tw / 2);
+      const y = this.topY();
+      if (right - left <= 1) {
+        // Missed the tower altogether: into the sea.
+        this.piece(this.fx, y - S.fh, this.w, dx > 0 ? 40 : -40, false);
+        this.lives--;
+        this.run = 0;
+        this.shake = 0.6;
+        this.sfx('buzz', { gain: 0.5 });
+        this.pop('SPLASH!', this.fx, y - 30, '#37b8ff');
+        if (this.lives <= 0) {
+          this.over = 'GAME OVER';
+          this.sfx('lose', { gain: 0.5 });
+        }
+        return;
+      }
+      let x, w;
+      if (Math.abs(dx) <= Math.max(4, (S.perfect * S.swing * TAU) / this.period)) {
+        // Dead centre: a perfect drop.
+        w = Math.min(S.w0, tw + S.grow);
+        x = tx;
+        this.run++;
+        this.perfects++;
+        this.best = Math.max(this.best, this.run);
+        const pts = 25 + 5 * (this.run - 1);
+        this.score += pts;
+        this.flash = 1;
+        this.pop('PERFECT +' + pts, x, y - 34, '#ffd24a');
+        this.sfx('ding', { gain: 0.45 });
+      } else {
+        w = right - left;
+        x = (left + right) / 2;
+        this.run = 0;
+        this.score += 10;
+        // The part that hung over the edge drops off.
+        const cut = this.w - w;
+        if (cut > 0.5) this.piece(dx > 0 ? right + cut / 2 : left - cut / 2, y - S.fh, cut, dx > 0 ? 50 : -50, false);
+        this.sfx('thud', { gain: 0.5 });
+        this.sfx('chip', { f: 330, len: 0.06, gain: 0.6 });
+      }
+      // Into the tower's own frame (the sway taken out).
+      this.blocks.push([x - W / 2 - this.swayAt(this.t), w]);
+      this.w = w;
+      if (this.floors % 10 === 0) {
+        // A lamp room: 100, and the next block is full width again.
+        this.score += 100;
+        this.w = S.w0;
+        this.pop('LAMP ROOM +100', x, y - 50, '#7dff9a');
+        this.sfx('win', { gain: 0.4 });
+      }
+    }
+
+    draw(c) {
+      const S = STACK;
+      const v = this.view;
+      const sh = this.shake > 0 ? Math.sin(this.t * 60) * this.shake * 3 : 0;
+      // The sky darkens to night the higher the tower goes; stars come out.
+      const k = clamp(v / 500, 0, 1);
+      const top = k < 0.5 ? '#5ab8e8' : '#2a1650', mid = k < 0.5 ? '#ffb27a' : '#5a2e8a';
+      const grd = c.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, k < 0.25 ? '#7cc8f0' : top);
+      grd.addColorStop(1, k < 0.25 ? '#ffe0b0' : mid);
+      c.fillStyle = grd;
+      c.fillRect(0, 0, W, H);
+      if (k > 0.2) {
+        c.fillStyle = 'rgba(255,255,255,' + ((k - 0.2) * 1.2).toFixed(2) + ')';
+        for (const [x, y, s] of this.stars) {
+          const yy = ((y + v * 0.3) % 900) - 300;
+          if (yy > 0 && yy < H) c.fillRect(x, yy, s > 0.8 ? 2 : 1, s > 0.8 ? 2 : 1);
+        }
+      }
+      c.save();
+      c.translate(sh, 0);
+      // The sea and the pier at the bottom (until the view rises past them).
+      const seaY = S.base + 4 + v;
+      if (seaY < H + 10) {
+        c.fillStyle = '#1a6aa0';
+        c.fillRect(-4, seaY, W + 8, H - seaY + 4);
+        c.fillStyle = '#5ab8e8';
+        for (let x = -10; x < W; x += 24) c.fillRect(x + ((this.t * 12) % 24), seaY + 4, 12, 2);
+        c.fillStyle = '#8a5a32';
+        c.fillRect(W / 2 - 70, S.base + v, 140, 6);
+        for (const x of [-60, -20, 20, 60]) c.fillRect(W / 2 + x - 3, S.base + v, 6, 40);
+      }
+      // The tower: red and white rings, a gold lamp room every tenth floor.
+      const n = this.floors;
+      for (let i = 1; i <= n; i++) {
+        const y = S.base - i * S.fh + v;
+        if (y > H + 4 || y < -S.fh) continue;
+        const x = this.floorX(i, this.t), w = this.blocks[i][1];
+        this.ring(c, x, y, w, i);
+      }
+      // A floor-zero plinth.
+      const by = S.base + v;
+      if (by - 4 < H) {
+        c.fillStyle = '#6b6f78';
+        c.fillRect(W / 2 - S.w0 / 2 - 4, by - 4, S.w0 + 8, 4);
+      }
+      // The crane along the top, its trolley, the rope and the block on the hook (or falling).
+      c.fillStyle = '#ffd24a';
+      c.fillRect(0, 6, W, 6);
+      c.fillStyle = '#c89a20';
+      for (let x = 0; x < W; x += 12) c.fillRect(x, 6, 2, 6);
+      const ty = this.topY();
+      if (!this.over && this.wait <= 0) {
+        const hx = this.falling ? this.fx : this.hookX(this.t);
+        const hy = ty - (this.falling ? this.fy : S.hookUp) - S.fh;
+        c.fillStyle = '#3a3d44';
+        c.fillRect((this.falling ? this.hookX(this.t) : hx) - 7, 12, 14, 6);
+        if (!this.falling) {
+          c.fillStyle = '#20202a';
+          c.fillRect(hx - 0.5, 18, 1, Math.max(0, hy - 18));
+        }
+        this.ring(c, hx, hy, this.w, n + 1);
+        if (!this.falling) {
+          // A guide: a faint line down from the block's middle.
+          c.fillStyle = 'rgba(255,255,255,0.18)';
+          c.fillRect(hx - 0.5, hy + S.fh, 1, ty - hy - S.fh);
+        }
+      }
+      // Pieces falling off.
+      for (const b of this.bits) {
+        if (!b.on) continue;
+        c.save();
+        c.translate(b.x, b.y + S.fh / 2);
+        c.rotate(b.r);
+        c.fillStyle = '#e0403a';
+        c.fillRect(-b.w / 2, -S.fh / 2, b.w, S.fh);
+        c.fillStyle = '#f2efe6';
+        c.fillRect(-b.w / 2, -S.fh / 2 + 4, b.w, 5);
+        c.restore();
+      }
+      c.restore();
+      if (this.flash > 0) {
+        c.fillStyle = 'rgba(255,240,180,' + (this.flash * 0.25).toFixed(2) + ')';
+        c.fillRect(0, 0, W, H);
+      }
+      for (const p of this.pops) {
+        if (p.t > 1) continue;
+        label(c, p.txt, p.x, p.y - p.t * 24, 11, p.col, 'center');
+      }
+      // The panel: score, floors, blocks left, time.
+      label(c, String(this.score), 8, 30, 14, '#ffffff');
+      label(c, this.floors + ' FLOORS', 8, 44, 9, '#ffd24a');
+      for (let i = 0; i < S.lives; i++) {
+        c.fillStyle = i < this.lives ? '#e0403a' : 'rgba(255,255,255,0.2)';
+        c.fillRect(W - 60 + i * 18, 22, 14, 8);
+        c.fillStyle = i < this.lives ? '#f2efe6' : 'rgba(255,255,255,0.1)';
+        c.fillRect(W - 60 + i * 18, 25, 14, 2);
+      }
+      label(c, Math.max(0, Math.ceil(S.secs - this.t)) + 's', W - 8, 44, 10, '#ffffff', 'right');
+      if (this.run > 1) label(c, 'RUN x' + this.run, W / 2, 34, 10, '#ffd24a', 'center');
+    }
+
+    /** One floor of the lighthouse: red with a white band; a lamp room every tenth. */
+    ring(c, x, y, w, i) {
+      const S = STACK;
+      const l = x - w / 2;
+      if (i % 10 === 0) {
+        c.fillStyle = '#c89a20';
+        c.fillRect(l, y, w, S.fh);
+        c.fillStyle = '#fff6c8';
+        c.fillRect(l + 3, y + 3, w - 6, S.fh - 6);
+        c.fillStyle = '#c89a20';
+        for (let k = l + 8; k < l + w - 4; k += 10) c.fillRect(k, y + 3, 2, S.fh - 6);
+        return;
+      }
+      c.fillStyle = i % 2 ? '#e0403a' : '#f2efe6';
+      c.fillRect(l, y, w, S.fh);
+      c.fillStyle = i % 2 ? '#a82a26' : '#c8c2b6';
+      c.fillRect(l, y + S.fh - 2, w, 2);
+      c.fillStyle = 'rgba(255,255,255,0.25)';
+      c.fillRect(l + 2, y + 1, Math.max(0, w * 0.2), S.fh - 3);
+      if (i % 4 === 2 && w > 20) {
+        c.fillStyle = '#20304a';
+        c.fillRect(x - 3, y + 4, 6, 6);
+      }
+    }
+
+    /** The attract mode's player: drops as the block crosses the middle, give or take a little. */
+    demo(I) {
+      clearIn(I);
+      if (this.wait > 0 || this.falling || this.over) {
+        this._dd = null;
+        return I;
+      }
+      const fall = Math.sqrt((2 * STACK.hookUp) / STACK.g);
+      const d = this.hookX(this.t) - this.floorX(this.floors, this.t + fall) - (((this.floors * 7.3) % 1) * 10 - 5);
+      if (this._dd !== null && this._dd !== undefined && (d > 0) !== (this._dd > 0)) I.a = I.aP = true;
+      this._dd = d;
+      return I;
+    }
+  }
+
+  // ========================================================== CATCH OF THE DAY
+  // A bucket on the pier, gulls overhead: they drop the fish they've pinched (sardines, mackerel, now and
+  // then a golden one that zigzags) and other things that are not fish (a splat in the bucket costs
+  // points and leaves it slow and mucky for a moment). Catches in a row build a multiplier; a starfish
+  // makes the bucket big for a while. 75 seconds, faster and busier as it goes.
+  const CATCH = {
+    secs: 75,
+    deck: 204, //       the pier's top
+    rim: 180, //        the bucket's rim (where a catch counts)
+    half: 19, //        half the bucket's width (big: 31)
+    halfBig: 31,
+    big: 7, //          seconds the big bucket lasts
+    speed: 300, //      the bucket's top speed (px/s) on the keys or the stick, and how quickly it gets there
+    accel: 2600,
+    mouse: 420, //      px per radian of mouse turn
+    mucky: 2.2, //      seconds slowed by a splat (to this much of its speed)
+    muckK: 0.55,
+    gap0: 1.2, //       seconds between drops at the start, at the end
+    gap1: 0.55,
+    reach: 240, //      a drop is never further from the last one than the bucket could go in the time between
+    // What falls: [kind, points, fall speed (px/s), chance at the start, at the end]
+    kinds: [['sardine', 10, 92, 0.6, 0.42], ['mackerel', 20, 128, 0.2, 0.24], ['gold', 50, 105, 0.05, 0.06], ['splat', -20, 118, 0.12, 0.24], ['star', 0, 85, 0.03, 0.04]],
+  };
+
+  class Catch {
+    constructor() {
+      this.title = 'CATCH OF THE DAY';
+      this.ink = '#37e8ff';
+      this.items = [];
+      for (let i = 0; i < 14; i++) this.items.push({ on: false, kind: '', pts: 0, x: 0, y: 0, vy: 0, x0: 0, ph: 0, flop: 0, gull: null });
+      this.gulls = [];
+      for (let i = 0; i < 4; i++) this.gulls.push({ on: false, x: 0, y: 0, dir: 1, v: 0, dropAt: 0, item: null, flap: 0 });
+      this.pops = [];
+      for (let i = 0; i < 6; i++) this.pops.push({ t: 9, x: 0, y: 0, txt: '', col: '' });
+      this._popI = 0;
+      this.sfx = () => {};
+      this.reset(1);
+    }
+
+    reset(seed) {
+      this.rnd = rng(seed);
+      this.t = 0;
+      this.score = 0;
+      this.over = null;
+      this.x = W / 2;
+      this.vx = 0;
+      this.combo = 0;
+      this.best = 0;
+      this.caught = 0;
+      this.gold = 0;
+      this.splats = 0;
+      this.missed = 0;
+      this.muck = 0;
+      this.bigT = 0;
+      this.next = 1.2;
+      this.lastX = W / 2;
+      this.lastT = 0;
+      this.boatX = 40;
+      for (const it of this.items) it.on = false;
+      for (const g of this.gulls) g.on = false;
+      for (const p of this.pops) p.t = 9;
+    }
+
+    get mult() {
+      return Math.min(5, 1 + Math.floor(this.combo / 5));
+    }
+    get half() {
+      return this.bigT > 0 ? CATCH.halfBig : CATCH.half;
+    }
+
+    line() {
+      const bits = [this.caught + (this.caught === 1 ? ' fish' : ' fish') + ' in the bucket'];
+      if (this.gold) bits.push(this.gold + ' golden');
+      if (this.best >= 5) bits.push('best run ' + this.best);
+      if (this.splats) bits.push(this.splats + (this.splats === 1 ? ' splat' : ' splats'));
+      return bits.join(', ');
+    }
+
+    pop(txt, x, y, col) {
+      const p = this.pops[this._popI++ % this.pops.length];
+      p.t = 0;
+      p.txt = txt;
+      p.x = x;
+      p.y = y;
+      p.col = col || '#ffffff';
+    }
+
+    /** A gull flies over carrying something, and lets go of it somewhere along the way. */
+    launch() {
+      const C = CATCH, k = Math.min(1, this.t / C.secs);
+      const g = this.gulls.find((q) => !q.on);
+      const it = this.items.find((q) => !q.on);
+      if (!g || !it) return;
+      let r = this.rnd(), kind = C.kinds[0];
+      let sum = 0;
+      for (const K of C.kinds) sum += K[3] + (K[4] - K[3]) * k;
+      r *= sum;
+      for (const K of C.kinds) {
+        r -= K[3] + (K[4] - K[3]) * k;
+        if (r <= 0) {
+          kind = K;
+          break;
+        }
+      }
+      g.on = true;
+      g.dir = this.rnd() < 0.5 ? 1 : -1;
+      g.x = g.dir > 0 ? -20 : W + 20;
+      g.y = 34 + this.rnd() * 26;
+      // When it lands, and where: never further from the last one than the bucket could get in the time
+      // between (fair, however busy it gets). The gull flies at whatever speed gets it there.
+      const vmax = kind[2] * (1 + k * 0.3), d = C.rim - (g.y + 9);
+      const fall = vmax / 520 + Math.max(0, d - (vmax * vmax) / 520) / vmax;
+      const gap = (C.gap0 + (C.gap1 - C.gap0) * k) * 0.7;
+      const land = Math.max(this.t + 0.9 + fall, this.lastT + gap);
+      const far = 40 + C.reach * (land - this.lastT);
+      g.dropAt = clamp(this.lastX + (this.rnd() * 2 - 1) * far, 26, W - 26);
+      g.v = clamp(Math.abs(g.dropAt - g.x) / Math.max(0.4, land - fall - this.t), 70, 330);
+      this.lastX = g.dropAt;
+      this.lastT = land;
+      g.item = it;
+      it.on = true;
+      it.kind = kind[0];
+      it.pts = kind[1];
+      it.vy = 0;
+      it.vmax = vmax;
+      it.held = true;
+      it.flop = 0;
+      it.ph = this.rnd() * TAU;
+      it.x = g.x;
+      it.y = g.y + 8;
+    }
+
+    step(dt, I) {
+      if (this.over) return;
+      const C = CATCH;
+      this.t += dt;
+      for (const p of this.pops) p.t += dt;
+      this.boatX = (this.boatX + dt * 6) % (W + 60);
+      if (this.t >= C.secs) {
+        this.over = 'TIME!';
+        return;
+      }
+      // The bucket: keys and the stick push it, the mouse puts it where it's moved to.
+      const slow = this.muck > 0 ? C.muckK : 1;
+      this.muck = Math.max(0, this.muck - dt);
+      this.bigT = Math.max(0, this.bigT - dt);
+      const want = I.x * C.speed * slow;
+      this.vx += clamp(want - this.vx, -C.accel * dt, C.accel * dt);
+      this.x += this.vx * dt + I.mx * C.mouse * slow;
+      const h = this.half;
+      if (this.x < h + 2 || this.x > W - h - 2) {
+        this.x = clamp(this.x, h + 2, W - h - 2);
+        this.vx = 0;
+      }
+      // Gulls in; each drops its catch over the spot it picked.
+      const k = Math.min(1, this.t / C.secs);
+      this.next -= dt;
+      if (this.next <= 0) {
+        this.launch();
+        this.next = (C.gap0 + (C.gap1 - C.gap0) * k) * (0.75 + this.rnd() * 0.5);
+      }
+      for (const g of this.gulls) {
+        if (!g.on) continue;
+        g.x += g.dir * g.v * dt;
+        g.flap += dt * 9;
+        if (g.item && g.item.held && (g.dir > 0 ? g.x >= g.dropAt : g.x <= g.dropAt)) {
+          g.item.held = false;
+          g.item.x0 = g.item.x = g.x;
+          g.item = null;
+          this.sfx('chip', { f: 900, f1: 1300, len: 0.05, gain: 0.25 });
+        }
+        if (g.x < -40 || g.x > W + 40) {
+          g.on = false;
+          if (g.item) g.item.on = false;
+          g.item = null;
+        }
+      }
+      for (const it of this.items) {
+        if (!it.on) continue;
+        if (it.held) {
+          const g = this.gulls.find((q) => q.item === it);
+          if (g) {
+            it.x = g.x + g.dir * 6;
+            it.y = g.y + 9;
+          }
+          continue;
+        }
+        if (it.flop > 0) {
+          it.flop -= dt;
+          if (it.flop <= 0) it.on = false;
+          continue;
+        }
+        const was = it.y;
+        it.vy = Math.min(it.vmax, it.vy + 260 * dt);
+        it.y += it.vy * dt;
+        it.ph += dt * 6;
+        if (it.kind === 'gold') it.x = clamp(it.x0 + Math.sin(it.ph * 0.55) * 34, 8, W - 8);
+        // Into the bucket?
+        if (was < C.rim && it.y >= C.rim && Math.abs(it.x - this.x) < h - 2) {
+          it.on = false;
+          this.land(it);
+          continue;
+        }
+        if (it.y >= C.deck - 4) {
+          // On the planks.
+          it.y = C.deck - 4;
+          it.flop = 0.6;
+          if (it.kind !== 'splat' && it.kind !== 'star') {
+            this.missed++;
+            if (this.combo >= 5) this.pop('MISSED!', it.x, C.deck - 20, '#ff8a8a');
+            this.combo = 0;
+            this.sfx('chip', { f: 180, f1: 120, len: 0.1, gain: 0.35 });
+          }
+        }
+      }
+    }
+
+    /** Something landed in the bucket. */
+    land(it) {
+      const C = CATCH;
+      if (it.kind === 'splat') {
+        this.score = Math.max(0, this.score + it.pts);
+        this.splats++;
+        this.combo = 0;
+        this.muck = C.mucky;
+        this.pop('SPLAT! ' + it.pts, this.x, C.rim - 18, '#f2efe6');
+        this.sfx('buzz', { gain: 0.45 });
+        return;
+      }
+      if (it.kind === 'star') {
+        this.bigT = C.big;
+        this.pop('BIG BUCKET!', this.x, C.rim - 18, '#ff7ab0');
+        this.sfx('win', { gain: 0.35 });
+        return;
+      }
+      this.combo++;
+      this.best = Math.max(this.best, this.combo);
+      this.caught++;
+      if (it.kind === 'gold') this.gold++;
+      const pts = it.pts * this.mult;
+      this.score += pts;
+      this.pop('+' + pts, this.x, C.rim - 18, it.kind === 'gold' ? '#ffd24a' : '#ffffff');
+      if (it.kind === 'gold') this.sfx('ding', { gain: 0.45 });
+      else this.sfx('chip', { f: 700 + Math.min(10, this.combo) * 40, len: 0.06, gain: 0.6 });
+      if (this.combo % 5 === 0 && this.mult <= 5) this.pop('x' + this.mult + '!', this.x, C.rim - 34, '#7dff9a');
+    }
+
+    draw(c) {
+      const C = CATCH;
+      // Morning sky, the sea, a trawler on the horizon.
+      const grd = c.createLinearGradient(0, 0, 0, 80);
+      grd.addColorStop(0, '#8fd3ff');
+      grd.addColorStop(1, '#ffe9c7');
+      c.fillStyle = grd;
+      c.fillRect(0, 0, W, 80);
+      c.fillStyle = '#fff3b0';
+      c.beginPath();
+      c.arc(262, 30, 14, 0, TAU);
+      c.fill();
+      c.fillStyle = '#2a7ab0';
+      c.fillRect(0, 76, W, C.deck - 76);
+      c.fillStyle = '#5ab8e8';
+      for (let y = 84; y < C.deck - 6; y += 14) for (let x = ((y * 7 + this.t * 10) % 40) - 40; x < W; x += 40) c.fillRect(x, y, 14, 2);
+      const bx = this.boatX - 30;
+      c.fillStyle = '#e0403a';
+      c.fillRect(bx, 68, 26, 7);
+      c.fillStyle = '#f2efe6';
+      c.fillRect(bx + 14, 60, 8, 8);
+      c.fillRect(bx + 4, 52, 2, 16);
+      // The pier.
+      c.fillStyle = '#9b6a3c';
+      c.fillRect(0, C.deck, W, H - C.deck);
+      c.fillStyle = '#7a5230';
+      for (let x = 0; x < W; x += 22) c.fillRect(x, C.deck, 2, H - C.deck);
+      c.fillStyle = '#c8873a';
+      c.fillRect(0, C.deck, W, 3);
+      // Gulls.
+      for (const g of this.gulls) {
+        if (!g.on) continue;
+        const f = Math.sin(g.flap) * 6;
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.ellipse(g.x, g.y, 9, 5, 0, 0, TAU);
+        c.fill();
+        c.strokeStyle = '#ffffff';
+        c.lineWidth = 3;
+        c.beginPath();
+        c.moveTo(g.x - 12, g.y - 4 - f);
+        c.lineTo(g.x, g.y - 1);
+        c.lineTo(g.x + 12, g.y - 4 - f);
+        c.stroke();
+        c.fillStyle = '#ffb000';
+        c.fillRect(g.x + g.dir * 8, g.y - 1, g.dir * 4, 2);
+        c.fillStyle = '#111';
+        c.fillRect(g.x + g.dir * 5, g.y - 3, 2, 2);
+      }
+      // What's falling (or flopping on the planks).
+      for (const it of this.items) {
+        if (!it.on) continue;
+        this.thing(c, it);
+      }
+      // The bucket: blue, a rim, a handle; fish tails poking out once it has a few.
+      const h = this.half, x = this.x, top = C.rim, bot = C.deck;
+      c.fillStyle = this.muck > 0 ? '#7a8a6a' : '#37b8ff';
+      c.beginPath();
+      c.moveTo(x - h, top);
+      c.lineTo(x + h, top);
+      c.lineTo(x + h - 5, bot);
+      c.lineTo(x - h + 5, bot);
+      c.fill();
+      c.fillStyle = '#1a6aa0';
+      c.fillRect(x - h - 2, top - 2, 2 * h + 4, 4);
+      c.fillRect(x - h + 4, top + 10, 2 * h - 8, 2);
+      c.strokeStyle = '#c8ccd4';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, top, h - 2, PI, TAU);
+      c.stroke();
+      const tails = Math.min(5, Math.floor(this.caught / 4));
+      c.fillStyle = '#c8d6e0';
+      for (let i = 0; i < tails; i++) {
+        const tx = x - h + 8 + ((i * 2 * (h - 8)) / Math.max(1, tails - 1 || 1)) * (tails > 1 ? 1 : 0.5);
+        c.beginPath();
+        c.moveTo(tx, top - 1);
+        c.lineTo(tx - 4, top - 8);
+        c.lineTo(tx + 4, top - 8);
+        c.fill();
+      }
+      if (this.muck > 0) {
+        c.fillStyle = '#f2efe6';
+        c.fillRect(x - 8, top + 4, 7, 4);
+        c.fillRect(x + 4, top + 12, 5, 3);
+      }
+      if (this.bigT > 0 && this.bigT < 2 && ((this.t * 8) | 0) % 2) {
+        c.strokeStyle = '#ff7ab0';
+        c.strokeRect(x - h - 3, top - 4, 2 * h + 6, bot - top + 4);
+      }
+      for (const p of this.pops) {
+        if (p.t > 0.9) continue;
+        label(c, p.txt, p.x, p.y - p.t * 26, 11, p.col, 'center');
+      }
+      label(c, String(this.score), 8, 18, 14, '#ffffff');
+      if (this.mult > 1) label(c, 'x' + this.mult, 8, 32, 11, '#7dff9a');
+      label(c, Math.max(0, Math.ceil(C.secs - this.t)) + 's', W - 8, 18, 11, '#ffffff', 'right');
+    }
+
+    thing(c, it) {
+      const x = it.x, y = it.y;
+      if (it.kind === 'splat') {
+        c.fillStyle = '#f2efe6';
+        c.beginPath();
+        c.arc(x, y, 5, 0, TAU);
+        c.fill();
+        c.fillRect(x - 1, y - 9, 2, 5);
+        c.fillStyle = '#9aa0a8';
+        c.fillRect(x - 1, y - 1, 3, 2);
+        return;
+      }
+      if (it.kind === 'star') {
+        c.fillStyle = '#ff7ab0';
+        c.beginPath();
+        for (let i = 0; i <= 10; i++) {
+          const a = it.ph * 0.5 + (i * PI) / 5, r = i % 2 ? 3 : 8;
+          if (i === 0) c.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+          else c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+        }
+        c.fill();
+        return;
+      }
+      const col = it.kind === 'gold' ? '#ffd24a' : it.kind === 'mackerel' ? '#3a7ac8' : '#c8d6e0';
+      const s = it.kind === 'mackerel' ? 1.2 : 1;
+      c.save();
+      c.translate(x, y);
+      c.rotate(it.held ? 0 : it.flop > 0 ? Math.sin(it.flop * 30) * 0.4 : PI / 2 + Math.sin(it.ph) * 0.3);
+      c.fillStyle = col;
+      c.beginPath();
+      c.ellipse(0, 0, 9 * s, 4 * s, 0, 0, TAU);
+      c.moveTo(7 * s, 0);
+      c.lineTo(13 * s, -5 * s);
+      c.lineTo(13 * s, 5 * s);
+      c.fill();
+      if (it.kind === 'mackerel') {
+        c.fillStyle = '#1a3a6a';
+        for (const k of [-4, 0, 4]) c.fillRect(k, -4, 2, 3);
+      }
+      c.fillStyle = '#111';
+      c.fillRect(-6 * s, -2, 2, 2);
+      c.restore();
+    }
+
+    /** The attract mode's player: under the fish that will land soonest, out from under the splats. */
+    demo(I) {
+      clearIn(I);
+      const C = CATCH;
+      let best = null, bt = 1e9;
+      for (const it of this.items) {
+        if (!it.on || it.held || it.flop > 0 || it.kind === 'splat' || it.y > C.rim) continue;
+        const tt = (C.rim - it.y) / Math.max(40, it.vy + 60);
+        if (tt < bt) {
+          bt = tt;
+          best = it;
+        }
+      }
+      let tx = best ? best.x : W / 2;
+      for (const it of this.items) {
+        if (!it.on || it.held || it.kind !== 'splat' || it.y > C.rim) continue;
+        if (Math.abs(it.x - this.x) < this.half + 6 && C.rim - it.y < 60) tx = it.x + (this.x > it.x ? 1 : -1) * (this.half + 14);
+      }
+      const d = tx - this.x;
+      I.x = Math.abs(d) < 4 ? 0 : clamp(d / 30, -1, 1);
+      return I;
+    }
+  }
+
+  // ============================================================ SERPENT SUPPER
+  // A young sea serpent in a rocky lagoon: steer it to the shrimp and it grows a segment for each. A
+  // golden pearl turns up now and then (grab it before it sinks). More rocks wash in as the tide turns,
+  // and it swims faster as it goes. Bumping a rock, the lagoon's edge or its own tail costs one of
+  // three lives (it shrinks to half and starts again in the middle). 75 seconds; every segment at the
+  // end is worth 5 more.
+  const SERP = {
+    secs: 75,
+    cols: 32, //       the lagoon's grid (10 px cells), below a 20 px strip for the score
+    rows: 21,
+    cell: 10,
+    top: 22,
+    rate0: 6.5, //     cells a second at the start, at the end
+    rate1: 11,
+    len0: 4,
+    lives: 3,
+    rocks0: 4, //      rocks to start, two more every rocksEvery seconds
+    rocksEvery: 15,
+    pearlEvery: 9, //  a pearl comes this often and stays this long
+    pearlFor: 5.5,
+    mouse: 0.04, //    a mouse flick this far (radians) turns the serpent
+  };
+  const SERP_MAX = SERP.cols * SERP.rows + 2;
+  const SERP_D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+  class Serpent {
+    constructor() {
+      this.title = 'SERPENT SUPPER';
+      this.ink = '#7dff6a';
+      this.bx = new Int16Array(SERP_MAX); // the body's cells, head first (one more than its length: the cell just left)
+      this.by = new Int16Array(SERP_MAX);
+      this.grid = new Uint8Array(SERP.cols * SERP.rows); // 1 rock, 2 body
+      this.rocks = [];
+      this.food = [{ x: -1, y: 0 }, { x: -1, y: 0 }];
+      this.pearl = { x: -1, y: 0, t: 0 };
+      this.turns = [];
+      this.pops = [];
+      for (let i = 0; i < 5; i++) this.pops.push({ t: 9, x: 0, y: 0, txt: '', col: '' });
+      this._popI = 0;
+      this.sfx = () => {};
+      this.reset(1);
+    }
+
+    reset(seed) {
+      this.rnd = rng(seed);
+      this.t = 0;
+      this.score = 0;
+      this.over = null;
+      this.lives = SERP.lives;
+      this.eaten = 0;
+      this.pearls = 0;
+      this.longest = SERP.len0;
+      this.grid.fill(0);
+      this.rocks.length = 0;
+      for (let i = 0; i < SERP.rocks0; i++) this.addRock();
+      this.spawn(SERP.len0);
+      this.food[0].x = this.food[1].x = -1;
+      this.place(this.food[0]);
+      this.pearl.x = -1;
+      this.pearlNext = SERP.pearlEvery;
+      this.rockNext = SERP.rocksEvery;
+      this.mxAcc = 0;
+      this.myAcc = 0;
+      for (const p of this.pops) p.t = 9;
+    }
+
+    /** The serpent, from the middle, heading right. */
+    spawn(len) {
+      const S = SERP;
+      for (let i = 0; i < this.grid.length; i++) if (this.grid[i] === 2) this.grid[i] = 0;
+      const y = (S.rows / 2) | 0, x0 = 10;
+      // Clear its way.
+      for (let x = x0 - len - 1; x < x0 + 8; x++) if (this.grid[y * S.cols + x] === 1) this.grid[y * S.cols + x] = 0;
+      this.rocks = this.rocks.filter((r) => this.grid[r.y * S.cols + r.x] === 1);
+      this.len = len;
+      for (let i = 0; i <= len; i++) {
+        this.bx[i] = x0 - i;
+        this.by[i] = y;
+        if (i < len) this.grid[y * S.cols + x0 - i] = 2;
+      }
+      this.dx = 1;
+      this.dy = 0;
+      this.turns.length = 0;
+      this.p = 0; //       how far into the next step (0..1)
+      this.ready = 1.0; // a moment to get going
+      this.hurt = 0;
+    }
+
+    free(x, y) {
+      return x >= 0 && y >= 0 && x < SERP.cols && y < SERP.rows && this.grid[y * SERP.cols + x] === 0;
+    }
+
+    /** A free cell for something to appear in, not right in front of the serpent. */
+    place(o) {
+      const S = SERP;
+      for (let k = 0; k < 200; k++) {
+        const x = 1 + ((this.rnd() * (S.cols - 2)) | 0), y = 1 + ((this.rnd() * (S.rows - 2)) | 0);
+        if (!this.free(x, y)) continue;
+        if (Math.abs(x - this.bx[0]) + Math.abs(y - this.by[0]) < 4) continue;
+        if (this.food.some((f) => f !== o && f.x === x && f.y === y) || (this.pearl !== o && this.pearl.x === x && this.pearl.y === y)) continue;
+        o.x = x;
+        o.y = y;
+        return true;
+      }
+      o.x = -1;
+      return false;
+    }
+
+    addRock() {
+      const S = SERP;
+      for (let k = 0; k < 100; k++) {
+        const x = 2 + ((this.rnd() * (S.cols - 4)) | 0), y = 2 + ((this.rnd() * (S.rows - 4)) | 0);
+        if (!this.free(x, y) || y === ((S.rows / 2) | 0)) continue;
+        if (this.food.some((f) => f.x === x && f.y === y)) continue;
+        if (this.len && Math.abs(x - this.bx[0]) + Math.abs(y - this.by[0]) < 6) continue;
+        this.grid[y * S.cols + x] = 1;
+        this.rocks.push({ x, y, s: this.rnd() });
+        return;
+      }
+    }
+
+    get rate() {
+      return SERP.rate0 + ((SERP.rate1 - SERP.rate0) * Math.min(1, this.t / SERP.secs));
+    }
+
+    line() {
+      const bits = [this.eaten + ' shrimp', 'grew to ' + this.longest];
+      if (this.pearls) bits.push(this.pearls + (this.pearls === 1 ? ' pearl' : ' pearls'));
+      return bits.join(', ');
+    }
+
+    pop(txt, x, y, col) {
+      const p = this.pops[this._popI++ % this.pops.length];
+      p.t = 0;
+      p.txt = txt;
+      p.x = x;
+      p.y = y;
+      p.col = col || '#ffffff';
+    }
+
+    /** Ask to turn (queued: two quick taps make a U-turn round a corner). */
+    turn(dx, dy) {
+      const last = this.turns.length ? this.turns[this.turns.length - 1] : [this.dx, this.dy];
+      if ((dx === last[0] && dy === last[1]) || (dx === -last[0] && dy === -last[1])) return;
+      if (this.turns.length < 2) this.turns.push([dx, dy]);
+    }
+
+    step(dt, I) {
+      if (this.over) return;
+      const S = SERP;
+      this.t += dt;
+      for (const p of this.pops) p.t += dt;
+      if (this.t >= S.secs) {
+        const bonus = this.len * 5;
+        this.score += bonus;
+        this.pop('LENGTH ' + this.len + ' +' + bonus, W / 2, 120, '#7dff6a');
+        this.over = 'TIME!';
+        return;
+      }
+      // Steering: a tap on the keys or the stick, or a flick of the mouse.
+      if (I.upP || (I.y > 0.6 && this._sy <= 0.6)) this.turn(0, -1);
+      if (I.downP || (I.y < -0.6 && this._sy >= -0.6)) this.turn(0, 1);
+      if (I.leftP || (I.x < -0.6 && this._sx >= -0.6)) this.turn(-1, 0);
+      if (I.rightP || (I.x > 0.6 && this._sx <= 0.6)) this.turn(1, 0);
+      this._sx = I.x;
+      this._sy = I.y;
+      this.mxAcc = this.mxAcc * 0.85 + I.mx;
+      this.myAcc = this.myAcc * 0.85 + I.my;
+      if (Math.abs(this.mxAcc) > S.mouse || Math.abs(this.myAcc) > S.mouse) {
+        if (Math.abs(this.mxAcc) > Math.abs(this.myAcc)) this.turn(this.mxAcc > 0 ? 1 : -1, 0);
+        else this.turn(0, this.myAcc > 0 ? -1 : 1);
+        this.mxAcc = this.myAcc = 0;
+      }
+      // The tide: more rocks; a pearl now and then.
+      if ((this.rockNext -= dt) <= 0) {
+        this.rockNext = S.rocksEvery;
+        this.addRock();
+        this.addRock();
+      }
+      if (this.pearl.x >= 0) {
+        if ((this.pearl.t -= dt) <= 0) this.pearl.x = -1;
+      } else if ((this.pearlNext -= dt) <= 0) {
+        this.pearlNext = S.pearlEvery;
+        if (this.place(this.pearl)) this.pearl.t = S.pearlFor;
+      }
+      if (this.t > 30 && this.food[1].x < 0) this.place(this.food[1]);
+      this.hurt = Math.max(0, this.hurt - dt);
+      if (this.ready > 0) {
+        this.ready -= dt;
+        return;
+      }
+      this.p += dt * this.rate;
+      while (this.p >= 1 && !this.over) {
+        this.p -= 1;
+        this.move();
+      }
+    }
+
+    /** One cell on. */
+    move() {
+      const S = SERP;
+      if (this.turns.length) {
+        const [dx, dy] = this.turns.shift();
+        this.dx = dx;
+        this.dy = dy;
+      }
+      const hx = this.bx[0] + this.dx, hy = this.by[0] + this.dy;
+      // The tail moves out of the way first (unless it is about to grow).
+      const eats = this.food[0].x === hx && this.food[0].y === hy ? 0 : this.food[1].x === hx && this.food[1].y === hy ? 1 : -1;
+      const tx = this.bx[this.len - 1], ty = this.by[this.len - 1];
+      if (eats < 0) this.grid[ty * S.cols + tx] = 0;
+      if (!this.free(hx, hy)) {
+        if (eats < 0) this.grid[ty * S.cols + tx] = 2;
+        this.crash(hx, hy);
+        return;
+      }
+      if (eats >= 0) this.len = Math.min(SERP_MAX - 2, this.len + 1);
+      for (let i = this.len; i > 0; i--) {
+        this.bx[i] = this.bx[i - 1];
+        this.by[i] = this.by[i - 1];
+      }
+      this.bx[0] = hx;
+      this.by[0] = hy;
+      this.grid[hy * S.cols + hx] = 2;
+      const px = hx * S.cell + S.cell / 2, py = S.top + hy * S.cell;
+      if (eats >= 0) {
+        this.eaten++;
+        this.longest = Math.max(this.longest, this.len);
+        const pts = 10 + Math.floor(this.len / 8) * 5;
+        this.score += pts;
+        this.pop('+' + pts, px, py, '#ff9ac8');
+        this.sfx('chip', { f: 600 + Math.min(20, this.len) * 25, len: 0.07, gain: 0.6 });
+        this.food[eats].x = -1;
+        this.place(this.food[eats]);
+      }
+      if (this.pearl.x === hx && this.pearl.y === hy) {
+        this.pearls++;
+        this.score += 50;
+        this.pearl.x = -1;
+        this.pop('PEARL +50', px, py, '#ffd24a');
+        this.sfx('ding', { gain: 0.45 });
+      }
+    }
+
+    crash(hx, hy) {
+      this.lives--;
+      this.hurt = 0.8;
+      this.sfx('buzz', { gain: 0.5 });
+      this.pop(hx < 0 || hy < 0 || hx >= SERP.cols || hy >= SERP.rows ? 'BONK!' : 'OUCH!', clamp(hx, 1, SERP.cols - 2) * SERP.cell, SERP.top + clamp(hy, 1, SERP.rows - 2) * SERP.cell, '#ff8a8a');
+      if (this.lives <= 0) {
+        const bonus = this.len * 5;
+        this.score += bonus;
+        this.over = 'GAME OVER';
+        this.sfx('lose', { gain: 0.5 });
+        return;
+      }
+      this.spawn(Math.max(SERP.len0, Math.floor(this.len / 2)));
+    }
+
+    draw(c) {
+      const S = SERP, Z = S.cell;
+      // The lagoon: sand all round, teal water, ripples.
+      c.fillStyle = '#e8c87a';
+      c.fillRect(0, 0, W, H);
+      c.fillStyle = '#1f8a8a';
+      c.fillRect(0, S.top, S.cols * Z, S.rows * Z);
+      c.fillStyle = 'rgba(255,255,255,0.08)';
+      for (let y = S.top + 6; y < S.top + S.rows * Z; y += 16) for (let x = ((y * 3 + this.t * 8) % 32) - 32; x < W; x += 32) c.fillRect(x, y, 12, 1);
+      // Rocks with a little weed on them.
+      for (const r of this.rocks) {
+        const x = r.x * Z, y = S.top + r.y * Z;
+        c.fillStyle = '#6b6f78';
+        c.fillRect(x, y + 1, Z, Z - 1);
+        c.fillStyle = '#8a8f99';
+        c.fillRect(x + 1, y + 1, Z - 4, 3);
+        c.fillStyle = '#3fae5a';
+        c.fillRect(x + 2 + ((r.s * 5) | 0), y - 2, 2, 4);
+      }
+      // Shrimp and the pearl.
+      for (const f of this.food) {
+        if (f.x < 0) continue;
+        const x = f.x * Z + Z / 2, y = S.top + f.y * Z + Z / 2;
+        c.strokeStyle = '#ff9ac8';
+        c.lineWidth = 3;
+        c.beginPath();
+        c.arc(x, y + Math.sin(this.t * 6 + f.x) * 0.8, 3.5, -0.3, PI + 0.6);
+        c.stroke();
+        c.fillStyle = '#111';
+        c.fillRect(x + 2, y - 2, 1, 1);
+      }
+      if (this.pearl.x >= 0 && (this.pearl.t > 1.5 || ((this.t * 8) | 0) % 2)) {
+        const x = this.pearl.x * Z + Z / 2, y = S.top + this.pearl.y * Z + Z / 2;
+        c.fillStyle = '#fff6c8';
+        c.beginPath();
+        c.arc(x, y, 4.5, 0, TAU);
+        c.fill();
+        c.fillStyle = '#ffd24a';
+        c.fillRect(x - 1, y - 3, 2, 2);
+      }
+      // The serpent: segments slide from cell to cell, the head with eyes and a fin.
+      const p = this.ready > 0 ? 0 : clamp(this.p, 0, 1);
+      if (this.hurt > 0 && ((this.t * 12) | 0) % 2) {
+        // (blinking after a bump)
+      } else {
+        for (let i = this.len - 1; i >= 0; i--) {
+          const x = (this.bx[i + 1] + (this.bx[i] - this.bx[i + 1]) * p) * Z + Z / 2;
+          const y = S.top + (this.by[i + 1] + (this.by[i] - this.by[i + 1]) * p) * Z + Z / 2;
+          const r = i === 0 ? 5.5 : Math.max(2.5, 5 - (i / this.len) * 2.5);
+          c.fillStyle = i % 3 === 1 ? '#3fae5a' : '#5ad26a';
+          c.beginPath();
+          c.arc(x, y, r, 0, TAU);
+          c.fill();
+          if (i === 0) {
+            c.fillStyle = '#ffffff';
+            const ex = -this.dy * 2.5, ey = this.dx * 2.5;
+            c.fillRect(x + ex + this.dx * 2 - 1, y + ey + this.dy * 2 - 1, 2, 2);
+            c.fillRect(x - ex + this.dx * 2 - 1, y - ey + this.dy * 2 - 1, 2, 2);
+            c.fillStyle = '#ff7ab0';
+            c.fillRect(x - this.dx * 3 - 1, y - this.dy * 3 - 1, 3, 3);
+          }
+        }
+      }
+      for (const q of this.pops) {
+        if (q.t > 0.9) continue;
+        label(c, q.txt, q.x, q.y - q.t * 22, 10, q.col, 'center');
+      }
+      label(c, String(this.score), 6, 15, 13, '#1a1030');
+      label(c, 'LENGTH ' + this.len, 92, 15, 10, '#1a6a2a');
+      for (let i = 0; i < S.lives; i++) {
+        c.fillStyle = i < this.lives ? '#3fae5a' : 'rgba(0,0,0,0.15)';
+        c.beginPath();
+        c.arc(210 + i * 14, 10, 5, 0, TAU);
+        c.fill();
+      }
+      label(c, Math.max(0, Math.ceil(S.secs - this.t)) + 's', W - 6, 15, 11, '#1a1030', 'right');
+      if (this.ready > 0 && this.t > 0.2) label(c, 'READY...', W / 2, 130, 14, '#ffffff', 'center');
+    }
+
+    /** The attract mode's player: heads for the nearest shrimp, turning away from what's in front. */
+    demo(I) {
+      clearIn(I);
+      if (this.ready > 0 || this.turns.length) return I;
+      const d = this.plan(1);
+      if (d) {
+        if (d[0] > 0) I.rightP = true;
+        else if (d[0] < 0) I.leftP = true;
+        else if (d[1] < 0) I.upP = true;
+        else I.downP = true;
+      }
+      return I;
+    }
+
+    /**
+     * Which way to go next ([dx, dy], or null to carry on): a breadth-first search from the head to the
+     * nearest shrimp or pearl (look = 1), or just the free way with the most room if there is no path.
+     */
+    plan(look) {
+      const S = SERP, N = S.cols * S.rows;
+      if (!this._seen) {
+        this._seen = new Int16Array(N);
+        this._q = new Int16Array(N);
+      }
+      const seen = this._seen, q = this._q;
+      seen.fill(-1);
+      const hx = this.bx[0], hy = this.by[0];
+      const D = SERP_D, F0 = this.food[0], F1 = this.food[1], P = this.pearl;
+      let qh = 0, qt = 0;
+      for (let k = 0; k < 4; k++) {
+        const [dx, dy] = D[k];
+        if (dx === -this.dx && dy === -this.dy) continue;
+        const x = hx + dx, y = hy + dy;
+        if (!this.free(x, y)) continue;
+        seen[y * S.cols + x] = k;
+        q[qt++] = y * S.cols + x;
+      }
+      while (qh < qt && look) {
+        const i = q[qh++], x = i % S.cols, y = (i / S.cols) | 0;
+        if ((F0.x === x && F0.y === y) || (F1.x === x && F1.y === y) || (P.x === x && P.y === y)) {
+          const k = seen[i];
+          return D[k][0] === this.dx && D[k][1] === this.dy ? null : D[k];
+        }
+        for (let k = 0; k < 4; k++) {
+          const nx = x + D[k][0], ny = y + D[k][1];
+          if (!this.free(nx, ny)) continue;
+          const j = ny * S.cols + nx;
+          if (seen[j] >= 0) continue;
+          seen[j] = seen[i];
+          q[qt++] = j;
+        }
+      }
+      // No way to food: the move with the most room behind it.
+      let best = null, room = -1;
+      for (let k = 0; k < 4; k++) {
+        const [dx, dy] = D[k];
+        if (dx === -this.dx && dy === -this.dy) continue;
+        if (!this.free(hx + dx, hy + dy)) continue;
+        let n = 0;
+        for (let i = 0; i < N; i++) if (seen[i] === k) n++;
+        if (n > room) {
+          room = n;
+          best = D[k];
+        }
+      }
+      return best && (best[0] !== this.dx || best[1] !== this.dy) ? best : null;
+    }
+  }
+
+  // ============================================================== REEF REBOUND
+  // Under the pier, a clam shell for a bat and a pearl for a ball: knock the pearl up into the coral and
+  // break it (pale coral takes one knock, orange two, purple three), and the little fish hiding in it
+  // swim off. Bubbles float down from broken coral now and then: catch one on the shell for a wider
+  // shell, three pearls at once, or a slower tide. Three pearls to lose; clear a reef and the next one
+  // grows. 90 seconds.
+  const REEF = {
+    secs: 90,
+    cols: 10,
+    rows: 6,
+    bw: 30, //          a coral block, the gap round it, the reef's top
+    bh: 11,
+    gap: 2,
+    top: 38,
+    left: 1,
+    shellY: 214, //     the shell's top
+    half: 26, //        half the shell's width (wide: 38)
+    halfWide: 38,
+    speed: 330, //      the shell on the keys / stick (px/s), the mouse (px per radian)
+    mouse: 450,
+    v0: 155, //         the pearl's speed at the start of a reef, and what it gains each knock (to the most)
+    vk: 2.2,
+    vmax: 280,
+    r: 3.5,
+    lives: 3,
+    dropChance: 0.13,
+  };
+  const REEF_PROBE = [[0, -1], [0, 1], [-1, 0], [1, 0]]; // the pearl's edge: top, bottom, left, right
+  // The reefs, row by row (0 none, 1 pale, 2 orange, 3 purple), from the top.
+  const REEFS = [
+    ['0333333330', '2222222222', '1111111111', '1111111111', '0111111110', '0011111100'],
+    ['3000330003', '2202222022', '1111111111', '1122112211', '1111111111', '0101111010'],
+    ['3333333333', '2222002222', '2111111112', '1110000111', '1111111111', '1111111111'],
+  ];
+
+  class Reef {
+    constructor() {
+      this.title = 'REEF REBOUND';
+      this.ink = '#ff7ab0';
+      this.coral = new Uint8Array(REEF.cols * REEF.rows);
+      this.balls = [];
+      for (let i = 0; i < 3; i++) this.balls.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, stuck: false });
+      this.drops = [];
+      for (let i = 0; i < 4; i++) this.drops.push({ on: false, x: 0, y: 0, kind: '' });
+      this.fish = [];
+      for (let i = 0; i < 10; i++) this.fish.push({ t: 9, x: 0, y: 0, dir: 1, col: '' });
+      this._fishI = 0;
+      this.pops = [];
+      for (let i = 0; i < 5; i++) this.pops.push({ t: 9, x: 0, y: 0, txt: '', col: '' });
+      this._popI = 0;
+      this.sfx = () => {};
+      this.reset(1);
+    }
+
+    reset(seed) {
+      this.rnd = rng(seed);
+      this.t = 0;
+      this.score = 0;
+      this.over = null;
+      this.lives = REEF.lives;
+      this.level = 0;
+      this.broken = 0;
+      this.reefs = 0;
+      this.x = W / 2;
+      this.vx = 0;
+      this.wide = 0;
+      this.slow = 0;
+      this.hits = 0;
+      this.grow(0);
+      for (const f of this.fish) f.t = 9;
+      for (const p of this.pops) p.t = 9;
+    }
+
+    /** A new reef (and the pearl back on the shell). */
+    grow(n) {
+      const L = REEFS[n % REEFS.length];
+      for (let r = 0; r < REEF.rows; r++) for (let c = 0; c < REEF.cols; c++) this.coral[r * REEF.cols + c] = +L[r][c] + (n >= REEFS.length && L[r][c] === '1' ? 1 : 0);
+      this.left = 0;
+      for (let i = 0; i < this.coral.length; i++) if (this.coral[i]) this.left++;
+      for (const d of this.drops) d.on = false;
+      this.serve();
+    }
+
+    serve() {
+      for (const b of this.balls) b.on = false;
+      const b = this.balls[0];
+      b.on = true;
+      b.stuck = true;
+      b.x = this.x;
+      b.y = REEF.shellY - REEF.r - 1;
+      this.hits = 0;
+      this.run = 0;
+      this.stuckT = 0;
+    }
+
+    get half() {
+      return this.wide > 0 ? REEF.halfWide : REEF.half;
+    }
+    get v() {
+      return Math.min(REEF.vmax, REEF.v0 + this.level * 12 + this.hits * REEF.vk) * (this.slow > 0 ? 0.7 : 1);
+    }
+
+    line() {
+      const bits = [this.broken + ' coral broken'];
+      if (this.reefs) bits.push(this.reefs + (this.reefs === 1 ? ' reef cleared' : ' reefs cleared'));
+      return bits.join(', ');
+    }
+
+    pop(txt, x, y, col) {
+      const p = this.pops[this._popI++ % this.pops.length];
+      p.t = 0;
+      p.txt = txt;
+      p.x = x;
+      p.y = y;
+      p.col = col || '#ffffff';
+    }
+
+    /** Off a ball goes, at angle a from straight up (radians, + to the right). */
+    launch(b, a) {
+      const v = this.v;
+      b.stuck = false;
+      b.vx = Math.sin(a) * v;
+      b.vy = -Math.cos(a) * v;
+    }
+
+    step(dt, I) {
+      if (this.over) return;
+      const R = REEF;
+      this.t += dt;
+      for (const p of this.pops) p.t += dt;
+      for (const f of this.fish) {
+        if (f.t > 2) continue;
+        f.t += dt;
+        f.x += f.dir * 60 * dt;
+        f.y -= 8 * dt;
+      }
+      if (this.t >= R.secs) {
+        this.over = 'TIME!';
+        this.score += this.lives * 50;
+        return;
+      }
+      this.wide = Math.max(0, this.wide - dt);
+      this.slow = Math.max(0, this.slow - dt);
+      // The shell.
+      const want = I.x * R.speed;
+      this.vx += clamp(want - this.vx, -3000 * dt, 3000 * dt);
+      this.x += this.vx * dt + I.mx * R.mouse;
+      const h = this.half;
+      if (this.x < h || this.x > W - h) {
+        this.x = clamp(this.x, h, W - h);
+        this.vx = 0;
+      }
+      // Pearls.
+      let live = 0;
+      for (const b of this.balls) {
+        if (!b.on) continue;
+        if (b.stuck) {
+          b.x = this.x + 6;
+          b.y = R.shellY - R.r - 1;
+          this.stuckT += dt;
+          // The button lets it go (or it goes by itself after a few seconds).
+          if (I.aP || this.stuckT > 3) {
+            this.launch(b, 0.35 + this.rnd() * 0.15);
+            this.sfx('chip', { f: 500, f1: 800, len: 0.08, gain: 0.5 });
+          }
+          live++;
+          continue;
+        }
+        this.fly(b, dt);
+        if (b.on) live++;
+      }
+      if (!live) {
+        this.lives--;
+        this.sfx('lose', { gain: 0.4 });
+        if (this.lives <= 0) {
+          this.over = 'GAME OVER';
+          return;
+        }
+        this.pop('PEARL LOST', W / 2, 150, '#ff8a8a');
+        this.serve();
+      }
+      // Bubbles drifting down.
+      for (const d of this.drops) {
+        if (!d.on) continue;
+        d.y += 55 * dt;
+        if (d.y >= R.shellY - 4 && d.y <= R.shellY + 6 && Math.abs(d.x - this.x) < this.half + 4) {
+          d.on = false;
+          this.score += 25;
+          if (d.kind === 'wide') this.wide = 12;
+          else if (d.kind === 'slow') this.slow = 10;
+          else this.triple();
+          this.pop(d.kind === 'wide' ? 'WIDE SHELL!' : d.kind === 'slow' ? 'SLOW TIDE!' : 'THREE PEARLS!', this.x, R.shellY - 14, '#7dff9a');
+          this.sfx('win', { gain: 0.35 });
+        } else if (d.y > H + 8) d.on = false;
+      }
+    }
+
+    triple() {
+      const src = this.balls.find((b) => b.on && !b.stuck) || this.balls.find((b) => b.on);
+      if (!src) return;
+      if (src.stuck) this.launch(src, 0.3);
+      const sp = Math.hypot(src.vx, src.vy) || this.v;
+      let k = 0;
+      for (const b of this.balls) {
+        if (b.on) continue;
+        const a = Math.atan2(src.vx, -src.vy) + (k++ ? -0.5 : 0.5);
+        b.on = true;
+        b.stuck = false;
+        b.x = src.x;
+        b.y = src.y;
+        b.vx = Math.sin(a) * sp;
+        b.vy = -Math.cos(a) * sp;
+      }
+    }
+
+    fly(b, dt) {
+      const R = REEF;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      // Walls and the surface.
+      if (b.x < R.r) {
+        b.x = R.r;
+        b.vx = Math.abs(b.vx);
+        this.sfx('chip', { f: 300, len: 0.03, gain: 0.3 });
+      } else if (b.x > W - R.r) {
+        b.x = W - R.r;
+        b.vx = -Math.abs(b.vx);
+        this.sfx('chip', { f: 300, len: 0.03, gain: 0.3 });
+      }
+      if (b.y < 22 + R.r) {
+        b.y = 22 + R.r;
+        b.vy = Math.abs(b.vy);
+      }
+      // The shell: the further from its middle, the steeper it goes off.
+      if (b.vy > 0 && b.y >= R.shellY - R.r && b.y <= R.shellY + 6 && Math.abs(b.x - this.x) <= this.half + R.r) {
+        const off = clamp((b.x - this.x) / this.half, -1, 1);
+        this.hits++;
+        this.run = 0;
+        this.launch(b, off * 1.05);
+        b.y = R.shellY - R.r;
+        this.sfx('chip', { f: 440, len: 0.05, gain: 0.5 });
+      }
+      if (b.y > H + 10) {
+        b.on = false;
+        return;
+      }
+      // Coral: the block the pearl's edge has gone into, bounced off the side it came in by.
+      const top = R.top, cw = R.bw + R.gap, ch = R.bh + R.gap;
+      if (b.y - R.r > top + R.rows * ch || b.y + R.r < top) return;
+      for (let k = 0; k < 4; k++) {
+        const ox = REEF_PROBE[k][0], oy = REEF_PROBE[k][1];
+        const px = b.x + ox * R.r, py = b.y + oy * R.r;
+        const c = Math.floor((px - R.left) / cw), r = Math.floor((py - top) / ch);
+        if (c < 0 || r < 0 || c >= R.cols || r >= R.rows) continue;
+        const i = r * R.cols + c;
+        if (!this.coral[i]) continue;
+        if (ox) b.vx = -ox * Math.abs(b.vx);
+        else b.vy = -oy * Math.abs(b.vy);
+        this.knock(i, c, r);
+        return;
+      }
+    }
+
+    knock(i, c, r) {
+      const R = REEF;
+      const hard = this.coral[i];
+      this.coral[i]--;
+      const x = R.left + c * (R.bw + R.gap) + R.bw / 2, y = R.top + r * (R.bh + R.gap) + R.bh / 2;
+      if (this.coral[i]) {
+        this.score += 5;
+        this.sfx('chip', { f: 250, len: 0.05, gain: 0.5 });
+        return;
+      }
+      // Coral broken on one flight (before the pearl is back on the shell) scores more and more.
+      this.run = Math.min(5, (this.run || 0) + 1);
+      const pts = (hard * 10 + this.level * 5) * this.run;
+      this.score += pts;
+      this.broken++;
+      this.left--;
+      this.pop('+' + pts, x, y, '#ffffff');
+      this.sfx('chip', { f: 900 + r * 60, len: 0.07, gain: 0.55 });
+      const f = this.fish[this._fishI++ % this.fish.length];
+      f.t = 0;
+      f.x = x;
+      f.y = y;
+      f.dir = this.rnd() < 0.5 ? -1 : 1;
+      f.col = ['#ffd24a', '#37e8ff', '#ff9a3c'][(c + r) % 3];
+      if (this.rnd() < REEF.dropChance) {
+        const d = this.drops.find((q) => !q.on);
+        if (d) {
+          d.on = true;
+          d.x = x;
+          d.y = y;
+          d.kind = ['wide', 'triple', 'slow'][(this.rnd() * 3) | 0];
+        }
+      }
+      if (this.left <= 0) {
+        this.reefs++;
+        this.level++;
+        this.score += 200;
+        this.pop('REEF CLEARED! +200', W / 2, 120, '#7dff9a');
+        this.sfx('win', { gain: 0.5 });
+        this.grow(this.level);
+      }
+    }
+
+    draw(c) {
+      const R = REEF;
+      const grd = c.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, '#1a6aa0');
+      grd.addColorStop(1, '#0a2a50');
+      c.fillStyle = grd;
+      c.fillRect(0, 0, W, H);
+      // Light from above, the pier's posts, sand.
+      c.fillStyle = 'rgba(255,255,255,0.06)';
+      for (let k = 0; k < 4; k++) {
+        const x = ((k * 97 + this.t * 6) % 360) - 20;
+        c.beginPath();
+        c.moveTo(x, 22);
+        c.lineTo(x + 24, 22);
+        c.lineTo(x - 30, H);
+        c.lineTo(x - 60, H);
+        c.fill();
+      }
+      c.fillStyle = '#e8c87a';
+      c.fillRect(0, H - 8, W, 8);
+      // The coral.
+      const cols = ['', '#ffc8c0', '#ff9a3c', '#b45cff'];
+      for (let r = 0; r < R.rows; r++) for (let k = 0; k < R.cols; k++) {
+        const v = this.coral[r * R.cols + k];
+        if (!v) continue;
+        const x = R.left + k * (R.bw + R.gap), y = R.top + r * (R.bh + R.gap);
+        c.fillStyle = cols[Math.min(3, v)];
+        c.fillRect(x, y, R.bw, R.bh);
+        c.fillStyle = 'rgba(255,255,255,0.35)';
+        c.fillRect(x + 2, y + 1, R.bw - 6, 2);
+        c.fillStyle = 'rgba(0,0,0,0.18)';
+        for (let d = 5; d < R.bw; d += 8) c.fillRect(x + d, y + 4 + ((d + r) % 3), 2, 2);
+      }
+      // Fish that were hiding in it.
+      for (const f of this.fish) {
+        if (f.t > 2) continue;
+        c.fillStyle = f.col;
+        c.fillRect(f.x - 4, f.y - 2, 7, 4);
+        c.fillRect(f.x - f.dir * 5, f.y - 3, 2, 6);
+      }
+      // Bubbles.
+      for (const d of this.drops) {
+        if (!d.on) continue;
+        c.strokeStyle = '#dff8ff';
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.arc(d.x, d.y, 7, 0, TAU);
+        c.stroke();
+        label(c, d.kind === 'wide' ? 'W' : d.kind === 'slow' ? 'S' : '3', d.x, d.y + 4, 9, '#7dff9a', 'center');
+      }
+      // The shell.
+      const h = this.half;
+      c.fillStyle = '#ff9ac8';
+      c.beginPath();
+      c.ellipse(this.x, R.shellY + 4, h, 6, 0, PI, TAU);
+      c.fill();
+      c.fillStyle = '#ffd0e6';
+      for (let k = -h + 6; k < h - 3; k += 7) c.fillRect(this.x + k, R.shellY + 1, 2, 3);
+      c.fillStyle = '#c85a8a';
+      c.fillRect(this.x - h, R.shellY + 4, 2 * h, 2);
+      // Pearls.
+      for (const b of this.balls) {
+        if (!b.on) continue;
+        c.fillStyle = '#fff6f0';
+        c.beginPath();
+        c.arc(b.x, b.y, R.r, 0, TAU);
+        c.fill();
+        c.fillStyle = '#ffffff';
+        c.fillRect(b.x - 2, b.y - 2, 1.5, 1.5);
+      }
+      for (const p of this.pops) {
+        if (p.t > 0.9) continue;
+        label(c, p.txt, p.x, p.y - p.t * 22, 10, p.col, 'center');
+      }
+      c.fillStyle = 'rgba(10,20,40,0.6)';
+      c.fillRect(0, 0, W, 22);
+      label(c, String(this.score), 6, 16, 13, '#ffffff');
+      for (let i = 0; i < this.lives; i++) {
+        c.fillStyle = '#fff6f0';
+        c.beginPath();
+        c.arc(140 + i * 12, 11, 4, 0, TAU);
+        c.fill();
+      }
+      label(c, 'REEF ' + (this.level + 1), 196, 16, 10, '#ff9ac8');
+      label(c, Math.max(0, Math.ceil(R.secs - this.t)) + 's', W - 6, 16, 11, '#ffffff', 'right');
+      if (this.balls[0].on && this.balls[0].stuck && ((this.t * 3) | 0) % 2) label(c, 'PRESS TO LAUNCH', W / 2, 180, 10, '#ffffff', 'center');
+    }
+
+    /** Where a ball coming down will reach the shell's line (walls bounced off), or null. */
+    landing(b) {
+      if (!b.on || b.stuck || b.vy <= 0) return null;
+      const t = (REEF.shellY - REEF.r - b.y) / b.vy;
+      if (t < 0) return null;
+      let x = b.x + b.vx * t;
+      const span = W - 2 * REEF.r;
+      x -= REEF.r;
+      x = ((x % (2 * span)) + 2 * span) % (2 * span);
+      if (x > span) x = 2 * span - x;
+      return x + REEF.r;
+    }
+
+    /** The attract mode's player: under the lowest falling pearl, a little to one side to angle it. */
+    demo(I) {
+      clearIn(I);
+      let tx = null, low = -1;
+      for (const b of this.balls) {
+        const x = this.landing(b);
+        if (x !== null && b.y > low) {
+          low = b.y;
+          tx = x - this.half * 0.35 * Math.sign(W / 2 - x || 1);
+        }
+      }
+      if (tx === null) {
+        let b = null;
+        for (const q of this.balls) if (q.on && !b) b = q;
+        tx = b ? b.x : W / 2;
+        if (b && b.stuck) I.a = I.aP = this.t % 2 < 0.05;
+      }
+      const d = tx - this.x;
+      I.x = Math.abs(d) < 3 ? 0 : clamp(d / 25, -1, 1);
+      return I;
+    }
+  }
+
+  // ============================================================== the hall
+  // Arcade Row's fit-out. The hall itself is neonstrand.js's (x 815..870, z 76..116, open to the midway
+  // on the east); a back wall at x 846 makes the front 23 m of it the arcade (the stock room behind is
+  // shut). Eight cabinets, every one a game: three along the north wall, three along the south, and an
+  // island facing the middle door (Boardwalk Dash, back to back with Seafront Sprint's sit-down racer).
+  // On the back wall the change desk, a drinks machine and neon; benches by the doors; a carpet that
+  // glows under the black lights at night. The shapes are merged into the chunk builders; the painted
+  // art (side art, marquees, neon, signs) is one canvas on two meshes (lit, glowing), the carpet one
+  // mesh, and each cabinet's live screen one more.
+  const HALL = { x0: 846.25, x1: 869.5, z0: 76.5, z1: 115.5, ceil: KERB + 7.4 };
+  // Where each cabinet stands: [x, z, yaw] (yaw: the way its screen faces).
+  const SPOTS = {
+    dash: [856.42, 96, PI / 2],
+    sprint: [854.95, 96, -PI / 2],
+    stack: [851.5, 115, PI],
+    serpent: [856, 115, PI],
+    catch: [860.5, 115, PI],
+    reef: [851.5, 77, 0],
+    rhythm: [856, 77, 0],
+    sub: [860.5, 77, 0],
+  };
+
+  // The two cabinet shapes, in a cabinet's frame (u across, y up from the floor, v towards the player).
+  // side: the side panels' outline [v, y]; body: the cabinet between them, set back so the screen sits
+  // in a bezel; screen: its middle (y, v), size and tilt back; marquee: [y, v, w, h] of its lit face;
+  // art: the side art's box [v0, y0, v1, y1]; hw: half the width over the side panels.
+  const TILT = Math.atan2(0.12, 0.69);
+  const MODELS = {
+    upright: {
+      hw: 0.39,
+      panel: 0.025,
+      side: [[-0.42, 0], [0.33, 0], [0.33, 0.84], [0.37, 1.02], [0.24, 1.7], [0.38, 1.73], [0.38, 2.05], [-0.42, 1.93]],
+      body: [[-0.41, 0], [0.3, 0], [0.3, 0.84], [0.31, 1.0], [0.19, 1.69], [0.35, 1.72], [0.35, 2.03], [-0.41, 1.92]],
+      screen: { y: 1.345, v: 0.25, w: 0.56, h: 0.42 },
+      marquee: [1.875, 0.352, 0.7, 0.27],
+      art: [-0.37, 0.2, 0.21, 1.72],
+      stand: [0, 1.15],
+      promptV: 0.8,
+      cam: [0.75, KERB + 2.05, 2.7, 0, KERB + 1.35, 0.2, 50],
+    },
+    sitdown: {
+      hw: 0.56,
+      panel: 0.03,
+      side: [[-1.05, 0.1], [-0.22, 0.1], [-0.22, 0.7], [-0.05, 0.86], [-0.05, 0.98], [-0.3, 1.05], [-0.42, 1.74], [-0.24, 1.78], [-0.24, 2.1], [-1.05, 1.98]],
+      body: [[-1.04, 0.1], [-0.25, 0.1], [-0.25, 0.7], [-0.08, 0.85], [-0.08, 0.97], [-0.33, 1.04], [-0.45, 1.73], [-0.27, 1.77], [-0.27, 2.08], [-1.04, 1.97]],
+      screen: { y: 1.385, v: -0.39, w: 0.72, h: 0.54 },
+      marquee: [1.925, -0.262, 0.98, 0.29],
+      art: [-0.98, 0.26, -0.34, 1.72],
+      stand: [0.95, 0.6], //  where Jay walks to, beside the seat
+      seat: [0, 0.62], //     where he sits (u, v); his hips at KERB + 0.6
+      promptU: 0.9,
+      promptV: 0.6,
+      cam: [1.2, KERB + 1.95, 2.4, 0, KERB + 1.3, -0.5, 52],
+    },
+  };
+
+  // ---------------------------------------------------- the painted art
+  // One 2048 × 1024 canvas: [x, y, w, h] slots. Side art 256 × 680 and marquees 256 × 100 for each of
+  // the eight cabinets (slot i by its place in CABINETS); the hall's neon and signs along the bottom.
+  const ART = {
+    w: 2048,
+    h: 1024,
+    slots: {
+      title: [0, 788, 640, 236],
+      fish: [640, 788, 300, 236],
+      strip: [940, 788, 700, 110],
+      desk: [940, 902, 700, 122],
+      door: [1640, 788, 120, 236],
+      vend: [1760, 788, 140, 236],
+      change: [1900, 788, 148, 236],
+    },
+    lit: [], //  quads drawn in the hall's light: [slot, x, y, z, rx, rz, w, h]
+    glow: [], // quads that light themselves (marquees, neon)
+    tex: null,
+    meshes: [],
+  };
+  const hexs = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+
+  /** A neon line: a soft wide glow, then the bright tube. */
+  function neon(g, col, width, draw) {
+    g.save();
+    g.lineCap = g.lineJoin = 'round';
+    g.strokeStyle = col;
+    g.globalAlpha = 0.35;
+    g.lineWidth = width * 3.2;
+    draw();
+    g.stroke();
+    g.globalAlpha = 1;
+    g.lineWidth = width;
+    draw();
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.85)';
+    g.lineWidth = Math.max(1, width * 0.35);
+    draw();
+    g.stroke();
+    g.restore();
+  }
+
+  /** Neon lettering. */
+  function neonText(g, s, x, y, size, col, font) {
+    g.save();
+    g.font = font || 'bold ' + size + 'px "Arial Black", Impact, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    g.strokeStyle = col;
+    g.globalAlpha = 0.35;
+    g.lineWidth = size * 0.28;
+    g.strokeText(s, x, y);
+    g.globalAlpha = 1;
+    g.lineWidth = size * 0.1;
+    g.strokeText(s, x, y);
+    g.fillStyle = '#ffffff';
+    g.globalAlpha = 0.9;
+    g.fillText(s, x, y);
+    g.restore();
+  }
+
+  /** A cabinet's marquee: its name in lights on a dark board. */
+  function paintMarquee(g, w, h, d) {
+    const col = hexs(d.colour || 0x37e8ff);
+    const grd = g.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, '#120a24');
+    grd.addColorStop(1, '#2a1250');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = col;
+    g.lineWidth = 4;
+    g.strokeRect(5, 5, w - 10, h - 10);
+    for (let x = 12; x < w - 6; x += 16) {
+      g.fillStyle = (x / 16) % 2 < 1 ? '#fff6c8' : col;
+      g.fillRect(x - 2, 1, 4, 3);
+      g.fillRect(x - 2, h - 4, 4, 3);
+    }
+    const name = d.name.toUpperCase();
+    let size = 34;
+    g.font = 'bold ' + size + 'px "Arial Black", Impact, sans-serif';
+    while (g.measureText(name).width > w - 26 && size > 14) g.font = 'bold ' + --size + 'px "Arial Black", Impact, sans-serif';
+    neonText(g, name, w / 2, h * 0.43, size, col);
+    g.font = 'bold 13px sans-serif';
+    g.textAlign = 'center';
+    g.fillStyle = '#ffffff';
+    g.fillText((d.marquee || '').toUpperCase(), w / 2, h * 0.8);
+  }
+
+  /** The art down a cabinet's sides: the game's own picture, its name up the front edge. */
+  function paintSide(g, w, h, d) {
+    g.save();
+    if (d.art) d.art(g, w, h);
+    g.restore();
+    // The name, in big letters reading up the side.
+    g.save();
+    g.translate(w - 34, h - 16);
+    g.rotate(-PI / 2);
+    const name = d.name.toUpperCase();
+    let size = 40;
+    g.font = 'bold ' + size + 'px "Arial Black", Impact, sans-serif';
+    while (g.measureText(name).width > h - 40 && size > 16) g.font = 'bold ' + --size + 'px "Arial Black", Impact, sans-serif';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    g.lineWidth = 7;
+    g.strokeStyle = '#140a26';
+    g.strokeText(name, 0, 0);
+    g.fillStyle = hexs(d.colour || 0xffffff);
+    g.fillText(name, 0, 0);
+    g.restore();
+    // A trim line round the edge.
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 3;
+    g.strokeRect(4, 4, w - 8, h - 8);
+  }
+
+  /** The hall's own neon and signs. */
+  const HALL_ART = {
+    title(g, w, h) {
+      neonText(g, 'ARCADE', w / 2, h * 0.3, 92, '#ff3d8b');
+      neonText(g, 'ROW', w / 2, h * 0.72, 92, '#37e8ff');
+      neon(g, '#ffd24a', 5, () => {
+        g.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const x = 40 + i * 14;
+          g.moveTo(x, h * 0.5 - 20);
+          g.lineTo(x + 30, h * 0.5);
+          g.lineTo(x, h * 0.5 + 20);
+        }
+      });
+      neon(g, '#ffd24a', 5, () => {
+        g.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const x = w - 40 - i * 14;
+          g.moveTo(x, h * 0.5 - 20);
+          g.lineTo(x - 30, h * 0.5);
+          g.lineTo(x, h * 0.5 + 20);
+        }
+      });
+    },
+    fish(g, w, h) {
+      neon(g, '#7dff9a', 6, () => {
+        g.beginPath();
+        g.ellipse(w * 0.45, h * 0.5, w * 0.27, h * 0.24, 0, 0, TAU);
+        g.moveTo(w * 0.72, h * 0.5);
+        g.lineTo(w * 0.9, h * 0.3);
+        g.lineTo(w * 0.9, h * 0.7);
+        g.closePath();
+      });
+      neon(g, '#ffffff', 4, () => {
+        g.beginPath();
+        g.arc(w * 0.3, h * 0.44, 7, 0, TAU);
+      });
+      neon(g, '#37e8ff', 3, () => {
+        g.beginPath();
+        g.arc(w * 0.13, h * 0.3, 8, 0, TAU);
+        g.moveTo(w * 0.09 + 12, h * 0.16);
+        g.arc(w * 0.09, h * 0.16, 12, 0, TAU);
+      });
+    },
+    strip(g, w, h) {
+      neon(g, '#ff3d8b', 5, () => {
+        g.beginPath();
+        g.moveTo(10, h * 0.7);
+        for (let x = 10; x < w - 20; x += 44) {
+          g.lineTo(x + 22, h * 0.3);
+          g.lineTo(x + 44, h * 0.7);
+        }
+      });
+      const star = (cx, cy, r, col) =>
+        neon(g, col, 3, () => {
+          g.beginPath();
+          for (let i = 0; i <= 10; i++) {
+            const a = -PI / 2 + (i * PI) / 5, rr = i % 2 ? r * 0.45 : r;
+            if (i === 0) g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+            else g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+          }
+        });
+      for (let x = 120; x < w; x += 230) star(x, h * 0.5, 26, '#ffd24a');
+    },
+    desk(g, w, h) {
+      g.fillStyle = '#100820';
+      g.fillRect(0, 0, w, h);
+      neonText(g, 'CHANGE · TICKETS', w / 2, h * 0.42, 54, '#ffd24a');
+      g.font = 'bold 20px sans-serif';
+      g.textAlign = 'center';
+      g.fillStyle = '#ffffff';
+      g.fillText('Prizes at the Prize Shack, by the Skyhook', w / 2, h * 0.84);
+    },
+    door(g, w, h) {
+      g.fillStyle = '#4a4458';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#5a546a';
+      g.fillRect(8, 8, w - 16, h - 8);
+      g.fillStyle = '#d8d2e4';
+      g.fillRect(w - 26, h * 0.52, 14, 5);
+      g.fillStyle = '#f2efe6';
+      g.fillRect(18, h * 0.22, w - 36, 34);
+      g.fillStyle = '#c0302c';
+      g.font = 'bold 13px sans-serif';
+      g.textAlign = 'center';
+      g.fillText('STAFF', w / 2, h * 0.22 + 15);
+      g.fillText('ONLY', w / 2, h * 0.22 + 29);
+    },
+    vend(g, w, h) {
+      g.fillStyle = '#fff2d6';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#c9302c';
+      g.fillRect(0, 0, w, 40);
+      g.fillStyle = '#ffffff';
+      g.font = 'bold 22px "Arial Black", sans-serif';
+      g.textAlign = 'center';
+      g.fillText('SUNFIZZ', w / 2, 28);
+      const cols = ['#ff9a3c', '#e0403a', '#7dcf6a', '#37b8ff'];
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) {
+        g.fillStyle = cols[(r + k) % 4];
+        g.fillRect(12 + k * 31, 52 + r * 44, 20, 34);
+        g.fillStyle = '#ffffff';
+        g.fillRect(15 + k * 31, 58 + r * 44, 5, 20);
+      }
+    },
+    change(g, w, h) {
+      g.fillStyle = '#c8ccd4';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#1a1626';
+      g.fillRect(14, 14, w - 28, 70);
+      neonText(g, 'CHANGE', w / 2, 49, 26, '#ffd24a');
+      g.fillStyle = '#3a3f48';
+      g.fillRect(w / 2 - 30, 110, 60, 8);
+      g.fillStyle = '#7dff9a';
+      g.fillRect(w / 2 - 34, 132, 68, 16);
+      g.fillStyle = '#1a1626';
+      g.font = 'bold 11px sans-serif';
+      g.textAlign = 'center';
+      g.fillText('NOTES IN', w / 2, 144);
+      g.fillStyle = '#2a2f38';
+      g.fillRect(w / 2 - 40, h - 60, 80, 36);
+    },
+  };
+
+  /** Paint the hall's canvas once (when the world is built), every cabinet's art and the neon on it. */
+  function paintArt() {
+    if (ART.tex) return ART.tex;
+    const cv = document.createElement('canvas');
+    cv.width = ART.w;
+    cv.height = ART.h;
+    const g = cv.getContext('2d'); // (clear: the neon tubes are drawn on nothing, so they hang on the wall)
+    const clip = (r, f) => {
+      g.save();
+      g.beginPath();
+      g.rect(r[0], r[1], r[2], r[3]);
+      g.clip();
+      g.translate(r[0], r[1]);
+      f(g, r[2], r[3]);
+      g.restore();
+    };
+    CABINETS.forEach((d) => {
+      clip(ART.slots['side_' + d.id], (gg, w, h) => paintSide(gg, w, h, d));
+      clip(ART.slots['marq_' + d.id], (gg, w, h) => paintMarquee(gg, w, h, d));
+    });
+    for (const k in HALL_ART) clip(ART.slots[k], HALL_ART[k]);
+    const tex = (ART.tex = new THREE.CanvasTexture(cv));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  /** A painted quad: slot, middle (x, y, z), the direction across it (rx, rz: to the right as you face it), size. */
+  function artQuad(list, slot, x, y, z, rx, rz, w, h) {
+    list.push([slot, x, y, z, rx, rz, w, h]);
+  }
+
+  /** The art's meshes: one lit by the hall, one that glows. */
+  function buildArtMeshes(world) {
+    const tex = paintArt();
+    const make = (list, mat, name) => {
+      if (!list.length) return null;
+      const pos = [], uv = [], nrm = [], idx = [];
+      for (const [slot, x, y, z, rx, rz, w, h] of list) {
+        const r = ART.slots[slot];
+        if (!r) continue;
+        const u0 = r[0] / ART.w, u1 = (r[0] + r[2]) / ART.w, v1 = 1 - r[1] / ART.h, v0 = 1 - (r[1] + r[3]) / ART.h;
+        const n = pos.length / 3;
+        for (const [su, sv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          pos.push(x + (rx * su * w) / 2, y + (sv * h) / 2, z + (rz * su * w) / 2);
+          uv.push(su < 0 ? u0 : u1, sv < 0 ? v0 : v1);
+          nrm.push(-rz, 0, rx);
+        }
+        idx.push(n, n + 1, n + 2, n, n + 2, n + 3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.name = name;
+      world.scene.add(mesh);
+      ART.meshes.push(mesh);
+      return mesh;
+    };
+    make(ART.lit, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.05 }), 'arcade-art');
+    make(ART.glow, new THREE.MeshBasicMaterial({ map: tex, transparent: true }), 'arcade-neon');
+  }
+
+  /** The carpet: dark, with neon squiggles and stars that glow under the black lights at night. */
+  function buildCarpet(world) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#141032';
+    g.fillRect(0, 0, 256, 256);
+    const R = rng(77);
+    const cols = ['#ff3d8b', '#37e8ff', '#ffd24a', '#7dff9a', '#b45cff'];
+    g.lineCap = 'round';
+    for (let i = 0; i < 22; i++) {
+      const x = R() * 256, y = R() * 256, col = cols[i % cols.length];
+      g.strokeStyle = g.fillStyle = col;
+      g.lineWidth = 3;
+      const k = i % 4;
+      for (const [ox, oy] of [[0, 0], [-256, 0], [0, -256], [-256, -256], [256, 0], [0, 256]]) {
+        g.save();
+        g.translate(x + ox, y + oy);
+        g.rotate(R() * TAU);
+        g.beginPath();
+        if (k === 0) {
+          g.moveTo(-14, 0);
+          g.bezierCurveTo(-7, -10, 0, 10, 7, 0);
+          g.bezierCurveTo(10, -5, 12, -5, 14, 0);
+          g.stroke();
+        } else if (k === 1) {
+          g.arc(0, 0, 6, 0, TAU);
+          g.stroke();
+        } else if (k === 2) {
+          g.moveTo(0, -8);
+          g.lineTo(7, 6);
+          g.lineTo(-7, 6);
+          g.closePath();
+          g.stroke();
+        } else {
+          g.moveTo(-10, -4);
+          g.lineTo(-3, 4);
+          g.lineTo(3, -4);
+          g.lineTo(10, 4);
+          g.stroke();
+        }
+        g.restore();
+      }
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 4;
+    const w = HALL.x1 - HALL.x0, d = HALL.z1 - HALL.z0;
+    tex.repeat.set(w / 2.2, d / 2.2);
+    const geo = new THREE.PlaneGeometry(w, d);
+    geo.rotateX(-PI / 2);
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex, roughness: 1, metalness: 0, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((HALL.x0 + HALL.x1) / 2, KERB + 0.025, (HALL.z0 + HALL.z1) / 2);
+    mesh.name = 'arcade-carpet';
+    world.scene.add(mesh);
+    ART.meshes.push(mesh);
+    ART.carpet = mesh;
+  }
+
+  // ------------------------------------------------------- the shapes
+  const _m4 = new THREE.Matrix4(), _q4 = new THREE.Quaternion(), _e4 = new THREE.Euler(), _p4 = new THREE.Vector3(), _s4 = new THREE.Vector3();
+  const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3();
+  const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+
+  /** Any shape in a frame at (u, y, v), tipped about the frame's u axis by tilt (+: its top towards the player), scaled. */
+  function placed(surf, F, geo, u, y, v, tilt, col, sx, sy, sz) {
+    _p4.set(F.wx(u, v), y, F.wz(u, v));
+    _q4.setFromEuler(_e4.set(tilt, F.yaw, 0, 'YXZ'));
+    _s4.set(sx || 1, sy || 1, sz || 1);
+    surf.merge(geo, _m4.compose(_p4, _q4, _s4), col);
+  }
+  /** A box in a frame: middle (u, y, v), size (across, up, along), tipped by tilt. */
+  function tbox(surf, F, u, y, v, su, sy, sv, tilt, col) {
+    placed(surf, F, UNIT_BOX, u, y, v, tilt, col, su, sy, sv);
+  }
+  /** An outline [v, y] in a frame, made solid from u0 to u1 (the cabinets' sides and bodies). */
+  function profile(surf, F, pts, u0, u1, col) {
+    const shape = new THREE.Shape(pts.map(([v, y]) => new THREE.Vector2(v, y)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: u1 - u0, bevelEnabled: false, steps: 1, curveSegments: 1 });
+    // The outline's x runs along v, its y up; it is pushed out along -u (a right-handed set), from u1 down to u0.
+    _m4.makeBasis(_ax.set(F.s, 0, F.c), _ay.set(0, 1, 0), _az.set(-F.c, 0, F.s));
+    _m4.setPosition(F.wx(u1, 0), KERB, F.wz(u1, 0));
+    surf.merge(geo, _m4, col);
+    geo.dispose();
+  }
+  /** A box in a frame, on a surface and (optionally) solid: frame-aligned, so a plain world box. */
+  const _rb = [0, 0, 0, 0];
+  let WORLD = null; // the world being built (for fbox's colliders)
+  function fbox(surf, F, u0, y0, v0, u1, y1, v1, col, solid) {
+    F.box(u0, v0, u1, v1, _rb);
+    if (surf) surf.box(_rb[0], KERB + y0, _rb[1], _rb[2], KERB + y1, _rb[3], col);
+    if (solid) WORLD.physics.addBox(_rb[0], KERB + y0, _rb[1], _rb[2], KERB + y1, _rb[3], solid, VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
+  }
+
+  const CYL = new THREE.CylinderGeometry(1, 1, 1, 12);
+  const BALL = new THREE.SphereGeometry(1, 10, 8);
+  const TORUS = new THREE.TorusGeometry(0.16, 0.022, 6, 18);
+
+  /** One cabinet, modelled: the sides, the body, the bezel, the controls, the coin door; solid. */
+  function buildCabinet(world, d) {
+    const M = MODELS[d.model];
+    const F = d.F;
+    const ctx = world.ctxAt(F.x, F.z);
+    const col = d.colour || 0x37e8ff;
+    const side = VH.col(d.side || col, 0.8), body = VH.col(0x17151f), trim = VH.col(0x2b2936), metal = VH.col(0xa9aeb6);
+    const hw = M.hw, pw = M.panel;
+    // The side panels and the body between them.
+    profile(ctx.prop, F, M.side, hw - pw, hw, side);
+    profile(ctx.prop, F, M.side, -hw, -hw + pw, side);
+    profile(ctx.prop, F, M.body, -hw + pw, hw - pw, body);
+    // The bezel round the screen (the screen itself is the game's: build() below).
+    const S = M.screen;
+    const nY = Math.sin(TILT), nV = Math.cos(TILT);
+    tbox(ctx.prop, F, 0, KERB + S.y + nY * 0.004, S.v + nV * 0.004, S.w + 0.07, S.h + 0.07, 0.01, -TILT, trim);
+    // The marquee's lit face, and the side art.
+    const c = F.c, s = F.s;
+    const mq = M.marquee;
+    artQuad(ART.glow, 'marq_' + d.id, F.wx(0, mq[1] + 0.003), KERB + mq[0], F.wz(0, mq[1] + 0.003), c, -s, mq[2], mq[3]);
+    const A = M.art, av = (A[0] + A[2]) / 2, ay = KERB + (A[1] + A[3]) / 2;
+    artQuad(ART.lit, 'side_' + d.id, F.wx(hw + 0.003, av), ay, F.wz(hw + 0.003, av), -s, -c, A[2] - A[0], A[3] - A[1]);
+    artQuad(ART.lit, 'side_' + d.id, F.wx(-hw - 0.003, av), ay, F.wz(-hw - 0.003, av), s, c, A[2] - A[0], A[3] - A[1]);
+    const btn = d.buttons || [0xe0403a, 0xffd24a, 0x37e8ff];
+    if (d.model === 'upright') {
+      // The control panel: sloping out over the coin door, a joystick, three buttons and the 1P / 2P starts.
+      const pt = 0.2, pv = 0.47, py = KERB + 0.93;
+      // A point on the panel: u across, w along it towards the player, h up off its middle.
+      const on = (u, w, h) => [u, py + h * Math.cos(pt) - w * Math.sin(pt), pv + h * Math.sin(pt) + w * Math.cos(pt)];
+      fbox(ctx.prop, F, -0.4, 0.8, 0.3, 0.4, 0.9, 0.6, body);
+      tbox(ctx.prop, F, 0, py, pv, 0.82, 0.07, 0.38, pt, VH.col(0x23202e));
+      let p = on(0, 0.193, 0);
+      tbox(ctx.screen, F, 0, p[1], p[2], 0.82, 0.03, 0.01, pt, VH.col(col, 1.4));
+      p = on(-0.2, 0.02, 0.04);
+      placed(ctx.prop, F, CYL, p[0], p[1], p[2], pt, VH.col(0x101010), 0.045, 0.01, 0.045);
+      p = on(-0.2, 0.02, 0.085);
+      placed(ctx.prop, F, CYL, p[0], p[1], p[2], pt, VH.col(0x202020), 0.011, 0.09, 0.011);
+      p = on(-0.2, 0.02, 0.135);
+      placed(ctx.screen, F, BALL, p[0], p[1], p[2], pt, VH.col(btn[0], 1.2), 0.034, 0.034, 0.034);
+      [[0.04, 0.03], [0.14, -0.01], [0.24, 0.03]].forEach(([u, w], i) => {
+        const q = on(u, w, 0.042);
+        placed(ctx.screen, F, CYL, q[0], q[1], q[2], pt, VH.col(btn[i % btn.length], 1.5), 0.027, 0.022, 0.027);
+      });
+      for (const u of [-0.05, 0.05]) {
+        const q = on(u, -0.13, 0.04);
+        placed(ctx.screen, F, CYL, q[0], q[1], q[2], pt, VH.col(0xf2efe6, 1.3), 0.014, 0.016, 0.014);
+      }
+      // The coin door (two lit slots, the return cup) and the kick plate.
+      fbox(ctx.prop, F, -0.13, 0.28, 0.3, 0.13, 0.66, 0.318, VH.col(0x6f747d));
+      fbox(ctx.screen, F, -0.075, 0.52, 0.318, -0.045, 0.6, 0.324, VH.col(0xff9a3c, 1.8));
+      fbox(ctx.screen, F, 0.045, 0.52, 0.318, 0.075, 0.6, 0.324, VH.col(0xff9a3c, 1.8));
+      fbox(ctx.prop, F, -0.04, 0.34, 0.318, 0.04, 0.4, 0.322, VH.col(0x111111));
+      fbox(ctx.prop, F, -hw + pw, 0, 0.3, hw - pw, 0.12, 0.316, metal);
+      // Solid: the body to its top, the panel at its height.
+      fbox(null, F, -hw, 0, -0.42, hw, 2.05, 0.33, 0, 'metal');
+      fbox(null, F, -0.41, 0.8, 0.33, 0.41, 0.98, 0.64, 0, 'metal');
+    } else {
+      // The sit-down racer: a plinth with a glow underneath, a wheel on the dash, pedals, a bucket seat.
+      fbox(ctx.prop, F, -hw, 0, -1.05, hw, 0.1, 1.0, VH.col(0x1d1b26));
+      fbox(ctx.screen, F, -hw - 0.006, 0.03, -1.02, -hw, 0.07, 0.97, VH.col(col, 1.6));
+      fbox(ctx.screen, F, hw, 0.03, -1.02, hw + 0.006, 0.07, 0.97, VH.col(col, 1.6));
+      // The leg well's low sides.
+      fbox(ctx.prop, F, -hw, 0.1, -0.22, -hw + 0.05, 0.45, 0.3, side);
+      fbox(ctx.prop, F, hw - 0.05, 0.1, -0.22, hw, 0.45, 0.3, side);
+      // The wheel on its column, a gear knob, the pedals.
+      tbox(ctx.prop, F, 0, KERB + 0.92, -0.02, 0.06, 0.06, 0.2, -0.6, VH.col(0x202020));
+      placed(ctx.prop, F, TORUS, 0, KERB + 0.99, 0.08, -0.6, VH.col(0x3c3c48));
+      placed(ctx.screen, F, CYL, 0, KERB + 0.99, 0.08, -0.6 + PI / 2, VH.col(col, 1.3), 0.04, 0.02, 0.04);
+      tbox(ctx.prop, F, 0, KERB + 0.99, 0.08, 0.3, 0.02, 0.02, -0.6, VH.col(0x3c3c48));
+      placed(ctx.prop, F, CYL, 0.3, KERB + 1.0, -0.12, 0, VH.col(0x202020), 0.012, 0.12, 0.012);
+      placed(ctx.screen, F, BALL, 0.3, KERB + 1.07, -0.12, 0, VH.col(btn[0], 1.2), 0.03, 0.03, 0.03);
+      for (const u of [-0.12, 0.12]) tbox(ctx.prop, F, u, KERB + 0.18, -0.12, 0.09, 0.015, 0.16, 0.7, metal);
+      placed(ctx.screen, F, CYL, -0.3, KERB + 0.99, -0.14, 0.4, VH.col(0xf2efe6, 1.3), 0.02, 0.02, 0.02);
+      // The seat: a base in the game's colour, a black cushion and a back that leans away from the screen.
+      fbox(ctx.prop, F, -0.3, 0.1, 0.3, 0.3, 0.42, 0.95, side);
+      fbox(ctx.prop, F, -0.28, 0.42, 0.33, 0.28, 0.52, 0.9, VH.col(0x15151a));
+      tbox(ctx.prop, F, 0, KERB + 0.86, 0.95, 0.56, 0.78, 0.09, 0.22, VH.col(0x15151a));
+      tbox(ctx.prop, F, 0, KERB + 0.86, 0.995, 0.6, 0.8, 0.02, 0.22, side);
+      // Solid: the screen unit, the leg well's sides, the seat.
+      fbox(null, F, -hw, 0, -1.05, hw, 2.1, -0.05, 0, 'metal');
+      fbox(null, F, -hw, 0, -0.05, -hw + 0.05, 0.45, 0.3, 0, 'metal');
+      fbox(null, F, hw - 0.05, 0, -0.05, hw, 0.45, 0.3, 0, 'metal');
+      fbox(null, F, -0.32, 0, 0.3, 0.32, 1.2, 1.04, 0, 'metal');
+      fbox(null, F, -hw, 0, -0.05, hw, 0.1, 1.0, 0, 'metal');
+    }
+  }
+
+  /** The hall round the cabinets: the back wall, the change desk, a drinks machine, neon, benches, lights. */
+  function buildHall(world) {
+    const ctx = world.ctxAt(857, 96);
+    const ph = world.physics;
+    const C = VH.COLLIDE;
+    const H = HALL;
+    const zm = (H.z0 + H.z1) / 2;
+    // The back wall (the stock room behind it is shut), with its staff door.
+    ctx.prop.box(845.75, KERB, H.z0, 846.25, H.ceil, H.z1, VH.col(0x3a2466));
+    ph.addBox(845.75, 0, H.z0, 846.25, H.ceil, H.z1, 'wall', C.ALL);
+    artQuad(ART.lit, 'door', 846.27, KERB + 1.05, 111.5, 0, -1, 1.0, 2.1);
+    // Neon on the back wall: the name over the desk, a fish, a strip of stars and zigzags round the sides.
+    artQuad(ART.glow, 'title', 846.28, KERB + 4.7, zm, 0, -1, 6.2, 2.29);
+    artQuad(ART.glow, 'fish', 846.28, KERB + 3.6, 84.5, 0, -1, 3.0, 2.36);
+    artQuad(ART.glow, 'fish', 846.28, KERB + 3.9, 106.5, 0, -1, 2.4, 1.89);
+    for (const x of [851, 858, 865]) {
+      artQuad(ART.glow, 'strip', x, KERB + 3.7, H.z1 - 0.02, -1, 0, 6.4, 1.0);
+      artQuad(ART.glow, 'strip', x, KERB + 3.7, H.z0 + 0.02, 1, 0, 6.4, 1.0);
+    }
+    // Strip lights across the ceiling, pink and cyan.
+    for (let k = 0; k < 6; k++) {
+      const z = H.z0 + 4 + k * 6.3;
+      ctx.screen.box(848, H.ceil - 0.1, z - 0.08, 868, H.ceil - 0.02, z + 0.08, VH.col(k % 2 ? 0x37e8ff : 0xff3d8b, 1.6));
+    }
+    // The change desk: a counter, the till, a ticket roll, and shelves of prizes behind.
+    const dz0 = 92.8, dz1 = 98.2;
+    ctx.wood.box(847.0, KERB, dz0, 848.1, KERB + 1.02, dz1, VH.col(0x6a3fa0));
+    ctx.prop.box(846.9, KERB + 1.02, dz0 - 0.1, 848.25, KERB + 1.08, dz1 + 0.1, VH.col(0x1d1b26));
+    ctx.screen.box(848.1, KERB + 0.95, dz0, 848.13, KERB + 1.0, dz1, VH.col(0xffd24a, 1.8));
+    ctx.screen.box(848.1, KERB + 0.1, dz0, 848.13, KERB + 0.15, dz1, VH.col(0xff3d8b, 1.8));
+    ph.addBox(846.25, 0, dz0 - 0.1, 848.25, KERB + 1.08, dz1 + 0.1, 'wood', C.SOLID | C.SHOTS);
+    ctx.prop.box(847.3, KERB + 1.08, 96.6, 847.75, KERB + 1.3, 97.1, VH.col(0x2b2936));
+    ctx.screen.box(847.74, KERB + 1.2, 96.65, 847.76, KERB + 1.28, 97.05, VH.col(0x7dff9a, 1.5));
+    ctx.prop.cylinder(847.6, KERB + 1.08, 94.2, 0.12, 0.12, 0.12, 10, VH.col(0xff9a3c), true);
+    artQuad(ART.glow, 'desk', 846.28, KERB + 2.95, zm - 0.5, 0, -1, 4.6, 0.8);
+    for (const y of [1.5, 2.0]) {
+      ctx.prop.box(846.25, KERB + y, dz0, 846.7, KERB + y + 0.04, dz1, VH.col(0xd9d2c4));
+      for (let z = dz0 + 0.3; z < dz1 - 0.2; z += 0.55) {
+        const k = Math.round(z * 7 + y * 3);
+        ctx.propMatte.box(846.32, KERB + y + 0.04, z - 0.15, 846.62, KERB + y + 0.3 + (k % 3) * 0.04, z + 0.15, VH.col(NEONS[k % NEONS.length]));
+      }
+    }
+    // A change machine by the desk.
+    ctx.prop.box(846.25, KERB, 89.8, 846.85, KERB + 1.65, 90.7, VH.col(0x8f949c));
+    ph.addBox(846.25, 0, 89.8, 846.85, KERB + 1.65, 90.7, 'metal', C.SOLID | C.SHOTS);
+    artQuad(ART.lit, 'change', 846.86, KERB + 1.05, 90.25, 0, -1, 0.6, 0.96);
+    // A drinks machine (it works, like the ones in town).
+    const vz = 104.6;
+    ctx.propMatte.box(846.25, KERB, vz - 0.5, 847.1, KERB + 1.95, vz + 0.5, VH.col(0xc9302c), { top: VH.col(0x8f1f1c) });
+    ph.addBox(846.25, 0, vz - 0.5, 847.1, KERB + 1.95, vz + 0.5, 'vending');
+    artQuad(ART.glow, 'vend', 847.11, KERB + 1.25, vz + 0.08, 0, -1, 0.7, 1.18);
+    world.interactables.push({ id: 'vending_arcade', kind: 'vending', x: 848.2, y: KERB + 1.0, z: vz, radius: 1.4, label: 'Buy a Sunfizz soda', price: 2, heal: 15 });
+    // Benches by the doors, a bin by the drinks machine.
+    world.addProp('bench', 866.5, KERB, H.z1 - 0.9, PI, 1);
+    world.addProp('bench', 866.5, KERB, H.z0 + 0.9, 0, 1);
+    world.addProp('bench', 848.2, KERB, 85.5, PI / 2, 1);
+    world.addProp('bin', 847.0, KERB, 106.2, 0, 1);
+  }
+  const NEONS = [0xff3d8b, 0x37e8ff, 0xb45cff, 0xffb92e, 0x7dff6a, 0xff6a2e, 0xffffff];
+
   // ============================================================== the cabinets
-  // Which cabinets (the west row's, along z), their games, and the tables of five they start with.
+  // The cabinets (in the order they were defined: each one's slots on the art canvas follow it).
   const CABINETS = [];
+  // What the cabinets' attract modes cost: pictures drawn, and the milliseconds spent drawing them (a test reads it).
+  const Arcade = { cost: 0, pictures: 0 };
 
   /** The big screen while Jay plays: the cabinet's own canvas, shown large over the scene. */
   let bigEl = null;
@@ -1665,24 +3905,35 @@
   }
 
   const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
+  const ATTRACT = 22; // the attract mode's cycle: the title and the table for 8 s, then the game playing itself
 
   /**
-   * One cabinet as a stall game: o = { id, name, z, game, table: [[initials, score] x5], tickets,
-   * howto, keys, prize, barks, tagline, price }.
+   * One cabinet as a stall game: o = { id, name, model ('upright' | 'sitdown'), game, colour, side,
+   * buttons, art(g, w, h), marquee, table: [[initials, score] x5], tickets, howto, keys, prize,
+   * barks, tagline, price }. Where it stands is SPOTS[id].
    */
   function cabinet(o) {
     const game = o.game;
+    const model = o.model || 'upright';
+    const M = MODELS[model];
+    const at = SPOTS[o.id];
+    const F0 = { x: at[0], z: at[1], yaw: at[2], w: 2 * M.hw, d: 1 };
+    const Fp = Carnival.Midway.frame(F0);
     const def = {
       id: o.id,
       name: o.name,
-      frame: { x: ROW_X, z: o.z, yaw: PI / 2, w: 1.0, d: 0.9 },
+      cabinet: true,
+      model,
+      frame: F0,
       price: o.price || 1,
       unit: 'points',
       radius: 1.5,
-      sleep: 30,
-      stand: [0, 1.15],
-      promptV: 0.8,
-      cam: [0.75, KERB + 2.05, 2.7, 0, KERB + 1.35, 0.2, 50],
+      sleep: 45,
+      stand: M.stand,
+      promptV: M.promptV,
+      x: Fp.wx(M.promptU || 0, M.promptV),
+      z: Fp.wz(M.promptU || 0, M.promptV),
+      cam: M.cam,
       seconds: null,
       holder: false,
       tagline: o.tagline,
@@ -1693,6 +3944,9 @@
       tickets: o.tickets,
       marquee: o.marquee,
       colour: o.colour,
+      side: o.side,
+      buttons: o.buttons,
+      art: o.art,
       game,
 
       verdict(g) {
@@ -1712,16 +3966,26 @@
         tex.magFilter = THREE.NearestFilter;
         tex.generateMipmaps = false;
         const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
-        this.screen = kit.single(new THREE.PlaneGeometry(0.68, 0.51), mat);
-        this.screen.position.set(0, KERB + 1.35, 0.49);
+        // The screen, set back in its bezel and tilted up at the player.
+        const S = M.screen, nY = Math.sin(TILT), nV = Math.cos(TILT);
+        this.screen = kit.single(new THREE.PlaneGeometry(S.w, S.h), mat);
+        this.screen.position.set(0, KERB + S.y + nY * 0.012, S.v + nV * 0.012);
+        this.screen.rotation.x = -TILT;
+        const F = this.F;
+        this.sx = F.wx(0, S.v);
+        this.sz = F.wz(0, S.v);
+        this.sy = KERB + S.y;
+        this.nx = F.s;
+        this.nz = F.c;
         game.sfx = (name, opts) => {
           const A = this.c.audio;
           if (A && A[name] && this.c.session && this.c.session.def === this) A[name](opts);
         };
         this.table = o.table.map((r) => r.slice());
         this.lastIni = ['JAY', 'P2 '];
-        this.att = 0; //  the attract mode's clock
-        this.drawT = 0;
+        this.att = (CABINETS.indexOf(this) * 5) % ATTRACT; // not all on the same page at once
+        this.drawT = CABINETS.indexOf(this) * 0.013; //      nor redrawn in the same frame
+        this.demoT = 0;
         this.demoOn = false;
         this.seed = 1;
         this.paint(0);
@@ -1743,13 +4007,30 @@
       reset() {
         bigScreen(null);
         this.demoOn = false;
-        this.att = 0;
+        // Off the racer's seat: stood beside it, so the go ends with him on the floor.
+        const s = this.c && this.c.session;
+        if (M.seat && s && s.def === this && s.data.stand) {
+          const p = s.game.player;
+          p.pos.set(s.data.stand.x, KERB, s.data.stand.z);
+        }
+      },
+
+      /** Jay at the controls: stood at an upright, sat in the racer. */
+      jay(s, g) {
+        if (!M.seat) {
+          const st = s.data.stand;
+          s.seat(st.x, KERB + Carnival.HIP, st.z, st.yaw, (g && this.pose && this.pose(g, s)) || Carnival.ARMS_REST);
+          return;
+        }
+        const F = this.F;
+        s.seat(F.wx(M.seat[0], M.seat[1]), KERB + 0.6, F.wz(M.seat[0], M.seat[1]), F.yaw + PI, SEATED);
       },
 
       begin(g, s) {
         // Both players get the same run (the same seed) on a two-player go.
         if (g.n === 1) s.data.seed = 1 + ((Math.random() * 1e6) | 0);
         game.reset(s.data.seed);
+        _mouse.yaw = null;
         g.ini = null;
         g.line = '';
         bigScreen(this.canvas, this.name);
@@ -1766,6 +4047,7 @@
             for (let i = 0; i < n; i++) {
               game.step(dt / n, IN);
               IN.aP = IN.upP = IN.downP = IN.leftP = IN.rightP = false;
+              IN.mx = IN.my = 0;
             }
             g.score = game.score;
             if (game.over) {
@@ -1821,18 +4103,18 @@
       /** Draw the screen (the game, a new-score page, or the attract mode) and send it to the cabinet. */
       paint(dt, g) {
         const c = this.ctx;
-        const live = this.c && this.c.session && this.c.session.def === this && this.c.session.data.go && (this.c.session.data.phase === 'play' || this.c.session.data.phase === 'whistle' || this.c.session.data.phase === 'count');
+        const S = this.c && this.c.session;
+        const live = S && S.def === this && S.data.go && (S.data.phase === 'play' || S.data.phase === 'whistle' || S.data.phase === 'count');
         if (live || !this.c) {
           game.draw(c);
           if (g && g.ini) this.drawInitials(c, g);
-          const ph = this.c && this.c.session && this.c.session.data.phase;
-          if (ph === 'count') {
+          if (S && S.data.phase === 'count') {
             c.fillStyle = 'rgba(10,6,24,0.55)';
             c.fillRect(0, 96, W, 48);
-            label(c, (this.c.session.data.players === 2 ? 'PLAYER ' + this.c.session.data.go.n + ' · ' : '') + 'GET READY!', W / 2, 126, 16, game.ink, 'center');
+            label(c, (S.data.players === 2 ? 'PLAYER ' + S.data.go.n + ' · ' : '') + 'GET READY!', W / 2, 126, 16, game.ink, 'center');
           }
         } else this.attract(c);
-        // The cabinet's own screen: refreshed at about 15 a second while playing, 8 otherwise.
+        // The cabinet's own screen: refreshed about 15 times a second while playing, 8 otherwise.
         this.drawT += dt;
         if (this.drawT >= (live ? 0.066 : 0.12) || dt === 0) {
           this.drawT = 0;
@@ -1864,7 +4146,7 @@
 
       /** The attract mode: the title and the table, then the game playing itself. */
       attract(c) {
-        const cyc = this.att % 22;
+        const cyc = this.att % ATTRACT;
         if (cyc < 8) {
           if (this.demoOn) {
             this.demoOn = false;
@@ -1881,11 +4163,27 @@
             label(c, r[0], 118, y, 13, i === 0 ? game.ink : '#ffffff');
             label(c, String(r[1]), 232, y, 13, i === 0 ? game.ink : '#ffffff', 'right');
           });
-          if (((this.att * 2) | 0) % 2) label(c, 'PRESS E TO PLAY · $' + this.price, W / 2, 222, 12, '#7dff9a', 'center');
+          if (((this.att * 2) | 0) % 2) label(c, 'PRESS E TO PLAY · $' + this.price + ' · 1 OR 2 PLAYERS', W / 2, 222, 11, '#7dff9a', 'center');
         } else {
           game.draw(c);
           label(c, 'DEMO', W / 2, 228, 10, 'rgba(255,255,255,0.8)', 'center');
         }
+      },
+
+      /**
+       * How often the attract mode should be redrawn (seconds), or 0 for not at all: Jay in or near
+       * the hall, the screen in the camera's view and facing it, nobody playing another cabinet.
+       */
+      every() {
+        const g = this.c.game, P = g.player.pos;
+        if (P.x < HALL.x0 - 1 || P.x > HALL.x1 + 18 || P.z < HALL.z0 - 10 || P.z > HALL.z1 + 10) return 0;
+        const s = this.c.session;
+        if (s && s.def.cabinet && s.def !== this && s.data.phase !== 'walk') return 0;
+        const cam = g.renderer.camera.position;
+        const dx = cam.x - this.sx, dz = cam.z - this.sz;
+        if (dx * this.nx + dz * this.nz < 0) return 0;
+        if (!g.isVisible(this.sx, this.sy, this.sz, 0.45)) return 0;
+        return dx * dx + dz * dz < 14 * 14 ? 0.1 : 0.2;
       },
 
       idleGame(dt) {
@@ -1895,64 +4193,105 @@
           return;
         }
         this.att += dt;
-        if (this.att % 22 >= 8) {
-          if (!this.demoOn) {
-            this.demoOn = true;
-            game.reset(++this.seed);
-          }
-          // The demo plays itself (a few steps at a time; the screen only needs a dozen pictures a second).
-          this.demoT = (this.demoT || 0) + dt;
-          if (this.demoT >= 0.08) {
-            const n = Math.ceil(this.demoT / (1 / 30));
-            for (let i = 0; i < n; i++) game.step(this.demoT / n, game.demo(IN));
-            this.demoT = 0;
-            if (game.over) this.att = 22 * Math.ceil(this.att / 22); // back to the title
-          }
+        const every = this.every();
+        if (!every) return;
+        if (this.att % ATTRACT >= 8 && !this.demoOn) {
+          this.demoOn = true;
+          game.reset(++this.seed);
         }
         this.drawT += dt;
-        if (this.drawT >= 0.12) {
-          this.attract(this.ctx);
-          this.drawT = 0;
-          this.tex.needsUpdate = true;
+        if (this.drawT < every) return;
+        // A new picture: the demo plays on by the time since the last one (it only needs this many pictures).
+        if (this.demoOn) {
+          const n = Math.min(12, Math.ceil(this.drawT / (1 / 30)));
+          for (let i = 0; i < n; i++) game.step(this.drawT / n, game.demo(IN));
+          if (game.over) this.att = ATTRACT * Math.ceil(this.att / ATTRACT); // back to the title
         }
+        this.drawT = 0;
+        const t0 = performance.now();
+        this.attract(this.ctx);
+        this.tex.needsUpdate = true;
+        Arcade.cost += performance.now() - t0;
+        Arcade.pictures++;
       },
     };
     const d = Carnival.stall(def);
     CABINETS.push(d);
     return d;
   }
+  // Sat in the racer: hands on the wheel.
+  const SEATED = { w: 1, hipL: 1.45, hipR: 1.45, kneeL: 1.25, kneeR: 1.25, ankleL: 0, ankleR: 0, shoulderL: 1.15, shoulderR: 1.15, elbowL: 0.45, elbowR: 0.45, splayL: 0.1, splayR: 0.1, lean: 0.08, twist: 0, pelvisY: 0.97, headPitch: 0, speed: 0, crouch: 0 };
 
-  // The cabinets' marquees (on the sign atlas: one draw call for all) and their control panels.
-  Carnival.Midway.builders.push((world, K) => {
-    for (const d of CABINETS) {
-      const F = K.frame(d.frame);
-      K.wantSign('arcade_' + d.id, [d.name.toUpperCase(), d.marquee || 'Arcade Row'], d.colour || 0x37e8ff, 0xffffff);
-      K.QUADS.push(['arcade_' + d.id, F.wx(0, 0.46), KERB + 2.025, F.wz(0, 0.46), F.yaw, 0.98, 0.245]);
-      const ctx = world.ctxAt(F.x, F.z);
-      const r = [0, 0, 0, 0];
-      const put = (surf, u0, y0, v0, u1, y1, v1, col) => {
-        F.box(u0, v0, u1, v1, r);
-        surf.box(r[0], y0, r[1], r[2], y1, r[3], VH.col(col));
-      };
-      // A control panel: a joystick and two buttons; a coin slot below.
-      put(ctx.prop, -0.44, KERB + 0.92, 0.45, 0.44, KERB + 1.0, 0.74, 0x15131c);
-      put(ctx.prop, -0.44, KERB + 0.6, 0.45, 0.44, KERB + 0.92, 0.5, 0x15131c);
-      put(ctx.prop, -0.2, KERB + 1.0, 0.57, -0.18, KERB + 1.1, 0.59, 0x222222);
-      put(ctx.screen, -0.23, KERB + 1.1, 0.55, -0.15, KERB + 1.15, 0.61, 0xe0403a);
-      put(ctx.screen, 0.1, KERB + 1.0, 0.56, 0.16, KERB + 1.03, 0.62, 0xffd24a);
-      put(ctx.screen, 0.22, KERB + 1.0, 0.56, 0.28, KERB + 1.03, 0.62, 0x37e8ff);
-      put(ctx.screen, -0.03, KERB + 0.7, 0.5, 0.03, KERB + 0.78, 0.51, 0xff9a3c);
-      F.box(-0.44, 0.45, 0.44, 0.74, r);
-      world.physics.addBox(r[0], KERB + 0.6, r[1], r[2], KERB + 1.0, r[3], 'metal', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS);
-    }
+  // The cabinets, the hall round them and its art: built with the world (the midway's builders).
+  Carnival.Midway.builders.push((world) => {
+    WORLD = world;
+    CABINETS.forEach((d, i) => {
+      ART.slots['side_' + d.id] = [i * 256, 0, 256, 680];
+      ART.slots['marq_' + d.id] = [i * 256, 684, 256, 100];
+      d.F = d.F || Carnival.Midway.frame(d.frame);
+      buildCabinet(world, d);
+    });
+    buildHall(world);
+    buildCarpet(world);
+    buildArtMeshes(world);
+    WORLD = null;
   });
+
+  // The hall's housekeeping: its art and carpet hidden when Jay is far off, the carpet glowing at
+  // night, the attendant at the change desk.
+  Carnival.define({
+    id: 'arcade_life',
+    name: 'Arcade Row',
+    kind: 'life',
+    sleep: 0,
+    setup(c) {
+      this.c = c;
+      this.shown = true;
+    },
+    idle() {
+      const g = this.c.game, P = g.player.pos;
+      const near = P.x > 780 && P.x < 940 && P.z > 30 && P.z < 170;
+      if (near !== this.shown) {
+        this.shown = near;
+        for (const m of ART.meshes) m.visible = near;
+      }
+      if (!near) return;
+      const env = g.environment;
+      const night = (env && env.nightFactor) || 0;
+      if (ART.carpet) ART.carpet.material.emissiveIntensity = 0.04 + 0.55 * night;
+      this.c.figures.add('stand', 846.62, KERB, 95.6, PI / 2, 3);
+    },
+    sleepNow() {
+      this.shown = false;
+      for (const m of ART.meshes) m.visible = false;
+    },
+  });
+
+  // ---------------------------------------------------- the eight games
+  // Side art painters draw a 256 × 680 picture (the name goes up its right-hand edge on top).
+  const sky = (g, w, h, stops) => {
+    const grd = g.createLinearGradient(0, 0, 0, h);
+    stops.forEach((c, i) => grd.addColorStop(i / (stops.length - 1), c));
+    g.fillStyle = grd;
+    g.fillRect(0, 0, w, h);
+  };
+  const dots = (g, n, seed, x0, y0, x1, y1, r0, r1, col) => {
+    const R = rng(seed);
+    g.fillStyle = col;
+    for (let i = 0; i < n; i++) {
+      g.beginPath();
+      g.arc(x0 + R() * (x1 - x0), y0 + R() * (y1 - y0), r0 + R() * (r1 - r0), 0, TAU);
+      g.fill();
+    }
+  };
 
   cabinet({
     id: 'dash',
     name: 'Boardwalk Dash',
     marquee: 'Run the pier!',
     colour: 0xffd24a,
-    z: 90.6,
+    side: 0xe0403a,
+    buttons: [0xe0403a, 0xffd24a, 0x37e8ff],
     game: new Dash(),
     price: 1,
     tagline: 'Ninety seconds to the end of the pier.',
@@ -1966,14 +4305,71 @@
     barks: ['Boardwalk Dash! Can you make the end of the pier?', 'One dollar a run! Mind the gulls!'],
     tickets: (score) => score / 70,
     table: [['ACE', 2000], ['GUS', 1500], ['DOT', 1100], ['KIT', 800], ['BOB', 500]],
+    art(g, w, h) {
+      sky(g, w, h, ['#ff8a3c', '#ff5c95', '#6a3fa0', '#2a1650']);
+      g.fillStyle = '#ffd24a';
+      g.beginPath();
+      g.arc(w * 0.4, h * 0.3, 46, 0, TAU);
+      g.fill();
+      // The pier's planks, running away to the sunset.
+      for (let i = 0; i < 9; i++) {
+        g.fillStyle = i % 2 ? '#8a5a32' : '#a8703e';
+        g.fillRect(0, h * 0.62 + i * 30, w, 30);
+      }
+      // A runner mid-leap over a crate, a gull, doughnuts.
+      g.fillStyle = '#c8873a';
+      g.fillRect(70, h * 0.62 - 54, 54, 54);
+      g.strokeStyle = '#6b4220';
+      g.lineWidth = 4;
+      g.strokeRect(72, h * 0.62 - 52, 50, 50);
+      g.fillStyle = '#1a1030';
+      const rx = 90, ry = h * 0.42;
+      g.beginPath();
+      g.arc(rx, ry - 34, 14, 0, TAU);
+      g.fill();
+      g.lineWidth = 12;
+      g.lineCap = 'round';
+      g.strokeStyle = '#1a1030';
+      g.beginPath();
+      g.moveTo(rx, ry - 18);
+      g.lineTo(rx - 6, ry + 26);
+      g.moveTo(rx - 6, ry + 26);
+      g.lineTo(rx - 40, ry + 34);
+      g.moveTo(rx - 6, ry + 26);
+      g.lineTo(rx + 26, ry + 50);
+      g.moveTo(rx - 2, ry - 6);
+      g.lineTo(rx + 34, ry - 22);
+      g.moveTo(rx - 2, ry - 6);
+      g.lineTo(rx - 36, ry + 6);
+      g.stroke();
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 6;
+      g.beginPath();
+      g.moveTo(150, 120);
+      g.quadraticCurveTo(165, 104, 180, 120);
+      g.quadraticCurveTo(195, 104, 210, 120);
+      g.stroke();
+      for (const [x, y] of [[50, 170], [150, 230], [60, 600]]) {
+        g.fillStyle = '#f2b0d0';
+        g.beginPath();
+        g.arc(x, y, 18, 0, TAU);
+        g.fill();
+        g.fillStyle = '#a8703e';
+        g.beginPath();
+        g.arc(x, y, 7, 0, TAU);
+        g.fill();
+      }
+    },
   });
 
   cabinet({
     id: 'sprint',
     name: 'Seafront Sprint',
+    model: 'sitdown',
     marquee: 'Four laps, flat out!',
     colour: 0xff7ab0,
-    z: 94.8,
+    side: 0x37b8ff,
+    buttons: [0xff7ab0, 0xffd24a],
     game: new Sprint(),
     price: 1,
     tagline: 'Four laps of the seafront against the clock.',
@@ -1987,6 +4383,52 @@
     barks: ['Seafront Sprint! Four laps, one dollar, no speed limit!', 'Beat the clock round the seafront!'],
     tickets: (score) => score / 100,
     table: [['ACE', 3500], ['GUS', 3000], ['DOT', 2400], ['KIT', 1600], ['BOB', 900]],
+    art(g, w, h) {
+      sky(g, w, h, ['#2fb7b0', '#37b8ff', '#1a3a6a']);
+      // A chequered band, a sweeping road with a car on it, palms.
+      for (let r = 0; r < 2; r++) for (let k = 0; k < 8; k++) {
+        g.fillStyle = (r + k) % 2 ? '#ffffff' : '#111111';
+        g.fillRect(k * 32, 20 + r * 32, 32, 32);
+      }
+      g.strokeStyle = '#3a3d44';
+      g.lineWidth = 70;
+      g.beginPath();
+      g.moveTo(-20, h * 0.9);
+      g.bezierCurveTo(w * 1.1, h * 0.75, -w * 0.3, h * 0.4, w * 0.8, h * 0.15);
+      g.stroke();
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 4;
+      g.setLineDash([18, 16]);
+      g.stroke();
+      g.setLineDash([]);
+      g.save();
+      g.translate(w * 0.42, h * 0.55);
+      g.rotate(-0.5);
+      g.fillStyle = '#ff7ab0';
+      g.fillRect(-22, -40, 44, 80);
+      g.fillStyle = '#1a1030';
+      g.fillRect(-16, -18, 32, 20);
+      g.fillStyle = '#ffd24a';
+      g.fillRect(-20, -40, 10, 6);
+      g.fillRect(10, -40, 10, 6);
+      g.restore();
+      for (const [x, y] of [[40, 300], [170, 620]]) {
+        g.strokeStyle = '#7a5230';
+        g.lineWidth = 8;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.quadraticCurveTo(x + 10, y - 50, x + 4, y - 90);
+        g.stroke();
+        g.strokeStyle = '#3fae5a';
+        g.lineWidth = 9;
+        for (let a = 0; a < 5; a++) {
+          g.beginPath();
+          g.moveTo(x + 4, y - 90);
+          g.quadraticCurveTo(x + 4 + Math.cos(a * 1.3) * 30, y - 110, x + 4 + Math.cos(a * 1.3) * 46, y - 80 + Math.sin(a) * 10);
+          g.stroke();
+        }
+      }
+    },
   });
 
   cabinet({
@@ -1994,7 +4436,8 @@
     name: 'Bubble Sub',
     marquee: 'Bubble the fish!',
     colour: 0x7dff9a,
-    z: 99.0,
+    side: 0x2fb7b0,
+    buttons: [0xffd24a, 0x7dff9a, 0xff7ab0],
     game: new Sub(),
     price: 1,
     tagline: 'Three subs, a sea full of fish, and the Big Angler.',
@@ -2008,7 +4451,274 @@
     barks: ['Bubble Sub! Save the sea from the Big Angler!', 'One dollar, three subs! Who can beat the Angler?'],
     tickets: (score) => score / 80,
     table: [['ACE', 2200], ['GUS', 1700], ['DOT', 1200], ['KIT', 800], ['BOB', 400]],
+    art(g, w, h) {
+      sky(g, w, h, ['#37b8ff', '#1a5aa0', '#0a1a40']);
+      g.fillStyle = 'rgba(255,255,255,0.12)';
+      for (let k = 0; k < 4; k++) {
+        g.beginPath();
+        g.moveTo(k * 70, 0);
+        g.lineTo(k * 70 + 30, 0);
+        g.lineTo(k * 70 - 40, h);
+        g.lineTo(k * 70 - 90, h);
+        g.fill();
+      }
+      dots(g, 28, 5, 10, 40, w - 50, h * 0.7, 4, 13, 'rgba(220,250,255,0.75)');
+      // The sub, fish, sand.
+      g.fillStyle = '#e8c87a';
+      g.fillRect(0, h - 70, w, 70);
+      g.fillStyle = '#ffd24a';
+      g.beginPath();
+      g.ellipse(w * 0.42, h * 0.78, 70, 34, 0, 0, TAU);
+      g.fill();
+      g.fillRect(w * 0.42 - 12, h * 0.78 - 56, 24, 30);
+      g.fillStyle = '#37e8ff';
+      for (const x of [-34, 0, 34]) {
+        g.beginPath();
+        g.arc(w * 0.42 + x, h * 0.78, 10, 0, TAU);
+        g.fill();
+      }
+      const fish = (x, y, s, col) => {
+        g.fillStyle = col;
+        g.beginPath();
+        g.ellipse(x, y, 26 * s, 13 * s, 0, 0, TAU);
+        g.moveTo(x + 22 * s, y);
+        g.lineTo(x + 40 * s, y - 14 * s);
+        g.lineTo(x + 40 * s, y + 14 * s);
+        g.fill();
+        g.fillStyle = '#111';
+        g.beginPath();
+        g.arc(x - 14 * s, y - 3 * s, 3 * s, 0, TAU);
+        g.fill();
+      };
+      fish(60, 160, 1, '#c8d6e0');
+      fish(150, 230, 0.8, '#c8d6e0');
+      fish(80, 330, 1.4, '#ff9a3c');
+      fish(140, 430, 1, '#ff7ab0');
+    },
   });
 
-  Carnival.Arcade = { cabinets: CABINETS, Dash, DASH, Sprint, SPRINT, Sub, SUB, rng, IN, TX, TY, TA };
+  cabinet({
+    id: 'stack',
+    name: 'Lighthouse Stack',
+    marquee: 'Build it to the stars!',
+    colour: 0xff9a3c,
+    side: 0xe0403a,
+    buttons: [0xff9a3c, 0xf2efe6, 0xe0403a],
+    game: new Stack(),
+    price: 1,
+    tagline: 'Stack a lighthouse on the end of the pier, as high as it will go.',
+    howto: [
+      'A block swings from the crane: press to drop it on the tower. Whatever hangs over the edge is sliced off, so the tower gets narrower.',
+      'Drop it dead centre for a PERFECT (25, and more for a run of them): the block grows back a little. Every tenth floor is a lamp room: 100, and a full-width block again.',
+      'The swing speeds up and the tower sways as it grows. Three blocks in the sea and it\'s over; 75 seconds in all.',
+    ],
+    keys: 'Space / click / A  drop the block',
+    prize: 'One for every 80 points',
+    barks: ['Lighthouse Stack! How high can you build it?', 'One dollar! Stack it to the stars!'],
+    tickets: (score) => score / 80,
+    table: [['ACE', 1800], ['GUS', 1300], ['DOT', 900], ['KIT', 600], ['BOB', 300]],
+    art(g, w, h) {
+      sky(g, w, h, ['#1a1040', '#5a2e8a', '#ff8a3c']);
+      dots(g, 30, 9, 0, 0, w, h * 0.45, 1, 2.5, '#ffffff');
+      // A lighthouse of red and white rings, its beam across the night, the sea.
+      const x = w * 0.42;
+      for (let i = 0; i < 14; i++) {
+        const y = h - 90 - i * 30, bw = 110 - i * 3 + Math.sin(i * 1.7) * 6;
+        g.fillStyle = i % 2 ? '#f2efe6' : '#e0403a';
+        g.fillRect(x - bw / 2 + Math.sin(i * 0.9) * 4, y, bw, 30);
+      }
+      g.fillStyle = '#ffd24a';
+      g.fillRect(x - 38, h - 90 - 14 * 30 - 30, 76, 30);
+      g.fillStyle = 'rgba(255,246,200,0.35)';
+      g.beginPath();
+      g.moveTo(x, h - 525);
+      g.lineTo(w + 20, h - 600);
+      g.lineTo(w + 20, h - 470);
+      g.fill();
+      g.fillStyle = '#1a6aa0';
+      g.fillRect(0, h - 60, w, 60);
+      g.fillStyle = '#5ab8e8';
+      for (let k = 0; k < 6; k++) g.fillRect(k * 46, h - 52, 22, 4);
+    },
+  });
+
+  cabinet({
+    id: 'catch',
+    name: 'Catch of the Day',
+    marquee: 'Fish yes, splats no!',
+    colour: 0x37e8ff,
+    side: 0x37b8ff,
+    buttons: [0x37e8ff, 0xf2efe6, 0xffd24a],
+    game: new Catch(),
+    price: 1,
+    tagline: 'The gulls are dropping fish all over the pier. Catch them in your bucket!',
+    howto: [
+      'Slide the bucket along the pier under the fish the gulls drop: sardines 10, mackerel 20, golden fish 50 (they zigzag).',
+      'Not everything a gull drops is a fish: a splat costs 20 and leaves the bucket slow for a moment. A starfish makes the bucket big.',
+      'Catch fish in a row for a multiplier (up to x5); miss one and it starts again. 75 seconds.',
+    ],
+    keys: 'A D / arrows / left stick / mouse  move the bucket',
+    prize: 'One for every 90 points',
+    barks: ['Catch of the Day! Fish in the bucket, not on the deck!', 'One dollar! Mind what the gulls drop!'],
+    tickets: (score) => score / 90,
+    table: [['ACE', 4000], ['GUS', 3000], ['DOT', 2000], ['KIT', 1200], ['BOB', 600]],
+    art(g, w, h) {
+      sky(g, w, h, ['#8fd3ff', '#ffe9c7', '#2a7ab0', '#1a4a80']);
+      // Gulls with fish, fish falling, the bucket on the planks.
+      const gull = (x, y, s) => {
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = 7 * s;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(x - 30 * s, y - 10 * s);
+        g.quadraticCurveTo(x - 12 * s, y - 18 * s, x, y);
+        g.quadraticCurveTo(x + 12 * s, y - 18 * s, x + 30 * s, y - 10 * s);
+        g.stroke();
+      };
+      gull(60, 90, 1.2);
+      gull(170, 170, 0.9);
+      gull(80, 260, 0.7);
+      const fish = (x, y, r, col) => {
+        g.save();
+        g.translate(x, y);
+        g.rotate(r);
+        g.fillStyle = col;
+        g.beginPath();
+        g.ellipse(0, 0, 26, 11, 0, 0, TAU);
+        g.moveTo(20, 0);
+        g.lineTo(38, -13);
+        g.lineTo(38, 13);
+        g.fill();
+        g.restore();
+      };
+      fish(70, 330, 1.4, '#c8d6e0');
+      fish(160, 380, 1.8, '#3a7ac8');
+      fish(90, 440, 1.2, '#ffd24a');
+      g.fillStyle = '#9b6a3c';
+      g.fillRect(0, h - 110, w, 110);
+      g.fillStyle = '#37b8ff';
+      g.beginPath();
+      g.moveTo(40, h - 200);
+      g.lineTo(170, h - 200);
+      g.lineTo(158, h - 110);
+      g.lineTo(52, h - 110);
+      g.fill();
+      g.fillStyle = '#1a6aa0';
+      g.fillRect(36, h - 206, 138, 10);
+      fish(105, h - 218, -1.4, '#c8d6e0');
+    },
+  });
+
+  cabinet({
+    id: 'serpent',
+    name: 'Serpent Supper',
+    marquee: 'Grow it long!',
+    colour: 0x7dff6a,
+    side: 0x2fb7b0,
+    buttons: [0x7dff6a, 0xff9ac8, 0xffd24a],
+    game: new Serpent(),
+    price: 1,
+    tagline: 'A hungry young sea serpent and a lagoon full of shrimp.',
+    howto: [
+      'Steer the serpent to the shrimp: each one is 10 (more as it grows) and makes it a segment longer. Grab a golden pearl for 50 before it sinks.',
+      'Don\'t bump a rock, the edge of the lagoon or your own tail: you have three lives, and a bump shrinks you to half. More rocks wash in as the tide turns.',
+      'It swims faster as it goes. 75 seconds, and every segment at the end is worth 5 more.',
+    ],
+    keys: 'Arrows / W A S D / left stick / a flick of the mouse  turn',
+    prize: 'One for every 40 points',
+    barks: ['Serpent Supper! Feed the serpent, watch it grow!', 'One dollar! How long can you grow it?'],
+    tickets: (score) => score / 40,
+    table: [['ACE', 900], ['GUS', 700], ['DOT', 500], ['KIT', 300], ['BOB', 150]],
+    art(g, w, h) {
+      sky(g, w, h, ['#1f8a8a', '#2fb7b0', '#1a5a6a']);
+      // A long green serpent coiling down the panel, shrimp, rocks.
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      g.strokeStyle = '#3fae5a';
+      g.lineWidth = 34;
+      g.beginPath();
+      g.moveTo(60, h - 40);
+      g.bezierCurveTo(220, h - 140, -20, h - 260, 120, h - 350);
+      g.bezierCurveTo(240, h - 430, 20, h - 520, 110, h - 600);
+      g.stroke();
+      g.strokeStyle = '#7dff6a';
+      g.lineWidth = 12;
+      g.stroke();
+      g.fillStyle = '#5ad26a';
+      g.beginPath();
+      g.ellipse(112, h - 610, 30, 24, -0.4, 0, TAU);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      g.fillRect(100, h - 628, 9, 9);
+      g.fillRect(122, h - 632, 9, 9);
+      g.fillStyle = '#111';
+      g.fillRect(104, h - 625, 4, 4);
+      g.fillRect(126, h - 629, 4, 4);
+      g.strokeStyle = '#ff9ac8';
+      g.lineWidth = 7;
+      for (const [x, y] of [[170, 120], [40, 300], [180, 470]]) {
+        g.beginPath();
+        g.arc(x, y, 12, -0.3, PI + 0.6);
+        g.stroke();
+      }
+      g.fillStyle = '#6b6f78';
+      for (const [x, y] of [[20, 200], [190, 300], [30, 560]]) g.fillRect(x, y, 36, 26);
+    },
+  });
+
+  cabinet({
+    id: 'reef',
+    name: 'Reef Rebound',
+    marquee: 'Pearl versus coral!',
+    colour: 0xff7ab0,
+    side: 0xb45cff,
+    buttons: [0xff7ab0, 0xfff6f0, 0x37e8ff],
+    game: new Reef(),
+    price: 1,
+    tagline: 'A clam shell, a pearl, and a reef that needs breaking up.',
+    howto: [
+      'Move the shell to keep the pearl bouncing up into the coral: pale coral breaks at one knock (10), orange at two (20), purple at three (30).',
+      'Hit the pearl with the shell\'s edge to send it off at an angle: coral broken on one flight scores double, triple, up to five times. Catch a falling bubble for a wide shell (W), three pearls (3) or a slow tide (S).',
+      'Three pearls to lose. Clear a reef for 200 and the next one grows. 90 seconds.',
+    ],
+    keys: 'A D / arrows / left stick / mouse  move the shell   ·   Space / click / A  launch',
+    prize: 'One for every 35 points',
+    barks: ['Reef Rebound! Smash the coral, free the fish!', 'One dollar, three pearls! Break the reef!'],
+    tickets: (score) => score / 35,
+    table: [['ACE', 1600], ['GUS', 1200], ['DOT', 800], ['KIT', 500], ['BOB', 250]],
+    art(g, w, h) {
+      sky(g, w, h, ['#1a6aa0', '#0a2a50']);
+      // Coral blocks, a pearl flying up, the shell.
+      const cols = ['#ffc8c0', '#ff9a3c', '#b45cff'];
+      for (let r = 0; r < 6; r++) for (let k = 0; k < 3; k++) {
+        if ((r + k) % 4 === 3) continue;
+        g.fillStyle = cols[(r + k) % 3];
+        g.fillRect(14 + k * 62, 40 + r * 34, 56, 26);
+      }
+      g.fillStyle = '#fff6f0';
+      g.beginPath();
+      g.arc(110, 380, 16, 0, TAU);
+      g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.5)';
+      g.lineWidth = 4;
+      g.setLineDash([10, 10]);
+      g.beginPath();
+      g.moveTo(60, h - 120);
+      g.lineTo(110, 380);
+      g.lineTo(190, 270);
+      g.stroke();
+      g.setLineDash([]);
+      g.fillStyle = '#ff9ac8';
+      g.beginPath();
+      g.ellipse(60, h - 100, 70, 28, 0, PI, TAU);
+      g.fill();
+      for (const [x, y, c] of [[40, 300, '#ffd24a'], [170, 330, '#37e8ff'], [150, 460, '#ff9a3c']]) {
+        g.fillStyle = c;
+        g.fillRect(x - 14, y - 6, 26, 12);
+        g.fillRect(x + 12, y - 9, 6, 18);
+      }
+    },
+  });
+
+  Carnival.Arcade = Object.assign(Arcade, { cabinets: CABINETS, HALL, SPOTS, MODELS, Dash, DASH, Sprint, SPRINT, Sub, SUB, Stack, STACK, Catch, CATCH, Serpent, SERP, Reef, REEF, rng, IN, TX, TY, TA });
 })();

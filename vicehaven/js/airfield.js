@@ -123,6 +123,8 @@
     const top = h || 0.32;
     ctx.prop.box(x - 0.05, 0, z - 0.05, x + 0.05, top - 0.08, z + 0.05, VH.col(0x5a5f66));
     ctx.screen.box(x - 0.14, top - 0.1, z - 0.14, x + 0.14, top + 0.06, z + 0.14, VH.col(hex, mul || 2.4));
+    // The approach lights' stalks stand out in the farmland (4.0): solid. The knee-high edge lights stay as they were.
+    if (top > 0.6) world.physics.addBox(x - 0.05, 0, z - 0.05, x + 0.05, top + 0.06, z + 0.05, 'pole', F().SOLID);
   }
 
   /** A box drawn into a surface and made solid. */

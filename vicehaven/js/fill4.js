@@ -420,9 +420,11 @@
       else world.physics.addBox(lo + 0.2, 0, a - 0.3, hi - 0.1, y + 2.0, a + 0.3, 'hedge', F().SOLID);
     } else {
       const v = VEG[rng.int(0, VEG.length - 1)];
+      // Veg rows are below the knee and walked through, like the crops in the fields.
+      const row = (a0, a1, y0, y1, col) => (alongX ? ctx.detailMatte.box(a0, y0, lo, a1, y1, hi, col, { bottom: false }) : ctx.detailMatte.box(lo, y0, a0, hi, y1, a1, col, { bottom: false })); // solidity: passable
       for (let a = along0 + 0.3; a < along1 - 0.2; a += v.rows + 0.35) {
-        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y, y + v.h, VH.col(v.side)); // solidity: passable
-        box(a, Math.min(along1, a + v.rows * 0.7), lo, hi, y + v.h - 0.02, y + v.h, VH.col(v.top)); // solidity: passable
+        row(a, Math.min(along1, a + v.rows * 0.7), y, y + v.h, VH.col(v.side));
+        row(a, Math.min(along1, a + v.rows * 0.7), y + v.h - 0.02, y + v.h, VH.col(v.top));
       }
     }
     if (hasShed) {

@@ -314,6 +314,7 @@
       gctx.screen.box(W.x1 - 3.02, 1.2, GATE.z1 + 2.6, W.x1 - 2.98, 2.3, GATE.z1 + 6.4, VH.col(0xfff1d8, 1.0));
       gctx.prop.box(W.x1 - 9.3, 3, GATE.z1 + 1.7, W.x1 - 2.7, 3.3, GATE.z1 + 7.3, VH.col(0x5d6b3c), { bottom: true });
       gctx.prop.box(W.x1 + 1.2, 0, GATE.z1 - 0.4, W.x1 + 1.8, 1.1, GATE.z1 + 0.2, VH.col(0xe0b12e));
+      world.physics.addBox(W.x1 + 1.2, 0, GATE.z1 - 0.4, W.x1 + 1.8, 1.1, GATE.z1 + 0.2, 'pole', VH.COLLIDE.SOLID); // the barrier's post (4.0 audit)
       gctx.prop.box(W.x1 + 1.43, 1.0, GATE.z1 - 0.2, W.x1 + 1.57, 9, GATE.z1 - 0.06, VH.col(0xd8262e)); // barrier, up
       for (let z = GATE.z0 + 1; z < GATE.z1 - 0.5; z += 2.4) gctx.prop.box(W.x1 + 8, 0, z, W.x1 + 8.6, 0.25, z + 1.2, VH.col(0xe0b12e)); // road blockers, lowered
       (world.signs || (world.signs = [])).push({ x: W.x1 + 0.35, y: 2.2, z: GATE.z0 - 14, yaw: Math.PI / 2, w: 11, h: 2.6, lines: ['FORT BREAKWATER', 'RESTRICTED AREA', 'NO UNAUTHORISED ENTRY'], style: 'brand' });

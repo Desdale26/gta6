@@ -349,19 +349,7 @@
     ctx.screen.box(A.x1 + 0.02, KERB + 4.3, A.z0 + 0.3, A.x1 + 0.12, KERB + 4.55, A.z1 - 0.3, VH.col(0xff3d8b, 2.2));
     ctx.screen.box(A.x1 + 0.02, KERB + A.h - 0.35, A.z0 + 0.3, A.x1 + 0.12, KERB + A.h - 0.15, A.z1 - 0.3, VH.col(0x37e8ff, 2.2));
     for (const [z0, z1] of piers) for (const z of [z0 + 0.4, z1 - 0.4]) ctx.screen.box(A.x1 + 0.02, KERB + 0.3, z - 0.1, A.x1 + 0.12, KERB + 4.3, z + 0.1, VH.col(0x37e8ff, 2));
-    // Cabinets in rows, their screens and marquees lit.
-    const cab = [0x1d1f2a, 0x2a1d3a, 0x3a1d22];
-    let i = 0;
-    for (let x = A.x0 + 3; x < A.x1 - 6; x += 5) {
-      for (let z = A.z0 + 2; z < A.z1 - 2; z += 2.1) {
-        if (x > A.x0 + 15 && x < A.x0 + 22) continue; // the aisle
-        const face = x < A.x0 + 15 ? 1 : -1;
-        ctx.prop.box(x - 0.45, KERB, z - 0.5, x + 0.45, KERB + 1.9, z + 0.5, VH.col(cab[i++ % 3]));
-        world.physics.addBox(x - 0.45, 0, z - 0.5, x + 0.45, KERB + 1.9, z + 0.5, 'metal', F().SOLID | F().SHOTS);
-        ctx.screen.box(x + face * 0.46 - 0.02, KERB + 1.1, z - 0.36, x + face * 0.46 + 0.02, KERB + 1.6, z + 0.36, VH.col(NEON[i % NEON.length], 1.3));
-        ctx.screen.box(x - 0.45, KERB + 1.9, z - 0.5, x + 0.45, KERB + 2.15, z + 0.5, VH.col(NEON[(i + 2) % NEON.length], 1.6));
-      }
-    }
+    // The hall's fit-out (the cabinets, every one playable, the carpet, the change desk) is js/carnival-arcade.js's.
     sign(world, { x: A.x1 + 0.2, y: KERB + 6.2, z: (A.z0 + A.z1) / 2, yaw: Math.PI / 2, w: 16, h: 2.6, lines: ['ARCADE ROW', 'Prizes every time*'], style: 'neon', posts: false });
     // The Golden Grabber: a gold claw machine under a glass dome, by the arcade's north door.
     const G = GRABBER;

@@ -209,6 +209,62 @@
     c.propMatte.cylinder(x, KERB + h, z, 0.2, 0.2, 0.01, 10, col(0x0c0c0c), true); // solidity: passable
   }
 
+  /**
+   * A heap of loose scrap: a rusty mound (a second, smaller one leaning on it)
+   * stuck with panels, doors and pipes. You can climb it: each mound is solid
+   * in layers a stride high (round, hugging the slope), so Jay steps up it to
+   * the top; a car just runs into it.
+   */
+  function scrapHeap(world, x, z, r, h, seed) {
+    const c = world.ctxAt(x, z);
+    const mounds = [
+      [x, z, r, h],
+      [x + r * 0.42 * Math.cos(seed), z + r * 0.42 * Math.sin(seed), r * 0.62, h * 0.62],
+      [x + r * 0.5 * Math.cos(seed + 2.4), z + r * 0.5 * Math.sin(seed + 2.4), r * 0.5, h * 0.45],
+    ];
+    let j = 0;
+    for (const [mx, mz, mr, mh] of mounds) {
+      const rt = mr * 0.2, slope = Math.atan2(mh, mr - rt);
+      // The core: dark, so the gaps between the panels read as shadow.
+      c.propMatte.cylinder(mx, KERB, mz, mr, rt, mh, 12, col(0x4a443e), true);
+      const n = Math.ceil(mh / 0.4);
+      for (let k = 1; k <= n; k++) {
+        const ym = (mh * (k - 0.5)) / n;
+        S().disc(world, mx, mz, mr - ((mr - rt) * ym) / mh, k === 1 ? 0 : KERB + (mh * (k - 1)) / n, KERB + (mh * k) / n, 'metal', F().ALL);
+      }
+      // The scrap: panels, doors, sheets and bonnets lying on the slope at all angles,
+      // overlapping, hugging it (proud by a few cm: the steps under them are the collider).
+      const slabs = Math.round(mr * mr * 1.15);
+      for (let i = 0; i < slabs; i++, j++) {
+        const hq = (q) => hash(seed * 131 + j, q);
+        const a = hq(61) * 2 * PI;
+        const rr = rt + 0.2 + (mr - rt - 0.5) * Math.sqrt(hq(62));
+        const ys = KERB + (mh * (mr - rr)) / (mr - rt);
+        const kind = hq(63);
+        const hexB = kind < 0.46 ? paint(seed * 13 + j) : kind < 0.68 ? (hq(67) < 0.5 ? 0x9a5a2e : 0x7a4526) : kind < 0.9 ? 0xaab0b6 : 0x2a2a2c;
+        const sx = 0.6 + 1.0 * hq(64), sz = 0.7 + 1.2 * hq(65), sy = kind >= 0.9 ? 0.3 : 0.05 + 0.12 * hq(66);
+        const yaw = PI / 2 - a + (hq(68) - 0.5) * 0.4, roll = slope + (hq(69) - 0.5) * 0.3; // kept close to the slope: no edge stands proud of the steps
+        K().tiltBox(kind < 0.46 ? c.prop : c.propMatte, mx + Math.cos(a) * rr, ys + sy * 0.1, mz + Math.sin(a) * rr, sx, sy, sz, yaw, roll, hexB);
+      }
+    }
+  }
+
+  /** A roll-off skip full of scrap: solid, a lip round the top, junk showing over it. */
+  function skip(world, x, z, yaw, hex, seed) {
+    const c = world.ctxAt(x, z);
+    c.prop.orientedBox(x, z, 0.95, 2.1, yaw, KERB, KERB + 1.45, col(hex));
+    c.prop.orientedBox(x, z, 1.0, 2.15, yaw, KERB + 1.35, KERB + 1.5, VH.colMul(col(hex), 0.75));
+    world.physics.addOrientedBox(x, z, 1.0, 2.15, yaw, 0, KERB + 1.55, 'metal', F().ALL);
+    c.propMatte.orientedBox(x, z, 0.85, 2.0, yaw, KERB + 1.5, KERB + 1.52, col(0x3a332c));
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    for (let i = 0; i < 5; i++) {
+      const u = (hash(seed + i, 71) - 0.5) * 1.2, v = (hash(seed + i, 72) - 0.5) * 3.2;
+      c.propMatte.orientedBox(x + fz * u + fx * v, z - fx * u + fz * v, 0.25, 0.4, yaw + hash(seed + i, 73) * 2, KERB + 1.4, KERB + 1.62, col(i % 2 ? 0x7a4a2a : paint(seed + i)));
+    }
+    // Lifting lugs at the ends.
+    for (const s of [-1, 1]) c.prop.orientedBox(x + fx * s * 2.18, z + fz * s * 2.18, 0.3, 0.06, yaw, KERB + 0.9, KERB + 1.2, col(0x2a2d31)); // solidity: passable
+  }
+
   /** A floodlight mast: a pole, a head of lamps, and a pool on the ground at night. */
   function mast(world, x, z, h, aimX, aimZ, r) {
     const c = world.ctxAt(x, z);
@@ -288,6 +344,11 @@
     hulks.forEach(([x, z, yaw], i) => hulk(world, x, z, yaw, paint(i * 11 + 3), i));
     for (const [x, z, n] of [[-339, 1676, 6], [-340.2, 1677.4, 4], [-338.6, 1678.6, 5], [-386, 1676, 6], [-384.6, 1677, 3], [-612, 1590, 6], [-610.6, 1591.2, 5], [-611.8, 1592.6, 4],
       [-500, 1570, 5], [-498.8, 1571, 6], [-388, 1580, 6], [-386.8, 1581.4, 4], [-560, 1546, 5], [-561.4, 1547, 6]]) tyres(world, x, z, n);
+    // Heaps of loose scrap waiting for the magnet (climbable), skips along the east wall.
+    scrapHeap(world, -360, 1590, 9, 5.6, 3);
+    scrapHeap(world, -356, 1546, 7.5, 4.6, 7);
+    scrapHeap(world, -592, 1566, 6.5, 4.2, 11);
+    [[-334.5, 1606, 0, 0xd8a520], [-334.5, 1612, 0, 0x2f6fa8], [-334.5, 1666, 0, 0xd8a520], [-334.5, 1740, 0.0, 0x2f7f6f]].forEach(([x, z, yaw, hex], i) => skip(world, x, z, yaw, hex, 40 + i * 9));
     // Floodlight masts.
     mast(world, -526, 1604, 16, -516, 1580, 26);
     mast(world, -488, 1660, 16, -476, 1660, 24);
@@ -295,6 +356,7 @@
     mast(world, -432, 1672, 16, -432, 1672, 24);
     mast(world, -400, 1604, 16, -420, 1585, 26);
     mast(world, -488, 1740, 14, -476, 1730, 20);
+    mast(world, -340, 1570, 14, -356, 1572, 24);
 
     buildCrusher(world);
     buildCrane(world);

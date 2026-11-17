@@ -626,6 +626,18 @@ the way out (turning round at the fort's gate and the ends of Airport
 Road). Green signs and gantries point the way to the airport, the base,
 Northgate and back downtown, and taxi fares now go to and from all of it.
 
+**No empty land.** The countryside ring round the city is now six more
+districts: **Haverly Farms** north of the airport (crop fields in strips
+of colour, farmhouses, barns, silos, paddocks of cows, sheep and horses,
+country lanes), **Gateway Park** (the airport's back yard: hotels, car
+hire, freight yards), **Lantern Heights** (terraces and walk-ups between
+Old Market and Halcyon), **Southgate** (flats and shops south of Palm
+Crescent), **Redwater** (the south-west countryside and a village) and
+**Paloma Cove**, an islet off the south-east corner reached by the Cove
+Causeway. Allotments and greens line the edges of the map. 17 new roads
+and 21 longer old ones tie it all to the ring road, with traffic lights,
+traffic, pedestrians, the GPS and every name on the HUD and the maps.
+
 **Daytime on / off.** Press **T** (D-pad right on a controller) at any time:
 the sun comes straight up and stays up, even in story scenes. Press it again
 for the day and night cycle. The pause menu has the same switch, and so does
