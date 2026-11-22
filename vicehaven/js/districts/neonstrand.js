@@ -351,18 +351,8 @@
     for (const [z0, z1] of piers) for (const z of [z0 + 0.4, z1 - 0.4]) ctx.screen.box(A.x1 + 0.02, KERB + 0.3, z - 0.1, A.x1 + 0.12, KERB + 4.3, z + 0.1, VH.col(0x37e8ff, 2));
     // The hall's fit-out (the cabinets, every one playable, the carpet, the change desk) is js/carnival-arcade.js's.
     sign(world, { x: A.x1 + 0.2, y: KERB + 6.2, z: (A.z0 + A.z1) / 2, yaw: Math.PI / 2, w: 16, h: 2.6, lines: ['ARCADE ROW', 'Prizes every time*'], style: 'neon', posts: false });
-    // The Golden Grabber: a gold claw machine under a glass dome, by the arcade's north door.
-    const G = GRABBER;
-    const gctx = world.ctxAt(G.x, G.z);
-    gctx.prop.box(G.x - 0.9, KERB, G.z - 0.9, G.x + 0.9, KERB + 1.1, G.z + 0.9, VH.col(0xd4a017));
-    gctx.screen.box(G.x - 0.92, KERB + 0.9, G.z - 0.92, G.x + 0.92, KERB + 1.02, G.z + 0.92, VH.col(0xffd96a, 1.8));
-    // (The glass, the claw and the prizes inside are js/carnival-games.js's: the claw is played.)
-    for (const [cx, cz] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) gctx.prop.box(G.x + cx - 0.06, KERB + 1.1, G.z + cz - 0.06, G.x + cx + 0.06, KERB + 2.3, G.z + cz + 0.06, VH.col(0xd4a017));
-    gctx.prop.box(G.x - 0.95, KERB + 2.3, G.z - 0.95, G.x + 0.95, KERB + 2.55, G.z + 0.95, VH.col(0xd4a017));
-    gctx.screen.cylinder(G.x, KERB + 2.55, G.z, 0.8, 0.15, 0.75, 10, VH.col(0x9fe6ff, 0.6), true);
-    gctx.prop.cylinder(G.x, KERB + 3.3, G.z, 0.12, 0.12, 0.18, 8, VH.col(0xffd24a), true);
-    world.physics.addBox(G.x - 0.95, 0, G.z - 0.95, G.x + 0.95, KERB + 3.3, G.z + 0.95, 'metal', F().ALL);
-    sign(world, { x: G.x + 0.96, y: KERB + 0.55, z: G.z, yaw: Math.PI / 2, w: 1.7, h: 0.5, lines: ['GOLDEN GRABBER'], style: 'neon', colors: GOLD, posts: false });
+    // The Golden Grabber (a gold claw machine under a glass dome by the arcade's north door, at GRABBER) is
+    // js/carnival-games.js's, case and all: the claw is played, and the DLC story takes the machine away.
   }
 
   /** The Skyhook: a tall drop tower (its ring of seats rides up and falls in WharfLife). */

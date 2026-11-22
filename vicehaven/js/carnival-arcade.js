@@ -11,13 +11,18 @@
  *            circuit (the sand slows you, cones scatter, yellow arrows boost)
  *   sub      Bubble Sub: a little submarine on the sea bed blowing bubbles at
  *            shoals of sardines, jellyfish and puffers, then the Big Angler
+ *   stack    Lighthouse Stack: drop the swinging floors into a tower
+ *   catch    Catch of the Day: a bucket on the pier catching the fish the
+ *            gulls drop (and not what else the gulls drop)
+ *   serpent  Serpent Supper: grow a sea serpent on shrimp round the rocks
+ *   reef     Reef Rebound: a clam-shell bat and a pearl breaking up coral
+ *   rhythm   Crab Conga: press the arrows in time to the band's tune
  *
  * They run on the stall framework (VH.Carnival.stall, js/carnival-midway.js):
  * the rules card, one player or two, the countdown, the results and the
  * tickets. A score good enough for the cabinet's table of five asks for
- * initials. The cabinets are neonstrand.js's (the west row of Arcade Row,
- * facing the aisle); this file gives three of them a live screen, a marquee
- * and a control panel.
+ * initials. This file also fits out the hall (Arcade Row in neonstrand.js):
+ * the eight cabinets themselves, the change desk, the carpet and the neon.
  *
  * A game here is a class with reset(seed), step(dt, IN) (IN: the controls
  * this frame, below), draw(c) (a 2D context), demo(IN) (the attract mode's
@@ -3265,6 +3270,507 @@
     }
   }
 
+  // ================================================================ CRAB CONGA
+  // A dancing game on the bandstand at the end of the pier. Arrows drift down four lanes to the shells
+  // at the bottom in time to the band's tune: press each one as it reaches its shell (the arrow keys,
+  // the stick or a flick of the mouse) and the crab on the stage dances the step, and the tune plays
+  // on (miss one and that note of the tune drops out). Gold bars across all four lanes are claps: the
+  // button. Hits in a row raise the multiplier and grow the conga line of little crabs behind the
+  // dancer; a miss, or a press with nothing there, sends the line scuttling off. One song, 75 seconds:
+  // a new dance every go to the same tune (the same dance for both players on a two-player go).
+  const CONGA = {
+    secs: 75,
+    beat: 0.5, //        seconds a beat (120 a minute), four to the bar
+    lead: 1, //          the count-in before the first bar
+    hitY: 200, //        the shells' line and where the arrows come in
+    topY: 24,
+    lane0: 12, //        the lanes' left edge and width
+    laneW: 34,
+    perfect: 0.05, //    how far off a press may be (s) for each grade, and how early one can be and still
+    great: 0.1, //       count (as a miss) rather than be a press with nothing there
+    good: 0.16,
+    early: 0.25,
+    pts: [10, 6, 3], //  points for perfect, great and good, times the multiplier
+    mouse: 0.05, //      a flick of the mouse this far (radians) is an arrow
+    max: 260, //         room for the notes and the band's own notes
+    maxEv: 1600,
+  };
+  const CONGA_COLS = ['#ff7ab0', '#37e8ff', '#7dff6a', '#ffd24a', '#ffb92e']; // left, down, up, right; the claps
+  const CONGA_ANG = [-PI / 2, PI, 0, PI / 2];
+  const CONGA_GRADE = [['PERFECT', '#ffffff'], ['GREAT', '#7dff9a'], ['GOOD', '#37e8ff'], ['TOO EARLY', '#ff9a6a'], ['MISS', '#ff6a6a'], ['OOPS', '#ff6a6a']];
+  // The band's tune (original): phrases of four bars, [semitones from middle C, beats]; the chords under them.
+  const CONGA_CHORDS = {
+    Am: { bass: -15, stab: [9, 12, 16] },
+    F: { bass: -19, stab: [5, 9, 12] },
+    C: { bass: -12, stab: [4, 7, 12] },
+    G: { bass: -17, stab: [2, 7, 11] },
+    Em: { bass: -20, stab: [4, 7, 11] },
+  };
+  const CONGA_PHRASES = {
+    A: { chords: ['Am', 'F', 'C', 'G'], tune: [[9, 1], [12, 0.5], [9, 0.5], [7, 1], [4, 1], [5, 0.5], [9, 0.5], [12, 1], [9, 0.5], [5, 0.5], [7, 1], [7, 1], [12, 0.5], [11, 0.5], [12, 1], [16, 1], [14, 1.5], [12, 0.5], [11, 1], [7, 1]] },
+    B: { chords: ['Am', 'F', 'C', 'G'], tune: [[16, 1], [14, 0.5], [12, 0.5], [9, 1], [12, 1], [17, 0.5], [16, 0.5], [14, 0.5], [12, 0.5], [9, 1], [5, 1], [7, 0.5], [9, 0.5], [12, 0.5], [14, 0.5], [16, 1], [12, 1], [11, 0.5], [12, 0.5], [14, 1], [11, 1], [7, 1]] },
+    C: { chords: ['F', 'G', 'Em', 'Am'], tune: [[12, 1], [9, 1], [12, 1], [17, 1], [14, 1], [11, 1], [14, 1], [19, 1], [16, 0.5], [14, 0.5], [12, 0.5], [11, 0.5], [12, 1], [16, 1], [12, 0.5], [11, 0.5], [9, 1], [4, 1], [9, 1]] },
+  };
+  const CONGA_SONG = 'ABABCABCB'; // nine phrases (36 bars), then the last chord
+
+  class Conga {
+    constructor() {
+      this.title = 'CRAB CONGA';
+      this.ink = '#ff6a5c';
+      const N = CONGA.max, E = CONGA.maxEv;
+      // The notes to press: time, lane (0-3 arrows, 4 a clap), state (0 to come, 1 hit, 2 missed),
+      // grade, the tune's pitch and length for the sound a hit makes, seconds on screen.
+      this.nt = new Float32Array(N);
+      this.nl = new Uint8Array(N);
+      this.ns = new Uint8Array(N);
+      this.np = new Int8Array(N);
+      this.nlen = new Float32Array(N);
+      this.nlead = new Float32Array(N);
+      // The band: time, kind (0 tune, 1 bass, 2 kick, 3 snare, 4 hat, 5 chord), pitch, length.
+      this.et = new Float32Array(E);
+      this.ek = new Uint8Array(E);
+      this.ep = new Int8Array(E);
+      this.el = new Float32Array(E);
+      this.press = [false, false, false, false, false];
+      this.flash = new Float32Array(5); // a shell lit by a hit (+) or a stray press (-)
+      this.pops = [];
+      for (let i = 0; i < 4; i++) this.pops.push({ t: 9, x: 0, y: 0, txt: '', col: '' });
+      this._popI = 0;
+      this.sfx = () => {};
+      this.reset(1);
+    }
+
+    reset(seed) {
+      this.rnd = rng(seed);
+      this.t = 0;
+      this.score = 0;
+      this.over = null;
+      this.combo = 0;
+      this.best = 0;
+      this.hits = 0;
+      this.perfects = 0;
+      this.misses = 0;
+      this.move = -1; //   the crab's step (a lane) and how long ago
+      this.moveT = 9;
+      this.gone = 0; //    crabs that left the conga line, and how long ago
+      this.goneT = 9;
+      this.cheer = -9;
+      this.mxAcc = this.myAcc = 0;
+      this._sx = this._sy = 0;
+      this.flash.fill(0);
+      for (const p of this.pops) p.t = 9;
+      this.compose();
+    }
+
+    /** The song: the band's notes and the dance to it (the arrows), from the seed. */
+    compose() {
+      const C = CONGA, B = C.beat;
+      const ev = [], mel = [];
+      CONGA_SONG.split('').forEach((name, k) => {
+        const P = CONGA_PHRASES[name], b0 = k * 16;
+        let bt = 0;
+        for (const [p, len] of P.tune) {
+          const e = { t: C.lead + (b0 + bt) * B, k: 0, p, l: len * B * 0.85 };
+          mel.push({ b: b0 + bt, p, len, e });
+          ev.push(e);
+          bt += len;
+        }
+        P.chords.forEach((ch, bar) => {
+          const Q = CONGA_CHORDS[ch], bb = b0 + bar * 4;
+          for (let e = 0; e < 8; e++) {
+            const t = C.lead + (bb + e / 2) * B;
+            ev.push({ t, k: 4, p: 0, l: 0 });
+            if (e % 4 === 0) ev.push({ t, k: 2, p: 0, l: 0 });
+            if (e % 4 === 2) ev.push({ t, k: 3, p: 0, l: 0 });
+            if (e % 2 === 0) ev.push({ t, k: 1, p: Q.bass + (e % 4 === 2 ? 12 : 0), l: B * 0.4 });
+            else for (const s of Q.stab) ev.push({ t, k: 5, p: s, l: 0.07 });
+          }
+        });
+      });
+      const end = CONGA_SONG.length * 16;
+      ev.push({ t: C.lead + end * B, k: 2, p: 0, l: 0 });
+      ev.push({ t: C.lead + end * B, k: 1, p: -15, l: 0.9 });
+      for (const s of CONGA_CHORDS.Am.stab) ev.push({ t: C.lead + end * B, k: 5, p: s, l: 0.9 });
+      // The count-in: four hats.
+      for (let i = 0; i < 2; i++) ev.push({ t: i * B, k: 4, p: 0, l: 0 });
+      // The dance: busier as the song goes on.
+      //   bars 0-3: every other beat; 4-11: every beat; 12-19: every beat, a clap every other bar;
+      //   20-27: the tune's notes, a clap every bar; 28-35: the tune's notes and every beat between.
+      const marks = [];
+      for (let bar = 0; bar < end / 4; bar++) {
+        const lv = bar < 4 ? 0 : bar < 12 ? 1 : bar < 20 ? 2 : bar < 28 ? 3 : 4, b0 = bar * 4;
+        const at = new Set();
+        if (lv === 0) at.add(b0).add(b0 + 2);
+        else if (lv <= 2) for (let i = 0; i < 4; i++) at.add(b0 + i);
+        else {
+          for (const m of mel) if (m.b >= b0 && m.b < b0 + 4) at.add(m.b);
+          if (lv === 4) for (let i = 0; i < 4; i++) at.add(b0 + i);
+        }
+        let clapAt = -1;
+        if ((lv === 2 && bar % 2 === 0) || lv >= 3) clapAt = b0;
+        const extra = lv === 4 && bar % 4 === 3 ? b0 + 2 : -1; // a second clap closing each phrase
+        for (const b of Array.from(at).sort((x, y) => x - y)) marks.push({ b, clap: b === clapAt || b === extra, lv });
+      }
+      marks.push({ b: end, clap: true, lv: 4 });
+      // Arrows follow the tune: up or right as it rises, down or left as it falls, the same lane again
+      // for the same note.
+      let n = 0, mi = 0, prevP = null, prevL = (this.rnd() * 4) | 0, same = 0;
+      for (const mk of marks) {
+        if (n >= C.max) break;
+        while (mi + 1 < mel.length && mel[mi + 1].b <= mk.b + 1e-6) mi++;
+        const m = mel[Math.min(mi, mel.length - 1)];
+        const onset = Math.abs(m.b - mk.b) < 1e-6;
+        let lane;
+        if (mk.clap) lane = 4;
+        else if (prevP === null) lane = prevL;
+        else if (m.p > prevP || (m.p === prevP && same >= 2 && this.rnd() < 0.5)) lane = this.rnd() < 0.5 ? 2 : 3;
+        else if (m.p < prevP || same >= 2) lane = this.rnd() < 0.5 ? 1 : 0;
+        else lane = prevL;
+        if (lane < 4) {
+          same = lane === prevL ? same + 1 : 0;
+          prevL = lane;
+          prevP = m.p;
+        }
+        this.nt[n] = C.lead + mk.b * B;
+        this.nl[n] = lane;
+        this.ns[n] = 0;
+        this.np[n] = onset ? m.p : m.p + 12;
+        this.nlen[n] = onset && lane < 4 ? m.len * B * 0.85 : -1; // -1: a woodblock tap, not a note of the tune
+        this.nlead[n] = mk.lv <= 1 ? 1.6 : mk.lv === 2 ? 1.4 : 1.2;
+        // That note of the tune is now the player's to play.
+        if (onset && lane < 4) m.e.k = 9;
+        n++;
+      }
+      this.n = n;
+      this.ni = 0; // the first note still to come
+      ev.sort((a, b) => a.t - b.t);
+      this.ne = Math.min(C.maxEv, ev.length);
+      for (let i = 0; i < this.ne; i++) {
+        const e = ev[i];
+        this.et[i] = e.t;
+        this.ek[i] = e.k;
+        this.ep[i] = e.p;
+        this.el[i] = e.l;
+      }
+      this.ei = 0;
+    }
+
+    line() {
+      const bits = [this.hits + ' of ' + this.n + ' steps in time'];
+      if (this.best >= 5) bits.push('a conga of ' + this.best);
+      return bits.join(', ');
+    }
+
+    get mult() {
+      return Math.min(4, 1 + Math.floor(this.combo / 10));
+    }
+
+    pop(txt, col) {
+      const p = this.pops[this._popI++ % this.pops.length];
+      p.t = 0;
+      p.txt = txt;
+      p.col = col;
+    }
+
+    /** The band plays on: every note due in the next tenth of a second, sent ahead to the sound. */
+    band() {
+      while (this.ei < this.ne && this.et[this.ei] < this.t + 0.1) {
+        const i = this.ei++, at = this.et[i] - this.t;
+        if (at < -0.03) continue;
+        const k = this.ek[i];
+        if (k === 9) continue; // the player's note
+        if (k === 0) this.sfx('note', { f: NOTE(this.ep[i]), len: this.el[i], at, gain: 0.8 });
+        else if (k === 1) this.sfx('note', { f: NOTE(this.ep[i]), len: this.el[i], at, wave: 'triangle', gain: 2.6 });
+        else if (k === 5) this.sfx('note', { f: NOTE(this.ep[i]), len: this.el[i], at, wave: 'triangle', gain: 0.55 });
+        else this.sfx('drum', { kind: k === 2 ? 'kick' : k === 3 ? 'snare' : 'hat', at });
+      }
+    }
+
+    step(dt, I) {
+      if (this.over) return;
+      const C = CONGA;
+      this.t += dt;
+      this.moveT += dt;
+      this.goneT += dt;
+      for (const p of this.pops) p.t += dt;
+      for (let l = 0; l < 5; l++) this.flash[l] = this.flash[l] > 0 ? Math.max(0, this.flash[l] - dt) : Math.min(0, this.flash[l] + dt);
+      this.band();
+      // This step's presses: the keys, the stick, a flick of the mouse; the button claps.
+      const P = this.press;
+      P[0] = I.leftP || (I.x < -0.6 && this._sx >= -0.6);
+      P[1] = I.downP || (I.y < -0.6 && this._sy >= -0.6);
+      P[2] = I.upP || (I.y > 0.6 && this._sy <= 0.6);
+      P[3] = I.rightP || (I.x > 0.6 && this._sx <= 0.6);
+      P[4] = I.aP;
+      this._sx = I.x;
+      this._sy = I.y;
+      this.mxAcc = this.mxAcc * 0.8 + I.mx;
+      this.myAcc = this.myAcc * 0.8 + I.my;
+      if (Math.abs(this.mxAcc) > C.mouse || Math.abs(this.myAcc) > C.mouse) {
+        if (Math.abs(this.mxAcc) > Math.abs(this.myAcc)) P[this.mxAcc > 0 ? 3 : 0] = true;
+        else P[this.myAcc > 0 ? 2 : 1] = true;
+        this.mxAcc = this.myAcc = 0;
+      }
+      for (let l = 0; l < 5; l++) if (P[l]) this.hit(l);
+      // Notes gone by unpressed.
+      while (this.ni < this.n && (this.ns[this.ni] || this.nt[this.ni] < this.t - C.good)) {
+        if (!this.ns[this.ni]) this.judge(this.ni, 4);
+        this.ni++;
+      }
+      if (this.t >= C.secs) {
+        const bonus = this.best * 5 + (this.misses ? 0 : 500);
+        this.score += bonus;
+        this.pop(this.misses ? 'BEST CONGA ' + this.best + ' +' + bonus : 'NOT ONE MISSED! +' + bonus, '#ffd24a');
+        this.over = 'ENCORE!';
+      }
+    }
+
+    /** A press in lane l: the next note there, if it's near enough. */
+    hit(l) {
+      const C = CONGA;
+      for (let i = this.ni; i < this.n && this.nt[i] < this.t + C.early; i++) {
+        if (this.ns[i] || this.nl[i] !== l || this.t > this.nt[i] + C.good) continue;
+        const e = Math.abs(this.t - this.nt[i]);
+        if (this.t < this.nt[i] - C.good) this.judge(i, 3);
+        else this.judge(i, e <= C.perfect ? 0 : e <= C.great ? 1 : 2);
+        return;
+      }
+      // Nothing there.
+      this.flash[l] = -0.2;
+      if (this.combo) this.breakLine();
+      this.pop('OOPS', '#ff6a6a');
+      this.sfx('chip', { f: 160, f1: 120, len: 0.06, gain: 0.5 });
+    }
+
+    /** Note i judged: 0 perfect, 1 great, 2 good, 3 too early, 4 missed. */
+    judge(i, g) {
+      const l = this.nl[i];
+      this.ns[i] = g <= 2 ? 1 : 2;
+      this.pop(CONGA_GRADE[g][0], CONGA_GRADE[g][1]);
+      if (g > 2) {
+        this.misses++;
+        if (this.combo) this.breakLine();
+        if (g === 3) this.sfx('chip', { f: 220, f1: 140, len: 0.08, gain: 0.5 });
+        return;
+      }
+      this.score += CONGA.pts[g] * this.mult;
+      this.combo++;
+      this.best = Math.max(this.best, this.combo);
+      this.hits++;
+      if (g === 0) this.perfects++;
+      this.flash[l] = 0.2;
+      this.move = l;
+      this.moveT = 0;
+      if (l === 4) this.sfx('drum', { kind: 'clap' });
+      else if (this.nlen[i] > 0) this.sfx('note', { f: NOTE(this.np[i]), len: this.nlen[i], gain: 1.1 });
+      else this.sfx('drum', { kind: 'block', f: NOTE(this.np[i]) });
+      if (this.combo === 25 || this.combo === 50 || this.combo === 100) {
+        this.sfx('cheer', { gain: 0.5 });
+        this.cheer = this.t;
+      }
+    }
+
+    breakLine() {
+      this.gone = Math.min(8, Math.floor(this.combo / 4));
+      this.goneT = 0;
+      this.combo = 0;
+    }
+
+    /** An arrow pointing in lane l's way, its tip r from the middle. */
+    arrow(c, x, y, l, r, fill, edge) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(CONGA_ANG[l]);
+      c.beginPath();
+      c.moveTo(0, -r);
+      c.lineTo(r, 0);
+      c.lineTo(r * 0.42, 0);
+      c.lineTo(r * 0.42, r);
+      c.lineTo(-r * 0.42, r);
+      c.lineTo(-r * 0.42, 0);
+      c.lineTo(-r, 0);
+      c.closePath();
+      if (fill) {
+        c.fillStyle = fill;
+        c.fill();
+      }
+      if (edge) {
+        c.strokeStyle = edge;
+        c.lineWidth = 2;
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    /** A crab: at x, y (its feet), s its size, step its dance step (-1 none), bob 0..1. */
+    crab(c, x, y, s, step, bob, col) {
+      const lean = step === 0 ? -0.35 : step === 3 ? 0.35 : 0;
+      const sq = step === 1 ? 0.25 : 0;
+      const by = y - s * (0.55 - sq * 0.4) - bob * s * 0.12;
+      const bx = x + lean * s * 0.5;
+      // Legs.
+      c.strokeStyle = col;
+      c.lineWidth = Math.max(1, s * 0.1);
+      c.beginPath();
+      for (let k = -1; k <= 1; k += 2) for (let j = 0; j < 3; j++) {
+        c.moveTo(bx + k * s * 0.3, by + s * 0.1);
+        c.lineTo(x + k * s * (0.55 + j * 0.13), y - (j === 1 ? s * 0.08 : 0));
+      }
+      c.stroke();
+      // Body and eyes on stalks.
+      c.fillStyle = col;
+      c.beginPath();
+      c.ellipse(bx, by, s * 0.5, s * 0.3, lean * 0.4, 0, TAU);
+      c.fill();
+      c.fillRect(bx - s * 0.2, by - s * 0.5, s * 0.07, s * 0.25);
+      c.fillRect(bx + s * 0.13, by - s * 0.5, s * 0.07, s * 0.25);
+      c.fillStyle = '#ffffff';
+      c.fillRect(bx - s * 0.24, by - s * 0.6, s * 0.15, s * 0.15);
+      c.fillRect(bx + s * 0.09, by - s * 0.6, s * 0.15, s * 0.15);
+      c.fillStyle = '#111';
+      c.fillRect(bx - s * 0.19, by - s * 0.56, s * 0.07, s * 0.07);
+      c.fillRect(bx + s * 0.14, by - s * 0.56, s * 0.07, s * 0.07);
+      // Claws: out to the side, up, down by the knees, or clapped together over its head.
+      const up = step === 2 || step === 4 ? 1 : step === 1 ? -0.4 : 0.35;
+      for (let k = -1; k <= 1; k += 2) {
+        const out = step === 4 ? 0.12 : (step === 0 && k < 0) || (step === 3 && k > 0) ? 0.95 : 0.7;
+        const cx = bx + k * s * out, cy = by - s * (0.2 + up * 0.55);
+        c.strokeStyle = col;
+        c.lineWidth = Math.max(1, s * 0.12);
+        c.beginPath();
+        c.moveTo(bx + k * s * 0.4, by - s * 0.05);
+        c.lineTo(cx, cy + s * 0.12);
+        c.stroke();
+        c.fillStyle = col;
+        c.beginPath();
+        c.arc(cx, cy, s * 0.16, 0, TAU);
+        c.fill();
+        c.fillStyle = 'rgba(0,0,0,0.35)';
+        c.fillRect(cx - s * 0.02, cy - s * 0.16, s * 0.04, s * 0.14);
+      }
+    }
+
+    draw(c) {
+      const C = CONGA, t = this.t;
+      const bp = Math.max(0, (t - C.lead) / C.beat), beat = bp % 1, bob = beat < 0.25 ? 1 - beat * 4 : 0;
+      const grd = c.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, '#2a1650');
+      grd.addColorStop(0.7, '#5a2a78');
+      grd.addColorStop(1, '#1a0c30');
+      c.fillStyle = grd;
+      c.fillRect(0, 0, W, H);
+      // The bandstand: spotlights, a string of bulbs flashing on the beat, the boards.
+      c.fillStyle = 'rgba(255,240,200,' + (0.05 + bob * 0.06).toFixed(3) + ')';
+      for (let k = 0; k < 2; k++) {
+        const x = 200 + k * 80 + Math.sin(t * 0.7 + k * 2) * 18;
+        c.beginPath();
+        c.moveTo(x - 6, 22);
+        c.lineTo(x + 6, 22);
+        c.lineTo(x + 40, 196);
+        c.lineTo(x - 40, 196);
+        c.fill();
+      }
+      for (let k = 0; k < 9; k++) {
+        const x = 166 + k * 18, y = 34 + Math.sin(k * 0.9) * 3;
+        const on = (k + Math.floor(bp)) % 2 === 0;
+        c.fillStyle = on ? NEON_BULBS[k % NEON_BULBS.length] : '#3a2a50';
+        c.fillRect(x - 2, y - 2, 5, 5);
+      }
+      c.fillStyle = '#8a5a32';
+      c.fillRect(156, 196, W - 156, H - 196);
+      c.fillStyle = '#6b4220';
+      for (let y = 204; y < H; y += 9) c.fillRect(156, y, W - 156, 1);
+      // The dancer, and the conga line behind it (more crabs the longer the run of hits).
+      const conga = Math.min(8, Math.floor(this.combo / 4));
+      for (let k = 0; k < conga; k++) {
+        const hop = (k + Math.floor(bp)) % 2 ? bob : 0;
+        this.crab(c, 172 + k * 19 + Math.sin(bp * PI) * 3, 234, 11, -1, hop, k % 2 ? '#ff8a6a' : '#ff6a5c');
+      }
+      if (this.goneT < 1.5) {
+        for (let k = 0; k < this.gone; k++) {
+          const x = 172 + k * 19 + this.goneT * (110 + k * 25);
+          if (x < W + 12) this.crab(c, x, 234, 11, -1, (this.goneT * 8 + k) % 1, '#c85a4a');
+        }
+      }
+      this.crab(c, 236, 200, 46, this.moveT < 0.3 ? this.move : -1, bob, '#e8483a');
+      if (this.moveT < 0.25 && this.move === 4) label(c, 'CLAP!', 236, 112, 12, '#ffd24a', 'center');
+      // The lanes, the arrows coming down and the shells they land on.
+      const x0 = C.lane0, lw = C.laneW;
+      c.fillStyle = 'rgba(10,6,24,0.55)';
+      c.fillRect(x0 - 4, 22, lw * 4 + 8, H - 22);
+      for (let l = 0; l < 4; l++) {
+        c.fillStyle = l % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.08)';
+        c.fillRect(x0 + l * lw, 22, lw, H - 22);
+      }
+      for (let l = 0; l < 4; l++) {
+        const f = this.flash[l], fc = this.flash[4];
+        const x = x0 + l * lw + lw / 2;
+        if (f > 0 || fc > 0) {
+          c.fillStyle = 'rgba(255,255,255,' + (Math.max(f, fc) * 2.5).toFixed(3) + ')';
+          c.beginPath();
+          c.arc(x, C.hitY, 16, 0, TAU);
+          c.fill();
+        }
+        this.arrow(c, x, C.hitY, l, 12, f < 0 ? 'rgba(255,80,80,0.5)' : 'rgba(0,0,0,0.35)', CONGA_COLS[l]);
+      }
+      for (let i = this.ni; i < this.n; i++) {
+        const dtn = this.nt[i] - t;
+        if (dtn > this.nlead[i]) {
+          if (dtn > 1.7) break;
+          continue;
+        }
+        if (this.ns[i]) continue;
+        const y = C.hitY - (dtn / this.nlead[i]) * (C.hitY - C.topY);
+        const l = this.nl[i];
+        if (l === 4) {
+          c.fillStyle = '#ffb92e';
+          c.fillRect(x0, y - 5, lw * 4, 10);
+          c.strokeStyle = '#fff2c0';
+          c.lineWidth = 1.5;
+          c.strokeRect(x0 + 0.5, y - 4.5, lw * 4 - 1, 9);
+          label(c, 'CLAP', x0 + lw * 2, y + 4, 9, '#5a2a00', 'center');
+        } else this.arrow(c, x0 + l * lw + lw / 2, y, l, 12, CONGA_COLS[l], '#ffffff');
+      }
+      // How it's going.
+      for (const p of this.pops) {
+        if (p.t > 0.5) continue;
+        label(c, p.txt, x0 + lw * 2, 150 - p.t * 16, p.txt.length > 10 ? 10 : 14, p.col, 'center');
+      }
+      if (this.combo >= 5) {
+        label(c, String(this.combo), x0 + lw * 2, 112, 22, this.t - this.cheer < 1 ? '#ffd24a' : '#ffffff', 'center');
+        label(c, 'IN A ROW', x0 + lw * 2, 124, 8, '#cfc6ff', 'center');
+      }
+      c.fillStyle = 'rgba(10,6,24,0.7)';
+      c.fillRect(0, 0, W, 22);
+      label(c, String(this.score), 6, 16, 13, '#ffffff');
+      label(c, 'x' + this.mult, 120, 16, 12, this.mult > 1 ? '#ffd24a' : '#8a80b0');
+      label(c, Math.max(0, Math.ceil(C.secs - t)) + 's', W - 6, 16, 11, '#ffffff', 'right');
+      // The song's progress along the top.
+      c.fillStyle = '#3a2a50';
+      c.fillRect(160, 9, 110, 4);
+      c.fillStyle = '#ff6a5c';
+      c.fillRect(160, 9, 110 * Math.min(1, t / C.secs), 4);
+      if (t < C.lead + 1.5) label(c, t < C.lead ? 'READY...' : 'DANCE!', x0 + lw * 2, 90, 14, '#ffd24a', 'center');
+    }
+
+    /** The attract mode's player: every step right on the beat. */
+    demo(I) {
+      clearIn(I);
+      for (let i = this.ni; i < this.n && this.nt[i] < this.t + 0.05; i++) {
+        if (this.ns[i] || this.nt[i] - this.t > 0.012) continue;
+        const l = this.nl[i];
+        if (l === 0) (I.leftP = true), (I.x = -1);
+        else if (l === 1) (I.downP = true), (I.y = -1);
+        else if (l === 2) (I.upP = true), (I.y = 1);
+        else if (l === 3) (I.rightP = true), (I.x = 1);
+        else I.a = I.aP = true;
+      }
+      return I;
+    }
+  }
+  const NEON_BULBS = ['#ff3d8b', '#37e8ff', '#ffb92e', '#7dff6a'];
+  const NOTE = (n) => 261.63 * Math.pow(2, n / 12);
+
   // ============================================================== the hall
   // Arcade Row's fit-out. The hall itself is neonstrand.js's (x 815..870, z 76..116, open to the midway
   // on the east); a back wall at x 846 makes the front 23 m of it the arcade (the stock room behind is
@@ -4720,5 +5226,111 @@
     },
   });
 
-  Carnival.Arcade = Object.assign(Arcade, { cabinets: CABINETS, HALL, SPOTS, MODELS, Dash, DASH, Sprint, SPRINT, Sub, SUB, Stack, STACK, Catch, CATCH, Serpent, SERP, Reef, REEF, rng, IN, TX, TY, TA });
+  cabinet({
+    id: 'rhythm',
+    name: 'Crab Conga',
+    marquee: 'Dance to the beat!',
+    colour: 0xff6a5c,
+    side: 0x6a3fa0,
+    buttons: [0xff7ab0, 0x37e8ff, 0xffb92e],
+    game: new Conga(),
+    price: 1,
+    tagline: 'The band plays, the crab dances, you call the steps.',
+    howto: [
+      'Arrows drift down the four lanes: press the same arrow just as each one reaches its shell, and the crab dances the step and the tune plays on.',
+      'A gold bar across all four lanes is a clap: press the button. A press with nothing there, or a step missed, breaks your run.',
+      'Steps in a row grow the conga line and the multiplier (up to x4). One song, 75 seconds; a new dance every go.',
+    ],
+    keys: 'Arrows / W A S D / left stick / a flick of the mouse  step   ·   Space / click / A  clap',
+    prize: 'One for every 100 points',
+    barks: ['Crab Conga! Shake a claw!', 'One dollar a dance! Can you keep up with the crab?'],
+    tickets: (score) => score / 100,
+    table: [['ACE', 5000], ['GUS', 3500], ['DOT', 2200], ['KIT', 1200], ['BOB', 600]],
+    art(g, w, h) {
+      sky(g, w, h, ['#2a1650', '#5a2a78', '#1a0c30']);
+      // Spotlights on a dancing crab, arrows raining down, notes in the air, the boards.
+      g.fillStyle = 'rgba(255,240,200,0.12)';
+      for (const x of [70, 190]) {
+        g.beginPath();
+        g.moveTo(x - 12, 0);
+        g.lineTo(x + 12, 0);
+        g.lineTo(x + 90, h - 120);
+        g.lineTo(x - 90, h - 120);
+        g.fill();
+      }
+      const cols = ['#ff7ab0', '#37e8ff', '#7dff6a', '#ffd24a'];
+      const arrow = (x, y, a, r, col) => {
+        g.save();
+        g.translate(x, y);
+        g.rotate(a);
+        g.fillStyle = col;
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = 4;
+        g.beginPath();
+        g.moveTo(0, -r);
+        g.lineTo(r, 0);
+        g.lineTo(r * 0.42, 0);
+        g.lineTo(r * 0.42, r);
+        g.lineTo(-r * 0.42, r);
+        g.lineTo(-r * 0.42, 0);
+        g.lineTo(-r, 0);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.restore();
+      };
+      arrow(50, 70, -PI / 2, 26, cols[0]);
+      arrow(150, 130, PI, 22, cols[1]);
+      arrow(70, 220, 0, 24, cols[2]);
+      arrow(190, 40, PI / 2, 20, cols[3]);
+      arrow(200, 250, -PI / 2, 18, cols[1]);
+      g.fillStyle = '#ffd24a';
+      for (const [x, y] of [[30, 300], [215, 330], [120, 30]]) {
+        g.beginPath();
+        g.ellipse(x, y, 9, 7, -0.4, 0, TAU);
+        g.fill();
+        g.fillRect(x + 6, y - 32, 4, 32);
+        g.fillRect(x + 6, y - 32, 14, 5);
+      }
+      g.fillStyle = '#8a5a32';
+      g.fillRect(0, h - 140, w, 140);
+      g.fillStyle = '#6b4220';
+      for (let y = h - 125; y < h; y += 22) g.fillRect(0, y, w, 4);
+      // The crab, claws up.
+      const cx = 118, cy = h - 230;
+      g.strokeStyle = '#e8483a';
+      g.lineWidth = 9;
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let k = -1; k <= 1; k += 2) for (let j = 0; j < 3; j++) {
+        g.moveTo(cx + k * 30, cy + 20);
+        g.lineTo(cx + k * (62 + j * 16), cy + 80 - (j === 1 ? 10 : 0));
+      }
+      for (let k = -1; k <= 1; k += 2) {
+        g.moveTo(cx + k * 40, cy - 6);
+        g.lineTo(cx + k * 78, cy - 70);
+      }
+      g.stroke();
+      g.fillStyle = '#e8483a';
+      g.beginPath();
+      g.ellipse(cx, cy, 62, 38, 0, 0, TAU);
+      g.fill();
+      for (let k = -1; k <= 1; k += 2) {
+        g.beginPath();
+        g.arc(cx + k * 80, cy - 84, 22, 0, TAU);
+        g.fill();
+      }
+      g.fillStyle = '#ffffff';
+      g.fillRect(cx - 28, cy - 62, 18, 18);
+      g.fillRect(cx + 10, cy - 62, 18, 18);
+      g.fillStyle = '#111111';
+      g.fillRect(cx - 22, cy - 56, 8, 8);
+      g.fillRect(cx + 16, cy - 56, 8, 8);
+      g.fillStyle = '#e8483a';
+      g.fillRect(cx - 22, cy - 44, 7, 14);
+      g.fillRect(cx + 15, cy - 44, 7, 14);
+    },
+  });
+
+  Carnival.Arcade = Object.assign(Arcade, { cabinets: CABINETS, HALL, SPOTS, MODELS, Dash, DASH, Sprint, SPRINT, Sub, SUB, Stack, STACK, Catch, CATCH, Serpent, SERP, Reef, REEF, Conga, CONGA, rng, IN, TX, TY, TA });
 })();

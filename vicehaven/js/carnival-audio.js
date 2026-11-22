@@ -10,7 +10,7 @@
  *                              (0..1 each); o.clank: the lift-hill chain. rideStop() silences it.
  *   one-shots: klaxon, bump, ding, clank, whoosh, cheer, buzz, win, lose, tick, nope, spark,
  *   scream, bell, pop, splash, thud — each takes { gain, pan } (all optional); chip (an
- *   arcade blip: { f, f1, len }).
+ *   arcade blip: { f, f1, len }); note and drum (an arcade tune's, sent ahead: { at }).
  */
 (function () {
   'use strict';
@@ -320,6 +320,37 @@
       if (!this._ok()) return;
       const a = this.a, t = a.ctx.currentTime, k = (o && o.gain) || 1;
       a._tone({ t, freq: 90, freqEnd: 45, wave: 'sine', peak: 0.4 * k, decay: 0.2 });
+    }
+
+    /** A note of an arcade tune: o.f Hz for o.len seconds, o.at seconds from now (so a tune keeps time); o.wave. */
+    note(o) {
+      if (!this._ok()) return;
+      const a = this.a, t = a.ctx.currentTime + Math.max(0, o.at || 0), k = o.gain || 1;
+      a._tone({ t, freq: o.f, wave: o.wave || 'square', peak: 0.05 * k, decay: o.len || 0.15, lowpass: 2600, bus: a.ui });
+    }
+
+    /** A drum of an arcade tune, o.at seconds from now: o.kind 'kick', 'snare', 'hat', 'clap' or 'block' (o.f Hz). */
+    drum(o) {
+      if (!this._ok()) return;
+      const a = this.a, t = a.ctx.currentTime + Math.max(0, o.at || 0), k = o.gain || 1;
+      switch (o.kind) {
+        case 'kick':
+          a._tone({ t, freq: 130, freqEnd: 48, wave: 'sine', peak: 0.3 * k, decay: 0.16, bus: a.ui });
+          break;
+        case 'snare':
+          a._hit({ t, freq: 1800, q: 0.7, peak: 0.14 * k, decay: 0.11, bus: a.ui });
+          a._tone({ t, freq: 190, wave: 'triangle', peak: 0.05 * k, decay: 0.06, bus: a.ui });
+          break;
+        case 'hat':
+          a._hit({ t, type: 'highpass', freq: 7500, peak: 0.035 * k, decay: 0.025, bus: a.ui });
+          break;
+        case 'clap':
+          for (let i = 0; i < 3; i++) a._hit({ t: t + i * 0.011, freq: 1400, q: 1.4, peak: 0.22 * k, decay: i === 2 ? 0.12 : 0.03, bus: a.ui });
+          break;
+        default: // a woodblock
+          a._tone({ t, freq: (o.f || 600) * 2, freqEnd: (o.f || 600) * 1.9, wave: 'sine', peak: 0.12 * k, decay: 0.05, bus: a.ui });
+          a._hit({ t, freq: 2400, q: 6, peak: 0.05 * k, decay: 0.03, bus: a.ui });
+      }
     }
   }
 

@@ -93,7 +93,12 @@
   }
 
   // ========================================================== GOLDEN GRABBER
-  // The machine (neonstrand.js GRABBER): a 1.7 m glass case on a gold base, the front facing the midway.
+  // The machine (at neonstrand.js GRABBER): a 1.7 m glass case on a gold base, the front facing the midway.
+  // The teddies are fair game. The gear stick on its stand at the back is the machine's famous top prize,
+  // and in the DLC story nobody has won it in fifty years (the dial inside lets go, d19): the claw can
+  // grip it and lift it against its clamp, and always slips at the last moment. Once the story has
+  // taken the machine away (d19 under way or done) it is gone from the fair: the case, the claw, the
+  // prompt and the colliders.
   const GB = {
     floor: KERB + 1.1, //  the prizes' floor
     top: KERB + 2.24, //   the gantry
@@ -105,12 +110,15 @@
     steer: 12, //          seconds to line up a drop
     carry: 10, //          seconds to carry a prize to the chute
     tries: 3,
+    stick: [-0.68, -0.68], // the gear stick: where it stands, its stand's top, its knob's top
+    plinth: 0.32,
+    knob: 0.7,
   };
   const BEAR_H = 0.24;
   const BEARS = 14;
   // Where the teddies sit at the start of a go: [u, v, layer].
   const PILE = [
-    [-0.6, -0.6, 0], [-0.2, -0.62, 0], [0.2, -0.6, 0], [0.6, -0.58, 0], [-0.62, -0.2, 0], [-0.22, -0.18, 0], [0.18, -0.22, 0],
+    [-0.46, -0.5, 0], [-0.2, -0.62, 0], [0.2, -0.6, 0], [0.6, -0.58, 0], [-0.62, -0.2, 0], [-0.22, -0.18, 0], [0.18, -0.22, 0],
     [0.6, -0.2, 0], [-0.58, 0.2, 0], [-0.2, 0.22, 0], [0.2, 0.18, 0], [-0.4, -0.4, 1], [0.0, -0.4, 1], [0.4, -0.4, 1],
   ];
   const BEAR_TINTS = [0xff7ab0, 0x5ab8e8, 0xffd24a, 0x7dcf6a, 0xb45cff, 0xff8a3c, 0xf6f1e4, 0xe0403a, 0x2fb7b0, 0xc89a6a, 0xff7ab0, 0x5ab8e8, 0xffd24a, 0xd4a017];
@@ -131,11 +139,21 @@
       'Three tries. Steer the claw over a teddy and drop it.',
       'Wait for the claw to stop swinging: drop it dead centre and it grips tight; off-centre it lets go.',
       'Carry the teddy to the chute in the front corner and drop it in. Go gently: a loose grip slips.',
+      'The gear stick at the back is the Grabber\'s famous top prize. Nobody has won it in fifty years.',
     ],
     keys: 'W A S D / mouse / left stick  move the claw   ·   Space / click / A  drop',
     prize: '8 for each teddy (and you keep the teddy)',
-    barks: ['The Golden Grabber! Nobody leaves empty-handed... well, hardly anybody!', 'Two dollars, three tries! Grab yourself a teddy!', 'Steady hands win teddies! Step up to the Grabber!'],
+    barks: ['The Golden Grabber! Nobody leaves empty-handed... well, hardly anybody!', 'Two dollars, three tries! Grab yourself a teddy!', 'Steady hands win teddies! Step up to the Grabber!', 'Fifty years, and the gear stick\'s still in there! The teddies come out every day!'],
     statKeys: { tries: 1 },
+
+    /** Taken away by the story (d19)? */
+    gone(c) {
+      return grabberGone(c.game);
+    },
+
+    available(c) {
+      return this.gone(c) ? 'The Golden Grabber has gone' : null;
+    },
 
     tickets(score) {
       return 1 + score * 8;
@@ -160,13 +178,13 @@
       B.box(12, c0 + 0.02, F0 + 0.001, c0 + 0.02, 0.84, F0 + 0.004, 0.84, 0x0d0a12);
       B.box(15, -0.84, F0, -0.86, 0.84, T, -0.83, 0x3a1460);
       B.box(19, 0.42, KERB + 0.35, 0.9, 0.8, KERB + 0.72, 0.92, 0x16121c);
-      // The famous gear stick, on its plinth in the back corner under its own cover: not a prize.
-      B.box(16, -0.8, F0, -0.8, -0.56, F0 + 0.32, -0.56, 0x2a1d3a);
-      B.box(17, -0.695, F0 + 0.32, -0.695, -0.665, F0 + 0.62, -0.665, chrome);
-      B.part(18, -0.68, F0 + 0.66, -0.68, 0.085, 0.085, 0.085, 0.4, 0.6, 0.2, gold);
+      // The famous gear stick, held upright in a clamp on its stand in the back corner (placed by place(): it lifts).
+      const [su, sv] = GB.stick;
+      B.box(16, su - 0.12, F0, sv - 0.12, su + 0.12, F0 + GB.plinth, sv + 0.12, 0x2a1d3a);
+      B.box(21, su - 0.035, F0 + GB.plinth, sv - 0.035, su + 0.035, F0 + GB.plinth + 0.05, sv + 0.035, gold);
+      B.part(17, su, F0 + 0.47, sv, 0.03, 0.3, 0.03, 0, 0, 0, chrome);
+      B.part(18, su, F0 + 0.66, sv, 0.085, 0.085, 0.085, 0.4, 0.6, 0.2, 0x141414);
       for (let k = 0; k < 3; k++) B.part(6 + k, 0, T, 0, 0.022, 0.15, 0.035, 0, 0, 0, chrome); // the fingers' colour (placed by place())
-      B.box(21, -0.82, F0 + 0.32, -0.82, -0.54, F0 + 0.8, -0.81, 0xbfefff);
-      B.box(22, -0.55, F0 + 0.32, -0.82, -0.54, F0 + 0.8, -0.54, 0xbfefff);
       B.done();
       // The teddies.
       this.bearMesh = kit.mesh(teddyGeometry(BEAR_H), BEARS);
@@ -181,6 +199,7 @@
       kit.group.add(glass);
       // The claw's own state (drawn by place()).
       this.claw = { u: GB.home[0], v: GB.home[1], vu: 0, vv: 0, su: 0, sv: 0, svu: 0, svv: 0, y: T - 0.22, open: 0.55, hu: GB.home[0], hv: GB.home[1] };
+      this.stick = { lift: 0, held: false, t: 0 }; // how far the claw has pulled it up against its clamp
       this.reset();
     },
 
@@ -204,6 +223,8 @@
       C.y = GB.top - 0.22;
       C.open = 0.55;
       this.held = null;
+      this.stick.lift = 0;
+      this.stick.held = false;
       this.place();
     },
 
@@ -253,6 +274,13 @@
       return moving;
     },
 
+    /** The top of the gear stick or its stand under (hu, hv), or the floor. */
+    stickTop(hu, hv) {
+      const du = Math.abs(hu - GB.stick[0]), dv = Math.abs(hv - GB.stick[1]);
+      if (Math.hypot(du, dv) < 0.06) return GB.floor + GB.knob;
+      return du < 0.13 && dv < 0.13 ? GB.floor + GB.plinth + 0.04 : GB.floor;
+    },
+
     /** The highest teddy under the claw's head (or null). */
     under(hu, hv) {
       let best = null;
@@ -281,7 +309,7 @@
             C.hu = clamp(C.hu, -GB.half + 0.05, GB.half - 0.05);
             C.hv = clamp(C.hv, -GB.half + 0.05, GB.half - 0.05);
             const b = this.under(C.hu, C.hv);
-            g.stopY = b ? b.y + BEAR_H - 0.07 : GB.floor + 0.03;
+            g.stopY = Math.max(b ? b.y + BEAR_H - 0.07 : GB.floor + 0.03, this.stickTop(C.hu, C.hv) - 0.07);
             s.sound('clank', { gain: 0.7 });
           }
           break;
@@ -310,6 +338,18 @@
                 pick = b;
               }
             }
+            // The gear stick, if the fingers close round its knob.
+            const sd = Math.hypot(GB.stick[0] - C.hu, GB.stick[1] - C.hv), knob = GB.floor + GB.knob;
+            if (sd < pd && knob >= C.y - 0.02 && knob <= C.y + 0.16) {
+              g.grip = 1 - sd / GB.reach;
+              this.stick.held = true;
+              this.stick.t = 0;
+              g.stage = 'lift';
+              g.st = 0;
+              s.sound('clank', { gain: 0.5 });
+              s.ui.caption(g.grip > 0.5 ? 'It\'s got the gear stick! Nobody\'s ever...' : 'It\'s touching the gear stick...', 1800);
+              break;
+            }
             g.grip = pick ? 1 - pd / GB.reach : 0;
             if (pick) {
               pick.state = 'held';
@@ -326,6 +366,26 @@
           }
           break;
         case 'lift':
+          if (this.stick.held) {
+            // Up it comes against its clamp; at the top the claw strains, thinks about it, and lets go.
+            const S = this.stick;
+            S.lift = Math.min(0.06 + 0.04 * g.grip, S.lift + dt * 0.5);
+            C.y = g.stopY + S.lift;
+            S.t += dt;
+            C.su = Math.sin(S.t * 47) * 0.004 * Math.min(1, S.t * 2);
+            C.hu = C.u + C.su;
+            if (S.t > 1.3 + g.grip * 0.6) {
+              S.held = false;
+              C.su = 0;
+              s.sound('clank', { gain: 0.6 });
+              s.sound('thud', { gain: 0.35 });
+              s.ui.caption('So close! The claw thinks better of it.', 2000);
+              g.stage = 'lift';
+              g.st = 0;
+            }
+            break;
+          }
+          if (this.stick.lift > 0) this.stick.lift = Math.max(0, this.stick.lift - dt * 1.2); // back down into its clamp
           C.y = Math.min(GB.top - 0.22, C.y + dt * 0.5);
           if (C.y >= GB.top - 0.22) {
             g.stage = this.held ? 'carry' : 'home';
@@ -433,8 +493,8 @@
           }
           continue;
         }
-        // Onto the floor, or onto another teddy.
-        let land = GB.floor;
+        // Onto the floor (or the gear stick's stand), or onto another teddy.
+        let land = Math.min(this.stickTop(b.u, b.v), GB.floor + GB.plinth + 0.04);
         for (const o of this.bears) {
           if (o === b || o.state !== 'rest') continue;
           if (Math.hypot(o.u - b.u, o.v - b.v) < 0.15) land = Math.max(land, o.y + 0.17);
@@ -470,7 +530,10 @@
       }
       // A spot on whatever is under the head: where it will land.
       const b = this.under(C.hu, C.hv);
-      const sy = b && b !== this.held ? b.y + BEAR_H + 0.004 : GB.floor + 0.004;
+      const sy = Math.max(b && b !== this.held ? b.y + BEAR_H + 0.004 : GB.floor + 0.004, this.stickTop(C.hu, C.hv) + 0.004);
+      const L = this.stick.lift;
+      B.part(17, GB.stick[0], GB.floor + 0.47 + L, GB.stick[1], 0.03, 0.3, 0.03, 0, 0, 0);
+      B.part(18, GB.stick[0], GB.floor + 0.66 + L, GB.stick[1], 0.085, 0.085, 0.085, 0.4, 0.6, 0.2);
       B.part(9, C.hu, sy, C.hv, 0.07, 0.004, 0.07, 0, 0, 0, 0x9fff6a);
       B.done();
       const m = this.bearMesh;
@@ -482,6 +545,10 @@
     },
 
     idleGame(dt) {
+      if (CASE.gone) {
+        this.group.visible = false;
+        return;
+      }
       // The claw sways a little where it's parked.
       const C = this.claw;
       if (this.held) return;
@@ -490,6 +557,99 @@
       C.hu = C.u + C.su;
       C.hv = C.v;
       this.place();
+    },
+  });
+
+  // The machine round the claw: the gold base, the corner posts, the roof and its glass dome, the sign.
+  // A mesh of its own rather than part of the chunk, so that it can go when the story takes it (d19).
+  const GRAB_MISSION = 'd19_golden_grabber';
+  const CASE = { group: null, dents: null, sign: null, signIn: false, cols: [], gone: false };
+  /** Has the story taken the Golden Grabber away: d19 under way, or done? */
+  function grabberGone(g) {
+    const m = g && g.missions;
+    return !!(m && ((m.completed && m.completed[GRAB_MISSION]) || (m.run && m.run.m && m.run.m.id === GRAB_MISSION)));
+  }
+
+  Carnival.Midway.builders.push((world) => {
+    const G = (world.wonderWharf && world.wonderWharf.grabber) || { x: 874.6, z: 88 };
+    const M = world.materials;
+    const prop = new VH.GeometryBuilder({}), glow = new VH.GeometryBuilder({}), dent = new VH.GeometryBuilder({});
+    const gold = VH.col(0xd4a017);
+    prop.box(G.x - 0.9, KERB, G.z - 0.9, G.x + 0.9, KERB + 1.1, G.z + 0.9, gold);
+    glow.box(G.x - 0.92, KERB + 0.9, G.z - 0.92, G.x + 0.92, KERB + 1.02, G.z + 0.92, VH.col(0xffd96a, 1.8));
+    for (const [cx, cz] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) {
+      prop.box(G.x + cx - 0.06, KERB + 1.1, G.z + cz - 0.06, G.x + cx + 0.06, KERB + 2.3, G.z + cz + 0.06, gold);
+      // When it has gone: four dents where its feet stood.
+      dent.box(G.x + cx * 0.94 - 0.08, KERB + 0.004, G.z + cz * 0.94 - 0.08, G.x + cx * 0.94 + 0.08, KERB + 0.009, G.z + cz * 0.94 + 0.08, VH.col(0x2a2620));
+    }
+    prop.box(G.x - 0.95, KERB + 2.3, G.z - 0.95, G.x + 0.95, KERB + 2.55, G.z + 0.95, gold, { bottom: true });
+    glow.cylinder(G.x, KERB + 2.55, G.z, 0.8, 0.15, 0.75, 10, VH.col(0x9fe6ff, 0.6), true);
+    prop.cylinder(G.x, KERB + 3.3, G.z, 0.12, 0.12, 0.18, 8, VH.col(0xffd24a), true);
+    // The sign on the front, on its board.
+    prop.box(G.x + 0.91, KERB + 0.24, G.z - 0.91, G.x + 1.01, KERB + 0.86, G.z + 0.91, VH.col(0x2b2f35));
+    const group = (CASE.group = new THREE.Group());
+    group.name = 'golden-grabber';
+    const body = new THREE.Mesh(prop.build(), M.prop);
+    body.castShadow = body.receiveShadow = true;
+    group.add(body, new THREE.Mesh(glow.build(), M.emissiveScreen));
+    const tex = VH.Signs.paint({ w: 1.7, h: 0.5, lines: ['GOLDEN GRABBER'], style: 'neon', colors: { fg: '#ffd96a', glow: '#ffb000', outline: '#fff0b8' } }, M._anisotropy || 4);
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: new THREE.Color(0.6, 0.6, 0.6), roughness: 0.55, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    mat.userData.neon = true;
+    const sign = (CASE.sign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.5), mat));
+    sign.position.set(G.x + 1.012, KERB + 0.55, G.z);
+    sign.rotation.y = PI / 2;
+    group.add(sign);
+    world.scene.add(group);
+    CASE.dents = new THREE.Mesh(dent.build(), M.prop);
+    CASE.dents.visible = false;
+    world.scene.add(CASE.dents);
+    // Solid: the case, and the sign's board.
+    const P = world.physics;
+    const keep = (col) => CASE.cols.push({ col, minY: col.minY, maxY: col.maxY });
+    keep(P.addBox(G.x - 0.95, 0, G.z - 0.95, G.x + 0.95, KERB + 3.3, G.z + 0.95, 'metal', VH.COLLIDE.ALL));
+    keep(P.addOrientedBox(G.x + 0.96, G.z, 0.91, 0.1, PI / 2, KERB + 0.24, KERB + 0.86, 'sign', VH.COLLIDE.SOLID | VH.COLLIDE.SHOTS));
+  });
+
+  // Whether the machine is there: checked every frame the fair is awake, and when a job starts or ends.
+  Carnival.define({
+    id: 'grabber_case',
+    name: 'the Golden Grabber',
+    kind: 'life',
+    sleep: 0,
+    setup(c) {
+      this.c = c;
+      const check = () => this.check();
+      for (const ev of ['mission:start', 'mission:pass', 'mission:fail']) VH.events.on(ev, check);
+    },
+    idle() {
+      this.check();
+    },
+    sleepNow() {
+      this.check();
+    },
+    check() {
+      const c = this.c, g = c.game;
+      if (!CASE.signIn && CASE.sign && g.world && g.world.signMaterials) {
+        g.world.signMaterials.push(CASE.sign.material); // it glows at night like the fair's other neon
+        CASE.signIn = true;
+      }
+      const gone = grabberGone(g);
+      if (gone === CASE.gone) return;
+      CASE.gone = gone;
+      if (CASE.group) CASE.group.visible = !gone;
+      if (CASE.dents) CASE.dents.visible = gone;
+      // Its colliders go below the ground (and come back if the job is failed or the game starts again).
+      for (const k of CASE.cols) {
+        k.col.minY = gone ? -60 : k.minY;
+        k.col.maxY = k.col.y0 = k.col.y1 = gone ? -59 : k.maxY;
+      }
+      const d = c.byId && c.byId.grabber;
+      if (d) {
+        if (!d.barks0) d.barks0 = d.barks;
+        d.barks = gone ? [] : d.barks0;
+        if (gone && d.group) d.group.visible = false;
+      }
+      for (const it of c._promptItems || []) if (it.attraction === 'grabber') it.enabled = !gone;
     },
   });
 

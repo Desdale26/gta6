@@ -425,6 +425,10 @@
     for (const d of defs) {
       if (d.kind !== 'game' || d.id === 'dodgems') continue;
       const best = c.best[d.id];
+      if (d.gone && d.gone(c)) {
+        if (best) row(nice(d), 'best ' + best + ' ' + (d.unit || 'points'), 'gone', 'done'); // (the Golden Grabber, once the story takes it)
+        continue;
+      }
       row(nice(d), best ? 'best ' + best + ' ' + (d.unit || 'points') : 'not played', money(d.price || 0), won[d.id] ? 'done' : '');
     }
     if (c.best.dodgems) row('Dodgems best', c.best.dodgems + ' points', '');
