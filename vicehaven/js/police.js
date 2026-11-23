@@ -171,6 +171,15 @@
       // off a story car, and the cruiser itself went up).
       if (tgt.speed < 2 && v.vF > Math.sqrt(2 * 7 * Math.max(0, dist - 8)) + 1) accel = -1;
       else if (tgt.speed < 2 && dist < 9) accel = v.vF > 1 ? -1 : 0;
+      // One and two stars: they chase and lean on him, they don't torpedo him.
+      // Closing at full pursuit speed was the 650 cap (260 off a story car, two
+      // rams and d01's Drifter was gone); the hard stuff (PIT above) is for three up.
+      if (p.inVehicle && pol.level <= 2) {
+        const closingNow = ((v.vel.x - tgt.vel.x) * (tx - v.pos.x) + (v.vel.z - tgt.vel.z) * (tz - v.pos.z)) / Math.max(dist, 0.1);
+        const allowed = Math.sqrt(100 + 12 * Math.max(0, dist - v.hz - tgt.hz - 0.5));
+        if (closingNow > allowed + 2) accel = -1;
+        else if (closingNow > allowed) accel = Math.min(accel, 0);
+      }
       v.input.steer = steer;
       v.input.accel = accel;
       v.input.handbrake = Math.abs(angle) > 1.3 && v.speed > 8 ? 1 : 0;

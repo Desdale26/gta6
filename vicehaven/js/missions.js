@@ -437,6 +437,8 @@
       this._feelT = 0;
       this._avoid = 0;
       this._l = {};
+      this._l0 = {};
+      this.ownCrashes = true; // its crashes, into Jay's car too, are its own doing (vehicle.damage)
       this._startT = 2.5; // engines starting: Jay gets a head start (and again after a checkpoint retry)
       this._backT = 0; // just rammed him: ease off so two hunters can't pin his car to a wall
       this._bumpCool = 0;
@@ -532,6 +534,17 @@
       const l = v.worldToLocal(tgt.pos.x + tgt.vel.x * lead, tgt.pos.z + tgt.vel.z * lead, this._l);
       let angle = Math.atan2(l.x, Math.max(0.1, l.z));
       if (l.z < 0) angle = l.x >= 0 ? 1.2 : -1.2;
+      // He's driving straight at it: pass alongside and turn after him, not a
+      // head-on (their two speeds together were the 650 cap, 258 off the Drifter).
+      const towards = (tgt.vel.x * (v.pos.x - tgt.pos.x) + tgt.vel.z * (v.pos.z - tgt.pos.z)) / Math.max(dist, 0.1);
+      let headOn = false;
+      if (towards > 6) {
+        const l0 = v.worldToLocal(tgt.pos.x, tgt.pos.z, this._l0); // where he is now, not where he'll be
+        if (l0.z > 0) {
+          headOn = true;
+          angle = Math.atan2(l0.x - (l0.x >= 0 ? 4.5 : -4.5), Math.max(0.1, l0.z));
+        }
+      }
       this._feelT -= dt;
       if (this._feelT <= 0) {
         this._feelT = 0.1;
@@ -546,10 +559,16 @@
       // brake to about 10 m/s at contact. Flat out into his door was the 650
       // cap (260 off a story car), and wrecked the hunter as well.
       const closingNow = ((v.vel.x - tgt.vel.x) * (tgt.pos.x - v.pos.x) + (v.vel.z - tgt.vel.z) * (tgt.pos.z - v.pos.z)) / Math.max(dist, 0.1);
-      const allowed = Math.sqrt(100 + 12 * Math.max(0, dist - v.hz - (tgt.hz || 1) - 0.5));
+      const gapNow = Math.max(0, dist - v.hz - (tgt.hz || 1) - 0.5);
+      // His car standing still (in the yard, at the gate): pull up to it, as the police box him in.
+      const allowed = tgt.speed < 3 ? Math.min(Math.sqrt(100 + 12 * gapNow), Math.sqrt(14 * Math.max(0, gapNow - 1.5)) + 2) : Math.sqrt(100 + 12 * gapNow);
       if (closingNow > allowed + 2) v.input.accel = -1;
       else if (closingNow > allowed) v.input.accel = Math.min(v.input.accel, 0);
       if (v.speed > 8 && this._wallAhead < v.speed * 0.8 + 3) v.input.accel = -1;
+      // A fence or a wall between them (his car still in the storage yard): creep
+      // and feel along it, don't charge it (the gate posts took a hunter to 300).
+      if (this._blocked && v.speed > 7) v.input.accel = v.speed > 9 ? -1 : 0;
+      if (headOn && v.speed > 8) v.input.accel = -1;
       this._checkStuck(v, dt);
     }
 
@@ -561,6 +580,8 @@
       let push = 0;
       this._wallAhead = Infinity;
       const toTgt = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
+      const gap = toTgt - v.hz - (tgt.hz || 1);
+      this._blocked = gap > 1 && !!ph.raycast(v.pos.x, y, v.pos.z, (tgt.pos.x - v.pos.x) / toTgt, 0, (tgt.pos.z - v.pos.z) / toTgt, toTgt - (tgt.hz || 1), { flags: VH.COLLIDE.SOLID, ground: false });
       for (const [a, w] of [[-0.45, 1], [0.45, -1], [0, 0]]) {
         const yaw = v.yaw + a;
         const dx = Math.sin(yaw);

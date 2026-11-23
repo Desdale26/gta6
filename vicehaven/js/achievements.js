@@ -90,6 +90,7 @@
     ['lanterns_10', 'Explorer', '🏮', 'Lantern Keeper', 'Find 10 lost lanterns.'],
     ['lanterns_all', 'Explorer', '✨', 'Every Last Light', 'Find every lost lantern.'],
     ['storm', 'Explorer', '⛈', 'Singing in the Rain', 'Spend a minute out in a thunderstorm.'],
+    ['shuttle_all', 'Explorer', '🚏', 'Next Stop: Everywhere', 'Unlock all eight Sunloop Shuttle stops.'],
     ['dance', 'Life', '💃', 'Dance Machine', 'Finish a dance at the Velvet Tide.'],
     ['rich_100k', 'Life', '💵', 'Six Figures', 'Have $100,000.'],
     ['rich_1m', 'Life', '💎', 'Millionaire', 'Have $1,000,000.'],

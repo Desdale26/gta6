@@ -1243,13 +1243,18 @@
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const body = VH.col(hex || (swan ? 0xf8f6f0 : 0x8a6a48));
     const wy = WL.lake.wy;
-    K.blob(s, x, wy + 0.06 * k, z, (0.12 + Math.abs(fx) * 0.1) * k, 0.09 * k, (0.12 + Math.abs(fz) * 0.1) * k, body); // solidity: passable (on the water, behind the reeds)
+    K.blob(s, x, wy + 0.06 * k, z, (0.12 + Math.abs(fx) * 0.1) * k, 0.09 * k, (0.12 + Math.abs(fz) * 0.1) * k, body);
     const hx = x + fx * 0.2 * k, hz = z + fz * 0.2 * k;
-    if (swan) W().beam(s, x + fx * 0.12 * k, wy + 0.14 * k, z + fz * 0.12 * k, hx, wy + 0.42 * k, hz, 0.07 * k, body); // solidity: passable (the neck)
+    if (swan) W().beam(s, x + fx * 0.12 * k, wy + 0.14 * k, z + fz * 0.12 * k, hx, wy + 0.42 * k, hz, 0.07 * k, body); // (the neck)
     const hy = wy + (swan ? 0.45 : 0.2) * k;
     K.blob(s, hx, hy, hz, 0.07 * k, 0.07 * k, 0.07 * k, swan ? body : VH.col(hex ? 0x8a6a48 : 0x2f6a3a)); // solidity: passable
     s.box(hx + fx * 0.07 * k - 0.03, hy - 0.02, hz + fz * 0.07 * k - 0.03, hx + fx * 0.07 * k + 0.03, hy + 0.01, hz + fz * 0.07 * k + 0.03, VH.col(0xf0a030)); // solidity: passable (the beak)
-    // No collider: the birds are out on the water, behind the shore rail.
+    // The rail can be vaulted and the lake is only ankle-deep, so the birds are solid.
+    const ph = world.physics;
+    const bx = (0.12 + Math.abs(fx) * 0.1) * k * 0.7, bz = (0.12 + Math.abs(fz) * 0.1) * k * 0.7; // inside the body's oval
+    ph.addBox(x - bx, wy - 0.05, z - bz, x + bx, wy + 0.11 * k, z + bz, 'animal', F().SOLID | F().SHOTS);
+    // (A duck's head is a 14 cm ball over its body: only the swans' necks need one of their own.)
+    if (swan) ph.addOrientedBox(x + fx * 0.16 * k, z + fz * 0.16 * k, 0.055 * k, 0.09 * k, yaw, wy + 0.1 * k, hy + 0.05 * k, 'animal', F().SOLID | F().SHOTS);
   }
 
   /**
@@ -1856,6 +1861,924 @@
     for (let x = P.camp.x0 + 6; x < P.x1 - 8; x += 14) world.addProp('tree', x, KERB, P.z1 - 4.5, x, 1.0);
   }
 
+  // -------------------------------------------------------- the solar farm
+  const SO = {
+    x0: -1582, x1: -1305, z0: 1477, z1: 1749,
+    edge: 1.6,
+    // The deer fence round the panels (the perimeter track runs just inside it).
+    fence: { x0: -1577.5, x1: -1309.5, z0: 1481.5, z1: 1701 },
+    spine: -1443, // the track up the middle, on the line of the drive in from South Coast Highway
+    aisle: { z0: 1584, z1: 1598 }, // the inverter lane across the middle, its track down the middle
+    halves: [[-1570, -1449], [-1437, -1317]], // the rows' ends, west and east of the spine
+    blocks: [1584, 1694], // each block's first row has its front (low, south) edge here; the others step north
+    rows: 11,
+    pitch: 9,
+    tilt: 25, // degrees: the panels lean back to face the midday sun, which crosses the south (+Z)
+    slope: 4.2, // a table's depth up the slope: two panels, long side up
+    low: 0.75, // its front edge above the grass
+    module: 1.1, // one panel's width along the row
+    watts: 400, // one panel at its best
+    gate: { x0: -1450, x1: -1436 }, // the way in from South Coast Highway
+    drive: { x0: -1447, x1: -1439 },
+    track: { z0: 1701.6, z1: 1705.4 }, // the service track inside the fence; the compounds open off it
+    battery: { x0: -1578, x1: -1526, z0: 1707, z1: 1744 },
+    park: { x0: -1520, x1: -1468, z0: 1708, z1: 1744 },
+    house: { x0: -1428, x1: -1404, z0: 1716, z1: 1729 }, // the Sunhouse, the visitor centre
+    tower: { x0: -1428, x1: -1420, z0: 1706.5, z1: 1712.5, h: 4.4 }, // the viewing deck
+    sub: { x0: -1398, x1: -1310, z0: 1707, z1: 1744 },
+    weather: { x: -1458, z: 1586 },
+    trail: 1737, // the Sun Trail footpath from the car park to the Sunhouse
+    panels: 0, // counted as they are built
+  };
+  let PANEL = null;
+
+  /** The front (low, south) edges of every row of tables: [zf, ...] for both blocks. */
+  function solarRows() {
+    const out = [];
+    for (const z of SO.blocks) for (let i = 0; i < SO.rows; i++) out.push(z - i * SO.pitch);
+    return out;
+  }
+  /** A table's depth on the ground (m). */
+  function tableDepth() {
+    return SO.slope * Math.cos((SO.tilt * Math.PI) / 180);
+  }
+
+  /**
+   * One table of panels from x a to b, its front (low, south) edge on zf: a
+   * dark glass face over a pale backing (drawn far off too), the panels'
+   * frames, two rails and the legs (close up only). Solid from the ground to
+   * its top edge unless solidToo is false. Returns how many panels it holds.
+   */
+  function panelTable(world, a, b, zf, base, solidToo) {
+    const P = SO, t = (P.tilt * Math.PI) / 180, ct = Math.cos(t), st = Math.sin(t);
+    const d = P.slope * ct, rise = P.slope * st, hs = P.slope / 2;
+    const y0 = base === undefined ? KERB : base;
+    const zc = zf - d / 2, yc = y0 + P.low + rise / 2, xc = (a + b) / 2, len = b - a;
+    const ctx = world.ctxAt(xc, zc);
+    W().tiltBox(ctx.prop, xc, yc + ct * 0.02, zc + st * 0.02, len, 0.03, P.slope, 0, t, PANEL.face);
+    W().tiltBox(ctx.prop, xc, yc - ct * 0.025, zc - st * 0.025, len + 0.04, 0.05, P.slope + 0.04, 0, t, PANEL.back);
+    // The frames: a line between every panel and one across the middle, just proud of the glass.
+    const s = ctx.detail, off = 0.04, nrm = [0, ct, st];
+    const at = (lx, q) => [lx, yc + ct * off - st * q, zc + st * off + ct * q];
+    const strip = (lx0, lx1, q0, q1) => s.quad(at(lx0, q1), at(lx1, q1), at(lx1, q0), at(lx0, q0), nrm, PANEL.frame);
+    const n = Math.max(1, Math.round(len / P.module));
+    for (let k = 0; k <= n; k++) {
+      const x = a + (len * k) / n;
+      strip(Math.max(a, x - 0.02), Math.min(b, x + 0.02), -hs, hs);
+    }
+    for (const q of [-hs, -0.025, hs - 0.05]) strip(a, b, q, q + 0.05);
+    // Two rails under the panels and the legs down to the grass.
+    for (const q of [-0.3 * P.slope, 0.3 * P.slope]) {
+      const y = yc - st * q - 0.1, z = zc + ct * q;
+      s.box(a + 0.3, y - 0.07, z - 0.05, b - 0.3, y + 0.03, z + 0.05, PANEL.steel);
+      const m = Math.max(1, Math.round((len - 0.6) / 5.8));
+      for (let k = 0; k <= m; k++) {
+        const x = a + 0.3 + ((len - 0.6) * k) / m;
+        s.box(x - 0.05, y0, z - 0.05, x + 0.05, y - 0.07, z + 0.05, PANEL.steel, { skip: { top: true } });
+      }
+    }
+    if (solidToo !== false) world.physics.addBox(a, 0, zf - d, b, y0 + P.low + rise + 0.06, zf, 'metal', F().ALL);
+    return n * 2;
+  }
+
+  /** A deer fence on an axis-aligned line: timber posts and five wire strands, 2 m high (too tall to climb), with gaps. */
+  function deerFence(world, x0, z0, x1, z1, gaps) {
+    const K = C();
+    const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+    const c = alongX ? z0 : x0;
+    const a0 = alongX ? Math.min(x0, x1) : Math.min(z0, z1), a1 = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
+    const post = VH.col(0x8a6a48), wire = VH.col(0x6a7076);
+    for (const [p0, p1] of K.cut(a0, a1, gaps)) {
+      K.pieces(p0, p1, 60, (a, b) => {
+        const ctx = world.ctxAt(alongX ? (a + b) / 2 : c, alongX ? c : (a + b) / 2);
+        const R = (q0, q1, cc0, cc1, ya, yb) => (alongX ? [q0, ya, cc0, q1, yb, cc1] : [cc0, ya, q0, cc1, yb, q1]);
+        for (const y of [0.2, 0.6, 1.0, 1.45, 1.95]) ctx.detail.box(...R(a, b, c - 0.012, c + 0.012, KERB + y - 0.035, KERB + y + 0.035), wire);
+        for (let p = a; p <= b + 0.01; p += 3.5) {
+          const q = Math.min(p, b);
+          ctx.detailWood.box(...R(q - 0.06, q + 0.06, c - 0.06, c + 0.06, KERB - 0.05, KERB + 2.05), post);
+        }
+      });
+      const bx = alongX ? [p0, 0, c - 0.08, p1, KERB + 2.05, c + 0.08] : [c - 0.08, 0, p0, c + 0.08, KERB + 2.05, p1];
+      world.physics.addBox(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], 'fence', F().SOLID | F().CAMERA);
+    }
+  }
+
+  /** A galvanised five-bar gate standing open: hinged at (x, z), pointing along yaw, len long. */
+  function fiveBar(world, x, z, yaw, len) {
+    const ctx = world.ctxAt(x, z);
+    const col = VH.col(0xa8aeb4);
+    const ex = x + Math.sin(yaw) * len, ez = z + Math.cos(yaw) * len;
+    for (const y of [0.3, 0.55, 0.8, 1.05, 1.25]) W().beam(ctx.detail, x, KERB + y, z, ex, KERB + y, ez, 0.07, col);
+    W().beam(ctx.detail, x, KERB + 0.3, z, ex, KERB + 1.25, ez, 0.07, col); // the brace
+    for (const [px, pz] of [[x, z], [ex, ez]]) ctx.detail.box(px - 0.06, KERB, pz - 0.06, px + 0.06, KERB + 1.32, pz + 0.06, col);
+    world.physics.addOrientedBox((x + ex) / 2, (z + ez) / 2, 0.08, len / 2 + 0.06, yaw, 0, KERB + 1.32, 'fence', F().SOLID | F().CAMERA);
+  }
+
+  /** A security camera on a green pole, looking along yaw. */
+  function cctv(world, x, z, yaw) {
+    const ctx = world.ctxAt(x, z);
+    const pole = VH.col(0x5a6a5a);
+    ctx.prop.cylinder(x, KERB, z, 0.09, 0.07, 6, 6, pole, true);
+    roundCollider(world, x, z, 0.1, 0, KERB + 6);
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    W().beam(ctx.prop, x, KERB + 5.8, z, x + fx * 0.6, KERB + 5.8, z + fz * 0.6, 0.06, pole);
+    W().tiltBox(ctx.prop, x + fx * 0.75, KERB + 5.62, z + fz * 0.75, 0.22, 0.2, 0.5, yaw, 0.35, VH.col(0xeceee8));
+  }
+
+  /** An inverter: a white cabin on a concrete plinth, louvres down its long sides, a finned transformer at its east end. */
+  function inverter(world, x, z, n, faceS) {
+    const WN = W();
+    const ctx = world.ctxAt(x, z);
+    WN.pave(world, x - 4.6, z - 1.8, x + 4.8, z + 1.8, 0xb8b4ac, 'plazaTop', KERB + 0.016);
+    WN.solid(world, ctx.prop, x - 4, KERB, z - 1.2, x + 1.2, KERB + 2.6, z + 1.2, 0xeef0ec, null, 'metal');
+    ctx.prop.box(x - 4.1, KERB + 2.6, z - 1.3, x + 1.3, KERB + 2.72, z + 1.3, VH.col(0xc8ccc8)); // the roof's lip
+    const louvre = VH.col(0x9aa0a6);
+    for (const sz of [-1, 1]) {
+      for (let k = 0; k < 4; k++) {
+        const lx = x - 3.5 + k * 1.15;
+        ctx.detail.box(lx, KERB + 1.4, z + sz * 1.2 - 0.03, lx + 0.8, KERB + 2.2, z + sz * 1.2 + 0.03, louvre);
+      }
+    }
+    WN.solid(world, ctx.prop, x + 1.8, KERB, z - 0.9, x + 3.8, KERB + 1.8, z + 0.9, 0x5f6f5f, null, 'metal');
+    for (let k = -0.7; k <= 0.71; k += 0.35) ctx.detail.box(x + 3.8, KERB + 0.3, z + k - 0.04, x + 4.2, KERB + 1.6, z + k + 0.04, VH.col(0x56665a));
+    world.physics.addBox(x + 3.8, 0, z - 0.8, x + 4.2, KERB + 1.6, z + 0.8, 'metal');
+    for (const k of [-0.5, 0, 0.5]) ctx.prop.cylinder(x + 2.8 + k, KERB + 1.8, z, 0.1, 0.06, 0.6, 6, VH.col(0x8a5a3a), true);
+    const fz = faceS ? 1 : -1, yaw = faceS ? 0 : Math.PI;
+    VH.Landmarks.sign(world, { x: x - 1.4, y: KERB + 0.95, z: z + fz * 1.25, yaw, w: 1.6, h: 0.45, lines: ['INVERTER ' + n], style: 'info' });
+    VH.Landmarks.sign(world, { x: x + 2.8, y: KERB + 1.15, z: z + fz * 0.95, yaw, w: 0.7, h: 0.5, lines: ['DANGER', 'High voltage'], style: 'brand', colors: { bg: ['#f2d22e', '#e0c018'], fg: '#1a1a1a' } });
+  }
+
+  /** The weather station: a mast with the wind cups and vane, the sun meter on its arm, a logger and a white louvred screen. */
+  function weatherStation(world, x, z) {
+    const K = C(), WN = W();
+    const ctx = world.ctxAt(x, z);
+    const grey = VH.col(0xb8bec4);
+    K.ground(world, x - 3.5, z - 1.8, x + 3.5, z + 1.8, 'gravel', KERB + 0.014);
+    ctx.prop.cylinder(x, KERB, z, 0.06, 0.05, 6, 6, grey, true);
+    roundCollider(world, x, z, 0.08, 0, KERB + 6);
+    W().beam(ctx.prop, x - 0.8, KERB + 5.9, z, x + 0.8, KERB + 5.9, z, 0.05, grey);
+    ctx.prop.cylinder(x - 0.8, KERB + 5.9, z, 0.015, 0.015, 0.25, 4, grey, true);
+    for (let k = 0; k < 3; k++) {
+      const a = k * 2.094;
+      K.blob(ctx.prop, x - 0.8 + Math.cos(a) * 0.18, KERB + 6.15, z + Math.sin(a) * 0.18, 0.05, 0.05, 0.05, 0xf2f2ee);
+    }
+    W().tiltBox(ctx.prop, x + 0.8, KERB + 6.1, z, 0.04, 0.18, 0.5, Math.PI / 2, 0, VH.col(0x2a2d30));
+    // The logger box and its little panel on the mast; the sun meter (a white dome) on an arm.
+    WN.solid(world, ctx.prop, x - 0.25, KERB + 1.3, z + 0.06, x + 0.25, KERB + 1.9, z + 0.32, 0xd8dcd8, null, 'metal', F().SOLID | F().SHOTS);
+    W().tiltBox(ctx.prop, x, KERB + 2.6, z + 0.35, 0.6, 0.03, 0.45, 0, 0.6, PANEL.face);
+    W().beam(ctx.prop, x, KERB + 3.2, z, x + 0.6, KERB + 3.2, z, 0.04, grey);
+    K.blob(ctx.prop, x + 0.6, KERB + 3.26, z, 0.07, 0.05, 0.07, 0xf8f8f4);
+    // The Stevenson screen on its legs.
+    const sx = x + 2, sz = z;
+    WN.solid(world, ctx.prop, sx - 0.35, KERB + 0.9, sz - 0.3, sx + 0.35, KERB + 1.5, sz + 0.3, 0xf4f4f0, null, 'metal', F().SOLID | F().SHOTS);
+    for (let k = 0; k < 4; k++) ctx.detail.box(sx - 0.36, KERB + 0.97 + k * 0.13, sz + 0.3, sx + 0.36, KERB + 1.02 + k * 0.13, sz + 0.33, VH.col(0xd8d8d2));
+    for (const [lx, lz] of [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]]) ctx.detail.box(sx + lx - 0.03, KERB, sz + lz - 0.03, sx + lx + 0.03, KERB + 0.9, sz + lz + 0.03, VH.col(0xe8e8e4));
+    world.physics.addBox(sx - 0.33, 0, sz - 0.28, sx + 0.33, KERB + 0.9, sz + 0.28, 'metal', F().SOLID | F().SHOTS);
+    VH.Landmarks.sign(world, { x: sx, y: KERB + 1.2, z: sz - 0.32, yaw: Math.PI, w: 0.6, h: 0.35, lines: ['WEATHER STATION'], style: 'plaque' });
+  }
+
+  function buildSolar(world) {
+    const K = C(), WN = W();
+    const P = SO, e = P.edge;
+    PANEL = { face: VH.col(0x1d3050), back: VH.col(0xc4c8cc), frame: VH.col(0x8894a6), steel: VH.col(0x8f969c) };
+    K.ground(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 'meadow', KERB + 0.002);
+    world.addLawn(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
+    const Fn = P.fence;
+    // Hedges along the lanes and the deer fence inside them; the field gate on the drive.
+    K.hedge(world, P.x0 + e + 0.5, P.z0 + e + 0.5, P.x1 - e - 0.5, P.z0 + e + 0.5, [[P.x0 + 10, P.x0 + 18]], 1.5, 0.9);
+    K.hedge(world, P.x0 + e + 0.5, P.z0 + e + 1, P.x0 + e + 0.5, P.z1 - e - 0.5, [], 1.5, 0.9);
+    K.hedge(world, P.x1 - e - 0.5, P.z0 + e + 1, P.x1 - e - 0.5, Fn.z1, [], 1.5, 0.9);
+    const fg = [[P.drive.x0 - 0.5, P.drive.x1 + 0.5]];
+    deerFence(world, Fn.x0, Fn.z0, Fn.x1, Fn.z0, []);
+    deerFence(world, Fn.x0, Fn.z1, Fn.x1, Fn.z1, fg);
+    deerFence(world, Fn.x0, Fn.z0, Fn.x0, Fn.z1, []);
+    deerFence(world, Fn.x1, Fn.z0, Fn.x1, Fn.z1, []);
+    fiveBar(world, P.drive.x0 - 0.5, Fn.z1 - 0.25, -Math.PI / 2, 4.2); // swung back against the fence, clear of the track
+    fiveBar(world, P.drive.x1 + 0.5, Fn.z1 - 0.25, Math.PI / 2, 4.2);
+    for (let k = 0; k < 8; k++) WN.mark(world, P.drive.x0, Fn.z1 - 1.4 + k * 0.4, P.drive.x1, Fn.z1 - 1.24 + k * 0.4, 0x2a2d30, KERB + 0.03); // the cattle grid
+    // The tracks: round the inside of the fence, up the spine, across the inverter lane.
+    const tr = (x0, z0, x1, z1) => K.ground(world, x0, z0, x1, z1, 'gravel', KERB + 0.012);
+    tr(Fn.x0 + 1, Fn.z0 + 1, Fn.x1 - 1, Fn.z0 + 6);
+    tr(Fn.x0 + 1, Fn.z1 - 6, Fn.x1 - 1, Fn.z1 - 1);
+    tr(Fn.x0 + 1, Fn.z0 + 6, Fn.x0 + 6, Fn.z1 - 6);
+    tr(Fn.x1 - 6, Fn.z0 + 6, Fn.x1 - 1, Fn.z1 - 6);
+    tr(P.spine - 3, Fn.z0 + 6, P.spine + 3, Fn.z1 - 6);
+    tr(Fn.x0 + 6, (P.aisle.z0 + P.aisle.z1) / 2 - 2.5, Fn.x1 - 6, (P.aisle.z0 + P.aisle.z1) / 2 + 2.5);
+    tr(P.drive.x0, Fn.z1 - 1, P.drive.x1, Fn.z1 + 0.6);
+    // The panels: eleven rows a block, each half-row two tables with a walkway between.
+    P.panels = 0;
+    P.tables = [];
+    for (const zf of solarRows()) {
+      for (const [h0, h1] of P.halves) {
+        const mid = (h0 + h1) / 2;
+        for (const [a, b] of [[h0, mid - 2], [mid + 2, h1]]) {
+          P.panels += panelTable(world, a, b, zf);
+          P.tables.push([a, b, zf]);
+        }
+      }
+    }
+    // An inverter at each end of the walkways, on the lane across the middle.
+    let n = 1;
+    for (const [h0, h1] of P.halves) {
+      const mid = (h0 + h1) / 2;
+      inverter(world, mid + 1, P.aisle.z0 + 2.2, n++, false);
+      inverter(world, mid + 1, P.aisle.z1 - 2.2, n++, true);
+    }
+    weatherStation(world, P.weather.x, P.weather.z);
+    // Cameras on the fence's corners.
+    cctv(world, Fn.x0 + 1.5, Fn.z0 + 1.5, Math.PI * 0.75);
+    cctv(world, Fn.x1 - 1.5, Fn.z0 + 1.5, -Math.PI * 0.75);
+    cctv(world, Fn.x0 + 1.5, Fn.z1 - 1.5, Math.PI * 0.25);
+    cctv(world, Fn.x1 - 1.5, Fn.z1 - 1.5, -Math.PI * 0.25);
+    // The flock that keeps the grass down: little groups grazing along the gaps between the rows.
+    const rng = new VH.RNG('redwater-solar-sheep');
+    const rows = solarRows(), d = tableDepth(), gap = P.pitch - d;
+    const troughZ = P.blocks[1] - 4 * P.pitch + gap / 2;
+    P.sheep = 0;
+    for (let f = 0; f < 10; ) {
+      const i = rng.int(0, rows.length - 1);
+      if (i % P.rows === 0) continue; // (no gap south of a block's first row)
+      f++;
+      const [h0, h1] = rng.pick(P.halves);
+      const cx = rng.range(h0 + 14, h1 - 14), n = rng.int(4, 8);
+      for (let k = 0; k < n; k++) {
+        const x = cx + (k - n / 2) * rng.range(2.2, 3.4), z = rows[i] + gap / 2 + rng.range(-1, 1);
+        if (Math.abs(x - (P.spine + 6)) < 3 && Math.abs(z - troughZ) < 2) continue; // (the trough)
+        K.animal(world, 'sheep', x, z, Math.PI / 2 + (rng.chance(0.5) ? Math.PI : 0) + rng.range(-0.3, 0.3), { color: rng.pick([0xf2eee4, 0xe8e2d4, 0xf6f2ea]), grazing: rng.chance(0.7) });
+        P.sheep++;
+      }
+    }
+    // A water trough for them by the spine.
+    trough(world, P.spine + 6, troughZ, 0);
+    buildSolarStrip(world);
+    // The names: at the gate on South Coast Highway, and on the corner of Foundry Road and Westfield Road.
+    WN.sign(world, { x: P.gate.x0 - 6, y: KERB + 2.4, z: P.z1 - e - 1.4, yaw: 0, w: 7, h: 1.6, lines: ['REDWATER SOLAR FARM', 'The Sunhouse · Sun Trail · Viewing tower'], style: 'brand', posts: true, colors: { bg: ['#1d3a5a', '#14304a'], fg: '#ffd84a' }, frame: 0xf2f2ee, twoSided: true });
+    WN.sign(world, { x: P.x0 + 14, y: KERB + 1.8, z: P.z0 + e + 0.5, yaw: Math.PI, w: 4.4, h: 1.1, lines: ['REDWATER SOLAR FARM', 'Visitors: entrance on South Coast Highway'], style: 'park', posts: true });
+    VH.Landmarks.sign(world, { x: P.spine + 6.5, y: KERB + 1.35, z: Fn.z1 + 0.12, yaw: 0, w: 2.6, h: 0.8, lines: ['SHEEP GRAZING', 'Drive slowly · Authorised vehicles only'], style: 'park' });
+  }
+
+  /** Along the highway: the battery store, the car park, the drive, the Sunhouse and its tower, the substation. */
+  function buildSolarStrip(world) {
+    const K = C(), WN = W();
+    const P = SO, e = P.edge, Fn = P.fence;
+    // The service track behind the fence, the drive and its gate on the highway.
+    K.ground(world, Fn.x0, P.track.z0, Fn.x1, P.track.z1, 'gravel', KERB + 0.012);
+    WN.pave(world, P.drive.x0, P.track.z1, P.drive.x1, P.z1 - e - 6, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    WN.pave(world, P.gate.x0, P.z1 - e - 6, P.gate.x1, P.z1 - e, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    for (let z = P.track.z1 + 2; z < P.z1 - e - 8; z += 6) WN.mark(world, P.spine - 0.07, z, P.spine + 0.07, z + 3, 0xf2f2ee, KERB + 0.022);
+    // A low hedge along the highway (people can hop it), open at the gate and the footpath.
+    const hz = P.z1 - e - 0.6;
+    K.hedge(world, P.x0 + e + 1, hz, P.x1 - e - 0.5, hz, [[P.gate.x0 - 2, P.gate.x1 + 2], [-1418, -1414]], 1.1, 0.8);
+    for (const z of [P.track.z1 + 3, P.track.z1 + 20, P.z1 - e - 8]) world.addProp('streetlight', P.drive.x0 - 1.2, KERB, z, Math.PI / 2, 1);
+    buildBatteryStore(world);
+    buildSolarPark(world);
+    buildSunhouse(world);
+    buildSolarTower(world);
+    buildSolarSubstation(world);
+  }
+
+  /** The battery store: six white containers of batteries in a fenced gravel compound, a transformer and a kiosk. */
+  function buildBatteryStore(world) {
+    const K = C(), WN = W();
+    const B = SO.battery;
+    K.ground(world, B.x0, B.z0, B.x1, B.z1, 'gravel', KERB + 0.014);
+    const gate = [B.x0 + 22, B.x0 + 30];
+    WN.fence(world, B.x0, B.z0, B.x1, B.z0, [gate], 'chain', 2.4);
+    WN.fence(world, B.x0, B.z1, B.x1, B.z1, [], 'chain', 2.4);
+    WN.fence(world, B.x0, B.z0, B.x0, B.z1, [], 'chain', 2.4);
+    WN.fence(world, B.x1, B.z0, B.x1, B.z1, [], 'chain', 2.4);
+    const gc = world.ctxAt((gate[0] + gate[1]) / 2, B.z0);
+    gc.prop.box(gate[0], KERB + 0.1, B.z0 - 0.06, gate[1], KERB + 2.2, B.z0 + 0.06, VH.col(0x7d838a));
+    world.physics.addBox(gate[0], 0, B.z0 - 0.12, gate[1], KERB + 2.3, B.z0 + 0.12, 'fence', F().SOLID | F().CAMERA);
+    WN.sign(world, { x: gate[1] + 4, y: KERB + 1.6, z: B.z0 - 0.3, yaw: Math.PI, w: 3.4, h: 0.9, lines: ['REDWATER BATTERY STORE', 'Danger of death · Keep out'], style: 'brand', posts: true, colors: { bg: ['#f2d22e', '#e0c018'], fg: '#1a1a1a' }, frame: 0x2b2f35 });
+    for (const z0 of [B.z0 + 6, B.z0 + 19]) {
+      for (const x0 of [B.x0 + 4, B.x0 + 19, B.x0 + 34]) batteryBox(world, x0, z0, x0 + 12, z0 + 2.5);
+    }
+    // The transformer that lifts their power onto the line, and the control kiosk.
+    const tx = B.x0 + 8, tz = B.z1 - 6;
+    const c = world.ctxAt(tx, tz);
+    WN.pave(world, tx - 4, tz - 3, tx + 4, tz + 3, 0xb8b4ac, 'plazaTop', KERB + 0.016);
+    WN.solid(world, c.prop, tx - 3, KERB, tz - 2, tx + 3, KERB + 3, tz + 2, 0x5f6f5f, null, 'metal');
+    for (let k = -2.6; k <= 2.61; k += 0.52) c.detail.box(tx + k - 0.06, KERB + 0.3, tz - 2.6, tx + k + 0.06, KERB + 2.6, tz - 2, VH.col(0x56665a));
+    world.physics.addBox(tx - 2.7, 0, tz - 2.6, tx + 2.7, KERB + 2.6, tz - 2, 'metal');
+    for (const k of [-1.5, 0, 1.5]) c.prop.cylinder(tx + k, KERB + 3, tz, 0.22, 0.12, 1.4, 8, VH.col(0x8a5a3a), true);
+    K.shed(world, { x0: B.x0 + 20, x1: B.x0 + 28, z0: B.z1 - 8, z1: B.z1 - 3 }, { h: 2.8, rise: 0.6, wall: 0xd8dcd8, roof: 0x5c5f63, axis: 'x', style: 1 });
+    world.addProp('streetlight', B.x0 + 32, KERB, B.z1 - 4, Math.PI, 1);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: B.x0 + 26, z: B.z0 + 15, r: 14, y: KERB + 0.03, strength: 0.45 });
+  }
+
+  /** One battery container: white on a plinth, door seams and green status lights down its south side, coolers on its east end. */
+  function batteryBox(world, x0, z0, x1, z1) {
+    const WN = W();
+    const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
+    ctx.concrete.box(x0 + 0.1, KERB, z0 + 0.1, x1 - 0.1, KERB + 0.22, z1 - 0.1, VH.col(0xb4b0a8));
+    WN.solid(world, ctx.prop, x0, KERB + 0.22, z0, x1, KERB + 3.0, z1, 0xf0f2f0, null, 'metal');
+    const seam = VH.col(0xc0c4c4), led = VH.col(0x5cff8a, 2.4);
+    for (let k = 1; k < 6; k++) {
+      const x = x0 + (k * (x1 - x0)) / 6;
+      ctx.detail.box(x - 0.025, KERB + 0.4, z1, x + 0.025, KERB + 2.8, z1 + 0.025, seam);
+      ctx.screen.box(x - 0.6, KERB + 2.35, z1, x - 0.45, KERB + 2.5, z1 + 0.035, led);
+    }
+    // Two coolers on a stand at the east end.
+    const cz = (z0 + z1) / 2;
+    WN.solid(world, ctx.prop, x1, KERB + 0.5, z0 + 0.2, x1 + 0.8, KERB + 2.4, z1 - 0.2, 0xd8dcd8, null, 'metal', F().SOLID | F().SHOTS);
+    for (const s of [-1, 1]) ctx.detail.box(x1 + 0.8, KERB + 1.0, cz + s * 0.55 - 0.45, x1 + 0.83, KERB + 1.9, cz + s * 0.55 + 0.45, VH.col(0x3a3f45));
+    for (const z of [z0 + 0.3, z1 - 0.3]) ctx.detail.box(x1 + 0.6, KERB, z - 0.05, x1 + 0.7, KERB + 0.5, z + 0.05, VH.col(0x8f969c));
+    world.physics.addBox(x1, 0, z0 + 0.2, x1 + 0.8, KERB + 0.5, z1 - 0.2, 'metal', F().SOLID | F().SHOTS);
+  }
+
+  /** The visitors' car park: tarmac, white bays, a hedge on the track side, lamps; the way in from the drive. */
+  function buildSolarPark(world) {
+    const K = C(), WN = W();
+    const p = SO.park;
+    WN.pave(world, p.x0, p.z0, p.x1, p.z1, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    WN.pave(world, p.x1, p.z0 + 6, SO.drive.x0, p.z0 + 13, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    const white = 0xf2f2ee;
+    SO.bayRows = [];
+    for (const [z, dir] of [[p.z0 + 1, 1], [p.z0 + 18, -1], [p.z0 + 18, 1], [p.z1 - 1, -1]]) {
+      for (let x = p.x0 + 8.4; x <= p.x1 - 2.9; x += 2.7) WN.mark(world, x - 0.06, Math.min(z, z + dir * 5), x + 0.06, Math.max(z, z + dir * 5), white, KERB + 0.02);
+      SO.bayRows.push({ z: z + dir * 2.5, h: dir > 0 ? Math.PI : 0, skip: [p.x0, p.x0 + 6] });
+    }
+    K.hedge(world, p.x0 - 1, p.z0 - 0.6, p.x1 + 0.5, p.z0 - 0.6, [], 1.1, 0.8);
+    K.hedge(world, p.x0 - 0.6, p.z0, p.x0 - 0.6, p.z1, [], 1.1, 0.8);
+    for (const x of [p.x0 + 18, p.x0 + 40]) world.addProp('streetlight', x, KERB, p.z0 + 18, 0, 1);
+    world.addProp('bin', p.x1 - 1, KERB, p.z1 - 7, 0, 1);
+  }
+
+  /**
+   * The Sunhouse: the visitor centre, timber with a glass front lit inside,
+   * panels on its roof, a canopy over the door, the live-output counter; a
+   * terrace with picnic tables and the Sun Trail's boards along the path.
+   */
+  function buildSunhouse(world) {
+    const K = C(), WN = W();
+    const H = SO.house, hx = (H.x0 + H.x1) / 2;
+    const ctx = WN.building(world, H.x0, H.z0, H.x1, H.z1, 4.2, { wall: 0x9a7a52, roof: 0x5c5f63, style: 2, bay: 2.4, floorH: 4.2, ww: 0.9, wh: 0.78, parapet: 0.45, sides: { n: 'blank', e: 'blank' }, seed: 0.61 });
+    // Its own panels on the roof (two rows, tilted at the sun).
+    for (const zf of [H.z1 - 1.2, H.z1 - 7.4]) SO.panels += panelTable(world, H.x0 + 1.2, H.x1 - 1.2, zf, KERB + 4.2, false);
+    // The glass doors (drawn on the front), and the canopy over them on two posts.
+    ctx.prop.box(hx - 1.15, KERB, H.z1, hx + 1.15, KERB + 2.5, H.z1 + 0.04, VH.col(0x3a3f45));
+    for (const x of [hx - 1.05, hx + 0.05]) ctx.prop.box(x, KERB + 0.1, H.z1 + 0.04, x + 1.0, KERB + 2.4, H.z1 + 0.06, VH.col(0x2a4a5a));
+    for (const x of [hx - 0.25, hx + 0.15]) ctx.prop.box(x, KERB + 1.0, H.z1 + 0.06, x + 0.1, KERB + 1.15, H.z1 + 0.12, VH.col(0xd8dcd8)); // handles
+    const cz = H.z1 + 2.6;
+    ctx.wood.box(hx - 3.2, KERB + 2.9, H.z1, hx + 3.2, KERB + 3.1, cz, VH.col(0x6b5038), { bottom: true });
+    for (const x of [hx - 2.9, hx + 2.9]) WN.solid(world, ctx.wood, x - 0.1, KERB, cz - 0.3, x + 0.1, KERB + 2.9, cz - 0.1, 0x6b5038, null, 'pole', F().SOLID | F().SHOTS);
+    VH.Landmarks.sign(world, { x: hx, y: KERB + 3.6, z: H.z1 + 0.06, yaw: 0, w: 7.5, h: 0.9, lines: ['THE SUNHOUSE', 'Redwater Solar Farm visitor centre'], style: 'brand', colors: { bg: ['#1d3a5a', '#14304a'], fg: '#ffd84a' }, frame: 0xf2f2ee });
+    // The live-output board by the door (lit), and the counter you ask at.
+    ctx.screen.box(hx + 3.6, KERB + 1.2, H.z1, hx + 5.4, KERB + 2.3, H.z1 + 0.05, VH.col(0x3a6aa8, 1.6));
+    ctx.screen.box(hx + 3.75, KERB + 1.7, H.z1 + 0.05, hx + 5.25, KERB + 2.0, H.z1 + 0.07, VH.col(0xffd84a, 2.2));
+    world.interactables.push({ id: 'solar_output', kind: 'redwaterSolar', x: hx + 2, y: KERB + 1.2, z: H.z1 + 1.6, radius: 2.4, label: "Check the farm's output", what: 'output' });
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: hx, z: H.z1 + 3, r: 8, y: KERB + 0.03, strength: 0.7 });
+    // The terrace and the footpath to it (across the drive from the car park), picnic tables, bins.
+    WN.pave(world, H.x0 - 2, H.z1, H.x1 + 2, H.z1 + 9, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    WN.pave(world, SO.park.x1, SO.trail - 1.4, SO.drive.x0, SO.trail + 1.4, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    WN.pave(world, SO.drive.x1, SO.trail - 1.4, H.x0 - 2, SO.trail + 1.4, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    for (let x = SO.drive.x0 + 0.5; x < SO.drive.x1 - 0.4; x += 1.2) WN.mark(world, x, SO.trail - 1.3, x + 0.6, SO.trail + 1.3, 0xf2f2ee, KERB + 0.022);
+    WN.pave(world, -1417.5, H.z1 + 9, -1414.5, SO.z1 - SO.edge, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    for (const [x, z] of [[H.x0 + 2.5, H.z1 + 6], [H.x0 + 7.5, H.z1 + 6.5], [H.x1 - 3, H.z1 + 6]]) K.picnicTable(world, x, z, 0, 0x8a6a48);
+    world.addProp('bin', H.x1 + 1, KERB, H.z1 + 2, 0, 1);
+    world.addProp('bench', H.x0 - 1, KERB, H.z1 + 4, Math.PI / 2, 1);
+    world.floodlights.push({ x: hx, z: H.z1 + 7, r: 9, y: KERB + 0.03, strength: 0.5 });
+    // The Sun Trail: three boards along the path from the car park.
+    const boards = [
+      ['SUN TRAIL 1 · SUNLIGHT TO KETTLE', 'Light knocks electrons loose in the panels', 'The inverters turn it into mains power'],
+      ['SUN TRAIL 2 · SHEEP AND THE SUN', SO.sheep + ' sheep keep the grass short', 'They like the shade under the panels'],
+      ['SUN TRAIL 3 · SAVING IT FOR LATER', 'Six containers of batteries by the gate', 'Lunchtime sunshine boils teatime kettles'],
+    ];
+    boards.forEach((lines, i) => WN.sign(world, { x: [SO.park.x1 + 4, SO.park.x1 + 11, SO.drive.x1 + 6][i], y: KERB + 1.6, z: SO.trail - 2.6, yaw: 0, w: 3.6, h: 1.2, lines, style: 'info', posts: true }));
+  }
+
+  /** The viewing tower: a timber deck 4.4 m up by the fence, stairs from the east, a viewer on a post. */
+  function buildSolarTower(world) {
+    const WN = W();
+    const T = SO.tower, y = KERB + T.h;
+    const ctx = world.ctxAt((T.x0 + T.x1) / 2, (T.z0 + T.z1) / 2);
+    const wood = 0x8a6a48, dark = 0x6b5038;
+    WN.deck(world, ctx.wood, T.x0, T.z0, T.x1, T.z1, y, wood, 'wood', 0.25);
+    for (const x of [T.x0 + 0.15, (T.x0 + T.x1) / 2, T.x1 - 0.15]) {
+      for (const z of [T.z0 + 0.15, T.z1 - 0.15]) {
+        if (x === T.x1 - 0.15 && z === T.z1 - 0.15) continue; // (the stair lands there)
+        WN.solid(world, ctx.wood, x - 0.13, KERB, z - 0.13, x + 0.13, y - 0.25, z + 0.13, dark, null, 'pole', F().SOLID | F().SHOTS);
+        W().beam(ctx.wood, x, y - 1.4, z, x + (x < (T.x0 + T.x1) / 2 ? 0.9 : -0.9), y - 0.3, z, 0.1, dark);
+      }
+    }
+    WN.stairs(world, ctx.wood, T.x1 + 8.4, T.z1 - 0.8, 'w', 8.4, 1.4, KERB, y, wood, { railHex: dark });
+    WN.deckRails(world, T.x0, T.z0, T.x1, T.z1, y, [{ side: 'e', a0: T.z1 - 1.6, a1: T.z1 }], dark);
+    // The viewer: a coin telescope on a post at the north rail.
+    const vx = (T.x0 + T.x1) / 2, vz = T.z0 + 0.9;
+    ctx.prop.cylinder(vx, y, vz, 0.07, 0.07, 1.05, 6, VH.col(0x2f5a3a), true);
+    ctx.prop.box(vx - 0.18, y + 1.05, vz - 0.32, vx + 0.18, y + 1.35, vz + 0.18, VH.col(0x2f5a3a));
+    world.physics.addBox(vx - 0.18, y, vz - 0.32, vx + 0.18, y + 1.35, vz + 0.18, 'metal', F().SOLID | F().SHOTS);
+    world.interactables.push({ id: 'solar_viewer', kind: 'redwaterSolar', x: vx, y: y + 1.2, z: vz + 1.0, radius: 1.6, label: 'Look through the viewer', what: 'view' });
+    // A lamp on the corner post for the evening, and a board at the foot of the stairs.
+    WN.lamp(world, T.x0 + 0.15, T.z1 - 0.15, 0xfff1c8, 2.4, 0.3, y + 1.05);
+    WN.sign(world, { x: T.x1 + 9.5, y: KERB + 1.3, z: T.z1 + 1.3, yaw: Math.PI / 2, w: 1.6, h: 0.5, lines: ['VIEWING TOWER'], style: 'park', posts: true });
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: T.x1 + 4, z: T.z1, r: 6, y: KERB + 0.03, strength: 0.45 });
+  }
+
+  /** The substation: a fenced gravel yard with three transformers, the gantries, switchgear and the control building. */
+  function buildSolarSubstation(world) {
+    const K = C(), WN = W();
+    const S = SO.sub;
+    K.ground(world, S.x0, S.z0, S.x1, S.z1, 'gravel', KERB + 0.014);
+    const gate = [S.x1 - 20, S.x1 - 12];
+    WN.fence(world, S.x0, S.z0, S.x1, S.z0, [gate], 'chain', 2.4);
+    WN.fence(world, S.x0, S.z1, S.x1, S.z1, [], 'chain', 2.4);
+    WN.fence(world, S.x0, S.z0, S.x0, S.z1, [], 'chain', 2.4);
+    WN.fence(world, S.x1, S.z0, S.x1, S.z1, [], 'chain', 2.4);
+    const gc = world.ctxAt((gate[0] + gate[1]) / 2, S.z0);
+    gc.prop.box(gate[0], KERB + 0.1, S.z0 - 0.06, gate[1], KERB + 2.2, S.z0 + 0.06, VH.col(0x7d838a));
+    world.physics.addBox(gate[0], 0, S.z0 - 0.12, gate[1], KERB + 2.3, S.z0 + 0.12, 'fence', F().SOLID | F().CAMERA);
+    VH.Landmarks.sign(world, { x: gate[0] - 4, y: KERB + 1.6, z: S.z0 - 0.12, yaw: Math.PI, w: 3.2, h: 0.9, lines: ['DANGER OF DEATH', 'Keep out · Redwater substation'], style: 'brand', colors: { bg: ['#f2d22e', '#e0c018'], fg: '#1a1a1a' }, frame: 0x2b2f35 });
+    VH.Landmarks.sign(world, { x: S.x0 + 20, y: KERB + 1.6, z: S.z1 + 0.12, yaw: 0, w: 3.2, h: 0.9, lines: ['DANGER OF DEATH', 'Keep out · Redwater substation'], style: 'brand', colors: { bg: ['#f2d22e', '#e0c018'], fg: '#1a1a1a' }, frame: 0x2b2f35 });
+    // The control building in the south-west corner.
+    const cb = { x0: S.x0 + 4, x1: S.x0 + 22, z0: S.z1 - 11, z1: S.z1 - 3 };
+    WN.building(world, cb.x0, cb.z0, cb.x1, cb.z1, 3.6, { wall: 0xc8c0b0, roof: 0x6b6e72, style: 1, bay: 3.6, floorH: 3.6, ww: 0.35, wh: 0.4, parapet: 0.4 });
+    WN.lamp(world, (cb.x0 + cb.x1) / 2, cb.z0 - 0.3, 0xfff1c8, 2.4, 0.2, KERB + 3.0);
+    // Three transformers in a row, finned, with bushings, each in a low bund.
+    for (let i = 0; i < 3; i++) {
+      const tx = S.x0 + 12 + i * 18, tz = S.z0 + 11;
+      const c = world.ctxAt(tx, tz);
+      c.concrete.box(tx - 4.2, KERB, tz - 3.4, tx + 4.2, KERB + 0.3, tz + 3.4, VH.col(0xb4b0a8));
+      WN.solid(world, c.prop, tx - 3, KERB + 0.3, tz - 2.2, tx + 3, KERB + 3.6, tz + 2.2, 0x6a7a6a, null, 'metal');
+      for (let k = -2.6; k <= 2.61; k += 0.52) c.detail.box(tx + k - 0.06, KERB + 0.6, tz + 2.2, tx + k + 0.06, KERB + 3.2, tz + 2.9, VH.col(0x5a6a5a));
+      world.physics.addBox(tx - 2.7, 0, tz + 2.2, tx + 2.7, KERB + 3.2, tz + 2.9, 'metal');
+      world.physics.addBox(tx - 4.2, 0, tz - 3.4, tx + 4.2, KERB + 0.3, tz + 3.4, 'kerb', F().SOLID);
+      for (const k of [-1.5, 0, 1.5]) c.prop.cylinder(tx + k, KERB + 3.6, tz, 0.22, 0.12, 1.6, 8, VH.col(0x8a5a3a), true);
+    }
+    // The switchgear: grey cabinets in a row.
+    for (let x = S.x0 + 30; x < S.x0 + 52; x += 2.2) WN.solid(world, world.ctxAt(x, S.z1 - 8).prop, x, KERB, S.z1 - 9, x + 2, KERB + 2.3, S.z1 - 7.8, 0x9aa0a6, null, 'metal');
+    // The gantries: steel goalposts the lines come in on, with their insulators.
+    for (const gx of [S.x1 - 26, S.x1 - 8]) {
+      const c = world.ctxAt(gx, S.z0 + 12);
+      for (const gz of [S.z0 + 4, S.z0 + 20]) {
+        c.prop.box(gx - 0.25, KERB, gz - 0.25, gx + 0.25, KERB + 10, gz + 0.25, VH.col(0x9aa0a6));
+        world.physics.addBox(gx - 0.27, 0, gz - 0.27, gx + 0.27, KERB + 10, gz + 0.27, 'pole', F().SOLID | F().SHOTS);
+      }
+      c.prop.box(gx - 0.2, KERB + 9.6, S.z0 + 4, gx + 0.2, KERB + 10, S.z0 + 20, VH.col(0x9aa0a6));
+      for (let gz = S.z0 + 6; gz < S.z0 + 19; gz += 3.5) c.prop.cylinder(gx, KERB + 8.2, gz, 0.15, 0.15, 1.4, 6, VH.col(0x8a5a3a), false);
+    }
+    // The lines from the gantries to the transformers.
+    for (let k = 0; k < 3; k++) {
+      const gz = S.z0 + 7.5 + k * 3.5;
+      W().beam(world.ctxAt(S.x1 - 17, gz).prop, S.x1 - 26, KERB + 8.2, gz, S.x1 - 8, KERB + 8.2, gz, 0.04, 0x3a3f45);
+      W().beam(world.ctxAt(S.x0 + 40, gz).prop, S.x0 + 48, KERB + 5.2, S.z0 + 11, S.x1 - 26, KERB + 8.2, gz, 0.04, 0x3a3f45);
+    }
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: S.x0 + 30, z: S.z0 + 18, r: 16, y: KERB + 0.03, strength: 0.45 });
+    world.floodlights.push({ x: S.x1 - 16, z: S.z0 + 18, r: 12, y: KERB + 0.03, strength: 0.4 });
+    for (const x of [S.x0 + 28, S.x1 - 4]) world.addProp('streetlight', x, KERB, S.z1 - 2, Math.PI, 1);
+  }
+
+  // --------------------------------------------------- the recycling centre
+  const RC = {
+    x0: -863, x1: -647, z0: 1477, z1: 1749,
+    edge: 1.6,
+    // The public side: in from South Coast Highway at the west gate, up the ramp, along the skip deck, down and out at the east gate.
+    inLane: { x0: -852, x1: -842 },
+    outLane: { x0: -702, x1: -692 },
+    deck: { x0: -822, x1: -722, z0: 1702, z1: 1714, h: 2.4 }, // the split-level deck; the skips stand below its north edge
+    ramp: 20,
+    skips: { n: 10, x0: -817, pitch: 9.6, z0: 1695.4, z1: 1701.6, h: 2.2 },
+    shop: { x0: -832, x1: -806, z0: 1726, z1: 1737 }, // Second Chance, the re-use shop
+    banks: { x: -786, z: 1727 }, // the bottle banks
+    park: { x0: -764, x1: -712, z0: 1720, z1: 1744 },
+    office: { x0: -860, x1: -854, z0: 1722, z1: 1734 },
+    // The working side: the yard behind the skips, the sorting shed and its bales, the lorry depot, the weighbridge.
+    yard: { z0: 1662, z1: 1702 },
+    lorryIn: { z0: 1662, z1: 1674 }, // the lorries' way in from Tipper Lane, over the weighbridge
+    shed: { x0: -822, x1: -740, z0: 1588, z1: 1640, h: 11 },
+    bales: { x0: -732, x1: -696, z0: 1592, z1: 1640 },
+    depot: { x0: -686, x1: -652, z0: 1566, z1: 1658 },
+    // The far side: compost windrows and the push-wall bays.
+    compost: { x0: -852, x1: -752, z: [1494, 1505, 1516, 1527, 1538, 1549], a: 3, h: 2.2 },
+    bays: { x0: -742, x1: -655, z0: 1486, z1: 1556, wall: 3 },
+  };
+
+  /**
+   * A long heap with a ridge along X (a compost windrow, a pile in a bay):
+   * two slopes of textured earth that Jay can scramble up, solid as two ramps.
+   */
+  function heap(world, x0, x1, zc, a, h, hex) {
+    const col = VH.col(hex, 4.5);
+    const y0 = KERB, y1 = KERB + h;
+    C().pieces(x0, x1, 60, (xa, xb) => {
+      const s = world.ctxAt((xa + xb) / 2, zc).asphaltTop;
+      s.polygon([[xa, y0, zc + a], [xb, y0, zc + a], [xb, y1, zc], [xa, y1, zc]], col);
+      s.polygon([[xb, y0, zc - a], [xa, y0, zc - a], [xa, y1, zc], [xb, y1, zc]], col);
+    });
+    world.ctxAt(x0, zc).asphaltTop.polygon([[x0, y0, zc - a], [x0, y0, zc + a], [x0, y1, zc]], col);
+    world.ctxAt(x1, zc).asphaltTop.polygon([[x1, y0, zc + a], [x1, y0, zc - a], [x1, y1, zc]], col);
+    const xc = (x0 + x1) / 2, L = (x1 - x0) / 2;
+    world.physics.addRamp(xc, zc + a / 2, L, a / 2, Math.PI, 0, y0, y1, 'dirt', F().ALL);
+    world.physics.addRamp(xc, zc - a / 2, L, a / 2, 0, 0, y0, y1, 'dirt', F().ALL);
+  }
+  /** Bits lying on a heap's slopes (planks, rubble, branches), each flat on the slope so no edge stands proud. */
+  function heapBits(world, x0, x1, zc, a, h, hexes, n, seed) {
+    const rng = new VH.RNG(seed);
+    const ang = Math.atan2(h, a);
+    for (let k = 0; k < n; k++) {
+      const x = rng.range(x0 + 1, x1 - 1), t = rng.range(0.15, 0.85), side = rng.chance(0.5) ? 1 : -1;
+      const z = zc + side * a * (1 - t), y = KERB + h * t;
+      const ctx = world.ctxAt(x, z);
+      W().tiltBox(ctx.propMatte, x, y + 0.02, z, rng.range(0.6, 2.2), 0.08, rng.range(0.3, 0.8), side > 0 ? 0 : Math.PI, ang + rng.range(-0.05, 0.05), VH.col(rng.pick(hexes))); // solidity: passable (flat on the slope)
+    }
+  }
+
+  /** A roll-on skip: an open steel container, its load showing over the rim; a board with its name on the deck rail above. */
+  function rollSkip(world, x, z0, z1, h, hex, load) {
+    const ctx = world.ctxAt(x, (z0 + z1) / 2);
+    const col = VH.col(hex), rim = VH.colMul(VH.col(hex), 0.75);
+    const x0 = x - 1.3, x1 = x + 1.3;
+    // Open-topped: four walls on a floor.
+    ctx.prop.box(x0, KERB + 0.2, z0, x0 + 0.1, KERB + h, z1, col);
+    ctx.prop.box(x1 - 0.1, KERB + 0.2, z0, x1, KERB + h, z1, col);
+    ctx.prop.box(x0 + 0.1, KERB + 0.2, z0, x1 - 0.1, KERB + h, z0 + 0.1, col);
+    ctx.prop.box(x0 + 0.1, KERB + 0.2, z1 - 0.1, x1 - 0.1, KERB + h, z1, col);
+    ctx.prop.box(x0 - 0.06, KERB + h - 0.15, z0 - 0.06, x0 + 0.1, KERB + h, z1 + 0.06, rim); // the rim
+    ctx.prop.box(x1 - 0.1, KERB + h - 0.15, z0 - 0.06, x1 + 0.06, KERB + h, z1 + 0.06, rim);
+    ctx.prop.box(x0 + 0.1, KERB + h - 0.15, z0 - 0.06, x1 - 0.1, KERB + h, z0 + 0.1, rim);
+    ctx.prop.box(x0 + 0.1, KERB + h - 0.15, z1 - 0.1, x1 - 0.1, KERB + h, z1 + 0.06, rim);
+    for (const z of [z0 + 1.2, (z0 + z1) / 2, z1 - 1.2]) ctx.prop.box(x0 - 0.05, KERB + 0.3, z - 0.08, x1 + 0.05, KERB + h - 0.2, z + 0.08, rim); // ribs
+    for (const xx of [x0 + 0.3, x1 - 0.3]) ctx.prop.box(xx - 0.12, KERB, z0 + 0.2, xx + 0.12, KERB + 0.2, z1 - 0.2, VH.col(0x2a2d30)); // runners
+    // The load: a few lumps just under the rim in the load's colours.
+    const L = load;
+    ctx.propMatte.box(x0 + 0.1, KERB + 0.3, z0 + 0.1, x1 - 0.1, KERB + h - 0.12, z1 - 0.1, VH.col(L[0]), { skip: { n: true, s: true, e: true, w: true } });
+    for (let k = 0; k < 4; k++) {
+      const zz = z0 + 0.8 + k * ((z1 - z0 - 1.6) / 3);
+      W().tiltBox(ctx.propMatte, x + (k % 2 ? 0.4 : -0.4), KERB + h - 0.05, zz, 0.9, 0.3, 1.0, k * 0.7, 0.2, VH.col(L[1 + (k % (L.length - 1))])); // solidity: passable (heaped just over the rim)
+    }
+    world.physics.addBox(x0 - 0.06, 0, z0 - 0.06, x1 + 0.06, KERB + h, z1 + 0.06, 'metal', F().ALL);
+  }
+
+  /** A bin lorry (or, with hook, a hook-lift lorry carrying a skip), parked facing yaw; solid. */
+  function lorry(world, x, z, yaw, hex, hook) {
+    const ctx = world.ctxAt(x, z), s = ctx.prop;
+    const P = C().frame(x, z, yaw);
+    const body = VH.col(hex || 0x2f7a3a), white = VH.col(0xf2f2ee), dark = VH.col(0x2a2d30);
+    const ob = (f, r, hf, hr, y0, y1, c, surf) => {
+      const [px, pz] = P(f, r);
+      (surf || s).orientedBox(px, pz, hr, hf, yaw, y0, y1, c);
+    };
+    ob(-0.6, 0, 4.4, 0.55, KERB + 0.5, KERB + 1.0, dark); // the chassis
+    ob(3.0, 0, 1.0, 1.25, KERB + 0.75, KERB + 3.0, white); // the cab
+    ob(4.02, 0, 0.03, 1.1, KERB + 1.9, KERB + 2.75, VH.col(0x2a3a44)); // the windscreen
+    for (const r of [-1, 1]) ob(3.2, r * 1.26, 0.6, 0.02, KERB + 1.9, KERB + 2.7, VH.col(0x2a3a44)); // side windows
+    ob(3.0, 0, 1.02, 1.27, KERB + 0.75, KERB + 1.1, body); // a stripe along the cab's foot
+    if (!hook) {
+      ob(-1.2, 0, 2.9, 1.25, KERB + 1.0, KERB + 3.4, body); // the body
+      ob(-4.35, 0, 0.3, 1.2, KERB + 0.7, KERB + 3.1, VH.colMul(body, 0.8)); // the tailgate
+      ob(-4.75, 0, 0.12, 0.9, KERB + 0.7, KERB + 1.5, dark); // the bin lifter
+    } else {
+      ob(-1.3, 0, 2.9, 1.2, KERB + 1.05, KERB + 2.9, body); // the skip on its back
+      ob(-1.3, 0, 2.95, 1.25, KERB + 2.75, KERB + 2.9, VH.colMul(body, 0.75));
+      ob(1.75, 0, 0.15, 0.6, KERB + 1.0, KERB + 3.4, dark); // the hook arm
+    }
+    const tyre = VH.col(0x1b1d20);
+    for (const f of [3.0, -1.2, -2.5]) {
+      for (const r of [-1.05, 1.05]) {
+        const [wx, wz] = P(f, r);
+        C().wheel(s, wx, KERB + 0.5, wz, 0.5, 0.4, yaw, tyre);
+      }
+    }
+    const [cx, cz] = P(3.0, 0), [bx, bz] = P(-1.3, 0);
+    world.physics.addOrientedBox(cx, cz, 1.28, 1.05, yaw, 0, KERB + 3.0, 'metal', F().ALL);
+    world.physics.addOrientedBox(bx, bz, 1.28, 3.5, yaw, 0, KERB + (hook ? 2.9 : 3.4), 'metal', F().ALL);
+    if (!hook) {
+      for (const side of [-1, 1]) {
+        const [sx, sz] = P(-1.2, side * 1.27);
+        VH.Landmarks.sign(world, { x: sx, y: KERB + 2.5, z: sz, yaw: yaw + side * Math.PI / 2, w: 4.6, h: 0.7, lines: ['REDWATER RECYCLING'], style: 'brand', colors: { bg: ['#2f7a3a', '#246030'], fg: '#ffffff' } });
+      }
+    }
+  }
+
+  /** A wheel loader, parked: yellow, a glass cab, its bucket down. Solid. */
+  function loader(world, x, z, yaw) {
+    const ctx = world.ctxAt(x, z), s = ctx.prop;
+    const P = C().frame(x, z, yaw);
+    const yel = VH.col(0xe0b12e), dark = VH.col(0x2a2d30);
+    const ob = (f, r, hf, hr, y0, y1, c) => {
+      const [px, pz] = P(f, r);
+      s.orientedBox(px, pz, hr, hf, yaw, y0, y1, c);
+    };
+    ob(-0.9, 0, 1.5, 1.05, KERB + 0.8, KERB + 2.2, yel); // the engine
+    ob(0.3, 0, 0.75, 0.85, KERB + 2.2, KERB + 3.5, VH.col(0x2a3a44)); // the glass cab
+    ob(0.3, 0, 0.82, 0.9, KERB + 3.5, KERB + 3.65, yel);
+    ob(1.5, 0, 0.6, 0.6, KERB + 0.8, KERB + 1.9, yel); // the front frame
+    for (const r of [-0.7, 0.7]) {
+      const [ax, az] = P(1.6, r), [bx, bz] = P(3.0, r);
+      W().beam(s, ax, KERB + 1.9, az, bx, KERB + 0.9, bz, 0.22, yel); // the arms
+    }
+    ob(3.35, 0, 0.45, 1.45, KERB + 0.1, KERB + 1.2, VH.colMul(yel, 0.75)); // the bucket
+    const tyre = VH.col(0x1b1d20);
+    for (const f of [1.5, -1.3]) {
+      for (const r of [-1.1, 1.1]) {
+        const [wx, wz] = P(f, r);
+        C().wheel(s, wx, KERB + 0.8, wz, 0.8, 0.55, yaw, tyre);
+      }
+    }
+    const [bx, bz] = P(-0.2, 0), [kx, kz] = P(3.35, 0), [mx, mz] = P(2.5, 0);
+    world.physics.addOrientedBox(bx, bz, 1.4, 2.3, yaw, 0, KERB + 3.65, 'metal', F().ALL);
+    world.physics.addOrientedBox(mx, mz, 1.4, 0.4, yaw, 0, KERB + 1.6, 'metal', F().ALL);
+    world.physics.addOrientedBox(kx, kz, 1.45, 0.45, yaw, 0, KERB + 1.2, 'metal', F().ALL);
+  }
+
+  /** A recycling bale: a pressed block with two straps. */
+  function rbale(ctx, x0, y0, z0, hex) {
+    const x1 = x0 + 1.5, z1 = z0 + 1.1, y1 = y0 + 1.05;
+    ctx.propMatte.box(x0, y0, z0, x1, y1, z1, VH.col(hex), { bottom: y0 > KERB + 0.01 });
+    for (const t of [0.3, 0.7]) {
+      const x = x0 + (x1 - x0) * t;
+      ctx.detail.box(x - 0.03, y0, z0 - 0.01, x + 0.03, y1 + 0.01, z1 + 0.01, VH.col(0x2a2d30));
+    }
+  }
+
+  function buildRecycling(world) {
+    const K = C(), WN = W();
+    const P = RC, e = P.edge;
+    // Concrete over the working side, tarmac on the public side, grass in the corners.
+    K.ground(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 'meadow', KERB + 0.002);
+    world.addLawn(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
+    WN.pave(world, P.x0 + e, P.yard.z0, P.x1 - e, P.yard.z1, 0xd0ccc4, 'plazaTop', KERB + 0.012);
+    WN.pave(world, P.x0 + e, P.compost.z[0] - P.compost.a - 4, P.x1 - e, P.yard.z0, 0xc4beb2, 'plazaTop', KERB + 0.01);
+    // The fence round the working side: Tipper Lane, Foundry Road, Westgate Parkway; the lorry gate on Tipper Lane.
+    const fx0 = P.x0 + e + 0.6, fx1 = P.x1 - e - 0.6, fz0 = P.z0 + e + 0.6, fzs = P.deck.z0 - 0.4;
+    WN.fence(world, fx0, fz0, fx1, fz0, [], 'chain', 2.4);
+    WN.fence(world, fx0, fz0, fx0, fzs, [[P.lorryIn.z0, P.lorryIn.z1]], 'chain', 2.4);
+    WN.fence(world, fx1, fz0, fx1, fzs, [], 'chain', 2.4);
+    // ... and between the working yard and the public side, either side of the deck (its north wall does the rest).
+    WN.fence(world, fx0, fzs, P.deck.x0 - P.ramp, fzs, [], 'chain', 2.4);
+    WN.fence(world, P.deck.x1 + P.ramp, fzs, fx1, fzs, [], 'chain', 2.4);
+    buildTipDeck(world);
+    buildTipVisitors(world);
+    buildRecyclingYard(world);
+    buildCompost(world);
+    // The name at the way in on South Coast Highway, and on Westgate Parkway.
+    WN.sign(world, { x: P.inLane.x1 + 9, y: KERB + 2.4, z: P.z1 - e - 1.4, yaw: 0, w: 7.5, h: 1.6, lines: ['REDWATER RECYCLING CENTRE', 'Household recycling · Re-use shop · Open daily'], style: 'brand', posts: true, colors: { bg: ['#2f7a3a', '#246030'], fg: '#ffffff' }, frame: 0xf2f2ee, twoSided: true });
+    WN.sign(world, { x: P.x1 - e - 2.5, y: KERB + 2.2, z: 1610, yaw: Math.PI / 2, w: 6, h: 1.3, lines: ['REDWATER RECYCLING', 'Lorries: Tipper Lane · Public: South Coast Highway'], style: 'brand', posts: true, colors: { bg: ['#2f7a3a', '#246030'], fg: '#ffffff' }, frame: 0xf2f2ee });
+  }
+
+  /** The split-level deck: up the ramp, park by the rail, throw your junk down into the right skip; down the ramp and out. */
+  function buildTipDeck(world) {
+    const K = C(), WN = W();
+    const P = RC, D = P.deck, y = KERB + D.h, e = P.edge;
+    const tar = 0x8a8a88, conc = VH.col(0xb8b4ac);
+    // The lanes in and out from the highway, and the ramps.
+    WN.pave(world, P.inLane.x0, D.z0, P.inLane.x1, P.z1 - e, tar, 'asphaltTop', KERB + 0.012);
+    WN.pave(world, P.outLane.x0, D.z0, P.outLane.x1, P.z1 - e, tar, 'asphaltTop', KERB + 0.012);
+    const rampUp = (xLow, xHigh) => {
+      const xa = Math.min(xLow, xHigh), xb = Math.max(xLow, xHigh);
+      const yl = KERB + 0.01, yh = y + 0.012;
+      const at = (x) => yl + ((yh - yl) * (x - xLow)) / (xHigh - xLow);
+      const ctx = world.ctxAt((xa + xb) / 2, (D.z0 + D.z1) / 2);
+      const top = VH.col(tar);
+      // The slope (two halves so each sits in its chunk's builder), the side walls.
+      ctx.asphaltTop.quad([xa, at(xa), D.z1], [xb, at(xb), D.z1], [xb, at(xb), D.z0], [xa, at(xa), D.z0], [0, 1, 0], top);
+      ctx.concrete.polygon([[xa, KERB, D.z1], [xb, KERB, D.z1], [xb, at(xb) - 0.012, D.z1], [xa, at(xa) - 0.012, D.z1]], conc);
+      ctx.concrete.polygon([[xb, KERB, D.z0], [xa, KERB, D.z0], [xa, at(xa) - 0.012, D.z0], [xb, at(xb) - 0.012, D.z0]], conc);
+      const yaw = xHigh > xLow ? Math.PI / 2 : -Math.PI / 2;
+      world.physics.addRamp((xa + xb) / 2, (D.z0 + D.z1) / 2, (D.z1 - D.z0) / 2, (xb - xa) / 2, yaw, 0, yl, yh, 'road', F().ALL);
+      // Kerb rails up both sides.
+      for (const z of [D.z0 + 0.15, D.z1 - 0.15]) {
+        const c2 = world.ctxAt((xa + xb) / 2, z);
+        W().beam(c2.prop, xLow, at(xLow) + 0.9, z, xHigh, at(xHigh) + 0.9, z, 0.08, 0xe8c040);
+        for (let k = 0; k <= 4; k++) {
+          const x = xLow + ((xHigh - xLow) * k) / 4;
+          c2.prop.box(x - 0.05, at(x), z - 0.05, x + 0.05, at(x) + 0.9, z + 0.05, VH.col(0xe8c040));
+        }
+        world.physics.addRamp((xa + xb) / 2, z, 0.1, (xb - xa) / 2, yaw, 0, yl + 0.95, yh + 0.95, 'railing', F().SOLID | F().SHOTS);
+      }
+    };
+    rampUp(D.x0 - P.ramp, D.x0);
+    rampUp(D.x1 + P.ramp, D.x1);
+    // The deck itself: a concrete-walled bank with tarmac on top.
+    W().tiles(world, D.x0, D.z0, D.x1, D.z1, (xa, za, xb, zb, ctx) => {
+      ctx.concrete.box(xa, KERB, za, xb, y, zb, conc, { skip: { top: true } });
+      ctx.asphaltTop.topRect(xa, za, xb, zb, y + 0.012, VH.col(tar), 6);
+    });
+    world.physics.addBox(D.x0, 0, D.z0, D.x1, y, D.z1, 'road', F().ALL);
+    // The walkway along the north edge, bays for the cars, arrows down the lane.
+    WN.mark(world, D.x0, D.z0 + 3, D.x1, D.z0 + 3.12, 0xf2c018, y + 0.022);
+    for (let x = D.x0 + 2; x <= D.x1 - 2; x += 3.2) WN.mark(world, x - 0.06, D.z0 + 3.1, x + 0.06, D.z0 + 7.6, 0xf2f2ee, y + 0.022);
+    for (let x = D.x0 + 8; x < D.x1 - 6; x += 18) WN.mark(world, x, D.z1 - 2.6, x + 3, D.z1 - 2.4, 0xf2f2ee, y + 0.022);
+    // Rails: along the north edge over the skips (waist-high: you throw over it), along the south edge.
+    const dc = world.ctxAt((D.x0 + D.x1) / 2, D.z0);
+    for (let x = D.x0; x < D.x1 - 0.01; x += 25) {
+      const xb = Math.min(D.x1, x + 25);
+      VH.Landmarks.railing(world, world.ctxAt((x + xb) / 2, D.z0), x, D.z0 + 0.2, xb, D.z0 + 0.2, y, { color: 0xe8c040 });
+      VH.Landmarks.railing(world, world.ctxAt((x + xb) / 2, D.z1), x, D.z1 - 0.2, xb, D.z1 - 0.2, y, { color: 0x3f454c });
+    }
+    // The skips below, each with its board on the rail.
+    const KINDS = [
+      ['GARDEN WASTE', 0x2f7a3a, [0x5a7a2e, 0x7a9a3a, 0x8a6a3a]],
+      ['WOOD', 0x2f5a8a, [0x8a6a48, 0xa8845a, 0x6b4e33]],
+      ['METAL', 0x8a3a2a, [0x8a9097, 0x9a5a2e, 0x6a7078]],
+      ['CARDBOARD', 0x2f5a8a, [0xb8925a, 0xa88450, 0xc8a46a]],
+      ['PAPER', 0x2f7a3a, [0xe8e4d8, 0xd8d4c8, 0x9ab0c8]],
+      ['PLASTICS', 0xe0b12e, [0x3a7ac8, 0xe8e8e4, 0xc83a3a]],
+      ['ELECTRICALS', 0x8a3a2a, [0x3a3f45, 0xe8e8e4, 0x6a7078]],
+      ['TEXTILES', 0x7a3a8a, [0xc83a6a, 0x3a5ac8, 0xe8c040]],
+      ['RUBBLE', 0x6a7078, [0x9a948a, 0xb8b4ac, 0x7a746a]],
+      ['GENERAL WASTE', 0x3a3f45, [0x2a2d30, 0x4a4f55, 0x6a6458]],
+    ];
+    const S = P.skips;
+    for (let k = 0; k < S.n; k++) {
+      const x = S.x0 + k * S.pitch, [name, hex, load] = KINDS[k];
+      rollSkip(world, x, S.z0, S.z1, S.h, hex, load);
+      const css = '#' + hex.toString(16).padStart(6, '0');
+      WN.sign(world, { x, y: y + 1.75, z: D.z0 + 0.3, yaw: 0, w: 2.6, h: 0.6, lines: [name], style: 'brand', posts: true, colors: { bg: [css, css], fg: hex === 0xe0b12e ? '#1a1a1a' : '#ffffff' } });
+    }
+    for (const x of [D.x0 + 30, D.x1 - 30]) world.interactables.push({ id: 'tip_skip_' + (x < -770 ? 'w' : 'e'), kind: 'redwaterTip', x, y: y + 1.2, z: D.z0 + 1.6, radius: 4, label: 'Get rid of your junk', what: 'skip' });
+    // Lamps along the south rail, up on the deck.
+    for (let x = D.x0 + 12; x < D.x1; x += 25) world.addProp('streetlight', x, y, D.z1 - 0.6, Math.PI, 1);
+    VH.Landmarks.sign(world, { x: D.x0 - P.ramp - 2.5, y: KERB + 1.4, z: D.z1 + 0.4, yaw: 0, w: 2.4, h: 0.9, lines: ['ONE WAY', 'Up the ramp · 5 mph'], style: 'road', posts: true });
+    world.floodlights = world.floodlights || [];
+    for (let x = D.x0 + 20; x < D.x1; x += 30) world.floodlights.push({ x, z: (D.z0 + D.z1) / 2, r: 12, y: y + 0.03, strength: 0.4 });
+    // A hook-lift lorry in the yard below, about to swap a full skip.
+    lorry(world, D.x0 + 40, P.yard.z1 - 12, 0, 0x2f7a3a, true);
+  }
+
+  /** The visitors' side by the highway: the re-use shop, the bottle banks, a car park, the site office, the hedge. */
+  function buildTipVisitors(world) {
+    const K = C(), WN = W();
+    const P = RC, e = P.edge;
+    // A low hedge along the highway, open at the two gates.
+    const hz = P.z1 - e - 0.6;
+    K.hedge(world, P.x0 + e + 0.5, hz, P.x1 - e - 0.5, hz, [[P.inLane.x0 - 1, P.inLane.x1 + 1], [P.outLane.x0 - 1, P.outLane.x1 + 1]], 1.1, 0.8);
+    K.hedge(world, P.x0 + e + 0.5, P.deck.z0, P.x0 + e + 0.5, hz, [], 1.1, 0.8);
+    K.hedge(world, P.x1 - e - 0.5, P.deck.z0, P.x1 - e - 0.5, hz, [], 1.1, 0.8);
+    // Second Chance: the re-use shop, lit inside, with its finds out front.
+    const S = P.shop, sx = (S.x0 + S.x1) / 2;
+    K.shed(world, S, { h: 3.4, rise: 1.4, wall: 0x2f6a5a, roof: 0x5c5f63, axis: 'x', style: 4, bay: 3, sides: { n: 'blank', e: 'blank', w: 'blank' }, ww: 0.8, wh: 0.7 });
+    VH.Landmarks.sign(world, { x: sx, y: KERB + 2.95, z: S.z1 + 0.08, yaw: 0, w: 7, h: 0.75, lines: ['SECOND CHANCE · RE-USE SHOP'], style: 'brand', colors: { bg: ['#e8c040', '#d8b030'], fg: '#1a3a2a' }, frame: 0x1a3a2a });
+    WN.pave(world, S.x0 - 1, S.z1, S.x1 + 1, S.z1 + 4, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    WN.pave(world, P.inLane.x1, S.z1 + 1, S.x0 - 1, S.z1 + 3.5, 0xd4ccb8, 'plazaTop', KERB + 0.016);
+    world.interactables.push({ id: 'tip_shop', kind: 'redwaterTip', x: sx, y: KERB + 1.2, z: S.z1 + 1.5, radius: 2.4, label: 'Browse the re-use shop', price: 5, what: 'shop' });
+    const fc = world.ctxAt(S.x0 + 4, S.z1 + 2);
+    // A sofa, an armchair and a table out front (all solid, all for sale).
+    const sofa = (x, z, w, hex) => {
+      WN.solid(world, fc.detailMatte, x - w / 2, KERB, z - 0.45, x + w / 2, KERB + 0.45, z + 0.45, hex, null, 'bench', F().SOLID | F().SHOTS);
+      fc.detailMatte.box(x - w / 2, KERB + 0.45, z - 0.45, x + w / 2, KERB + 0.95, z - 0.2, VH.col(hex));
+      for (const s of [-1, 1]) fc.detailMatte.box(x + s * w / 2 - (s > 0 ? 0.2 : 0), KERB + 0.45, z - 0.45, x + s * w / 2 + (s < 0 ? 0.2 : 0), KERB + 0.7, z + 0.45, VH.col(hex));
+      world.physics.addBox(x - w / 2, KERB + 0.45, z - 0.45, x + w / 2, KERB + 0.95, z - 0.2, 'bench', F().SOLID | F().SHOTS);
+    };
+    sofa(S.x0 + 3, S.z1 + 2.2, 2.0, 0x8a3a3a);
+    sofa(S.x1 - 3, S.z1 + 2.2, 1.0, 0x3a5a8a);
+    WN.solid(world, fc.detailWood, S.x1 - 6.5, KERB, S.z1 + 1.8, S.x1 - 5.3, KERB + 0.75, S.z1 + 2.6, 0x8a6a48, null, 'bench', F().SOLID | F().SHOTS);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: sx, z: S.z1 + 3, r: 8, y: KERB + 0.03, strength: 0.6 });
+    // The bottle banks: green, brown and clear glass, cans, and a clothes bank, on a concrete pad.
+    const B = P.banks;
+    WN.pave(world, B.x - 9, B.z - 3, B.x + 9, B.z + 3, 0xb8b4ac, 'plazaTop', KERB + 0.016);
+    const bc = world.ctxAt(B.x, B.z);
+    [[0x2f7a3a, 'GREEN GLASS'], [0x7a4a2a, 'BROWN GLASS'], [0xe8ece8, 'CLEAR GLASS']].forEach(([hex, name], i) => {
+      const x = B.x - 6 + i * 3.4;
+      bc.prop.cylinder(x, KERB, B.z, 1.0, 0.6, 1.45, 10, VH.col(hex), true);
+      bc.prop.cylinder(x, KERB + 1.45, B.z, 0.6, 0.15, 0.25, 10, VH.col(hex), true);
+      bc.prop.box(x - 0.18, KERB + 1.05, B.z + 0.76, x + 0.18, KERB + 1.3, B.z + 0.82, VH.col(0x1a1a1a)); // the hole
+      roundCollider(world, x, B.z, 0.95, 0, KERB + 0.8);
+      roundCollider(world, x, B.z, 0.72, KERB + 0.8, KERB + 1.6);
+      VH.Landmarks.sign(world, { x, y: KERB + 0.55, z: B.z + 1.02, yaw: 0, w: 1.3, h: 0.3, lines: [name], style: 'plaque' });
+    });
+    for (const [x, hex, name] of [[B.x + 4.5, 0xc83a3a, 'CANS'], [B.x + 7, 0x7a3a8a, 'CLOTHES & SHOES']]) {
+      WN.solid(world, bc.prop, x - 0.9, KERB, B.z - 0.8, x + 0.9, KERB + 1.8, B.z + 0.8, hex, null, 'metal');
+      bc.prop.box(x - 0.4, KERB + 1.2, B.z + 0.8, x + 0.4, KERB + 1.45, B.z + 0.84, VH.col(0x1a1a1a));
+      VH.Landmarks.sign(world, { x, y: KERB + 0.7, z: B.z + 0.86, yaw: 0, w: 1.5, h: 0.35, lines: [name], style: 'plaque' });
+    }
+    world.interactables.push({ id: 'tip_bottles', kind: 'redwaterTip', x: B.x - 2.6, y: KERB + 1.2, z: B.z + 2.4, radius: 2.6, label: 'Recycle a bag of bottles', what: 'bottles' });
+    // The car park, reached off the lane out.
+    const p = P.park;
+    WN.pave(world, p.x0, p.z0, p.x1, p.z1, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    WN.pave(world, p.x1, p.z0 + 7, P.outLane.x0, p.z0 + 14, 0x8a8a88, 'asphaltTop', KERB + 0.012);
+    P.bayRows = [];
+    for (const [z, dir] of [[p.z0 + 1, 1], [p.z1 - 1, -1]]) {
+      for (let x = p.x0 + 8.4; x <= p.x1 - 2.9; x += 2.7) WN.mark(world, x - 0.06, Math.min(z, z + dir * 5), x + 0.06, Math.max(z, z + dir * 5), 0xf2f2ee, KERB + 0.02);
+      P.bayRows.push({ z: z + dir * 2.5, h: dir > 0 ? Math.PI : 0, skip: [p.x0, p.x0 + 6] });
+    }
+    for (const x of [p.x0 + 14, p.x0 + 38]) world.addProp('streetlight', x, KERB, p.z0 + 12, 0, 1);
+    // The site office by the way in, and lamps down both lanes.
+    const O = P.office;
+    K.shed(world, O, { h: 2.7, rise: 0.4, wall: 0xd8dcd8, roof: 0x5c5f63, axis: 'z', style: 1, sides: { w: 'blank' } });
+    VH.Landmarks.sign(world, { x: O.x1 + 0.08, y: KERB + 2.2, z: (O.z0 + O.z1) / 2, yaw: Math.PI / 2, w: 2.6, h: 0.5, lines: ['SITE OFFICE'], style: 'plaque' });
+    for (const z of [P.deck.z1 + 6, P.deck.z1 + 24]) {
+      world.addProp('streetlight', P.inLane.x0 - 1.2, KERB, z, Math.PI / 2, 1);
+      world.addProp('streetlight', P.outLane.x1 + 1.2, KERB, z, -Math.PI / 2, 1);
+    }
+    world.addProp('bin', B.x + 9.5, KERB, B.z + 2, 0, 1);
+    world.addProp('bench', (S.x1 + B.x) / 2 + 2, KERB, S.z1 + 3, Math.PI, 1);
+  }
+
+  /** The working yard: the weighbridge, the sorting shed and its bales, the bin lorries' depot, floodlight masts. */
+  function buildRecyclingYard(world) {
+    const K = C(), WN = W();
+    const P = RC, e = P.edge;
+    // The weighbridge on the lorries' way in from Tipper Lane, its cabin and a raised barrier.
+    const L = P.lorryIn, wz = (L.z0 + L.z1) / 2, wx0 = P.x0 + e + 8, wx1 = wx0 + 18;
+    WN.pave(world, wx0, wz - 1.8, wx1, wz + 1.8, 0x5a5f66, 'marks', KERB + 0.024);
+    for (let x = wx0 + 1; x < wx1; x += 2) WN.mark(world, x, wz - 1.7, x + 0.05, wz + 1.7, 0x8a9097, KERB + 0.03);
+    const cab = { x0: wx0 + 5, x1: wx0 + 12, z0: L.z0 - 7, z1: L.z0 - 3 };
+    K.shed(world, cab, { h: 2.7, rise: 0.4, wall: 0xd8dcd8, roof: 0x5c5f63, axis: 'x', style: 1 });
+    VH.Landmarks.sign(world, { x: (cab.x0 + cab.x1) / 2, y: KERB + 2.3, z: cab.z1 + 0.08, yaw: 0, w: 3, h: 0.5, lines: ['WEIGHBRIDGE'], style: 'plaque' });
+    const bx = wx0 - 2, bzc = L.z0 + 0.4, gc = world.ctxAt(bx, bzc);
+    WN.solid(world, gc.prop, bx - 0.25, KERB, bzc - 0.25, bx + 0.25, KERB + 1.1, bzc + 0.25, 0xe8c040, null, 'metal', F().SOLID | F().SHOTS);
+    gc.prop.box(bx - 0.06, KERB + 1.1, bzc - 0.06, bx + 0.06, KERB + 5.6, bzc + 0.06, VH.col(0xf2f2ee)); // the boom, raised
+    for (let k = 0; k < 4; k++) gc.prop.box(bx - 0.065, KERB + 1.6 + k * 1.1, bzc - 0.065, bx + 0.065, KERB + 2.1 + k * 1.1, bzc + 0.065, VH.col(0xd83a2a));
+    gc.screen.box(bx - 0.1, KERB + 0.7, bzc + 0.25, bx + 0.1, KERB + 0.9, bzc + 0.27, VH.col(0x5cff8a, 2.2));
+    VH.Landmarks.sign(world, { x: P.x0 + e + 3, y: KERB + 2, z: L.z1 + 1.2, yaw: -Math.PI / 2, w: 3.4, h: 0.9, lines: ['LORRIES ONLY', 'Stop on the weighbridge'], style: 'road', posts: true });
+    // The sorting shed: green cladding, three roller doors onto the yard, the office at its west end.
+    const S = P.shed;
+    const sc = K.shed(world, S, { h: S.h, rise: 3, wall: 0x4f6f5f, roof: 0x8d9094, axis: 'x', style: 0 });
+    for (const x of [S.x0 + 18, S.x0 + 41, S.x0 + 64]) {
+      sc.prop.box(x - 3.5, KERB, S.z1, x + 3.5, KERB + 7, S.z1 + 0.08, VH.col(0x9aa0a6));
+      for (let yy = KERB + 0.5; yy < KERB + 7; yy += 0.5) sc.detail.box(x - 3.5, yy, S.z1 + 0.08, x + 3.5, yy + 0.05, S.z1 + 0.1, VH.col(0x7a8086));
+      sc.prop.box(x - 3.8, KERB + 7, S.z1, x + 3.8, KERB + 7.6, S.z1 + 0.3, VH.col(0x3a3f45)); // the door's head box
+      world.floodlights = world.floodlights || [];
+      world.floodlights.push({ x, z: S.z1 + 5, r: 8, y: KERB + 0.03, strength: 0.5 });
+      WN.lamp(world, x, S.z1 + 0.4, 0xfff1c8, 2.4, 0.2, KERB + 7.7);
+    }
+    VH.Landmarks.sign(world, { x: S.x0 + 41, y: KERB + 9, z: S.z1 + 0.08, yaw: 0, w: 16, h: 1.6, lines: ['REDWATER RECYCLING · SORTING CENTRE'], style: 'brand', colors: { bg: ['#2f7a3a', '#246030'], fg: '#ffffff' } });
+    WN.building(world, S.x0 - 10, S.z1 - 22, S.x0, S.z1 - 2, 6.8, { wall: 0xd8d4c8, roof: 0x6b6e72, style: 1, bay: 3.2, floorH: 3.4, ww: 0.5, wh: 0.5, sides: { e: 'skip' } });
+    // A conveyor up the shed's east end from a hopper, over to the baler.
+    const hx = S.x1 + 3, hz = S.z0 + 14, hc = world.ctxAt(hx, hz);
+    WN.solid(world, hc.prop, hx - 2, KERB, hz - 2, hx + 2, KERB + 3, hz + 2, 0x5a6a5a, null, 'metal');
+    hc.prop.box(hx - 2.4, KERB + 3, hz - 2.4, hx + 2.4, KERB + 4.2, hz + 2.4, VH.col(0x6a7a6a)); // the hopper's mouth
+    world.physics.addBox(hx - 2.4, KERB + 3, hz - 2.4, hx + 2.4, KERB + 4.2, hz + 2.4, 'metal', F().ALL);
+    W().beam(hc.prop, hx, KERB + 4.2, hz, S.x1 - 0.2, KERB + 9, hz, 0.9, VH.col(0x8a9097));
+    // The bales, stacked by kind: paper, cardboard, cans, plastic bottles, plastic film.
+    const B = P.bales, hexes = [0xe8e4d8, 0xb8925a, 0xaab0b6, 0x3a7ac8, 0xe8e8ee, 0xc8a46a];
+    let n = 0;
+    for (let x = B.x0; x + 1.5 <= B.x1; x += 4.5) {
+      for (let z = B.z0; z + 1.1 <= B.z1; z += 1.2) {
+        if (z > B.z0 + 18 && z < B.z0 + 24) continue; // a way through the stacks
+        const hex = hexes[Math.round((x - B.x0) / 4.5) % hexes.length];
+        const tall = 1 + ((Math.abs(Math.round(x * 3 + z * 7)) % 5) < 2 ? 2 : (Math.abs(Math.round(x + z)) % 3 ? 1 : 0));
+        const ctx = world.ctxAt(x, z);
+        for (let k = 0; k < tall; k++) rbale(ctx, x, KERB + k * 1.05, z, hex);
+        world.physics.addBox(x, 0, z, x + 1.5, KERB + tall * 1.05, z + 1.1, 'crate', F().ALL);
+        n++;
+      }
+    }
+    // The depot: bin lorries parked in a row, a wash bay, a fuel pump.
+    const Dp = P.depot;
+    K.ground(world, Dp.x0, Dp.z0, Dp.x1, Dp.z1, 'gravel', KERB + 0.016);
+    for (let i = 0; i < 6; i++) lorry(world, Dp.x0 + 10, Dp.z0 + 8 + i * 6.5, -Math.PI / 2, 0x2f7a3a, false);
+    const wb = { x0: Dp.x1 - 14, x1: Dp.x1 - 2, z0: Dp.z1 - 24, z1: Dp.z1 - 8 };
+    const wc = world.ctxAt((wb.x0 + wb.x1) / 2, (wb.z0 + wb.z1) / 2);
+    for (const x of [wb.x0, wb.x1]) for (const z of [wb.z0, wb.z1]) WN.solid(world, wc.prop, x - 0.2, KERB, z - 0.2, x + 0.2, KERB + 5, z + 0.2, 0x9aa0a6, null, 'pole', F().SOLID | F().SHOTS);
+    wc.prop.box(wb.x0 - 0.5, KERB + 5, wb.z0 - 0.5, wb.x1 + 0.5, KERB + 5.4, wb.z1 + 0.5, VH.col(0xd8dcd8), { bottom: true });
+    VH.Landmarks.sign(world, { x: (wb.x0 + wb.x1) / 2, y: KERB + 4.6, z: wb.z1 + 0.6, yaw: 0, w: 4, h: 0.6, lines: ['WASH BAY'], style: 'plaque' });
+    const px = Dp.x1 - 8, pz = Dp.z0 + 10, pc = world.ctxAt(px, pz);
+    WN.pave(world, px - 3, pz - 2, px + 3, pz + 2, 0xb8b4ac, 'plazaTop', KERB + 0.02);
+    WN.solid(world, pc.prop, px - 0.5, KERB + 0.1, pz - 0.35, px + 0.5, KERB + 1.9, pz + 0.35, 0x2f7a3a, null, 'metal');
+    pc.screen.box(px - 0.3, KERB + 1.3, pz + 0.35, px + 0.3, KERB + 1.6, pz + 0.37, VH.col(0x9adcff, 1.6));
+    // Floodlight masts over the yard.
+    for (const [x, z] of [[P.x0 + 30, P.yard.z0 - 8], [-770, 1660], [-700, 1660], [-700, 1580]]) {
+      const c = world.ctxAt(x, z);
+      c.prop.cylinder(x, KERB, z, 0.22, 0.16, 14, 8, VH.col(0x8e959c), true);
+      roundCollider(world, x, z, 0.23, 0, KERB + 14);
+      c.prop.box(x - 1.2, KERB + 14, z - 0.35, x + 1.2, KERB + 14.9, z + 0.35, VH.col(0x3f454c));
+      c.screen.box(x - 1.1, KERB + 13.98, z - 0.3, x + 1.1, KERB + 14.02, z + 0.3, VH.col(0xf6f2e0, 2.4));
+      world.floodlights.push({ x, z, r: 24, y: KERB + 0.03, strength: 0.5 });
+    }
+  }
+
+  /** The compost windrows and the push-wall bays of wood, rubble and green waste; a turner and two loaders. */
+  function buildCompost(world) {
+    const WN = W();
+    const P = RC, Cp = P.compost;
+    for (let i = 0; i < Cp.z.length; i++) {
+      heap(world, Cp.x0, Cp.x1, Cp.z[i], Cp.a, Cp.h - (i % 3) * 0.2, i % 2 ? 0x5a4430 : 0x6b4f35);
+      heapBits(world, Cp.x0, Cp.x1, Cp.z[i], Cp.a, Cp.h - (i % 3) * 0.2, [0x5a7a2e, 0x8a6a3a, 0x7a6a40], 30, 'redwater-compost-' + i);
+    }
+    // The turner straddling the third windrow: tracks in the gaps either side, the frame and cab over the top.
+    const tx = -790, tz = Cp.z[2], tc = world.ctxAt(tx, tz), yel = 0xe0b12e;
+    for (const s of [-1, 1]) {
+      const z = tz + s * (Cp.a + 0.9);
+      WN.solid(world, tc.prop, tx - 1.6, KERB, z - 0.45, tx + 1.6, KERB + 0.9, z + 0.45, 0x2a2d30, null, 'metal');
+      WN.solid(world, tc.prop, tx - 0.4, KERB + 0.9, z - 0.3, tx + 0.4, KERB + 3.6, z + 0.3, yel, null, 'metal');
+    }
+    tc.prop.box(tx - 1.0, KERB + 3.6, tz - Cp.a - 1.3, tx + 1.0, KERB + 4.4, tz + Cp.a + 1.3, VH.col(yel), { bottom: true });
+    world.physics.addBox(tx - 1.0, KERB + 3.6, tz - Cp.a - 1.3, tx + 1.0, KERB + 4.4, tz + Cp.a + 1.3, 'metal', F().ALL);
+    tc.prop.box(tx - 0.9, KERB + 4.4, tz + Cp.a - 0.6, tx + 0.9, KERB + 6.0, tz + Cp.a + 1.2, VH.col(0x2a3a44));
+    loader(world, Cp.x1 + 7, Cp.z[1] + 5.5, -Math.PI / 2);
+    // The bays: concrete push walls, open to the south, each with its heap and its name.
+    const B = P.bays, wall = VH.col(0xb8b4ac), bw = (B.x1 - B.x0) / 3;
+    const piles = [['WOOD', 0x8a6a48, [0xa8845a, 0x6b4e33, 0x8a6a48]], ['RUBBLE', 0x8a847a, [0x9a948a, 0xb8b4ac, 0x6a645a]], ['GREEN WASTE', 0x5a6a30, [0x5a7a2e, 0x7a9a3a, 0x6b4e33]]];
+    const wc = (x0, z0, x1, z1) => WN.solid(world, world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2).concrete, x0, KERB, z0, x1, KERB + B.wall, z1, wall, null, 'building');
+    wc(B.x0, B.z0, B.x1, B.z0 + 0.6);
+    for (let k = 0; k <= 3; k++) wc(B.x0 + k * bw - (k === 3 ? 0.6 : 0), B.z0 + 0.6, B.x0 + k * bw + (k === 3 ? 0 : 0.6), B.z1);
+    piles.forEach(([name, hex, bits], k) => {
+      const x0 = B.x0 + k * bw + 3, x1 = B.x0 + (k + 1) * bw - 3, zc = B.z0 + 18;
+      heap(world, x0, x1, zc, 12, 4.2, hex);
+      heapBits(world, x0, x1, zc, 12, 4.2, bits, 40, 'redwater-bay-' + k);
+      VH.Landmarks.sign(world, { x: B.x0 + (k + 0.5) * bw, y: KERB + 2.2, z: B.z0 + 0.66, yaw: 0, w: 4.4, h: 0.8, lines: [name], style: 'brand', colors: { bg: ['#2f7a3a', '#246030'], fg: '#ffffff' } });
+    });
+    loader(world, B.x0 + bw * 1.5, B.z1 - 6, Math.PI);
+  }
+
   // -------------------------------------------------------------- the map
   if (VH.MapPainters) {
     VH.MapPainters.push((g, layout, o) => {
@@ -1936,6 +2859,56 @@
     });
   }
 
+  if (VH.MapPainters) {
+    VH.MapPainters.push((g, layout, o) => {
+      if (!layout.plots || !layout.plots.redwater_solar || !SO.tables) return;
+      const P = SO, R = o.R, Fn = P.fence, d = tableDepth();
+      // Redwater Solar Farm: the rows of panels, the tracks, the compounds and the Sunhouse.
+      g.fillStyle = '#8ab062';
+      R(P.x0 + 1.6, P.z0 + 1.6, P.x1 - 1.6, P.z1 - 1.6);
+      g.fillStyle = '#c8c2b4';
+      R(Fn.x0 + 1, Fn.z0 + 1, Fn.x1 - 1, Fn.z1 - 1);
+      g.fillStyle = '#8ab062';
+      R(Fn.x0 + 6, Fn.z0 + 6, Fn.x1 - 6, Fn.z1 - 6);
+      g.fillStyle = '#c8c2b4';
+      R(P.spine - 3, Fn.z0 + 6, P.spine + 3, Fn.z1);
+      R(Fn.x0 + 6, (P.aisle.z0 + P.aisle.z1) / 2 - 2.5, Fn.x1 - 6, (P.aisle.z0 + P.aisle.z1) / 2 + 2.5);
+      R(Fn.x0, P.track.z0, Fn.x1, P.track.z1);
+      g.fillStyle = '#2c4472';
+      for (const [a, b, zf] of P.tables) R(a, zf - d, b, zf);
+      g.fillStyle = '#9a9a96';
+      R(P.drive.x0, P.track.z1, P.drive.x1, P.z1 - 1.6);
+      W().mapBox(g, R, P.park.x0, P.park.z0, P.park.x1, P.park.z1, '#8a8a88', false);
+      for (const c of [P.battery, P.sub]) W().mapBox(g, R, c.x0, c.z0, c.x1, c.z1, '#b4aea0', false);
+      W().mapBox(g, R, P.house.x0, P.house.z0, P.house.x1, P.house.z1, '#2c4472');
+      W().mapBox(g, R, P.tower.x0, P.tower.z0, P.tower.x1, P.tower.z1, '#8a6a48');
+    });
+    VH.MapPainters.push((g, layout, o) => {
+      if (!layout.plots || !layout.plots.redwater_recycling || !RC.built) return;
+      const P = RC, R = o.R, e = P.edge;
+      // Redwater Recycling Centre: concrete yards, the deck and its lanes, the shed, the windrows and bays.
+      g.fillStyle = '#8ab062';
+      R(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
+      g.fillStyle = '#c8c4bc';
+      R(P.x0 + e, P.compost.z[0] - P.compost.a - 4, P.x1 - e, P.yard.z1);
+      g.fillStyle = '#9a9a96';
+      R(P.inLane.x0, P.deck.z0, P.inLane.x1, P.z1 - e);
+      R(P.outLane.x0, P.deck.z0, P.outLane.x1, P.z1 - e);
+      R(P.deck.x0 - P.ramp, P.deck.z0, P.deck.x1 + P.ramp, P.deck.z1);
+      g.fillStyle = '#6b5038';
+      for (const z of P.compost.z) R(P.compost.x0, z - P.compost.a, P.compost.x1, z + P.compost.a);
+      g.fillStyle = '#9a8a6a';
+      const bw = (P.bays.x1 - P.bays.x0) / 3;
+      for (let k = 0; k < 3; k++) R(P.bays.x0 + k * bw + 3, P.bays.z0 + 6, P.bays.x0 + (k + 1) * bw - 3, P.bays.z0 + 30);
+      W().mapBox(g, R, P.park.x0, P.park.z0, P.park.x1, P.park.z1, '#8a8a88', false);
+      W().mapBox(g, R, P.shed.x0, P.shed.z0, P.shed.x1, P.shed.z1, '#4f6f5f');
+      W().mapBox(g, R, P.shop.x0, P.shop.z0, P.shop.x1, P.shop.z1, '#2f6a5a');
+      W().mapBox(g, R, P.bales.x0, P.bales.z0, P.bales.x1, P.bales.z1, '#b4aa92', false);
+      g.fillStyle = '#2f7a3a';
+      for (let k = 0; k < P.skips.n; k++) R(P.skips.x0 + k * P.skips.pitch - 1.3, P.skips.z0, P.skips.x0 + k * P.skips.pitch + 1.3, P.skips.z1);
+    });
+  }
+
   // --------------------------------------------------------- moving parts
   /** The counters (lemonade at the club) and the driving range's ball machine; parked cars at the club. */
   class RedwaterLife {
@@ -1944,6 +2917,7 @@
       const WN = W();
       this.saveKey = 'redwater';
       this.best = 0; // the longest drive at the range (m)
+      this.tip = { loads: 0, bottles: 0, finds: 0 }; // the recycling centre: loads over the rail, bags of bottles, shop finds
       if (game.interaction && game.interaction.on) {
         game.interaction.on('redwaterBuy', (item, player) => {
           if (player.money < item.price) {
@@ -2037,11 +3011,56 @@
           });
           return 4;
         });
+        game.interaction.on('redwaterSolar', (item) => {
+          // What the farm makes right now follows the sun (the same sun that lights the world).
+          const env = game.environment;
+          const sun = env && env.sunDir ? env.sunDir.y : 0.6;
+          const peak = (SO.panels * SO.watts) / 1e6;
+          const k = Math.pow(Math.min(1, Math.max(0, (sun - 0.03) / 0.88)), 0.8);
+          const mw = Math.round(peak * k * 10) / 10;
+          const homes = Math.round((mw * 1000) / 0.45 / 10) * 10;
+          if (item.what === 'view') {
+            VH.events.emit('notify', { title: 'Through the viewer', text: SO.panels.toLocaleString() + ' panels in their rows, ' + SO.sheep + ' sheep between them, the substation humming by the gate' + (sun > 0.05 ? ', and far off the wind turbines of Haverly turning.' : '. The panels are dark: the sun has gone down.'), icon: '🔭' });
+            return 3;
+          }
+          if (mw < 0.1) {
+            VH.events.emit('notify', { title: 'The panels are asleep', text: 'No sun, no power. The battery store is feeding the grid until the morning. On a sunny day the farm makes up to ' + (Math.round(peak * 10) / 10) + ' MW.', icon: '🌙' });
+          } else {
+            VH.events.emit('notify', { title: 'Redwater Solar Farm', text: 'Right now: ' + mw + ' MW from ' + SO.panels.toLocaleString() + ' panels. That is enough for about ' + homes.toLocaleString() + ' homes.', icon: '☀', tone: 'good' });
+          }
+          return 3;
+        });
+        game.interaction.on('redwaterTip', (item, player) => {
+          const T = this.tip;
+          if (item.what === 'skip') {
+            const JUNK = [['an old microwave', 'ELECTRICALS'], ['a wobbly bookcase', 'WOOD'], ['a rusty bike frame', 'METAL'], ['a mountain of pizza boxes', 'CARDBOARD'], ['a box of old school books', 'PAPER'], ['three bags of grass cuttings', 'GARDEN WASTE'], ['a broken paddling pool', 'PLASTICS'], ['a bag of outgrown football kits', 'TEXTILES'], ['a bucket of broken tiles', 'RUBBLE'], ['a mystery bag nobody will talk about', 'GENERAL WASTE']];
+            const [what, skip] = JUNK[T.loads % JUNK.length];
+            T.loads++;
+            const champ = T.loads % 10 === 0;
+            VH.events.emit('notify', { title: champ ? T.loads + ' loads recycled!' : 'Into the ' + skip + ' skip', text: (champ ? 'The staff give you a Champion Recycler sticker. ' : '') + 'Over the rail goes ' + what + '. Very satisfying.', icon: '♻', tone: champ ? 'good' : undefined });
+            return 2;
+          }
+          if (item.what === 'bottles') {
+            T.bottles++;
+            const bank = ['green', 'brown', 'clear'][T.bottles % 3];
+            VH.events.emit('notify', { title: 'Smash!', text: 'A bag of bottles into the ' + bank + ' glass bank. That makes ' + T.bottles + (T.bottles === 1 ? ' bag' : ' bags') + ' so far.', icon: '♻' });
+            return 1.5;
+          }
+          if (player.money < item.price) {
+            VH.events.emit('notify', { title: 'Not enough cash', text: 'Everything in Second Chance is ' + VH.util.formatMoney(item.price) + '.', icon: '✕', tone: 'bad' });
+            return 1;
+          }
+          player.money -= item.price;
+          VH.events.emit('money:changed', { delta: -item.price, reason: 'Second Chance' });
+          const FINDS = ['a lava lamp that still works', 'a skateboard with three good wheels', 'a garden gnome holding a fishing rod', 'a jigsaw of a lighthouse with one piece missing', 'a keyboard from the 1980s with a drum button', 'a signed photo of the weather presenter', 'a snow globe of Vicehaven pier', 'a box of comics, slightly chewed'];
+          VH.events.emit('notify', { title: 'Second Chance', text: 'You find ' + FINDS[T.finds++ % FINDS.length] + '. Somebody\'s junk, your treasure.', icon: '🛍', tone: 'good' });
+          return 2;
+        });
       }
       // Cars in the club car park.
       const list = [];
       let seed = 4242;
-      for (const [park, rows, m] of [[PL.park, PL.bayRows, 4], [RR.park, RR.bayRows, 3], [WL.park, WL.bayRows, 3]]) {
+      for (const [park, rows, m] of [[PL.park, PL.bayRows, 4], [RR.park, RR.bayRows, 3], [WL.park, WL.bayRows, 3], [SO.park, SO.bayRows, 3], [RC.park, RC.bayRows, 3]]) {
         for (const r of rows || []) {
           for (let x = park.x0 + m + 1.35; x < park.x1 - m; x += 2.7) {
             if (r.skip && x > r.skip[0] - 1.5 && x < r.skip[1] + 1.5) continue;
@@ -2061,15 +3080,17 @@
         });
       }
       WN.addParkedSpots(game, list);
-      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670], [RR.x1 - 4, RR.gate.z0 - 3, RR.x1 + 14, RR.gate.z1 + 3], [WL.gate.x0 - 3, 1178, WL.gate.x1 + 3, 1200]]);
+      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670], [RR.x1 - 4, RR.gate.z0 - 3, RR.x1 + 14, RR.gate.z1 + 3], [WL.gate.x0 - 3, 1178, WL.gate.x1 + 3, 1200], [SO.gate.x0 - 3, SO.z1 - 4, SO.gate.x1 + 3, SO.z1 + 14], [RC.inLane.x0 - 3, RC.z1 - 4, RC.inLane.x1 + 3, RC.z1 + 14], [RC.outLane.x0 - 3, RC.z1 - 4, RC.outLane.x1 + 3, RC.z1 + 14], [RC.x0 - 16, RC.lorryIn.z0 - 3, RC.x0 + 2, RC.lorryIn.z1 + 3]]);
     }
     update() {}
     serialize() {
-      return { rangeBest: this.best, fish: this.fish || null };
+      return { rangeBest: this.best, fish: this.fish || null, tip: this.tip };
     }
     load(d) {
       this.best = (d && +d.rangeBest) || 0;
       this.fish = d && d.fish && +d.fish.kg > 0 ? { kg: +d.fish.kg, name: String(d.fish.name || 'fish') } : null;
+      const t = (d && d.tip) || {};
+      this.tip = { loads: +t.loads || 0, bottles: +t.bottles || 0, finds: +t.finds || 0 };
     }
     reset() {}
     stop() {}
@@ -2079,13 +3100,18 @@
   VH.Districts.register({
     id: D,
     name: 'Redwater',
-    plots: ['pelican_links', 'redwater_ranch', 'willow_lake'],
+    plots: ['pelican_links', 'redwater_ranch', 'willow_lake', 'redwater_solar', 'redwater_recycling'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.pelican_links || !VH.WNKit || !VH.CountryKit) return;
       buildGolf(world);
       buildRanch(world);
       if (layout.plots.willow_lake) buildWillowLake(world);
+      if (layout.plots.redwater_solar) buildSolar(world);
+      if (layout.plots.redwater_recycling) {
+        buildRecycling(world);
+        RC.built = true;
+      }
       world.redwater = true;
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -2098,6 +3124,8 @@
       const c = PL.club, dx = (c.x0 + c.x1) / 2;
       add('pelican_links', { name: 'Pelican Links', x: dx, z: c.z0 - 9, yaw: 0, kind: 'golf', landmark: true });
       add('redwater_ranch', { name: 'Redwater Ranch', x: RR.x1 - 12, z: (RR.gate.z0 + RR.gate.z1) / 2, yaw: -Math.PI / 2, kind: 'ranch', landmark: true });
+      if (SO.tables) add('redwater_solar', { name: 'Redwater Solar Farm', x: SO.spine, z: SO.z1 - 6, yaw: Math.PI, kind: 'solar', landmark: true });
+      if (RC.built) add('redwater_recycling', { name: 'Redwater Recycling Centre', x: (RC.inLane.x0 + RC.inLane.x1) / 2, z: RC.z1 - 6, yaw: Math.PI, kind: 'recycling', landmark: true });
       if (WL.jet) add('willow_lake', { name: 'Willow Lake', x: (WL.gate.x0 + WL.gate.x1) / 2, z: WL.park.z0 + 14, yaw: 0, kind: 'lake', landmark: true });
       const extra = places.extra[D];
       if (extra) {
@@ -2138,6 +3166,23 @@
             { x: WL.cabins.xs[0], z: WL.lane.z1 + 4, yaw: 0, kinds: ['house', 'cabin', 'back_door', 'lane'], name: 'Behind the first cabin, Willow Lake' },
             { x: WL.walk, z: WL.z1 - 6, yaw: Math.PI, kinds: ['park', 'lake', 'footpath', 'gate'], name: 'The footpath gate on Foundry Road, Willow Lake' },
             { x: -1500, z: WL.lake.z + WL.lake.rz + WL.ring + 6, yaw: Math.PI, kinds: ['park', 'picnic', 'bench', 'lake'], name: 'The picnic tables, Willow Lake' },
+          );
+        }
+        if (SO.tables) {
+          const H = SO.house, T = SO.tower, Fn = SO.fence, d = tableDepth();
+          const zg = SO.blocks[1] - 5 * SO.pitch + (SO.pitch - d) / 2; // in a gap between two rows
+          extra.push(
+            { x: (H.x0 + H.x1) / 2, z: H.z1 + 4, yaw: Math.PI, kinds: ['shop', 'museum', 'visitor_centre', 'storefront', 'front_door'], name: 'The Sunhouse, Redwater Solar Farm' },
+            { x: (H.x0 + H.x1) / 2, z: H.z1 + 7, yaw: Math.PI, kinds: ['cafe', 'picnic', 'terrace', 'bench'], name: 'The Sunhouse terrace, Redwater Solar Farm' },
+            { x: (T.x0 + T.x1) / 2, z: T.z0 + 2.2, y: KERB + T.h, yaw: Math.PI, kinds: ['overlook', 'tower', 'stands'], name: 'The viewing tower, Redwater Solar Farm' },
+            { x: (SO.park.x0 + SO.park.x1) / 2, z: SO.park.z0 + 10.5, yaw: 0, kinds: ['parking', 'solar'], name: 'The car park, Redwater Solar Farm' },
+            { x: SO.park.x1 + 8, z: SO.trail, yaw: -Math.PI / 2, kinds: ['park', 'footpath', 'trail'], name: 'The Sun Trail, Redwater Solar Farm' },
+            { x: SO.spine, z: Fn.z1 - 3, yaw: Math.PI, kinds: ['gate', 'farm', 'lane', 'solar'], name: 'The field gate, Redwater Solar Farm' },
+            { x: SO.halves[0][0] + 20, z: zg, yaw: Math.PI / 2, kinds: ['field', 'farm', 'solar', 'sheep'], name: 'Among the panels, Redwater Solar Farm' },
+            { x: SO.spine + 10, z: (SO.aisle.z0 + SO.aisle.z1) / 2, yaw: Math.PI / 2, kinds: ['industrial', 'solar', 'lane'], name: 'The inverter lane, Redwater Solar Farm' },
+            { x: SO.weather.x - 3, z: SO.weather.z + 4.5, yaw: Math.PI, kinds: ['field', 'solar', 'weather'], name: 'The weather station, Redwater Solar Farm' },
+            { x: SO.sub.x1 - 16, z: SO.track.z0 + 2, yaw: 0, kinds: ['industrial', 'power', 'gate', 'fence'], name: 'The substation gate, Redwater Solar Farm' },
+            { x: SO.battery.x0 + 26, z: SO.track.z0 + 2, yaw: 0, kinds: ['industrial', 'power', 'gate'], name: 'The battery store, Redwater Solar Farm' },
           );
         }
       }

@@ -566,6 +566,8 @@
       if (this.damageScale) amount *= this.damageScale * (this.driver === 'player' ? 1 : 0.25);
       else if (this.type === 'bulwark') amount *= 0.45; // armoured
       this.health -= amount;
+      // A mission hunter that rams Jay owns the dent, even when that ram is the one that blows it up.
+      if (source === 'player' && kind === 'crash' && this.controller && this.controller.ownCrashes) source = null;
       if (source) {
         this.lastHitBy = source;
         this.lastHitKind = kind; // 'crash', 'blast', a weapon... (a mission hunter's own crashes aren't Jay's doing)

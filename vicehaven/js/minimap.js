@@ -2145,7 +2145,7 @@
 
   // What the full-screen map (js/mapview.js) shares with the radar.
   VH.MapKit = {
-    PAL, LEGEND, PRIORITY,
+    PAL, LEGEND, PRIORITY, GLYPHS, // GLYPHS: a later file may add its own icon before the first map draws (fasttravel.js)
     font: () => FONT,
     buildSprites, paintCity, noisePattern, extentsOf, openDistrictSpots, route,
     formatDistance, sunsetGradient, setSpacing, setStretch, roundRectPath, makeCanvas, tintOf, hexRgb,

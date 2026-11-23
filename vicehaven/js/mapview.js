@@ -2486,5 +2486,6 @@
     }
   }
 
+  MapView.TYPES = TYPES; // a later file may add its own kind of blip (fasttravel.js)
   VH.MapView = MapView;
 })();
