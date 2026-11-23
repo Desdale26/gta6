@@ -112,7 +112,7 @@
   // Backlot Avenue east, Mariner Way south, Westfield Road west. The club
   // and the driving range along the north side, nine holes below them.
   const PL = {
-    x0: -1582, x1: -1057, z0: -1181 * -1 - 512, z1: 1181,
+    x0: -1582, x1: -1057, z0: 669, z1: 1181,
     edge: 1.6,
     range: { x0: -1572, x1: -1326, z0: 680, z1: 764, bays: -1342 },
     club: { x0: -1278, x1: -1216, z0: 696, z1: 730, h: 7 },
@@ -139,7 +139,6 @@
       { x: -1229, z: 960, rx: 12, rz: 30 },
     ],
   };
-  PL.z0 = 669;
   PL.holes.forEach((H, i) => {
     H.n = i + 1;
     const L = Math.hypot(H.gx - H.tx, H.gz - H.tz);
@@ -562,9 +561,9 @@
 
   // -------------------------------------------------------------- the map
   if (VH.MapPainters) {
-    VH.MapPainters.push((g, layout) => {
+    VH.MapPainters.push((g, layout, o) => {
       if (!layout.plots || !layout.plots.pelican_links) return;
-      const P = PL;
+      const P = PL, R = o.R;
       const poly = (pts, col) => {
         g.fillStyle = col;
         g.beginPath();
@@ -573,9 +572,9 @@
         g.fill();
       };
       g.fillStyle = '#86b064';
-      g.fillRect(P.x0 + 1.6, P.z0 + 1.6, P.x1 - P.x0 - 3.2, P.z1 - P.z0 - 3.2);
+      R(P.x0 + 1.6, P.z0 + 1.6, P.x1 - 1.6, P.z1 - 1.6);
       g.fillStyle = '#7aa85a';
-      g.fillRect(P.range.x0, P.range.z0, P.range.bays - P.range.x0, P.range.z1 - P.range.z0);
+      R(P.range.x0, P.range.z0, P.range.bays, P.range.z1);
       for (const H of P.holes) {
         if (H.w) {
           const w0 = H.w * 0.3, w1 = H.w * 0.5;
@@ -586,10 +585,8 @@
         C().mapEllipse(g, H.tx, H.tz, 6, 6, '#b0e08c');
       }
       for (const p of P.ponds) C().mapEllipse(g, p.x, p.z, p.rx, p.rz, '#4f9ac8');
-      g.fillStyle = '#5a2e26';
-      W().mapBox(g, (a, b, c, d) => g.fillRect(a, b, c - a, d - b), P.club.x0, P.club.z0, P.club.x1, P.club.z1, '#e8e4d8');
-      g.fillStyle = '#8a8a88';
-      g.fillRect(P.park.x0, P.park.z0, P.park.x1 - P.park.x0, P.park.z1 - P.park.z0);
+      W().mapBox(g, R, P.club.x0, P.club.z0, P.club.x1, P.club.z1, '#e8e4d8');
+      W().mapBox(g, R, P.park.x0, P.park.z0, P.park.x1, P.park.z1, '#8a8a88', false);
     });
   }
 
