@@ -193,6 +193,7 @@
     const ctx = world.ctxAt(x, z);
     S().drum(world, ctx.prop, x, KERB, z, 0.75, 0.76, 12, 0xf6f4ee, 'crate');
     ctx.prop.cylinder(x, KERB + 0.76, z, 0.08, 0.08, 0.25, 6, VH.col(0xd8eef4), true); // a carafe
+    K().block(world, x - 0.09, KERB + 0.76, z - 0.09, x + 0.09, KERB + 1.01, z + 0.09, 'crate');
     for (const a of [0.4, 0.4 + PI]) {
       const cx = x + Math.cos(a) * 1.15, cz = z + Math.sin(a) * 1.15;
       sbox(world, 'prop', cx - 0.22, KERB, cz - 0.22, cx + 0.22, KERB + 0.95, cz + 0.22, 0xd8c08a, 'crate');
@@ -446,7 +447,8 @@
 
     // The buffet: white-clothed tables along the terrace foot, the ice swan losing its head.
     const bz = TS.z1 + 7;
-    sbox(world, 'prop', 900, KERB, bz - 0.6, 918, KERB + 0.9, bz + 0.6, 0xf6f4ee, 'crate');
+    draw(world, 'prop', 900, KERB, bz - 0.6, 918, KERB + 0.9, bz + 0.6, 0xf6f4ee);
+    cbox(world, 900, 0, bz - 0.6, 918, KERB + 1.1, bz + 0.6, 'crate'); // the tables and the dishes on them
     const bctx = world.ctxAt(909, bz);
     for (let x = 901; x < 917; x += 1.4) bctx.prop.box(x, KERB + 0.9, bz - 0.35, x + 0.9, KERB + 0.96, bz + 0.35, VH.col(0xd8d8d8));
     for (let x = 901.5; x < 917; x += 2.8) bctx.prop.box(x, KERB + 0.96, bz - 0.25, x + 0.5, KERB + 1.08, bz + 0.25, VH.col([0xe8a050, 0xc0392b, 0x7ac04a, 0xf0d050][Math.round(x) % 4]));
@@ -769,19 +771,26 @@
 
     // --- the palm house: white iron and glass, two wings and a domed centre, doors north and south
     const pane = (x0, y0, z0, x1, y1, z1) => glass.box(x0, y0, z0, x1, y1, z1, gcol, { bottom: true });
-    const frameV = (x0, z0, x1, z1, y0, y1, step) => {
-      // mullions along a wall line every `step` m, plus rails at the base, middle and top
+    const frameV = (x0, z0, x1, z1, y0, y1, step, gap) => {
+      // mullions along a wall line every `step` m, plus rails at the base, middle and top (none across a door gap below its head)
       const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
       const a0 = alongX ? x0 : z0, a1 = alongX ? x1 : z1, c = alongX ? z0 : x0;
       const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
-      for (let a = a0; a <= a1 + 1e-6; a += step) {
-        if (alongX) ctx.prop.box(a - 0.07, y0, c - 0.09, a + 0.07, y1, c + 0.09, white);
-        else ctx.prop.box(c - 0.09, y0, a - 0.07, c + 0.09, y1, a + 0.07, white);
-      }
+      const head = KERB + 3.2;
+      const mull = (a, ya) => {
+        if (alongX) ctx.prop.box(a - 0.07, ya, c - 0.09, a + 0.07, y1, c + 0.09, white);
+        else ctx.prop.box(c - 0.09, ya, a - 0.07, c + 0.09, y1, a + 0.07, white);
+      };
+      for (let a = a0; a <= a1 + 1e-6; a += step) mull(a, gap && a > gap[0] - 0.1 && a < gap[1] + 0.1 ? head : y0);
+      if (gap) { mull(gap[0] - 0.07, y0); mull(gap[1] + 0.07, y0); } // the door posts, just outside the opening
+      const rail = (p0, p1, y) => {
+        if (alongX) ctx.prop.box(p0, y, c - 0.08, p1, y + 0.12, c + 0.08, white, { bottom: true });
+        else ctx.prop.box(c - 0.08, y, p0, c + 0.08, y + 0.12, p1, white, { bottom: true });
+      };
       for (const y of [y0 + 0.5, (y0 + y1) / 2, y1 - 0.12]) {
-        if (alongX) ctx.prop.box(a0, y, c - 0.08, a1, y + 0.12, c + 0.08, white, { bottom: true });
-        else ctx.prop.box(c - 0.08, y, a0, c + 0.08, y + 0.12, a1, white, { bottom: true });
+        if (gap && y < head) { rail(a0, gap[0], y); rail(gap[1], a1, y); } else rail(a0, a1, y);
       }
+      if (gap) rail(gap[0], gap[1], head); // the door head
     };
     const wallG = (x0, z0, x1, z1, y0, y1, gap) => {
       // a glass wall on a low white plinth, solid, with an optional door gap [a0, a1] (3 m high)
@@ -796,7 +805,7 @@
         if (alongX) { pane(gap[0], KERB + 3.2, c - 0.04, gap[1], y1, c + 0.04); cbox(world, gap[0], KERB + 3.2, c - 0.12, gap[1], y1, c + 0.12, 'glass'); }
         else { pane(c - 0.04, KERB + 3.2, gap[0], c + 0.04, y1, gap[1]); cbox(world, c - 0.12, KERB + 3.2, gap[0], c + 0.12, y1, gap[1], 'glass'); }
       }
-      frameV(x0, z0, x1, z1, KERB + 0.5, y1, 2.4);
+      frameV(x0, z0, x1, z1, KERB + 0.5, y1, 2.4, gap);
     };
     const yW = KERB + Hs.hW, yC = KERB + Hs.hC;
     // Wings.
@@ -908,6 +917,15 @@
       const a = (k / 8) * PI * 2 + PI / 8;
       world.addProp('bench', Pd.x + Math.cos(a) * 12.4, KERB, Pd.z + Math.sin(a) * 12.4, -a - PI / 2, 1);
     }
+    // Four old garden lanterns on the diagonals round the pond (they light the water after dark).
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * PI * 2 + PI / 4, lx = Pd.x + Math.cos(a) * 11.2, lz = Pd.z + Math.sin(a) * 11.2;
+      pctx.prop.cylinder(lx, KERB, lz, 0.16, 0.08, 3.0, 8, VH.col(0x2a3a2e), true);
+      pctx.prop.box(lx - 0.24, KERB + 3.0, lz - 0.24, lx + 0.24, KERB + 3.08, lz + 0.24, VH.col(0x2a3a2e), { bottom: true });
+      glow(world, lx - 0.2, KERB + 3.08, lz - 0.2, lx + 0.2, KERB + 3.6, lz + 0.2, 0xffe2a0, 2.4);
+      pctx.prop.cylinder(lx, KERB + 3.6, lz, 0.3, 0.02, 0.3, 4, VH.col(0x2a3a2e), true);
+      K().block(world, lx - 0.17, 0, lz - 0.17, lx + 0.17, KERB + 3.0, lz + 0.17, 'pole');
+    }
 
     // --- the hedged rooms: four quarters of clipped yew rooms off the gravel walks, beds of flowers in them
     const flowers = [[0xe8483a, 0xf0d050], [0xe86ab0, 0xffffff], [0x8a5aa0, 0xf0a030], [0xf0d050, 0x3d6b8f]];
@@ -1008,6 +1026,33 @@
       R(W.x0, W.z1 - 0.8, W.x1, W.z1);
       R(W.x0, W.z0, W.x0 + 0.8, W.z1);
       R(W.x1 - 0.8, W.z0, W.x1, W.z1);
+      // The botanical gardens: lawns, the two walks, the pond, the palm house.
+      const G = GDN, Hs = G.house;
+      g.fillStyle = '#6fa45a';
+      R(G.x0, G.z0, G.x1, G.z1);
+      g.fillStyle = '#e2d4b4';
+      R(G.axis - 3, G.z0, G.axis + 3, G.z1);
+      R(G.x0, G.cross - 3, G.x1, G.cross + 3);
+      if (o.circle) o.circle(G.pond.x, G.pond.z, G.pond.r + 4);
+      g.fillStyle = '#3f8aa0';
+      if (o.circle) o.circle(G.pond.x, G.pond.z, G.pond.r);
+      g.fillStyle = '#dff0f4';
+      R(Hs.x0, Hs.z0, Hs.x1, Hs.z1);
+      R(Hs.cx0, Hs.cz0, Hs.cx1, Hs.cz1);
+      // The observatory on its lawn and the clinic with its helipad.
+      g.fillStyle = '#86b46e';
+      R(1167, -463, 1293, -295);
+      g.fillStyle = '#e6dcc4';
+      R(OBS.x - 3.4, -463, OBS.x + 3.4, OBS.z);
+      g.fillStyle = '#d8d4cc';
+      if (o.circle) o.circle(OBS.x, OBS.z, OBS.rOut);
+      g.fillStyle = '#f4f4f4';
+      if (o.circle) o.circle(OBS.x, OBS.z, OBS.rIn);
+      const C = CLINIC;
+      g.fillStyle = '#eef1f2';
+      R(C.x0, C.z0, C.x1, C.z1);
+      g.fillStyle = '#d8302a';
+      if (o.circle) o.circle(1230, -342, 4);
     });
   }
 

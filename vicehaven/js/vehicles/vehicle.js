@@ -566,14 +566,16 @@
       if (this.damageScale) amount *= this.damageScale * (this.driver === 'player' ? 1 : 0.25);
       else if (this.type === 'bulwark') amount *= 0.45; // armoured
       this.health -= amount;
-      if (source) this.lastHitBy = source;
+      if (source) {
+        this.lastHitBy = source;
+        this.lastHitKind = kind; // 'crash', 'blast', a weapon... (a mission hunter's own crashes aren't Jay's doing)
+      }
       if (this.health < 150 && this.burning === 0) this.burning = 0.001;
       if (this.health <= 0) {
         this.health = 0;
         this.explode();
       }
       this.model.setDamage(clamp(1 - this.health / 1000, 0, 1) * 0.9);
-      void kind;
     }
 
     /** Good as new (a respawn hands Jay his car back fixed). Not for wrecks. */

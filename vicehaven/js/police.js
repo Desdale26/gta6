@@ -64,7 +64,13 @@
     }
 
     onBump(v, other, speed) {
-      if (other && other.driver === 'player') this.police.crime('hitCop', v.pos.x, v.pos.z, speed);
+      if (!other || other.driver !== 'player') return;
+      // One collision is one crime: contact lasts several steps, and each step
+      // rolled the 25% extra star (heat 2 to 5 in half a second, d01).
+      const t = this.game.time;
+      if (t - (this._hitT ?? -9) < 1.5) return;
+      this._hitT = t;
+      this.police.crime('hitCop', v.pos.x, v.pos.z, speed);
     }
 
     onJacked() {

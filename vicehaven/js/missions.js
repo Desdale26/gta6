@@ -440,6 +440,8 @@
       this._startT = 2.5; // engines starting: Jay gets a head start (and again after a checkpoint retry)
       this._backT = 0; // just rammed him: ease off so two hunters can't pin his car to a wall
       this._bumpCool = 0;
+      this._pinT = 0; // how long it's been leaning on his stopped car
+      this._holdT = 0; // sitting back after a pin, so he can get away
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
     }
@@ -464,7 +466,9 @@
       const dist = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
       v.input.boost = 0;
       this._bumpCool -= dt;
-      if (v.lastHitBy === 'player' && this.game.time - (this._ramT ?? -9) < 0.3) v.lastHitBy = null;
+      // Its crashes are its own doing (its rams, the gate post it took at speed):
+      // only Jay's shots or blasts make its wreck his explosion for the police.
+      if (v.lastHitBy === 'player' && (v.lastHitKind === 'crash' || this.game.time - (this._ramT ?? -9) < 0.3)) v.lastHitBy = null;
       if (this._startT > 0) {
         this._startT -= dt;
         v.input.accel = 0;
@@ -477,6 +481,24 @@
         v.input.accel = v.vF > 1 ? -1 : -0.5;
         v.input.steer = 0;
         v.input.handbrake = 0;
+        return;
+      }
+      if (this._holdT > 0) {
+        this._holdT -= dt;
+        v.input.accel = v.vF > 0.5 ? -1 : 0;
+        v.input.steer = 0;
+        v.input.handbrake = v.speed < 1 ? 1 : 0;
+        return;
+      }
+      // Leaning on his stopped car: pushing doesn't count as a bump (no closing
+      // speed), so on its own it never let go (d01's Drifter was held against
+      // the drive-in fence for 200 s). After a moment it backs off and waits.
+      if (p.inVehicle && dist < v.hz + tgt.hz + 2.5 && tgt.speed < 3) this._pinT += dt;
+      else this._pinT = Math.max(0, this._pinT - dt * 0.5);
+      if (this._pinT > 1.5) {
+        this._pinT = 0;
+        this._backT = 1.2;
+        this._holdT = 2;
         return;
       }
       if (this._reverseT > 0) {
@@ -527,6 +549,7 @@
       const allowed = Math.sqrt(100 + 12 * Math.max(0, dist - v.hz - (tgt.hz || 1) - 0.5));
       if (closingNow > allowed + 2) v.input.accel = -1;
       else if (closingNow > allowed) v.input.accel = Math.min(v.input.accel, 0);
+      if (v.speed > 8 && this._wallAhead < v.speed * 0.8 + 3) v.input.accel = -1;
       this._checkStuck(v, dt);
     }
 
@@ -536,12 +559,16 @@
       const y = v.pos.y + 0.7;
       const len = 6 + v.speed * 0.6;
       let push = 0;
-      for (const [a, w] of [[-0.45, 1], [0.45, -1]]) {
+      this._wallAhead = Infinity;
+      const toTgt = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
+      for (const [a, w] of [[-0.45, 1], [0.45, -1], [0, 0]]) {
         const yaw = v.yaw + a;
         const dx = Math.sin(yaw);
         const dz = Math.cos(yaw);
         const hit = ph.raycast(v.pos.x + dx * v.hz, y, v.pos.z + dz * v.hz, dx, 0, dz, len, { flags: VH.COLLIDE.SOLID, ground: false });
-        if (hit && hit.t < Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z)) push += w * 0.7 * (1 - hit.t / len);
+        if (!hit || hit.t >= toTgt) continue;
+        if (w === 0) this._wallAhead = hit.t; // straight ahead: brake for it (a gate post at 30 m/s was 650)
+        else push += w * 0.7 * (1 - hit.t / len);
       }
       return clamp(push, -0.9, 0.9);
     }

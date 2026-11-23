@@ -1597,7 +1597,7 @@
         name: 'Southbay Speedway',
         length: LEN,
         radius: SP.R,
-        grip: 10.8, // the bends' lateral grip a rival dares (x0.82-1.04 by skill): a works Zephyr ~28 m/s, a flat-out player ~30
+        grip: 10.2, // the bends' lateral grip a rival dares (x0.82-1.04 by skill): a works Zephyr ~27 m/s, a flat-out player ~30 (10.8 beat a clean 27 m/s line by 0.9 s)
         bounds: [SP.x0 - 2, SP.zn - SP.HW - 6, SP.x1 + 2, SP.zs + SP.HW + 6],
         at: trackAt,
       }));

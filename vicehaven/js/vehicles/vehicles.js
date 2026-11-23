@@ -350,7 +350,9 @@
       if (speed < 1.2 && (slide || 0) < 3) return;
       if (speed > 5.5) {
         // A plough shrugs off traffic, but Jay ramming it (or it into a wall) still counts.
-        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (this._ploughs(v) && other && other.driver !== 'player' ? 0.15 : 1);
+        // A car a plough shoves aside is pushed, not wrecked (it went up 7 s later beside whoever was near).
+        const shoved = other && this._ploughs(other) && v.driver !== 'player' && !this._ploughs(v) ? 0.3 : 1;
+        const mul = (v.driver === 'player' ? 0.6 : v.isPolice ? 0.75 : 1) * (this._ploughs(v) && other && other.driver !== 'player' ? 0.15 : 1) * shoved;
         v.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), other && other.driver === 'player' ? 'player' : other ? other : null, 'crash');
         v.wake();
       }
@@ -476,7 +478,8 @@
       if (b.controller && b.controller.onBump) b.controller.onBump(b, a, speed);
       this._impact(a, b, speed, r.px, a.pos.y + 0.6, r.pz, r.nx, r.nz, Math.abs(vt));
       if (speed > 5.5) {
-        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (this._ploughs(b) && a.driver !== 'player' ? 0.15 : 1);
+        const shoved = this._ploughs(a) && b.driver !== 'player' && !this._ploughs(b) ? 0.3 : 1;
+        const mul = (b.driver === 'player' ? 0.6 : b.isPolice ? 0.75 : 1) * (this._ploughs(b) && a.driver !== 'player' ? 0.15 : 1) * shoved;
         b.damage(Math.min(650, Math.pow(speed - 5.5, 1.6) * 14 * mul), a.driver === 'player' ? 'player' : a, 'crash');
       }
       b.lastContact = this.time;

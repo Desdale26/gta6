@@ -1085,9 +1085,12 @@
     const x0 = 1028, x1 = 1033, xm = (x0 + x1) / 2, w = x1 - x0;
     const up = 0.45;
     pave(world, x0, 344, x1, 410, 0xb89a72, 'plazaTop', KERB + 0.035, 2);
-    K().stairs(world, world.ctxAt(xm, 354).concrete, xm, 352, 's', 2.4, w - 0.02, KERB, KERB + up, sc(0xd8cbb0), { rails: false, tag: 'stairs' });
+    // Three shallow stone steps up at each end, each step its own solid block (no ramp standing proud of the step faces).
+    for (let i = 0; i < 3; i++) {
+      sbox(world, 'concrete', x0 + 0.01, KERB, 352 + i * 0.8, x1 - 0.01, KERB + (up * (i + 1)) / 3, 352.8 + i * 0.8, 0xd8cbb0, 'stairs');
+      sbox(world, 'concrete', x0 + 0.01, KERB, 387.2 - i * 0.8, x1 - 0.01, KERB + (up * (i + 1)) / 3, 388 - i * 0.8, 0xd8cbb0, 'stairs');
+    }
     sbox(world, 'concrete', x0 + 0.01, KERB, 354.4, x1 - 0.01, KERB + up, 385.6, 0xc9b48e, 'stairs');
-    K().stairs(world, world.ctxAt(xm, 387).concrete, xm, 388, 'n', 2.4, w - 0.02, KERB, KERB + up, sc(0xd8cbb0), { rails: false, tag: 'stairs' });
     const ctx = world.ctxAt(xm, 380);
     // Pots of geraniums along both walls (solid), on the raised stretch.
     for (let z = 358; z < 384; z += 4.5) for (const [px, s2] of [[x0 + 0.45, 1], [x1 - 0.45, -1]]) {
@@ -1301,11 +1304,12 @@
     for (const y of [1.0, 2.2]) for (const dz of [-1.3, 1.3]) draw(world, 'wood', dr.x0, KERB + y - 0.1, dr.z + dz - 0.08, dr.x1, KERB + y, dr.z + dz + 0.08, 0x6b4e33);
     const dhex = [0xf4f2ec, 0x2a62b8, 0xd8302a, 0x2f7a4a, 0xf0c040, 0x3d6b8f];
     for (let i = 0; i < 6; i++) {
-      const x = dr.x0 + 1.6 + (i % 3) * 5.6, y = KERB + (i < 3 ? 1.0 : 2.2);
+      const x = dr.x0 + 3 + (i % 3) * 6, y = KERB + (i < 3 ? 1.0 : 2.2);
       world.ctxAt(x, dr.z).prop.box(x - 2.2, y, dr.z - 0.75, x + 2.2, y + 0.45, dr.z + 0.75, VH.col(dhex[i]));
       world.ctxAt(x, dr.z).prop.box(x - 2.0, y + 0.45, dr.z - 0.55, x + 2.0, y + 0.6, dr.z + 0.55, VH.col(dhex[(i + 3) % 6]));
     }
-    cbox(world, dr.x0 - 0.15, 0, dr.z - 1.45, dr.x1 + 0.15, KERB + 2.85, dr.z + 1.45, 'wood');
+    for (const x of [dr.x0, dr.x1]) draw(world, 'wood', x - 0.12, KERB + 0.3, dr.z - 1.3, x + 0.12, KERB + 2.5, dr.z + 1.3, 0x8a6a48); // boarded ends
+    cbox(world, dr.x0 - 0.12, 0, dr.z - 1.4, dr.x1 + 0.12, KERB + 2.85, dr.z + 1.4, 'wood');
     // Lights over the yard and the hard-standing (it is a working harbour after dark too).
     for (const [lx, lz, ly] of [[880, 704, PI], [912, 736, -PI / 2], [850, 742, PI / 2], [900, 694, 0], [860, 760, 0]]) world.addProp('streetlight', lx, KERB, lz, ly, 1);
 
@@ -1371,7 +1375,8 @@
     for (let i = 0; i < 6; i++) {
       // a stall: a steel table under crushed ice, the catch laid out, a scale on a post
       const sx = L.x0 + 6 + (i % 3) * 16, sz = L.z0 + 11 + Math.floor(i / 3) * 18;
-      sbox(world, 'prop', sx - 3, KERB, sz - 1.0, sx + 3, KERB + 0.9, sz + 1.0, 0xb8c0c8, 'metal');
+      draw(world, 'prop', sx - 3, KERB, sz - 1.0, sx + 3, KERB + 0.9, sz + 1.0, 0xb8c0c8);
+      cbox(world, sx - 3, 0, sz - 1.0, sx + 3, KERB + 1.12, sz + 1.0, 'metal'); // the table, the ice and the catch
       lc.prop.box(sx - 2.9, KERB + 0.9, sz - 0.9, sx + 2.9, KERB + 1.0, sz + 0.9, VH.col(0xe8f4f8));
       for (let k = 0; k < 9; k++) {
         const fx = sx - 2.5 + (k % 9) * 0.62, fz = sz + ((k * 5) % 3 - 1) * 0.45;
@@ -1494,6 +1499,50 @@
       R(FORT.museum.x0, FORT.museum.z0, FORT.museum.x1, FORT.museum.z1);
       g.fillStyle = '#f4f1ea';
       if (o.circle) o.circle(FORT.light.x, FORT.light.z, 4.5);
+      // Plaza Paloma: the square, the houses round it, the church and its tower, the market hall.
+      const Pz = PLAZA;
+      g.fillStyle = '#e2d2ac';
+      R(987, 187, 1153, 413);
+      g.fillStyle = '#efe2c2';
+      R(Pz.sq.x0, Pz.sq.z0, Pz.sq.x1, Pz.sq.z1);
+      for (const [z0, z1, , c] of Pz.west) { g.fillStyle = '#' + c.toString(16).padStart(6, '0'); R(Pz.wx0, z0, Pz.wx1, z1); }
+      for (const [z0, z1, , c] of Pz.east) { g.fillStyle = '#' + c.toString(16).padStart(6, '0'); R(Pz.ex0, z0, Pz.ex1, z1); }
+      g.fillStyle = '#c96a48';
+      R(Pz.church.x0, Pz.church.z0, Pz.church.x1, Pz.church.z1);
+      g.fillStyle = '#f1e3c0';
+      R(Pz.tower.x0, Pz.tower.z0, Pz.tower.x1, Pz.tower.z1);
+      g.fillStyle = '#b8603e';
+      R(Pz.market.x0, Pz.market.z0, Pz.market.x1, Pz.market.z1);
+      g.fillStyle = '#4cb4c8';
+      if (o.circle) o.circle(Pz.fountain.x, Pz.fountain.z, Pz.fountain.r);
+      g.fillStyle = '#f6f1e4';
+      if (o.circle) o.circle(Pz.band.x, Pz.band.z, Pz.band.r);
+      // The harbour: the quay, the fish market, the lofts, the yard, the mole and its light.
+      const Hb = HARB;
+      g.fillStyle = '#d4c4a0';
+      R(Hb.x0, Hb.z0, Hb.x1, Hb.z1);
+      g.fillStyle = '#c8b890';
+      R(Hb.x0, Hb.z0, Hb.quay, Hb.z1);
+      g.fillStyle = '#a4553c';
+      R(824, 598, 880, 638);
+      g.fillStyle = '#f3eee2';
+      R(826, 654, 844, 672);
+      R(828, 690, 848, 714);
+      R(884, 598, 922, 622);
+      g.fillStyle = '#e6eaec';
+      R(886, 648, 918, 682);
+      g.fillStyle = '#9c9a92';
+      R(850, 646, 880, 696);
+      g.fillStyle = '#aaa496';
+      R(850, 700, 910, 760);
+      for (const [z0, z1, c] of [[588, 626, '#d8a24a'], [632, 672, '#3d6b8f'], [678, 716, '#c0563a'], [722, 760, '#5a8a6a']]) { g.fillStyle = c; R(938, z0, 970, z1); }
+      g.fillStyle = '#c96a48';
+      R(912, 765, 972, 781);
+      g.fillStyle = '#b9a682';
+      R(Hb.mole.x, Hb.mole.z - 4, 778, Hb.mole.z + 4);
+      R(Hb.mole.x, Hb.mole.z + 4, Hb.mole.x + 8, Hb.mole.zEnd);
+      g.fillStyle = '#2f8a4a';
+      if (o.circle) o.circle(Hb.mole.x + 4, Hb.mole.zEnd - 4, 2.2);
     });
   }
 

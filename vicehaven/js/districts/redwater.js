@@ -14,6 +14,13 @@
  *                      ranch house, and the floodlit rodeo arena with chutes,
  *                      barrels, two stands, the announcer's box and a corn-dog
  *                      kiosk; a visitors' car park and horse trailers
+ *   willow_lake        Willow Lake on Mariner Way: a lake with weeping willows,
+ *                      an island, ducks and swans, a path round it; the jetty
+ *                      with rowing boats (hire one at the boathouse), three
+ *                      fishing platforms (bait at the middle one, the biggest
+ *                      catch is saved), five log cabins on the north shore, a
+ *                      campsite of tents and caravans with a shower block and
+ *                      a campfire circle, the reception and camp shop
  *
  * Static parts are merged into the chunk builders (VH.WNKit, VH.CountryKit);
  * nothing makes a mesh of its own apart from the signs and the ponds' water.
@@ -989,6 +996,866 @@
     world.physics.addOrientedBox(x, z, 1.1, 2.45, yaw, 0, KERB + 2.5, 'metal', F().ALL);
   }
 
+  // ---------------------------------------------------------- Willow Lake
+  // The plot (-1582..-1305, 1199..1463): Mariner Way north (the front, the
+  // way into the car park), Willow Lane east, Foundry Road south, Westfield
+  // Road west. The lake fills the west two-thirds, a gravel path round it,
+  // an island with a willow, the jetty and the boathouse on the north shore
+  // and fishing platforms on the south; log cabins along the lane behind
+  // the north shore; the campsite in the east behind the reception.
+  const WL = {
+    x0: -1582, x1: -1305, z0: 1199, z1: 1463,
+    edge: 1.6,
+    // The lake: an ellipse whose radius wobbles with the angle, a bay in the south-west, flatter in the east.
+    lake: { x: -1478, z: 1352, rx: 72, rz: 56, n: 96, bays: [[2.6, 0.22, 0.32], [0.05, -0.08, 0.5]], wy: KERB + 0.2 },
+    ring: 5, // the path round the lake: this far outside the shore
+    island: { x: -1502, z: 1364, rx: 11, rz: 7 },
+    gate: { x0: -1362, x1: -1348 }, // the car park's way in from Mariner Way
+    walk: 0, // the footpath from Mariner Way to the jetty and on to Foundry Road: on the jetty's line (set in build)
+    park: { x0: -1394, x1: -1310, z0: 1206, z1: 1250 },
+    office: { x0: -1394, x1: -1374, z0: 1258, z1: 1268 },
+    lane: { x0: -1562, z0: 1244, z1: 1250 },
+    cabins: { xs: [-1554, -1534, -1514, -1446, -1426], z0: 1260, z1: 1267, w: 10, deck: 3.5 },
+    cabinPath: 1274, // the footpath along the cabins' decks
+    boathouse: { x0: -1506, x1: -1494, z0: 1278, z1: 1288 },
+    camp: { x0: -1396, x1: -1308, z0: 1274, z1: 1458, track: -1350 },
+    toilets: { x0: -1331, x1: -1311, z0: 1294, z1: 1306 },
+    fire: { x: -1374, z: 1444 },
+    pitchZ: [1286, 1302, 1318, 1334, 1350, 1366, 1382, 1398, 1414, 1430, 1446],
+    pitchX: [-1374, -1326],
+    campWay: 1350, // the path from the track to the lake, where the west row has no pitch
+  };
+
+  /** The lake's radius factor at the parametric angle a (x = cos a, z = sin a): gentle wobbles and the bays. */
+  function lakeK(L, a) {
+    let k = 1 + 0.06 * Math.sin(2 * a + 0.8) + 0.05 * Math.sin(3 * a + 2.1) + 0.025 * Math.sin(5 * a + 0.3);
+    for (const [a0, h, wd] of L.bays || []) {
+      let d = Math.abs(a - a0) % (Math.PI * 2);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      k += h * Math.exp(-((d / wd) ** 2));
+    }
+    return k;
+  }
+  /** The shore: L.n points round the lake, each with its outward normal (the average of its two edges'). */
+  function lakeShore(L) {
+    if (L.pts) return L.pts;
+    const N = L.n;
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2, k = lakeK(L, a);
+      pts.push({ x: L.x + Math.cos(a) * L.rx * k, z: L.z + Math.sin(a) * L.rz * k });
+    }
+    for (let i = 0; i < N; i++) {
+      const p = pts[(i + N - 1) % N], q = pts[(i + 1) % N];
+      // Edge direction p -> q; outward is to its left in this winding (x right, z down the map).
+      let nx = q.z - p.z, nz = -(q.x - p.x);
+      if (nx * (pts[i].x - L.x) + nz * (pts[i].z - L.z) < 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      const n = Math.hypot(nx, nz);
+      pts[i].nx = nx / n;
+      pts[i].nz = nz / n;
+    }
+    L.pts = pts;
+    return pts;
+  }
+  /** Shore edge i (from point i to i + 1): its middle, the yaw pointing into the water, its length. */
+  function shoreSlice(L, i) {
+    const pts = lakeShore(L), N = pts.length;
+    i = ((i % N) + N) % N;
+    const a = pts[i], b = pts[(i + 1) % N];
+    const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+    let nx = -(b.z - a.z), nz = b.x - a.x;
+    if (nx * (L.x - mx) + nz * (L.z - mz) < 0) {
+      nx = -nx;
+      nz = -nz;
+    }
+    const n = Math.hypot(nx, nz);
+    return { i, x: mx, z: mz, yaw: Math.atan2(nx / n, nz / n), len: Math.hypot(b.x - a.x, b.z - a.z), ax: a.x, az: a.z, bx: b.x, bz: b.z };
+  }
+  /** The shore edge nearest the parametric angle a. */
+  function sliceAt(L, a) {
+    const N = L.n;
+    return shoreSlice(L, Math.round((((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * N - 0.5));
+  }
+  /** A point on the path round the lake (WL.ring outside the shore) at the parametric angle a, and the outward normal there. */
+  function ringPt(a) {
+    const L = WL.lake, pts = lakeShore(L), N = pts.length;
+    const t = ((((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)) * N;
+    const i = Math.floor(t) % N, f = t - Math.floor(t);
+    const p = pts[i], q = pts[(i + 1) % N];
+    let nx = p.nx + (q.nx - p.nx) * f, nz = p.nz + (q.nz - p.nz) * f;
+    const n = Math.hypot(nx, nz);
+    nx /= n;
+    nz /= n;
+    const r = WL.ring;
+    return [p.x + (q.x - p.x) * f + nx * r, p.z + (q.z - p.z) * f + nz * r, nx, nz];
+  }
+  /** Is (x, z) within `margin` metres of the water (or in it)? */
+  function nearLake(L, x, z, margin) {
+    const u = (x - L.x) / L.rx, v = (z - L.z) / L.rz;
+    const a = Math.atan2(v, u), k = lakeK(L, a);
+    return Math.hypot(u, v) < k + margin / Math.min(L.rx, L.rz);
+  }
+
+  /**
+   * The lake: a dark bed, the water (its own mesh, like the ponds), stones
+   * along the shore, a timber rail just outside them (solid: the water is
+   * for looking at) that closes onto the jetty's and platforms' rails, reed
+   * clumps in the shallows and lily pads. gaps: [{ s: shore slice, w: width }].
+   */
+  function buildLake(world, L, gaps) {
+    const pts = lakeShore(L), N = pts.length;
+    // The bed and the water stand a hand's breadth over the meadow (the stones hide the step): the long
+    // slices from the middle flickered in stripes against the grass from high up when they were closer.
+    const bed = VH.col(0x2f4a3e), yb = L.wy - 0.06;
+    for (let i = 0; i < N; i++) {
+      const a = pts[i], b = pts[(i + 1) % N];
+      world.ctxAt((L.x + a.x + b.x) / 3, (L.z + a.z + b.z) / 3).asphaltTop.polygon([[L.x, yb, L.z], [b.x, yb, b.z], [a.x, yb, a.z]], bed);
+    }
+    const shape = new THREE.Shape();
+    pts.forEach((p, i) => {
+      const x = (p.x - L.x) * 0.997, y = -(p.z - L.z) * 0.997;
+      if (i === 0) shape.moveTo(x, y);
+      else shape.lineTo(x, y);
+    });
+    const water = new THREE.Mesh(new THREE.ShapeGeometry(shape), world.materials.fountainWater || world.materials.water);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(L.x, L.wy, L.z);
+    water.name = 'lake';
+    water.receiveShadow = false; // (long thin triangles: the shadow map striped them)
+    world.chunkAt(L.x, L.z).group.add(water);
+    const stone = VH.col(0x9a948a), rail = VH.col(0xc8aa7c);
+    const reed = VH.col(0x56763a), reedTop = VH.col(0x9a8c50);
+    const off = 0.65; // the rail stands this far outside the shore line
+    const R = (p) => [p.x + p.nx * off, p.z + p.nz * off];
+    const railSeg = (ax, az, bx, bz) => {
+      const ctx = world.ctxAt((ax + bx) / 2, (az + bz) / 2);
+      for (const y of [0.5, 0.95]) W().beam(ctx.detailWood, ax, KERB + y, az, bx, KERB + y, bz, 0.09, rail);
+      const len = Math.hypot(bx - ax, bz - az);
+      world.physics.addOrientedBox((ax + bx) / 2, (az + bz) / 2, 0.1, len / 2 + 0.06, Math.atan2(bx - ax, bz - az), 0, KERB + 1.05, 'fence', F().SOLID | F().CAMERA);
+    };
+    for (let i = 0; i < N; i++) {
+      const a = pts[i], b = pts[(i + 1) % N];
+      const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, len = Math.hypot(b.x - a.x, b.z - a.z);
+      const yaw = Math.atan2(b.x - a.x, b.z - a.z);
+      const c = world.ctxAt(mx, mz);
+      c.detailMatte.orientedBox(mx, mz, 0.45, len / 2 + 0.3, yaw, KERB, L.wy + 0.1, stone); // solidity: passable (shore stones, knee-low)
+      const [ax, az] = R(a), [bx, bz] = R(b);
+      c.detailWood.box(ax - 0.07, KERB, az - 0.07, ax + 0.07, KERB + 1.05, az + 0.07, rail);
+      const g = gaps.find((q) => q.s.i === i);
+      if (g) {
+        // Stubs from the corners in to the jetty's rails.
+        const k = Math.max(0, (len - g.w) / 2 - 0.02) / len;
+        if (k > 0.02) {
+          railSeg(ax, az, ax + (bx - ax) * k, az + (bz - az) * k);
+          railSeg(bx + (ax - bx) * k, bz + (az - bz) * k, bx, bz);
+        }
+        continue;
+      }
+      railSeg(ax, az, bx, bz);
+      // Reeds in clumps a metre into the water (behind the rail: leaves, never in the way).
+      const h = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+      if (h < 0.45) {
+        const ix = mx - a.nx * 1.3, iz = mz - a.nz * 1.3;
+        c.hedge.orientedBox(ix, iz, 0.35, len * (0.2 + h * 0.5), yaw, KERB, KERB + 1.1 + h * 0.9, reed, reedTop);
+      }
+    }
+    // Lily pads in the calm corners.
+    const rng = new VH.RNG('willow-lilies');
+    for (let k = 0; k < 7; k++) {
+      const p = pts[(k * 37 + 11) % N];
+      for (let j = 0; j < 4; j++) {
+        const t = rng.range(2.5, 6), sx = rng.range(-2.5, 2.5);
+        const x = p.x - p.nx * t + p.nz * sx, z = p.z - p.nz * t - p.nx * sx;
+        ellipse(world, 'marks', x, z, rng.range(0.4, 0.75), rng.range(0.4, 0.75), 0, L.wy + 0.012, VH.col(rng.chance(0.2) ? 0xf2d8e0 : 0x4a7a3a), 7);
+      }
+    }
+    return water;
+  }
+
+  /** Round octagonal collider for a trunk or post of radius r (four turned boxes). */
+  function roundCollider(world, x, z, r, y0, y1, tag, flags) {
+    for (let k = 0; k < 4; k++) world.physics.addOrientedBox(x, z, r, r * 0.42, (k * Math.PI) / 4, y0, y1, tag || 'pole', flags === undefined ? F().SOLID | F().SHOTS : flags);
+  }
+
+  /** A weeping willow: a stout trunk, a domed crown and a curtain of leaves hanging to head height (walked through, like leaves). */
+  function willow(world, x, z, s, y) {
+    const K = C();
+    const base = y === undefined ? KERB : y;
+    const ctx = world.ctxAt(x, z);
+    const bark = VH.col(0x5a4632);
+    ctx.wood.cylinder(x, base, z, 0.42 * s, 0.3 * s, 3.4 * s, 8, bark, true);
+    for (const [dx, dz] of [[1.4, 0.3], [-1.1, 0.9], [0.2, -1.4]]) W().beam(ctx.wood, x, base + 2.8 * s, z, x + dx * s, base + 4.2 * s, z + dz * s, 0.22 * s, bark);
+    roundCollider(world, x, z, 0.4 * s, 0, base + 3.4 * s, 'pole');
+    const leafA = VH.col(0x9ab84a), leafB = VH.col(0x7ea040);
+    K.blob(ctx.hedge, x, base + 4.9 * s, z, 3.3 * s, 1.7 * s, 3.3 * s, leafA);
+    K.blob(ctx.hedge, x + 0.8 * s, base + 5.8 * s, z - 0.5 * s, 2.0 * s, 1.1 * s, 2.0 * s, leafA);
+    // The curtain: an open cone from the crown's rim down to 1.6 m (two layers, the inner one darker).
+    ctx.hedge.cylinder(x, base + 1.6 * s, z, 3.6 * s, 3.1 * s, 3.4 * s, 12, leafB, false);
+    ctx.hedge.cylinder(x, base + 1.9 * s, z, 3.0 * s, 2.6 * s, 3.0 * s, 10, VH.colMul(leafB, 0.85), false);
+  }
+
+  /** A clinker rowing boat lying on the water (or upside down on trestles with up = false), facing yaw. */
+  function rowboat(world, x, z, yaw, hex, up) {
+    const ctx = world.ctxAt(x, z);
+    const s = ctx.detail;
+    const K = C();
+    const P = K.frame(x, z, yaw);
+    const hull = VH.col(hex || 0xf2efe6), inside = VH.col(0xa8885c), trim = VH.col(0x6b4a30);
+    if (up === false) {
+      // Upturned on two trestles: the hull's bottom painted, the gunwale underneath.
+      const y0 = KERB + 0.55;
+      s.orientedBox(x, z, 0.62, 1.5, yaw, y0, y0 + 0.42, hull, VH.col(hex === 0xf2efe6 ? 0x2f5f8a : 0xf2efe6));
+      const [bx, bz] = P(1.75, 0);
+      s.orientedBox(bx, bz, 0.32, 0.3, yaw, y0 + 0.05, y0 + 0.38, hull);
+      for (const f of [-0.9, 0.9]) {
+        const [tx, tz] = P(f, 0);
+        world.ctxAt(tx, tz).detailWood.orientedBox(tx, tz, 0.75, 0.06, yaw, KERB, y0, trim);
+      }
+      world.physics.addOrientedBox(x + Math.sin(yaw) * 0.15, z + Math.cos(yaw) * 0.15, 0.78, 1.95, yaw, 0, y0 + 0.42, 'plank', F().SOLID | F().SHOTS);
+      return;
+    }
+    const y0 = WL.lake.wy - 0.06, y1 = WL.lake.wy + 0.34;
+    s.orientedBox(x, z, 0.62, 1.4, yaw, y0, y1, hull, inside); // the hull, its floor boards seen from above
+    const [bx, bz] = P(1.65, 0);
+    s.orientedBox(bx, bz, 0.34, 0.28, yaw, y0 + 0.05, y1 + 0.03, hull, inside); // the bow
+    const [cx, cz] = P(-1.45, 0);
+    s.orientedBox(cx, cz, 0.55, 0.06, yaw, y0, y1 + 0.02, trim); // the transom
+    for (const f of [-0.6, 0.35]) {
+      const [tx, tz] = P(f, 0);
+      s.orientedBox(tx, tz, 0.6, 0.12, yaw, y1 - 0.02, y1 + 0.03, trim); // thwarts
+    }
+    // The oars shipped along the thwarts.
+    for (const r of [-0.35, 0.35]) {
+      const [ax, az] = P(1.2, r), [ox, oz] = P(-1.3, r * 0.8);
+      W().beam(s, ax, y1 + 0.06, az, ox, y1 + 0.06, oz, 0.05, VH.col(0xc8a878)); // solidity: passable (oars in a boat on the water)
+    }
+    world.physics.addOrientedBox(x + Math.sin(yaw) * 0.12, z + Math.cos(yaw) * 0.12, 0.64, 1.8, yaw, 0, y1 + 0.05, 'plank', F().SOLID | F().SHOTS);
+  }
+
+  /** A duck (or, big, a swan) sitting on the water, facing yaw. */
+  function duck(world, x, z, yaw, swan, hex) {
+    const ctx = world.ctxAt(x, z);
+    const s = ctx.detailMatte, K = C();
+    const k = swan ? 2.2 : 1;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const body = VH.col(hex || (swan ? 0xf8f6f0 : 0x8a6a48));
+    const wy = WL.lake.wy;
+    K.blob(s, x, wy + 0.06 * k, z, (0.12 + Math.abs(fx) * 0.1) * k, 0.09 * k, (0.12 + Math.abs(fz) * 0.1) * k, body); // solidity: passable (on the water, behind the reeds)
+    const hx = x + fx * 0.2 * k, hz = z + fz * 0.2 * k;
+    if (swan) W().beam(s, x + fx * 0.12 * k, wy + 0.14 * k, z + fz * 0.12 * k, hx, wy + 0.42 * k, hz, 0.07 * k, body); // solidity: passable (the neck)
+    const hy = wy + (swan ? 0.45 : 0.2) * k;
+    K.blob(s, hx, hy, hz, 0.07 * k, 0.07 * k, 0.07 * k, swan ? body : VH.col(hex ? 0x8a6a48 : 0x2f6a3a)); // solidity: passable
+    s.box(hx + fx * 0.07 * k - 0.03, hy - 0.02, hz + fz * 0.07 * k - 0.03, hx + fx * 0.07 * k + 0.03, hy + 0.01, hz + fz * 0.07 * k + 0.03, VH.col(0xf0a030)); // solidity: passable (the beak)
+    // No collider: the birds are out on the water, behind the shore rail.
+  }
+
+  /**
+   * A timber deck from (x, z) running `len` metres out along yaw, `w` wide,
+   * its top at y, on piles; a rail down both sides and across the far end
+   * (open at the land end). Returns the frame (f, r) -> [x, z].
+   */
+  function jetty(world, x, z, yaw, w, len, y) {
+    const K = C();
+    const P = K.frame(x, z, yaw);
+    const plank = VH.col(0xb89a70), dark = VH.col(0x7a5e40), rail = VH.col(0xc8aa7c);
+    const [cx, cz] = P(len / 2, 0);
+    K.pieces(0, len, 20, (a, b) => {
+      const [px, pz] = P((a + b) / 2, 0);
+      const ctx = world.ctxAt(px, pz);
+      ctx.prop.orientedBox(px, pz, w / 2, (b - a) / 2, yaw, y - 0.18, y, plank);
+      // Plank joints across the deck.
+      for (let f = Math.ceil(a / 0.9) * 0.9; f < b; f += 0.9) {
+        const [jx, jz] = P(f, 0);
+        ctx.detail.orientedBox(jx, jz, w / 2 - 0.02, 0.012, yaw, y, y + 0.004, dark); // solidity: passable (paint)
+      }
+    });
+    world.physics.addOrientedBox(cx, cz, w / 2, len / 2, yaw, y - 0.3, y, 'plank', F().SOLID | F().SHOTS);
+    // Piles under the edges, and the posts and rails above them.
+    for (let f = 0.3; f <= len; f += 2.4) {
+      for (const r of [-w / 2 + 0.1, w / 2 - 0.1]) {
+        const [px, pz] = P(Math.min(f, len - 0.1), r);
+        const ctx = world.ctxAt(px, pz);
+        ctx.wood.box(px - 0.11, KERB - 0.1, pz - 0.11, px + 0.11, y - 0.18, pz + 0.11, dark); // a pile (under the deck)
+        ctx.detailWood.box(px - 0.06, y, pz - 0.06, px + 0.06, y + 1.0, pz + 0.06, rail);
+      }
+    }
+    const rails = (f0, r0, f1, r1) => {
+      const [ax, az] = P(f0, r0), [bx, bz] = P(f1, r1);
+      const ctx = world.ctxAt((ax + bx) / 2, (az + bz) / 2);
+      for (const yy of [0.5, 0.95]) W().beam(ctx.detailWood, ax, y + yy, az, bx, y + yy, bz, 0.08, rail);
+      const L = Math.hypot(bx - ax, bz - az);
+      world.physics.addOrientedBox((ax + bx) / 2, (az + bz) / 2, 0.09, L / 2 + 0.05, Math.atan2(bx - ax, bz - az), 0, y + 1.0, 'railing', F().SOLID | F().SHOTS);
+    };
+    rails(0.3, -w / 2 + 0.1, len - 0.1, -w / 2 + 0.1);
+    rails(0.3, w / 2 - 0.1, len - 0.1, w / 2 - 0.1);
+    rails(len - 0.1, -w / 2 + 0.1, len - 0.1, w / 2 - 0.1);
+    for (const r of [-w / 2 + 0.1, w / 2 - 0.1]) {
+      const [px, pz] = P(len - 0.1, r);
+      world.ctxAt(px, pz).detailWood.box(px - 0.06, y, pz - 0.06, px + 0.06, y + 1.0, pz + 0.06, rail);
+    }
+    return P;
+  }
+
+  /** A ridge tent (two sloping sides, a door flap at the front) or, dome = true, a dome tent; facing yaw. Solid. */
+  function tent(world, x, z, yaw, hex, dome, big) {
+    const ctx = world.ctxAt(x, z);
+    const s = ctx.detail, K = C();
+    const col = VH.col(hex), dark = VH.colMul(VH.col(hex), 0.62);
+    const P = K.frame(x, z, yaw);
+    if (dome) {
+      const R = big ? 1.9 : 1.4, H = big ? 1.6 : 1.25;
+      K.blob(s, x, KERB, z, R, H, R, col);
+      // The door: a dark arch on the front, and the poles' seams over the top.
+      const [dx, dz] = P(R * 0.86, 0);
+      s.orientedBox(dx, dz, 0.42, 0.25, yaw, KERB, KERB + H * 0.62, dark);
+      // (The sphere is a low one: seven facets round, so the dome's sides are straight to 0.7 of its height.)
+      for (const [h0, h1, k] of [[0, 0.42, 0.88], [0.42, 0.78, 0.7], [0.78, 1, 0.3]]) roundCollider(world, x, z, R * k, h0 ? KERB + H * h0 : 0, KERB + H * h1, 'tent', F().SOLID | F().CAMERA);
+      return;
+    }
+    const L = big ? 4.2 : 2.6, hw = big ? 1.5 : 1.05, H = big ? 2.0 : 1.35;
+    // The ridge runs along yaw; the sides slope down to the ground.
+    const f0 = -L / 2, f1 = L / 2;
+    const V = (f, r, y) => {
+      const [px, pz] = P(f, r);
+      return [px, y, pz];
+    };
+    for (const side of [-1, 1]) {
+      const a = V(f0, side * hw, KERB), b = V(f1, side * hw, KERB), c = V(f1, 0, KERB + H), d = V(f0, 0, KERB + H);
+      const quad = side > 0 ? [d, c, b, a] : [c, d, a, b]; // facing out and up
+      s.polygon(quad, col);
+      s.polygon(quad.slice().reverse(), dark);
+    }
+    for (const [f, door] of [[f1, true], [f0, false]]) {
+      const tri = [V(f, -hw, KERB), V(f, hw, KERB), V(f, 0, KERB + H)];
+      s.polygon(f > 0 ? tri : tri.slice().reverse(), door ? dark : col);
+      s.polygon(f > 0 ? tri.slice().reverse() : tri, dark);
+    }
+    // Guy ropes are left out (thin); the pegs' loops are flat on the grass. Stepped colliders under the slopes.
+    for (const [t0, t1] of [[0, 0.3], [0.3, 0.55], [0.55, 0.8], [0.8, 1]]) {
+      world.physics.addOrientedBox(x, z, hw * (1 - (t0 + t1) / 2) + 0.02, L / 2, yaw, t0 === 0 ? 0 : KERB + H * t0, KERB + H * t1, 'tent', F().SOLID | F().CAMERA);
+    }
+  }
+
+  /** A touring caravan: a rounded box on one axle, a window band, a door on the right side, the A-frame hitch; facing yaw. */
+  function caravan(world, x, z, yaw, stripe) {
+    const ctx = world.ctxAt(x, z);
+    const s = ctx.detail, K = C();
+    const P = K.frame(x, z, yaw);
+    const body = VH.col(0xf4f2ea), glass = VH.col(0x2a3440);
+    const ob = (f, r, hf, hr, y0, y1, c, top) => {
+      const [px, pz] = P(f, r);
+      s.orientedBox(px, pz, hr, hf, yaw, y0, y1, c, top);
+    };
+    const y0 = KERB + 0.45, y1 = KERB + 2.55;
+    ob(0, 0, 2.6, 1.1, y0, y1, body);
+    ob(2.75, 0, 0.18, 0.95, y0 + 0.2, y1 - 0.25, body); // the rounded front
+    ob(0, 0, 2.62, 1.12, y0 + 0.75, y0 + 0.9, VH.col(stripe || 0x2f6f9a));
+    ob(2.94, 0, 0.02, 0.8, y0 + 1.15, y0 + 1.75, glass); // the front window
+    for (const f of [-1.6, 0.4, 1.8]) ob(f, 0, 0.5, 1.13, y0 + 1.15, y0 + 1.7, glass);
+    ob(-0.6, 1.12, 0.4, 0.02, y0 + 0.05, y0 + 1.95, VH.col(0xe8e4d8)); // the door
+    ob(0, 0, 1.0, 0.6, y1, y1 + 0.12, VH.col(0xd8d8d0)); // a roof light
+    ob(3.6, 0, 0.6, 0.07, KERB + 0.35, KERB + 0.5, VH.col(0x2b2d30)); // the hitch
+    for (const r of [-1, 1]) {
+      const [wx, wz] = P(0, r * 1.0);
+      K.wheel(s, wx, KERB + 0.33, wz, 0.33, 0.2, yaw, VH.col(0x1b1d20));
+    }
+    const [jx, jz] = P(3.9, 0);
+    s.box(jx - 0.05, KERB, jz - 0.05, jx + 0.05, KERB + 0.42, jz + 0.05, VH.col(0x3a3f45)); // the jockey wheel's leg
+    world.physics.addOrientedBox(x + Math.sin(yaw) * 0.1, z + Math.cos(yaw) * 0.1, 1.13, 2.95, yaw, 0, y1 + 0.12, 'metal', F().ALL);
+    const [hx, hz] = P(3.6, 0);
+    world.physics.addOrientedBox(hx, hz, 0.15, 0.6, yaw, 0, KERB + 0.5, 'metal', F().SOLID);
+  }
+
+  /** A striped windbreak along a line (1.2 m, solid). */
+  function windbreak(world, ax, az, bx, bz, cols) {
+    const L = Math.hypot(bx - ax, bz - az), n = Math.max(2, Math.round(L));
+    const yaw = Math.atan2(bx - ax, bz - az);
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n, t1 = (i + 1) / n;
+      const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+      const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
+      ctx.detail.orientedBox((x0 + x1) / 2, (z0 + z1) / 2, 0.02, L / n / 2, yaw, KERB + 0.1, KERB + 1.2, VH.col(cols[i % cols.length]));
+      ctx.detailWood.box(x0 - 0.03, KERB, z0 - 0.03, x0 + 0.03, KERB + 1.25, z0 + 0.03, VH.col(0x8a6a48));
+    }
+    world.physics.addOrientedBox((ax + bx) / 2, (az + bz) / 2, 0.06, L / 2 + 0.04, yaw, 0, KERB + 1.25, 'fence', F().SOLID | F().CAMERA);
+  }
+
+  /** A folding camping chair (solid), facing yaw. */
+  function campChair(world, x, z, yaw, hex, y) {
+    const ctx = world.ctxAt(x, z);
+    const base = y === undefined ? KERB : y;
+    const P = C().frame(x, z, yaw);
+    const col = VH.col(hex || 0x2f5f8a);
+    ctx.detail.orientedBox(x, z, 0.27, 0.25, yaw, base + 0.36, base + 0.44, col);
+    const [bx, bz] = P(-0.24, 0);
+    ctx.detail.orientedBox(bx, bz, 0.27, 0.03, yaw, base + 0.44, base + 0.95, col);
+    for (const [f, r] of [[0.2, 0.25], [0.2, -0.25], [-0.22, 0.25], [-0.22, -0.25]]) {
+      const [lx, lz] = P(f, r);
+      ctx.detail.box(lx - 0.02, base, lz - 0.02, lx + 0.02, base + 0.4, lz + 0.02, VH.col(0x3a3f45)); // solidity: passable (inside the chair's collider)
+    }
+    world.physics.addOrientedBox(x, z, 0.29, 0.29, yaw, 0, base + 0.44, 'bench', F().SOLID | F().SHOTS);
+    world.physics.addOrientedBox(bx, bz, 0.29, 0.05, yaw, base + 0.44, base + 0.95, 'bench', F().SOLID | F().SHOTS);
+  }
+
+  /** A log lying on the grass as a seat (axis across yaw), solid. */
+  function logSeat(world, x, z, yaw, len) {
+    const ctx = world.ctxAt(x, z);
+    C().wheel(ctx.detailWood, x, KERB + 0.24, z, 0.24, len, yaw, VH.col(0x6b4a30));
+    world.physics.addOrientedBox(x, z, len / 2, 0.24, yaw, 0, KERB + 0.48, 'bench', F().SOLID | F().SHOTS);
+  }
+
+  /** A post with a light on top (a path lamp), solid. */
+  function postLamp(world, x, z, h, hex) {
+    W().lamp(world, x, z, hex || 0xffe2a0, 2.2, h);
+    world.physics.addBox(x - 0.08, 0, z - 0.08, x + 0.08, KERB + h, z + 0.08, 'pole', F().SOLID | F().SHOTS);
+    (world.floodlights || (world.floodlights = [])).push({ x, z, r: 3.5, y: KERB + 0.03, strength: 0.35, tint: [1.1, 1.0, 0.8] });
+  }
+
+  function buildWillowLake(world) {
+    const K = C(), WN = W();
+    const P = WL, e = P.edge, L = P.lake;
+    K.ground(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 'meadow', KERB + 0.002);
+    world.addLawn(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
+    // The fence round the plot (dark timber): open at the car park's gate and where the footpath crosses.
+    const jet = sliceAt(L, Math.PI * 1.5);
+    P.walk = jet.x;
+    const fx0 = P.x0 + e + 0.5, fx1 = P.x1 - e - 0.5, fz0 = P.z0 + e + 0.5, fz1 = P.z1 - e - 0.5;
+    const rail = { hex: 0x5a4030, h: 1.3 };
+    K.postRail(world, fx0, fz0, fx1, fz0, [[P.gate.x0, P.gate.x1], [P.walk - 2, P.walk + 2]], rail);
+    K.postRail(world, fx0, fz1, fx1, fz1, [[P.walk - 2, P.walk + 2]], rail);
+    K.postRail(world, fx0, fz0, fx0, fz1, [], rail);
+    K.postRail(world, fx1, fz0, fx1, fz1, [], rail);
+    // The lake: the jetty's slice and the three fishing platforms' slices are left open in the reeds.
+    const pegs = [sliceAt(L, Math.PI * 0.5 - 0.33), sliceAt(L, Math.PI * 0.5 + 0.02), sliceAt(L, Math.PI * 0.5 + 0.36)];
+    buildLake(world, L, [{ s: jet, w: 3.6 }, ...pegs.map((q) => ({ s: q, w: 3.4 }))]);
+    P.jet = jet;
+    P.pegs = pegs;
+    buildLakePaths(world);
+    buildIsland(world);
+    buildJetty(world);
+    buildBoathouse(world);
+    buildFishing(world);
+    P.cabins.xs.forEach((x, i) => buildCabin(world, x, i));
+    buildWillowOffice(world);
+    buildWillowPark(world);
+    buildCampsite(world);
+    buildLakeTrees(world);
+    // Ducks and two swans on the water (clear of the jetty and the island).
+    const rng = new VH.RNG('willow-ducks');
+    for (let k = 0; k < 14; k++) {
+      const a = rng.range(0, Math.PI * 2), t = rng.range(0.25, 0.8) * lakeK(L, a);
+      const x = L.x + Math.cos(a) * L.rx * t, z = L.z + Math.sin(a) * L.rz * t;
+      if (Math.hypot(x - P.island.x, z - P.island.z) < 16 || Math.abs(x - jet.x) < 6 && z < jet.z + 40) continue;
+      duck(world, x, z, rng.range(0, Math.PI * 2), k < 2, k % 4 === 3 ? 0xf2efe6 : null);
+    }
+    // The names: by the car park's gate on Mariner Way, and by the footpath's gates.
+    VH.Landmarks.sign(world, { x: P.gate.x1 + 7, y: KERB + 2.4, z: P.z0 + e + 1.2, yaw: Math.PI, w: 7, h: 1.6, lines: ['WILLOW LAKE', 'Cabins · Camping · Boats · Fishing'], style: 'brand', posts: true, colors: { bg: ['#2f5a3a', '#22442c'], fg: '#f2ead0' }, frame: 0x5a4030, twoSided: true });
+    VH.Landmarks.sign(world, { x: P.walk + 4.5, y: KERB + 1.8, z: P.z1 - e - 1.4, yaw: 0, w: 4.2, h: 1.1, lines: ['WILLOW LAKE', 'Footpath round the lake'], style: 'park', posts: true });
+  }
+
+  /** The gravel path round the lake, the footpath along the cabins and the ways in; benches and lamps along them. */
+  function buildLakePaths(world) {
+    const P = WL, L = P.lake;
+    const y = KERB + 0.035;
+    const col = VH.col(0xb4ab98);
+    const N = 56;
+    P.paths = [];
+    const seg = (ax, az, bx, bz, w) => {
+      band(world, 'marks', ax, az, bx, bz, w || 2.6, y, col);
+      ellipse(world, 'marks', bx, bz, (w || 2.6) / 2, (w || 2.6) / 2, 0, y, col, 8);
+      P.paths.push([ax, az, bx, bz]);
+    };
+    for (let i = 0; i < N; i++) {
+      const [ax, az] = ringPt((i / N) * Math.PI * 2), [bx, bz] = ringPt(((i + 1) / N) * Math.PI * 2);
+      seg(ax, az, bx, bz);
+    }
+    const bottom = ringPt(Math.PI * 0.5)[1];
+    // The footpath north-south: Mariner Way, across the lane, past the boathouse to the jetty; from the south shore to Foundry Road.
+    seg(P.walk, P.z0 + 1, P.walk, P.jet.z - 1.5, 2.4);
+    seg(P.walk, bottom - 0.5, P.walk, P.z1 - 1, 2.4);
+    // Along the cabins' decks, and down to the lake at its north-west.
+    const cz = P.cabinPath;
+    seg(P.cabins.xs[0] - 4, cz, P.office.x0, cz, 2.4);
+    const nw = ringPt(Math.PI * 1.2);
+    seg(P.cabins.xs[0] - 4, cz, nw[0], nw[1], 2.4);
+    // From the campsite to the east shore.
+    const east = ringPt(0);
+    seg(P.camp.track - 3, P.campWay, east[0], east[1], 2.4);
+    // Benches facing the water and lamps along the ring.
+    for (let k = 0; k < 14; k++) {
+      const a = ((k + 0.5) / 14) * Math.PI * 2;
+      const [px, pz, ox, oz] = ringPt(a); // and the way out from the water
+      if (k % 2 === 0) {
+        if (Math.abs(px - P.jet.x) > 8 && !P.pegs.some((s) => Math.hypot(px - s.x, pz - s.z) < 10)) world.addProp('bench', px + ox * 2.4, KERB, pz + oz * 2.4, Math.atan2(-ox, -oz), 1);
+      } else {
+        postLamp(world, px + ox * 1.9, pz + oz * 1.9, 1.0);
+      }
+    }
+  }
+
+  /** The island: a grassy hump in the lake with a willow, two bushes and a duck house on a post. */
+  function buildIsland(world) {
+    const K = C(), I = WL.island;
+    const y = WL.lake.wy;
+    ellipse(world, 'marks', I.x, I.z, I.rx + 1.2, I.rz + 1.0, 0.3, y + 0.025, VH.col(0xa89a72));
+    ellipse(world, 'grassTop', I.x, I.z, I.rx, I.rz, 0.3, y + 0.07, VH.col(0xb8d890, 1.1));
+    willow(world, I.x - 1.5, I.z + 0.5, 1.05, y + 0.07);
+    const ctx = world.ctxAt(I.x, I.z);
+    K.blob(ctx.hedge, I.x + 6, KERB + 0.6, I.z - 1.5, 1.6, 1.0, 1.4, VH.col(0x5a7a3a));
+    K.blob(ctx.hedge, I.x - 7, KERB + 0.5, I.z + 2, 1.3, 0.8, 1.2, VH.col(0x6a8a3a));
+    world.physics.addBox(I.x + 4.6, 0, I.z - 2.8, I.x + 7.4, KERB + 1.5, I.z - 0.2, 'hedge', F().SOLID | F().SHOTS);
+    world.physics.addBox(I.x - 8.2, 0, I.z + 0.9, I.x - 5.8, KERB + 1.2, I.z + 3.1, 'hedge', F().SOLID | F().SHOTS);
+    // The duck house: a little red hut on a post at the water's edge.
+    const dx = I.x + 3, dz = I.z + I.rz - 0.6;
+    ctx.wood.box(dx - 0.07, KERB, dz - 0.07, dx + 0.07, KERB + 1.2, dz + 0.07, VH.col(0x6b5038));
+    ctx.prop.box(dx - 0.45, KERB + 1.2, dz - 0.35, dx + 0.45, KERB + 1.75, dz + 0.35, VH.col(0xa83a2a));
+    W().gable(ctx.prop, dx - 0.45, dz - 0.35, dx + 0.45, dz + 0.35, KERB + 1.75, 0.35, 'x', 0x3a3f45, 0xa83a2a);
+    ctx.prop.box(dx - 0.12, KERB + 1.3, dz + 0.35, dx + 0.12, KERB + 1.55, dz + 0.37, VH.col(0x1a1a1a));
+    world.physics.addBox(dx - 0.47, 0, dz - 0.37, dx + 0.47, KERB + 2.1, dz + 0.37, 'pole', F().SOLID | F().SHOTS);
+  }
+
+  /** The jetty off the north shore: rowing boats moored along it, a lifebuoy, the boat-hire hatch at its root. */
+  function buildJetty(world) {
+    const P = WL, s = P.jet;
+    const len = 34, w = 3.6;
+    // From 1.5 m back on the bank, out square to the shore.
+    const x0 = s.x - Math.sin(s.yaw) * 1.5, z0 = s.z - Math.cos(s.yaw) * 1.5;
+    const J = jetty(world, x0, z0, s.yaw, w, len, KERB + 0.32);
+    P.jetty = { x0, z0, len, w, P: J };
+    const cols = [0xf2efe6, 0x2f6f9a, 0xc8402c, 0x2f7a4a, 0xf2c318];
+    [[9, 1], [16, 1], [23, -1], [12.5, -1], [30, 1]].forEach(([f, r], i) => {
+      const [bx, bz] = J(f, r * (w / 2 + 0.95));
+      rowboat(world, bx, bz, s.yaw + (i % 2 ? Math.PI : 0), cols[i]);
+    });
+    // One boat out on the water by the island.
+    rowboat(world, P.island.x + 16, P.island.z - 6, 2.2, 0xf2c318);
+    // A lifebuoy on a post by the root, the no-swimming sign.
+    const [lx, lz] = J(0.6, -(w / 2 + 1.4));
+    const lc = world.ctxAt(lx, lz);
+    lc.wood.box(lx - 0.08, KERB, lz - 0.08, lx + 0.08, KERB + 1.9, lz + 0.08, VH.col(0x6b5038));
+    C().wheel(lc.detail, lx, KERB + 1.35, lz + 0.12, 0.38, 0.1, Math.PI / 2, VH.col(0xe8402c));
+    C().wheel(lc.detail, lx, KERB + 1.35, lz + 0.18, 0.2, 0.02, Math.PI / 2, VH.col(0xf2f2ee));
+    world.physics.addBox(lx - 0.4, 0, lz - 0.1, lx + 0.4, KERB + 1.9, lz + 0.25, 'pole', F().SOLID | F().SHOTS);
+    const [nx, nz] = J(-1.2, w / 2 + 3.2);
+    VH.Landmarks.sign(world, { x: nx, y: KERB + 1.6, z: nz, yaw: Math.PI, w: 3.4, h: 0.9, lines: ['NO SWIMMING', 'Deep cold water'], style: 'park', posts: true });
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: x0, z: z0 + 1, r: 6, y: KERB + 0.03, strength: 0.5 });
+    const [ex, ez] = J(len - 1, 0);
+    world.floodlights.push({ x: ex, z: ez, r: 4, y: KERB + 0.36, strength: 0.4 });
+    for (const r of [-1, 1]) {
+      const [px, pz] = J(len - 0.1, r * (w / 2 - 0.1));
+      W().lamp(world, px, pz, 0xffe2a0, 2.2, 0.25, KERB + 1.32);
+    }
+  }
+
+  /** The boathouse behind the jetty: green timber, the big doors on the lake side, the hire hatch, oars on a rack, boats upturned. */
+  function buildBoathouse(world) {
+    const K = C(), WN = W();
+    const b = WL.boathouse;
+    const ctx = K.shed(world, b, { h: 3.6, rise: 2.6, wall: 0x4a6a52, roof: 0x3a3f45, axis: 'z', style: 0, sides: { s: 'blank' } });
+    const cx = (b.x0 + b.x1) / 2;
+    // The doors (shut) and the hire hatch beside them.
+    ctx.prop.box(cx - 3.2, KERB, b.z1 - 0.02, cx + 1.2, KERB + 3.2, b.z1 + 0.06, VH.col(0x3a4a3e));
+    WN.beam(ctx.prop, cx - 3.1, KERB + 0.1, b.z1 + 0.08, cx + 1.1, KERB + 3.1, b.z1 + 0.08, 0.1, 0xf2efe6);
+    WN.beam(ctx.prop, cx - 3.1, KERB + 3.1, b.z1 + 0.08, cx + 1.1, KERB + 0.1, b.z1 + 0.08, 0.1, 0xf2efe6);
+    ctx.prop.box(cx - 1.0 - 2.1, KERB + 3.1, b.z1 - 0.02, cx + 1.1, KERB + 3.25, b.z1 + 0.1, VH.col(0xf2efe6));
+    const hx = b.x1 - 2.2;
+    ctx.screen.box(hx - 1.0, KERB + 1.0, b.z1 + 0.02, hx + 1.0, KERB + 1.9, b.z1 + 0.05, VH.col(0xffe2b0, 0.85));
+    WN.solid(world, ctx.wood, hx - 1.2, KERB, b.z1, hx + 1.2, KERB + 1.0, b.z1 + 0.5, 0x6b5038, null, 'building', F().ALL); // the counter
+    world.interactables.push({ id: 'willow_boats', kind: 'redwaterBoat', x: hx, y: KERB + 1.0, z: b.z1 + 1.6, radius: 1.8, label: 'Hire a rowing boat', price: 8 });
+    VH.Landmarks.sign(world, { x: hx, y: KERB + 2.35, z: b.z1 + 0.08, yaw: 0, w: 3.0, h: 0.55, lines: ['ROWING BOATS $8'], style: 'plaque' });
+    WN.lamp(world, hx, b.z1 + 0.3, 0xffe2a0, 2.2, 0.2, KERB + 2.85);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: hx, z: b.z1 + 2, r: 5, y: KERB + 0.03, strength: 0.5 });
+    // Oars stood in a rack on the east wall.
+    const rx = b.x1 + 0.35;
+    for (let k = 0; k < 6; k++) {
+      const z = b.z0 + 3 + k * 0.4;
+      WN.beam(ctx.detailWood, rx, KERB, z, rx - 0.15, KERB + 2.5, z, 0.05, 0xc8a878);
+      ctx.detailWood.box(rx - 0.21, KERB + 2.2, z - 0.09, rx - 0.09, KERB + 2.5, z + 0.09, VH.col(0xc8a878)); // the blade
+    }
+    world.physics.addBox(b.x1, 0, b.z0 + 2.7, rx + 0.12, KERB + 2.5, b.z0 + 5.3, 'crate', F().SOLID | F().SHOTS);
+    // Two boats upturned on trestles on the west side.
+    rowboat(world, b.x0 - 2.2, b.z0 + 3.5, 0, 0xf2efe6, false);
+    rowboat(world, b.x0 - 2.2, b.z0 + 8.5, Math.PI, 0x2f6f9a, false);
+  }
+
+  /** Three fishing platforms off the south shore; the bait box on the middle one. */
+  function buildFishing(world) {
+    const K = C();
+    const P = WL;
+    P.pegs.forEach((s, i) => {
+      const x0 = s.x - Math.sin(s.yaw) * 1.2, z0 = s.z - Math.cos(s.yaw) * 1.2;
+      const J = jetty(world, x0, z0, s.yaw, 3.4, 5.2, KERB + 0.3);
+      s.P = J;
+      // A green brolly and a chair on two of them, a rod out over the rail.
+      if (i !== 1) {
+        const [ux, uz] = J(3.6, 0.9);
+        const uc = world.ctxAt(ux, uz);
+        // (The brolly's rim is above head height: 2.4 m off the deck.)
+        uc.detail.cylinder(ux, KERB + 0.3, uz, 0.035, 0.035, 2.5, 6, VH.col(0xd8d8d0), true);
+        uc.detail.cylinder(ux, KERB + 2.25, uz, 1.25, 0.05, 0.5, 8, VH.col(0x2f5a3a), true);
+        world.physics.addBox(ux - 0.08, 0, uz - 0.08, ux + 0.08, KERB + 2.8, uz + 0.08, 'pole', F().SOLID | F().SHOTS);
+        const [chx, chz] = J(2.6, -0.4);
+        campChair(world, chx, chz, s.yaw, 0x2f5a3a, KERB + 0.3);
+        const [r0x, r0z] = J(3.3, -0.9), [r1x, r1z] = J(7.4, -1.3);
+        W().beam(uc.detail, r0x, KERB + 0.95, r0z, r1x, KERB + 2.3, r1z, 0.03, VH.col(0x2a2d30)); // solidity: passable (a fishing rod out over the water)
+        uc.detail.box(r0x - 0.04, KERB + 0.3, r0z - 0.04, r0x + 0.04, KERB + 0.95, r0z + 0.04, VH.col(0x3a3f45)); // solidity: passable (the rod rest, 2 cm)
+      } else {
+        const [bx, bz] = J(1.2, 1.0);
+        const bc = world.ctxAt(bx, bz);
+        W().solid(world, bc.detailWood, bx - 0.45, KERB + 0.3, bz - 0.3, bx + 0.45, KERB + 1.05, bz + 0.3, 0x4a6a52, null, 'crate', F().SOLID | F().SHOTS);
+        world.interactables.push({ id: 'willow_fish', kind: 'redwaterFish', x: s.x - Math.sin(s.yaw) * -2.5, y: KERB + 1.2, z: s.z - Math.cos(s.yaw) * -2.5, radius: 2.2, label: 'Go fishing (bait)', price: 2 });
+        const [gx, gz] = J(-2.4, 2.6);
+        VH.Landmarks.sign(world, { x: gx, y: KERB + 1.6, z: gz, yaw: s.yaw + Math.PI, w: 3.4, h: 0.9, lines: ['FISHING', 'Bait $2 · Catch and release'], style: 'park', posts: true });
+      }
+    });
+    // Picnic tables on the grass behind the platforms, a barbecue stand and bins.
+    const z = WL.lake.z + WL.lake.rz + WL.ring + 9;
+    for (const x of [-1530, -1516, -1446, -1432]) K.picnicTable(world, x, z, 0, 0x8a6a48);
+    const bx = -1500, bz = z + 2;
+    const bc = world.ctxAt(bx, bz);
+    W().solid(world, bc.concrete, bx - 0.8, KERB, bz - 0.5, bx + 0.8, KERB + 0.85, bz + 0.5, 0x9a948a, null, 'building', F().ALL);
+    bc.detail.box(bx - 0.6, KERB + 0.85, bz - 0.35, bx + 0.6, KERB + 0.9, bz + 0.35, VH.col(0x2a2d30)); // the grill
+    for (const x of [-1508, -1440]) world.addProp('bin', x, KERB, z - 2.4, 0, 1);
+  }
+
+  /** A log cabin facing the lake: corner log ends, a stone chimney, a deck with a rail and two chairs, a porch lamp; a gravel pad behind. */
+  function buildCabin(world, x, i) {
+    const K = C(), WN = W();
+    const c = WL.cabins;
+    const r = { x0: x - c.w / 2, x1: x + c.w / 2, z0: c.z0, z1: c.z1 };
+    const logCol = [0x8a5a36, 0x7a4e2e, 0x96643c][i % 3];
+    const ctx = K.shed(world, r, { h: 2.9, rise: 2.0, wall: logCol, roof: 0x3f4a3a, axis: 'x', bay: 2.6, floorH: 2.9, ww: 0.5, wh: 0.5, seed: 3.3 + i, sides: { e: 'blank', w: 'blank' } });
+    // The log ends, crossing at the corners.
+    const end = VH.colMul(VH.col(logCol), 1.25);
+    for (const cx of [r.x0, r.x1]) {
+      for (const cz of [r.z0, r.z1]) {
+        for (let k = 0; k < 9; k++) {
+          const y = KERB + 0.12 + k * 0.31, o = k % 2 ? 0.28 : 0.12;
+          ctx.wood.box(cx - o, y, cz - (0.4 - o), cx + o, y + 0.26, cz + (0.4 - o), end);
+        }
+      }
+    }
+    for (const cx of [r.x0, r.x1]) {
+      for (const cz of [r.z0, r.z1]) {
+        world.physics.addBox(cx - 0.29, 0, cz - 0.13, cx + 0.29, KERB + 2.9, cz + 0.13, 'building', F().ALL);
+        world.physics.addBox(cx - 0.13, 0, cz - 0.29, cx + 0.13, KERB + 2.9, cz + 0.29, 'building', F().ALL);
+      }
+    }
+    // The chimney on the west gable.
+    const cz = (r.z0 + r.z1) / 2;
+    WN.solid(world, ctx.concrete, r.x0 - 0.9, KERB, cz - 0.6, r.x0 - 0.3, KERB + 5.7, cz + 0.6, 0x8a8478, null, 'building', F().ALL);
+    // The deck: a step up, the rail round it with the steps' gap, the door and its lamp.
+    const dz0 = r.z1, dz1 = r.z1 + c.deck, dy = KERB + 0.38;
+    WN.deck(world, ctx.wood, r.x0 + 0.4, dz0, r.x1 - 0.4, dz1, dy, 0x9a7448, 'plank', 0.38);
+    const rl = { hex: 0x7a5a3a, h: 0.95, y: dy };
+    K.postRail(world, r.x0 + 0.5, dz1 - 0.1, r.x1 - 0.5, dz1 - 0.1, [[x - 0.9, x + 0.9]], rl);
+    K.postRail(world, r.x0 + 0.5, dz0 + 0.4, r.x0 + 0.5, dz1 - 0.1, [], rl);
+    K.postRail(world, r.x1 - 0.5, dz0 + 0.4, r.x1 - 0.5, dz1 - 0.1, [], rl);
+    ctx.prop.box(x - 0.5, dy, r.z1 - 0.02, x + 0.5, dy + 2.05, r.z1 + 0.05, VH.col(0x4a3020));
+    WN.lamp(world, x + 0.95, r.z1 + 0.15, 0xffd890, 2.2, 0.2, KERB + 2.45);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x, z: dz1 + 1.5, r: 5, y: KERB + 0.03, strength: 0.45 });
+    campChair(world, x - 3, dz0 + 1.6, Math.PI * (i % 2 ? 0.92 : 1.08) - Math.PI, [0x2f5a3a, 0xc8402c, 0x2f5f8a][i % 3], dy);
+    campChair(world, x + 2.8, dz0 + 1.5, Math.PI * 0.05, [0xf2c318, 0x2f5a3a, 0xc8402c][i % 3], dy);
+    // Firewood stacked against the east wall, a gravel pad behind for the car.
+    WN.solid(world, ctx.detailWood, r.x1 + 0.35, KERB, cz - 1.6, r.x1 + 1.05, KERB + 1.1, cz + 1.6, 0x7a5434, null, 'crate', F().SOLID | F().SHOTS);
+    K.ground(world, x - 3, WL.lane.z1, x + 3, r.z0 - 0.4, 'gravel', KERB + 0.01);
+  }
+
+  /** The reception and camp shop by the car park: a timber hut with a veranda, the shop hatch, festoon lights. */
+  function buildWillowOffice(world) {
+    const K = C(), WN = W();
+    const o = WL.office;
+    const ctx = K.shed(world, o, { h: 3.2, rise: 1.8, wall: 0x8a5a36, roof: 0x3f4a3a, axis: 'x', bay: 2.8, floorH: 3.2, ww: 0.5, wh: 0.5, seed: 9.1 });
+    // The veranda on the car park side.
+    const vz0 = o.z0 - 3, vz1 = o.z0;
+    ctx.wood.topRect(o.x0, vz0, o.x1, vz1, KERB + 0.04, VH.col(0xa8885c), 2);
+    WN.tiltBox(ctx.prop, (o.x0 + o.x1) / 2, KERB + 3.0, (vz0 + vz1) / 2, o.x1 - o.x0 + 0.6, 0.14, vz1 - vz0 + 0.5, 0, -0.16, 0x3f4a3a);
+    for (const x of [o.x0 + 0.3, (o.x0 + o.x1) / 2, o.x1 - 0.3]) {
+      ctx.wood.box(x - 0.1, KERB, vz0 + 0.1, x + 0.1, KERB + 2.9, vz0 + 0.3, VH.col(0x6b4a30));
+      world.physics.addBox(x - 0.12, 0, vz0 + 0.08, x + 0.12, KERB + 2.9, vz0 + 0.32, 'pole', F().SOLID | F().SHOTS);
+    }
+    const hx = o.x0 + 5;
+    ctx.screen.box(hx - 1.2, KERB + 1.0, o.z0 - 0.05, hx + 1.2, KERB + 2.0, o.z0 - 0.02, VH.col(0xffe2b0, 0.85));
+    WN.solid(world, ctx.wood, hx - 1.4, KERB, o.z0 - 0.55, hx + 1.4, KERB + 1.0, o.z0, 0x6b5038, null, 'building', F().ALL);
+    world.interactables.push({ id: 'willow_shop', kind: 'redwaterBuy', x: hx, y: KERB + 1.0, z: o.z0 - 1.8, radius: 1.8, label: 'Buy toasted marshmallows', price: 3, heal: 25, what: 'smores' });
+    const dx = o.x1 - 5;
+    ctx.prop.box(dx - 0.55, KERB, o.z0 - 0.06, dx + 0.55, KERB + 2.2, o.z0 + 0.02, VH.col(0x4a3020)); // the reception door
+    VH.Landmarks.sign(world, { x: o.x1 + 3, y: KERB + 1.8, z: vz0 - 1.5, yaw: Math.PI, w: 3.8, h: 1.0, lines: ['RECEPTION', 'Camp shop · Cabins · Pitches'], style: 'park', posts: true });
+    // Bulbs under the veranda's front edge (they hang from 2.2 m: Jay walks under them).
+    WN.festoon(world, o.x0 + 0.3, KERB + 2.5, vz0 + 0.2, o.x1 - 0.3, KERB + 2.5, vz0 + 0.2, 0.25, [0xffd890, 0xff9a6a, 0x9ad8ff, 0xb8ff9a], 1.4);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: (o.x0 + o.x1) / 2, z: vz0 - 1, r: 7, y: KERB + 0.03, strength: 0.55 });
+    // A noticeboard on two posts by the track.
+    const nx = o.x1 + 3.5, nz = o.z0 + 2;
+    ctx.detailWood.box(nx - 0.9, KERB, nz - 0.06, nx - 0.8, KERB + 1.9, nz + 0.06, VH.col(0x6b4a30));
+    ctx.detailWood.box(nx + 0.8, KERB, nz - 0.06, nx + 0.9, KERB + 1.9, nz + 0.06, VH.col(0x6b4a30));
+    ctx.detail.box(nx - 0.85, KERB + 1.0, nz - 0.04, nx + 0.85, KERB + 1.8, nz + 0.04, VH.col(0x5a7a4a));
+    for (let k = 0; k < 5; k++) ctx.detail.box(nx - 0.7 + k * 0.3, KERB + 1.15 + (k % 2) * 0.25, nz - 0.06, nx - 0.5 + k * 0.3, KERB + 1.45 + (k % 2) * 0.25, nz - 0.04, VH.col([0xf2efe6, 0xf2e2a0, 0xb8d8f2][k % 3]));
+    world.physics.addBox(nx - 0.92, 0, nz - 0.08, nx + 0.92, KERB + 1.9, nz + 0.08, 'sign', F().SOLID | F().SHOTS);
+  }
+
+  /** The car park off Mariner Way (gravel, sleepers at the bay heads, lamps) and the cabins' lane. */
+  function buildWillowPark(world) {
+    const K = C();
+    const p = WL.park;
+    K.ground(world, p.x0, p.z0, p.x1, p.z1, 'gravel', KERB + 0.01);
+    K.ground(world, WL.gate.x0, WL.z0 + WL.edge, WL.gate.x1, p.z0, 'gravel', KERB + 0.01);
+    K.ground(world, WL.lane.x0, WL.lane.z0, p.x0, WL.lane.z1, 'gravel', KERB + 0.01);
+    WL.bayRows = [];
+    for (const [z, dir] of [[p.z0 + 3, 1], [p.z0 + 22, -1], [p.z0 + 22, 1], [p.z1 - 3, -1]]) {
+      const zh = z + dir * 0.25;
+      const skip = z === p.z0 + 3 ? [WL.gate.x0 - 2, WL.gate.x1 + 2] : null;
+      for (let x = p.x0 + 3; x < p.x1 - 3; x += 2.7) {
+        if (skip && x > skip[0] - 1 && x < skip[1] + 1) continue;
+        world.ctxAt(x, zh).detailWood.box(x - 0.9, KERB, zh - 0.12, x + 0.9, KERB + 0.12, zh + 0.12, VH.col(0x6b5038));
+      }
+      WL.bayRows.push({ z: z + dir * 2.6, h: dir > 0 ? Math.PI : 0, skip });
+    }
+    for (const x of [p.x0 + 22, p.x1 - 22]) world.addProp('streetlight', x, KERB, p.z0 + 22, 0, 1);
+    for (let x = WL.lane.x0 + 30; x < p.x0 - 10; x += 44) world.addProp('streetlight', x, KERB, WL.lane.z0 - 1.5, 0, 1);
+  }
+
+  /** The campsite: the track and its turning circle, pitches with tents, caravans and cars, the toilet block, the campfire. */
+  function buildCampsite(world) {
+    const K = C(), WN = W();
+    const P = WL, cp = P.camp;
+    const tx = cp.track;
+    K.ground(world, tx - 3, P.park.z1, tx + 3, cp.z1 - 8, 'gravel', KERB + 0.01);
+    ellipse(world, 'marks', tx, cp.z1 - 9, 8, 7, 0, KERB + 0.03, VH.col(0x9c9486), 12);
+    for (let z = cp.z0 + 6; z < cp.z1 - 10; z += 24) for (const s of [-1, 1]) postLamp(world, tx + s * 4, z, 1.0);
+    // The toilet and shower block.
+    const t = P.toilets;
+    const tc = K.shed(world, t, { h: 3.0, rise: 1.4, wall: 0xe8e0cc, roof: 0x2f4a3a, axis: 'x', bay: 3, floorH: 3, ww: 0.35, wh: 0.25, seed: 5.5, sides: { w: 'blank' } });
+    for (const [z, col] of [[t.z0 + 3, 0x2f5f9a], [t.z1 - 3, 0xc8402c]]) tc.prop.box(t.x0 - 0.06, KERB, z - 0.55, t.x0 + 0.02, KERB + 2.1, z + 0.55, VH.col(col));
+    VH.Landmarks.sign(world, { x: t.x0 - 0.08, y: KERB + 2.55, z: (t.z0 + t.z1) / 2, yaw: -Math.PI / 2, w: 4.2, h: 0.55, lines: ['TOILETS · SHOWERS'], style: 'plaque' });
+    WN.lamp(world, t.x0 - 0.3, (t.z0 + t.z1) / 2, 0xfff2d8, 2.2, 0.2, KERB + 2.2);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: t.x0 - 3, z: (t.z0 + t.z1) / 2, r: 6, y: KERB + 0.03, strength: 0.45 });
+    world.addProp('bin', t.x0 - 1.2, KERB, t.z1 + 2, 0, 1);
+    // The pitches: a mown square each, an electric hook-up post, and a tent, a caravan or a picnic table.
+    const rng = new VH.RNG('willow-camp');
+    const tentCols = [0x2f7a4a, 0xe86a2a, 0x2f5f9a, 0xd8c040, 0xc8402c, 0x6a4a8a, 0x3a8a8a];
+    P.campCars = [];
+    P.pitches = [];
+    for (const px of P.pitchX) {
+      const west = px < tx;
+      const back = west ? px - 8.5 : px + 8.5, front = west ? px + 8 : px - 8;
+      const rows = P.pitchZ.filter((pz) => (west ? Math.abs(pz - P.fire.z) >= 6 && Math.abs(pz - P.campWay) >= 6 : pz <= t.z0 - 8 || pz >= t.z1 + 8));
+      // Hedges between the pitches and along the back (open to the track); none against the shower block.
+      const lines = new Set();
+      for (const pz of rows) for (const z of [pz - 8, pz + 8]) if (west || z < t.z0 - 1 || z > t.z1 + 1) lines.add(z);
+      for (const z of lines) K.hedge(world, Math.min(back, front), z, Math.max(back, front), z, [], 1.2, 0.9, 0x3f6a30);
+      for (const pz of rows) K.hedge(world, back, pz - 8.45, back, pz + 8.45, west ? [] : [[t.z0 - 0.6, t.z1 + 0.6]], 1.2, 0.9, 0x3f6a30);
+      for (const pz of rows) {
+        W().pave(world, px - 7, pz - 6.5, px + 7, pz + 6.5, 0xd8f4a8, 'grassTop', KERB + 0.02);
+        P.pitches.push([px, pz]);
+        // The hook-up post at the pitch's front corner.
+        const hx = west ? px + 6.6 : px - 6.6, hz = pz - 6;
+        const hc = world.ctxAt(hx, hz);
+        hc.detail.box(hx - 0.14, KERB, hz - 0.14, hx + 0.14, KERB + 0.85, hz + 0.14, VH.col(0x3a6a3a));
+        hc.screen.box(hx - 0.1, KERB + 0.86, hz - 0.1, hx + 0.1, KERB + 0.92, hz + 0.1, VH.col(0x9aff9a, 1.6));
+        world.physics.addBox(hx - 0.15, 0, hz - 0.15, hx + 0.15, KERB + 0.92, hz + 0.15, 'pole', F().SOLID | F().SHOTS);
+        const roll = rng.next();
+        const yaw = west ? Math.PI / 2 : -Math.PI / 2; // doors face the track
+        const col = rng.pick(tentCols);
+        if (roll < 0.36) {
+          tent(world, px - (west ? 1 : -1), pz + rng.range(-1.5, 1.5), yaw, col, false, rng.chance(0.5));
+          campChair(world, px + (west ? 2.4 : -2.4), pz + 2.2, yaw + 0.4, rng.pick(tentCols));
+        } else if (roll < 0.66) {
+          tent(world, px, pz, yaw, col, true, rng.chance(0.4));
+          if (rng.chance(0.6)) tent(world, px - (west ? 4 : -4), pz - 3.6, yaw, rng.pick(tentCols), true, false);
+          windbreak(world, px - 5, pz + 4.5, px + 3, pz + 4.5, [col, 0xf2efe6]);
+        } else if (roll < 0.86) {
+          caravan(world, px - (west ? 0.5 : -0.5), pz, west ? 0 : Math.PI, rng.pick([0x2f6f9a, 0xc8402c, 0x2f7a4a, 0x8a6a48]));
+          campChair(world, px + (west ? 2.6 : -2.6), pz - 1.5, yaw, rng.pick(tentCols));
+          campChair(world, px + (west ? 2.6 : -2.6), pz + 0.2, yaw + 0.3, rng.pick(tentCols));
+        } else {
+          K.picnicTable(world, px, pz, 0, 0x8a6a48);
+          tent(world, px - (west ? 4 : -4), pz + 2.5, yaw, col, true, false);
+        }
+        // A car on most pitches, between the pitch and the track.
+        if (roll < 0.86 && rng.chance(0.7)) P.campCars.push({ x: west ? px + 10.5 : px - 10.5, z: pz + 1, h: rng.chance(0.5) ? 0 : Math.PI });
+      }
+    }
+    buildCampfire(world);
+  }
+
+  /** The campfire circle at the end of the track: stones, a stack of logs with a glow, log seats, festoon lights on two posts. */
+  function buildCampfire(world) {
+    const K = C();
+    const f = WL.fire;
+    const ctx = world.ctxAt(f.x, f.z);
+    ellipse(world, 'marks', f.x, f.z, 5.5, 5.5, 0, KERB + 0.025, VH.col(0xa4865c), 14);
+    for (let k = 0; k < 11; k++) {
+      const a = (k / 11) * Math.PI * 2;
+      K.blob(ctx.detailMatte, f.x + Math.sin(a) * 0.95, KERB + 0.08, f.z + Math.cos(a) * 0.95, 0.22, 0.14, 0.2, VH.col(0x8a857a)); // solidity: passable (the fire's ring of stones, ankle-high)
+    }
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      W().beam(ctx.detailWood, f.x + Math.sin(a) * 0.55, KERB + 0.05, f.z + Math.cos(a) * 0.55, f.x, KERB + 0.85, f.z, 0.11, VH.col(0x5a3a22));
+    }
+    K.blob(ctx.screen, f.x, KERB + 0.28, f.z, 0.42, 0.32, 0.42, VH.col(0xff8a2a, 2.4));
+    world.physics.addBox(f.x - 0.6, 0, f.z - 0.6, f.x + 0.6, KERB + 0.88, f.z + 0.6, 'crate', F().SOLID);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + 0.3;
+      logSeat(world, f.x + Math.sin(a) * 3.4, f.z + Math.cos(a) * 3.4, a, 2.0);
+    }
+    for (const s of [-1, 1]) {
+      const px = f.x + s * 6.2, pz = f.z - 1;
+      ctx.wood.box(px - 0.08, KERB, pz - 0.08, px + 0.08, KERB + 3.0, pz + 0.08, VH.col(0x6b4a30));
+      world.physics.addBox(px - 0.1, 0, pz - 0.1, px + 0.1, KERB + 3.0, pz + 0.1, 'pole', F().SOLID | F().SHOTS);
+    }
+    W().festoon(world, f.x - 6.2, KERB + 2.95, f.z - 1, f.x + 6.2, KERB + 2.95, f.z - 1, 0.6, [0xffd890, 0xff9a6a, 0xffe8b8], 1.2);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: f.x, z: f.z, r: 6, y: KERB + 0.03, strength: 0.6, tint: [1.3, 0.75, 0.4] });
+  }
+
+  /** Willows round the shore, woods along the lanes, trees between the cabins. */
+  function buildLakeTrees(world) {
+    const P = WL, L = P.lake;
+    // Willows just outside the shore stones (in front of the path), their curtains over the water.
+    const pts = lakeShore(L);
+    for (const a of [0.42, 0.8, 2.3, 2.62, 2.95, 3.6, 4.1, 5.3, 5.62, 6.15]) {
+      const p = pts[Math.round((a / (Math.PI * 2)) * pts.length) % pts.length];
+      willow(world, p.x + p.nx * 2.4, p.z + p.nz * 2.4, 0.95 + ((a * 7) % 1) * 0.2);
+    }
+    const rng = new VH.RNG('willow-woods');
+    const clear = (x, z) => {
+      if (nearLake(L, x, z, 12)) return false;
+      if (x > P.camp.x0 - 4) return false; // the campsite, the office and the car park
+      if (z > P.lane.z0 - 4 && z < P.cabinPath + 4) return false; // the lane, the cabins and their path
+      if (Math.abs(x - P.walk) < 4) return false;
+      if (x > P.boathouse.x0 - 6 && x < P.boathouse.x1 + 3 && z < P.boathouse.z1 + 4) return false;
+      if (z > L.z + L.rz + P.ring + 4 && z < L.z + L.rz + P.ring + 14 && x > -1540 && x < -1424) return false; // the picnic tables
+      for (const s of P.paths) if (segDist(x, z, s[0], s[1], s[2], s[3]) < 3.5) return false;
+      return true;
+    };
+    // The woods' floor: rougher, darker grass along the lanes (the lawns by the water stay mown).
+    const e = P.edge, south = ringPt(Math.PI * 0.5)[1] + 8;
+    for (const r of [[P.x0 + e, P.z0 + e, P.camp.x0 - 4, P.lane.z0 - 2], [P.x0 + e, P.lane.z1 + 2, P.x0 + e + 14, south], [P.x0 + e, south, P.camp.x0 - 4, P.z1 - e]]) {
+      W().pave(world, r[0], r[1], r[2], r[3], 0xb4c494, 'grassTop', KERB + 0.012);
+    }
+    for (let x = P.x0 + 6; x < P.x1 - 5; x += 8) {
+      for (let z = P.z0 + 6; z < P.z1 - 5; z += 8) {
+        const jx = x + rng.range(-3, 3), jz = z + rng.range(-3, 3);
+        const k = Math.sin(jx * 0.037 + 0.4) + Math.sin(jz * 0.029 + jx * 0.013) + rng.range(-0.5, 0.5);
+        // Woods in the rough along the lanes; a few lone oaks on the lawns.
+        const rough = jz < P.lane.z0 - 2 || jz > south || jx < P.x0 + e + 14;
+        if ((rough ? k < -0.75 : k < 1.15) || !clear(jx, jz)) continue;
+        world.addProp(rng.chance(0.55) ? 'treeB' : 'tree', jx, KERB, jz, rng.range(0, 6.28), rng.range(0.85, 1.2) * (rough ? 1 : 1.2));
+      }
+    }
+    // A hedge of trees along Willow Lane behind the campsite.
+    for (let z = P.camp.z0 + 4; z < P.z1 - 6; z += 13) world.addProp('treeB', P.x1 - 4.5, KERB, z, z, 1.0);
+    for (let x = P.camp.x0 + 6; x < P.x1 - 8; x += 14) world.addProp('tree', x, KERB, P.z1 - 4.5, x, 1.0);
+  }
+
   // -------------------------------------------------------------- the map
   if (VH.MapPainters) {
     VH.MapPainters.push((g, layout, o) => {
@@ -1033,6 +1900,39 @@
       W().mapBox(g, R, Q.stables.x0, Q.stables.z0, Q.stables.x1, Q.stables.z1, '#8a3a2a');
       W().mapBox(g, R, Q.hay.x0, Q.hay.z0, Q.hay.x1, Q.hay.z1, '#7a3a2a');
       C().mapEllipse(g, Q.pen.x, Q.pen.z, Q.pen.r, Q.pen.r, '#d8c08a');
+      // Willow Lake: the lake and its path, the island, the cabins, the campsite.
+      if (!layout.plots.willow_lake) return;
+      const Wl = WL, Lk = Wl.lake;
+      g.fillStyle = '#88b062';
+      R(Wl.x0 + 1.6, Wl.z0 + 1.6, Wl.x1 - 1.6, Wl.z1 - 1.6);
+      const shore = lakeShore(Lk);
+      g.strokeStyle = '#c4b898';
+      g.lineWidth = 2.6;
+      g.beginPath();
+      shore.forEach((q, i) => (i ? g.lineTo(q.x + q.nx * Wl.ring, q.z + q.nz * Wl.ring) : g.moveTo(q.x + q.nx * Wl.ring, q.z + q.nz * Wl.ring)));
+      g.closePath();
+      g.stroke();
+      poly(shore.map((q) => [q.x, q.z]), '#4f9ac8');
+      C().mapEllipse(g, Wl.island.x, Wl.island.z, Wl.island.rx, Wl.island.rz, '#7aa85a');
+      g.fillStyle = '#b4aa92';
+      R(Wl.lane.x0, Wl.lane.z0, Wl.park.x0, Wl.lane.z1);
+      R(Wl.camp.track - 3, Wl.park.z1, Wl.camp.track + 3, Wl.camp.z1 - 8);
+      W().mapBox(g, R, Wl.park.x0, Wl.park.z0, Wl.park.x1, Wl.park.z1, '#a8a08c', false);
+      g.fillStyle = '#a4c87c';
+      for (const [px, pz] of Wl.pitches || []) R(px - 7, pz - 6, px + 7, pz + 6);
+      for (const x of Wl.cabins.xs) W().mapBox(g, R, x - Wl.cabins.w / 2, Wl.cabins.z0, x + Wl.cabins.w / 2, Wl.cabins.z1, '#7a4e2e');
+      for (const b of [Wl.boathouse, Wl.office]) W().mapBox(g, R, b.x0, b.z0, b.x1, b.z1, '#5a6a52');
+      W().mapBox(g, R, Wl.toilets.x0, Wl.toilets.z0, Wl.toilets.x1, Wl.toilets.z1, '#e8e0cc');
+      if (Wl.jetty) {
+        const J = Wl.jetty;
+        const [ax, az] = J.P(0, 0), [bx, bz] = J.P(J.len, 0);
+        g.strokeStyle = '#a8885c';
+        g.lineWidth = J.w;
+        g.beginPath();
+        g.moveTo(ax, az);
+        g.lineTo(bx, bz);
+        g.stroke();
+      }
     });
   }
 
@@ -1055,9 +1955,9 @@
           if (item.heal) player.heal(item.heal);
           VH.events.emit('money:changed', { delta: -item.price, reason: 'Redwater' });
           const gained = Math.round(player.health - before);
-          const LINES = { lemonade: ['Pink lemonade', 'Ice-cold, on the terrace. '], corndog: ['A corn dog', 'With mustard, rodeo style. '] };
+          const LINES = { lemonade: ['Pink lemonade', 'Ice-cold, on the terrace. '], corndog: ['A corn dog', 'With mustard, rodeo style. '], smores: ['Toasted marshmallows', 'Squashed between biscuits, still gooey. '] };
           const [title, text] = LINES[item.what] || ['Thanks!', ''];
-          VH.events.emit('notify', { title, text: text + (item.heal ? (gained > 0 ? '+' + gained + ' health' : 'You were already feeling fine.') : ''), icon: item.what === 'corndog' ? '🌭' : '🍋' });
+          VH.events.emit('notify', { title, text: text + (item.heal ? (gained > 0 ? '+' + gained + ' health' : 'You were already feeling fine.') : ''), icon: { corndog: '🌭', smores: '🔥' }[item.what] || '🍋' });
           return 1.5;
         });
         game.interaction.on('redwaterRange', (item, player) => {
@@ -1093,13 +1993,58 @@
           VH.events.emit('notify', { title: 'Pony ride', text: names[this.rides % names.length] + ' takes you twice round the pen' + (this.rides === 1 ? '. Your legs are a bit too long.' : ' at a gentle trot.'), icon: '🐴', tone: 'good' });
           return 4;
         });
+        game.interaction.on('redwaterBoat', (item, player) => {
+          if (player.money < item.price) {
+            VH.events.emit('notify', { title: 'Not enough cash', text: 'A rowing boat is ' + VH.util.formatMoney(item.price) + ' an hour.', icon: '✕', tone: 'bad' });
+            return 1;
+          }
+          player.money -= item.price;
+          VH.events.emit('money:changed', { delta: -item.price, reason: 'Willow Lake' });
+          this.rows = (this.rows || 0) + 1;
+          const SIGHTS = ['a heron standing on one leg by the island', 'the swans, who hiss at you', 'a kingfisher flash past the reeds', 'a pike turning under the boat', 'the ducks following you for crumbs'];
+          VH.events.emit('notify', { title: 'Round the island', text: 'You row out round the island and back' + (this.rows === 1 ? ', mostly in circles at first. ' : '. ') + 'You see ' + SIGHTS[(this.rows + 2) % SIGHTS.length] + '.', icon: '🚣', tone: 'good' });
+          return 5;
+        });
+        game.interaction.on('redwaterFish', (item, player) => {
+          if (player.money < item.price) {
+            VH.events.emit('notify', { title: 'Not enough cash', text: 'Bait is ' + VH.util.formatMoney(item.price) + '.', icon: '✕', tone: 'bad' });
+            return 1;
+          }
+          player.money -= item.price;
+          VH.events.emit('money:changed', { delta: -item.price, reason: 'Willow Lake' });
+          // What bites: [name, lightest kg, heaviest kg, chance weight]; a welly now and then.
+          const FISH = [['roach', 0.1, 0.6, 30], ['perch', 0.2, 1.4, 24], ['bream', 0.5, 3, 16], ['tench', 0.8, 3.5, 12], ['carp', 2, 12, 10], ['pike', 2, 9, 5]];
+          let r = Math.random() * 100;
+          if (r < 3) {
+            VH.events.emit('notify', { title: 'Something heavy…', text: 'It is an old welly boot. You put it in the bin.', icon: '🥾' });
+            return 4;
+          }
+          let f = FISH[0];
+          for (const q of FISH) {
+            if ((r -= q[3]) < 0) {
+              f = q;
+              break;
+            }
+          }
+          const kg = Math.round((f[1] + (f[2] - f[1]) * Math.random() ** 2) * 10) / 10;
+          const best = this.fish && this.fish.kg >= kg;
+          if (!best) this.fish = { kg, name: f[0] };
+          VH.events.emit('notify', {
+            title: best ? 'A ' + f[0] + '!' : 'Your biggest catch yet!',
+            text: 'A ' + kg + ' kg ' + f[0] + '. You slip it back into the lake.' + (best ? ' Your record is a ' + this.fish.kg + ' kg ' + this.fish.name + '.' : ''),
+            icon: '🎣',
+            tone: best ? undefined : 'good',
+          });
+          return 4;
+        });
       }
       // Cars in the club car park.
       const list = [];
       let seed = 4242;
-      for (const [park, rows, m] of [[PL.park, PL.bayRows, 4], [RR.park, RR.bayRows, 3]]) {
+      for (const [park, rows, m] of [[PL.park, PL.bayRows, 4], [RR.park, RR.bayRows, 3], [WL.park, WL.bayRows, 3]]) {
         for (const r of rows || []) {
           for (let x = park.x0 + m + 1.35; x < park.x1 - m; x += 2.7) {
+            if (r.skip && x > r.skip[0] - 1.5 && x < r.skip[1] + 1.5) continue;
             if ((seed * 7) % 5 < 2) {
               seed++;
               continue;
@@ -1108,15 +2053,23 @@
           }
         }
       }
+      // Willow Lake: cars on the campsite's pitches and behind three of the cabins.
+      for (const c of WL.campCars || []) list.push(WN.parkedSpot(c.x, c.z, c.h, seed++));
+      if (WL.jet) {
+        WL.cabins.xs.forEach((x, i) => {
+          if (i !== 1) list.push(WN.parkedSpot(x, WL.lane.z1 + 5, i % 2 ? 0 : Math.PI, seed++));
+        });
+      }
       WN.addParkedSpots(game, list);
-      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670], [RR.x1 - 4, RR.gate.z0 - 3, RR.x1 + 14, RR.gate.z1 + 3]]);
+      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670], [RR.x1 - 4, RR.gate.z0 - 3, RR.x1 + 14, RR.gate.z1 + 3], [WL.gate.x0 - 3, 1178, WL.gate.x1 + 3, 1200]]);
     }
     update() {}
     serialize() {
-      return { rangeBest: this.best };
+      return { rangeBest: this.best, fish: this.fish || null };
     }
     load(d) {
       this.best = (d && +d.rangeBest) || 0;
+      this.fish = d && d.fish && +d.fish.kg > 0 ? { kg: +d.fish.kg, name: String(d.fish.name || 'fish') } : null;
     }
     reset() {}
     stop() {}
@@ -1126,12 +2079,13 @@
   VH.Districts.register({
     id: D,
     name: 'Redwater',
-    plots: ['pelican_links', 'redwater_ranch'],
+    plots: ['pelican_links', 'redwater_ranch', 'willow_lake'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.pelican_links || !VH.WNKit || !VH.CountryKit) return;
       buildGolf(world);
       buildRanch(world);
+      if (layout.plots.willow_lake) buildWillowLake(world);
       world.redwater = true;
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -1144,6 +2098,7 @@
       const c = PL.club, dx = (c.x0 + c.x1) / 2;
       add('pelican_links', { name: 'Pelican Links', x: dx, z: c.z0 - 9, yaw: 0, kind: 'golf', landmark: true });
       add('redwater_ranch', { name: 'Redwater Ranch', x: RR.x1 - 12, z: (RR.gate.z0 + RR.gate.z1) / 2, yaw: -Math.PI / 2, kind: 'ranch', landmark: true });
+      if (WL.jet) add('willow_lake', { name: 'Willow Lake', x: (WL.gate.x0 + WL.gate.x1) / 2, z: WL.park.z0 + 14, yaw: 0, kind: 'lake', landmark: true });
       const extra = places.extra[D];
       if (extra) {
         const H = PL.holes;
@@ -1167,6 +2122,24 @@
           { x: RR.hay.x1 + 3, z: (RR.hay.z0 + RR.hay.z1) / 2, yaw: -Math.PI / 2, kinds: ['ranch', 'barn', 'farm', 'storage'], name: 'The hay barn, Redwater Ranch' },
           { x: (RR.park.x0 + RR.park.x1) / 2, z: RR.park.z0 + 20, yaw: 0, kinds: ['parking', 'ranch'], name: 'The car park, Redwater Ranch' },
         );
+        if (WL.jet) {
+          const J = WL.jetty.P, [jx, jz] = J(WL.jetty.len - 2, 0), [rx, rz] = J(-2.5, 0);
+          const f = WL.fire, o = WL.office, peg = WL.pegs[0], [px, pz] = peg.P(3.5, 0);
+          extra.push(
+            { x: jx, z: jz, y: KERB + 0.32, yaw: WL.jet.yaw, kinds: ['lake', 'jetty', 'pier', 'overlook', 'dock'], name: 'The end of the jetty, Willow Lake' },
+            { x: rx, z: rz, yaw: WL.jet.yaw, kinds: ['lake', 'jetty', 'boats', 'park'], name: 'The boat hire, Willow Lake' },
+            { x: px, z: pz, y: KERB + 0.3, yaw: peg.yaw, kinds: ['lake', 'fishing', 'pond', 'overlook'], name: 'The fishing platforms, Willow Lake' },
+            { x: (o.x0 + o.x1) / 2, z: o.z0 - 5, yaw: 0, kinds: ['shop', 'campsite', 'reception', 'storefront'], name: 'The camp shop, Willow Lake' },
+            { x: (WL.park.x0 + WL.park.x1) / 2, z: WL.park.z0 + 14, yaw: Math.PI, kinds: ['parking', 'lake'], name: 'The car park, Willow Lake' },
+            { x: f.x + 4.5, z: f.z - 4.5, yaw: -Math.PI * 0.75, kinds: ['campsite', 'campfire', 'park', 'bench'], name: 'The campfire, Willow Lake' },
+            { x: WL.camp.track, z: WL.pitchZ[5], yaw: 0, kinds: ['campsite', 'tents', 'caravan', 'park'], name: 'The campsite, Willow Lake' },
+            { x: WL.toilets.x0 - 3, z: (WL.toilets.z0 + WL.toilets.z1) / 2, yaw: Math.PI / 2, kinds: ['toilets', 'campsite'], name: 'The shower block, Willow Lake' },
+            { x: WL.cabins.xs[3], z: WL.cabins.z1 + WL.cabins.deck + 2.5, yaw: Math.PI, kinds: ['house', 'cabin', 'front_door', 'lake'], name: 'The lakeside cabins, Willow Lake' },
+            { x: WL.cabins.xs[0], z: WL.lane.z1 + 4, yaw: 0, kinds: ['house', 'cabin', 'back_door', 'lane'], name: 'Behind the first cabin, Willow Lake' },
+            { x: WL.walk, z: WL.z1 - 6, yaw: Math.PI, kinds: ['park', 'lake', 'footpath', 'gate'], name: 'The footpath gate on Foundry Road, Willow Lake' },
+            { x: -1500, z: WL.lake.z + WL.lake.rz + WL.ring + 6, yaw: Math.PI, kinds: ['park', 'picnic', 'bench', 'lake'], name: 'The picnic tables, Willow Lake' },
+          );
+        }
       }
     },
     System: RedwaterLife,

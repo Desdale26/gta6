@@ -464,7 +464,7 @@
     water.rotation.x = -Math.PI / 2;
     water.position.set(cx, KERB + 0.06, cz);
     water.name = 'pond';
-    water.receiveShadow = true;
+    water.receiveShadow = false; // (the fan's thin triangles caught shadow-map stripes)
     world.chunkAt(cx, cz).group.add(water);
     // Stones round the edge, and the reed bank just inside it.
     const gaps = o.gaps || [];
