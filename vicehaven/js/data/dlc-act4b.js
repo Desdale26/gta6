@@ -1390,20 +1390,40 @@
       },
       {
         if: 'dlc_chet_told',
+        // June is only in the car with dlc_june_told; otherwise Dess rides up front and June is in the grandstand.
         then: [{
-          deliver: 'firecrest', to: 'speedway_tunnel', maxDamage: 0.75, radius: 20, stop: false,
-          objective: 'Down the coast road and into the Speedway tunnel',
-          say: [
-            ['dess', 'Last lap, fifty years ago. Rex had the inside. I had the outside and a better reason.'],
-            ['jay', 'What reason?'],
-            ['dess', "(a glance back at June) Somebody at home who'd want to know I won."],
-            ['chet', "(on the car radio, from the Speedway) Hello? This is Chet Valiant. I'm not supposed to be up here."],
-            ['chet', "(radio) Monty's let me have the microphone, because I told him I'd cry if he didn't. I would have. I'm very good at it."],
-            ['dess', '(to June) Is that the film star?'],
-            ['june', "Mum, I have no idea who anybody is any more. Mirror, Mr Mercer."],
-            ['dess', 'Still in my helmet, I was, when I came out of that tunnel with the cup. Win was going to cook.'],
-            ['caption', 'Ahead: the Bowl, the stands, the noise. The mouth of the tunnel under the main stand.'],
-          ],
+          if: 'dlc_june_told',
+          then: [{
+            deliver: 'firecrest', to: 'speedway_tunnel', maxDamage: 0.75, radius: 20, stop: false,
+            objective: 'Down the coast road and into the Speedway tunnel',
+            say: [
+              ['dess', 'Last lap, fifty years ago. Rex had the inside. I had the outside and a better reason.'],
+              ['jay', 'What reason?'],
+              ['dess', "(a glance back at June) Somebody at home who'd want to know I won."],
+              ['chet', "(on the car radio, from the Speedway) Hello? This is Chet Valiant. I'm not supposed to be up here."],
+              ['chet', "(radio) Monty's let me have the microphone, because I told him I'd cry if he didn't. I would have. I'm very good at it."],
+              ['dess', '(to June) Is that the film star?'],
+              ['june', "Mum, I have no idea who anybody is any more. Mirror, Mr Mercer."],
+              ['dess', 'Still in my helmet, I was, when I came out of that tunnel with the cup. Win was going to cook.'],
+              ['caption', 'Ahead: the Bowl, the stands, the noise. The mouth of the tunnel under the main stand.'],
+            ],
+          }],
+          else: [{
+            deliver: 'firecrest', to: 'speedway_tunnel', maxDamage: 0.75, radius: 20, stop: false,
+            objective: 'Down the coast road and into the Speedway tunnel',
+            say: [
+              ['dess', 'Last lap, fifty years ago. Rex had the inside. I had the outside and a better reason.'],
+              ['jay', 'What reason?'],
+              ['dess', "(looking straight ahead) Somebody at home who'd want to know I won."],
+              ['chet', "(on the car radio, from the Speedway) Hello? This is Chet Valiant. I'm not supposed to be up here."],
+              ['chet', "(radio) Monty's let me have the microphone, because I told him I'd cry if he didn't. I would have. I'm very good at it."],
+              ['dess', 'Is that the film star?'],
+              ['jay', 'He plays Rex in the film. He knows the real ending.'],
+              ['dess', "(dry) Then he's one up on Rex."],
+              ['dess', 'Still in my helmet, I was, when I came out of that tunnel with the cup. Win was going to cook.'],
+              ['caption', 'Ahead: the Bowl, the stands, the noise. The mouth of the tunnel under the main stand.'],
+            ],
+          }],
         }],
         else: [{
           deliver: 'firecrest', to: 'speedway_tunnel', maxDamage: 0.75, radius: 20, stop: false,
@@ -1553,7 +1573,7 @@
             ['dash', '(radio, live, at the top of his voice) Legend... FOUND!'],
             ['dash', "(off camera, much quieter) Kit. Kit, that's the right one. I said it about the RIGHT ONE."],
             ['kit', "We're rolling."],
-            ['hob', '(radio) Your hover\'s a five, Lockwood. Your moment\'s a ten.'],
+            ['hob', '(radio) Your hover\'s a five, Lockwood. The moment I\'m not marking. Some things you just watch.'],
           ],
         }],
         else: [

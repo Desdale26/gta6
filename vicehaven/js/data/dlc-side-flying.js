@@ -160,7 +160,7 @@
           ['gully', "You're too low. You're too loud. And you're upside down."],
           ['jay', "I'm not upside down."],
           ['gully', 'Your banner is. It says SENOB REWEF HTIW WON.'],
-          ['jay', '(to the plane, quietly) Damn.'],
+          ['jay', '(to the plane, quietly) You could have said.'],
           ['caption', '(A pause on the radio while three people look out of three windows.)'],
           ['hob', "(cutting in from the hangar) That's not your fault, Skylark. Over."],
           ['gully', "Whose fault is it, then?"],

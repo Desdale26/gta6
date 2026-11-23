@@ -57,7 +57,7 @@
       recap: [
         'Pip clipped the Firecrest\'s starter key to Jay\'s belt: "Driver holds the key."',
         'Then Jay drove Hob\'s doughnut van through a Guest Services Welcome Check, while the guards argued about whether a croissant is bread or cake.',
-        'At Ines Duarte\'s café, an old woman called Odie Wren, keeper of the fort light, bought twelve jam doughnuts. She tapped the counter three times and stared at the gold bird on Jay\'s belt.',
+        'At Celeste Duarte\'s café, an old woman called Odie Wren, keeper of the fort light, bought twelve jam doughnuts. She tapped the counter three times and stared at the gold bird on Jay\'s belt.',
         'Milo solved the riddle: the box where nobody wins is the Golden Grabber claw machine, beside the big wheel at Wonder Wharf. Its prize is a gear stick.',
       ],
       line: 'Jay smuggled Hob\'s doughnuts into Old Paloma, met a sharp old lighthouse keeper called Odie Wren, and Milo found the next part.',
@@ -120,7 +120,7 @@
       recap: [
         { if: 'dlc_dash_in', text: 'Dash and Kit came too.' },
         'Jay climbed the bell tower and rang the bell once. Inside its clapper he found the ignition coil, the seventh and last part of the Firecrest.',
-        'Then Guest Services gunmen stood up on the roofs. Pip herded the old folk into Ines\'s café while Jay cleared the rooftops',
+        'Then Guest Services gunmen stood up on the roofs. Pip herded the old folk into Celeste\'s café while Jay cleared the rooftops',
         { if: 'dlc_dash_in', text: 'and Dash and Kit led three of the gunmen on a chase round the church.' },
         { if: 'dlc_dash_left', text: 'one by one.' },
         'Hob picked him up at the harbour.',
@@ -165,7 +165,7 @@
 
   // People met in Act 3 (names and roles come from dlc.js).
   Object.assign(R.who, {
-    ines: { intro: 'd17_contraband', bio: 'Ines Duarte runs the café on Paloma Plaza and sells Hob\'s smuggled doughnuts from under a tea towel. She has been married three times, all to fishermen called Tomás.' },
+    ines: { intro: 'd17_contraband', bio: 'Celeste Duarte runs the café on Paloma Plaza and sells Hob\'s smuggled doughnuts from under a tea towel. She has been married three times, all to fishermen called Tomás.' },
     odie: { intro: 'd17_contraband', bio: [
       'Odie Wren keeps the old fort lighthouse on Isla Paloma. She buys twelve jam doughnuts every Tuesday and pays the exact money.',
       'She told Jay she was not a ghost, tapped the counter three times, and stared at the gold bird on his belt.',

@@ -73,7 +73,7 @@
         camera: 'paloma_plaza', seconds: 4,
         say: [
           ['caption', 'Old Paloma. The harbour festival. Half past eleven.'],
-          ['caption', 'Bunting zig-zagged across the plaza, a brass band of nine playing something in three different keys, stalls selling grilled sardines and paper flags. Ines has put out a fourth table. It is also full.'],
+          ['caption', 'Bunting zig-zagged across the plaza, a brass band of nine playing something in three different keys, stalls selling grilled sardines and paper flags. Celeste has put out a fourth table. It is also full.'],
         ],
       },
       {
@@ -103,12 +103,12 @@
       },
       {
         goto: 'plaza_cafe', vehicle: false, stop: true, radius: 6,
-        objective: "Find Pip at Ines's café",
+        objective: "Find Pip at Celeste's café",
       },
       {
         scene: { at: 'plaza_cafe', cast: ['ines', 'pip', 'hob'] },
         say: [
-          ['caption', "Ines's café. Pip has a doughnut in one hand and the festival programme in the other, and is reading it like a race card."],
+          ['caption', "Celeste's café. Pip has a doughnut in one hand and the festival programme in the other, and is reading it like a race card."],
           ['pip', "Band, band, sardines, children's sack race, band, 'blessing of the boats'. Noon. That's us."],
           ['ines', '(setting down a coffee nobody ordered, in front of Jay) The bell? Father Anselmo rings it when the first boat comes round the harbour wall. Noon, near enough.'],
           ['ines', "(beat) His back's gone this year. He was going to ask a tourist."],
@@ -284,7 +284,7 @@
         goto: 'paloma_harbour', vehicle: false, stop: true, radius: 6,
         objective: "Hob's waiting at the harbour with the van",
         say: [
-          ['pip', '(radio) I\'m coming down. Ines is coming too. She says she\'s "not missing the end".'],
+          ['pip', '(radio) I\'m coming down. Celeste is coming too. She says she\'s "not missing the end".'],
           ['jay', "It's not a film."],
           ['pip', "She says everything's a film if you've got a good seat."],
         ],
@@ -294,29 +294,25 @@
         scene: { at: 'paloma_harbour', cast: ['hob', 'pip', 'ines'] },
         say: [
           ['caption', 'The harbour. Behind them, up the lanes, the band is tentatively starting again, a bit quieter, from the inside of the café.'],
-          ['caption', 'Ines has followed them down with a tray. She hands Jay a doughnut through the window as if he had ordered it.'],
+          ['caption', 'Celeste has followed them down with a tray. She hands Jay a doughnut through the window as if he had ordered it.'],
           ['ines', 'Best festival in years.'],
           ['hob', "(checking the canvas bag) You didn't shoot any gulls."],
           ['jay', 'No.'],
           ['hob', "Good man. (beat) You shot a chimney pot. Gianni's. He'll want it back."],
         ],
       },
-      {
-        phone: 'milo',
-        say: [
-          ['milo', "Did you know the clapper's the only part of a bell that isn't the bell? You're not hurt. Pip said you're not hurt. I asked four times."],
-          ['milo', "Score. Team Firecrest seven. That's all seven. Wheel, bird, clock, carburettor, headlamps, gear stick, coil."],
-          ['milo', "Lockwood's Lost Legends nil, plus a rusty tap, a spur, a minute hand, a gnome and a teddy bear. Plus a museum."],
-          ['jay', 'A museum.'],
-          ['milo', "That's what it is now. It's not a score any more. It's a collection."],
-        ],
-      },
+      // One call; Lockwood's whistle (d11) only counts with the blog on.
       {
         if: 'dlc_blog_on',
         then: [
           {
             phone: 'milo',
             say: [
+              ['milo', "Did you know the clapper's the only part of a bell that isn't the bell? You're not hurt. Pip said you're not hurt. I asked four times."],
+              ['milo', "Score. Team Firecrest seven. That's all seven. Wheel, bird, clock, carburettor, headlamps, gear stick, coil."],
+              ['milo', "Lockwood's Lost Legends nil, plus a rusty tap, a spur, a minute hand, a gnome, a whistle and a teddy bear. Plus a museum."],
+              ['jay', 'A museum.'],
+              ['milo', "That's what it is now. It's not a score any more. It's a collection."],
               ['milo', "And eighty thousand subscribers. Eighty THOUSAND. Someone filmed you ringing the bell."],
               ['milo', "The video's called 'MAN RINGS BELL, ENTIRE TOWN GOES OHHH.' It's got a million views. You're a moment, Jay. You're a meme."],
               ['jay', "I'm not a meme."],
@@ -328,6 +324,11 @@
           {
             phone: 'milo',
             say: [
+              ['milo', "Did you know the clapper's the only part of a bell that isn't the bell? You're not hurt. Pip said you're not hurt. I asked four times."],
+              ['milo', "Score. Team Firecrest seven. That's all seven. Wheel, bird, clock, carburettor, headlamps, gear stick, coil."],
+              ['milo', "Lockwood's Lost Legends nil, plus a rusty tap, a spur, a minute hand, a gnome and a teddy bear. Plus a museum."],
+              ['jay', 'A museum.'],
+              ['milo', "That's what it is now. It's not a score any more. It's a collection."],
               ['milo', "I've drawn the bell on the scoreboard. It's a big bell. I've run out of wall."],
               ['milo', "I've started on the ceiling. Gran says it's very good, and also please stop drawing on the ceiling."],
               ['jay', 'Listen to your gran.'],

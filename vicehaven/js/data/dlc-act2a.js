@@ -845,7 +845,7 @@
     start: 'sandpiper_promenade',
     time: 19,
     estMinutes: 8,
-    summary: 'A floor safe nobody has opened in fifty years, a clerk called Benny, and a man who doesn\'t want the money.',
+    summary: 'A floor safe nobody has opened in fifty years, a clerk called Femi, and a man who doesn\'t want the money.',
     reward: { money: 800 },
     failIf: ['dead:benny', 'dead:pip'],
     steps: [
@@ -899,7 +899,7 @@
       { music: 'tension', checkpoint: true },
       {
         holdup: 'promenade_kwikpik', safe: true,
-        objective: 'Aim at Benny. Ask for the safe, not the till',
+        objective: 'Aim at Femi. Ask for the safe, not the till',
         say: [
           ['caption', 'Jay sighs, and draws.'],
           ['benny', '(hands straight up; and then, by reflex, turning to the till) Okay. Okay okay okay. Okay.'],
@@ -922,7 +922,7 @@
           ['benny', "You're not taking the money?"],
           ['jay', 'Just the envelope.'],
           ['benny', '(a long beat) ...Can I have a photo?'],
-          ['caption', 'Jay looks at him. Then he puts the pistol away, and stands beside him behind the counter for the photo. Benny does a thumbs up. Jay does not.'],
+          ['caption', 'Jay looks at him. Then he puts the pistol away, and stands beside him behind the counter for the photo. Femi does a thumbs up. Jay does not.'],
           ['jay', "Don't post it."],
           ['benny', "I won't. (beat) I'll post it a bit."],
           ['caption', 'On his way out, Jay takes one bag of crisps off the pile of nineteen, and leaves the money for it on the counter.'],

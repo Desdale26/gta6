@@ -71,6 +71,7 @@
     earth: ['asphaltTop', 0x6b4f35, 4.5], dirt: ['asphaltTop', 0xa4865c, 4.5], track: ['asphaltTop', 0x9a8466, 4.4],
     // The flat ones paint on the road-marking surface: its stronger polygon offset keeps them over the grass from afar.
     gravel: ['marks', 0x9c9486, 1], sand: ['marks', 0xc9b07a, 1], chaff: ['marks', 0xcdb47c, 1], // chaff: a trodden path of earth and chopped straw
+    soil: ['marks', 0x9a7c58, 1], arena: ['marks', 0xbe9c70, 1], // soil: a beaten dirt track; arena: a raked riding ring
     straw: ['grassTop', 0xffe6a0, 1.1], meadow: ['grassTop', 0xf0f4e0, 1],
   };
   function ground(world, x0, z0, x1, z1, kind, y) {

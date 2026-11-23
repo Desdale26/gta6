@@ -8,6 +8,12 @@
  *                      the white clubhouse with its terrace and putting green,
  *                      the buggy shed (buggies parked, as props), a floodlit
  *                      driving range where Jay can hit a bucket of balls
+ *   redwater_ranch     Redwater Ranch on Westgate Parkway: the log gate, the
+ *                      red stables with horses looking out, the hay barn, the
+ *                      round pen and pony rides, three paddocks of horses, the
+ *                      ranch house, and the floodlit rodeo arena with chutes,
+ *                      barrels, two stands, the announcer's box and a corn-dog
+ *                      kiosk; a visitors' car park and horse trailers
  *
  * Static parts are merged into the chunk builders (VH.WNKit, VH.CountryKit);
  * nothing makes a mesh of its own apart from the signs and the ponds' water.
@@ -82,8 +88,9 @@
     const R = (q0, q1, cc0, cc1, y0, y1) => (alongX ? [q0, y0, cc0, q1, y1, cc1] : [cc0, y0, q0, cc1, y1, q1]);
     C().pieces(a0, a1, 48, (a, b) => {
       const ctx = world.ctxAt(alongX ? (a + b) / 2 : c, alongX ? c : (a + b) / 2);
-      for (let y = 0.6; y <= h + 0.01; y += 0.9) ctx.prop.box(...R(a, b, c - 0.015, c + 0.015, KERB + y, KERB + y + 0.035), cord);
-      for (let p = a; p <= b + 0.01; p += 0.9) ctx.prop.box(...R(p - 0.015, p + 0.015, c - 0.015, c + 0.015, KERB + 0.6, KERB + h), cord);
+      // (The cords cast no shadow: a fine mesh would shade the whole range in the far shadow map.)
+      for (let y = 0.6; y <= h + 0.01; y += 0.9) ctx.interior.box(...R(a, b, c - 0.015, c + 0.015, KERB + y, KERB + y + 0.035), cord);
+      for (let p = a; p <= b + 0.01; p += 0.9) ctx.interior.box(...R(p - 0.015, p + 0.015, c - 0.015, c + 0.015, KERB + 0.6, KERB + h), cord);
     });
     for (let p = a0; p <= a1 + 0.01; p += Math.max(6, (a1 - a0) / Math.max(1, Math.round((a1 - a0) / 12)))) {
       world.ctxAt(alongX ? p : c, alongX ? c : p).prop.box(...R(p - 0.1, p + 0.1, c - 0.1, c + 0.1, KERB, KERB + h + 0.3), pole);
@@ -588,13 +595,404 @@
     W().tiltBox(ctx.prop, x, y + 1.72, z + 1.15, 0.14, 0.1, 0.9, 0, 0.18, bill); // the bill
     W().tiltBox(ctx.prop, x, y + 1.6, z + 1.05, 0.2, 0.2, 0.7, 0, 0.3, VH.col(0xe8a83a)); // the pouch
     for (const s of [-1, 1]) K.blob(ctx.prop, x + s * 0.5, y + 0.85, z - 0.05, 0.12, 0.35, 0.7, VH.col(0xd8d4cc)); // folded wings
-    world.physics.addBox(x - 0.6, y, z - 1.05, x + 0.6, y + 2.1, z + 1.6, 'wall', F().SOLID | F().SHOTS);
+    world.physics.addBox(x - 0.62, y, z - 1.1, x + 0.62, y + 1.3, z + 0.9, 'wall', F().SOLID | F().SHOTS); // the body
+    world.physics.addBox(x - 0.25, y + 1.0, z + 0.3, x + 0.25, y + 2.1, z + 1.6, 'wall', F().SOLID | F().SHOTS); // the neck, head and bill
+  }
+
+  // ------------------------------------------------------- Redwater Ranch
+  // The plot (-1043..-647, 669..913): Westgate Parkway east (the front, the
+  // ranch gate), Southbay Road north, Dune Street south, Backlot Avenue
+  // west. The drive runs in from the gate to the rodeo arena; the stables,
+  // the round pen and the house face the yard track; paddocks in the west.
+  const RR = {
+    x0: -1043, x1: -647, z0: 669, z1: 913,
+    edge: 1.6,
+    gate: { z0: 776, z1: 790 },
+    drive: { x0: -790, z0: 776, z1: 790 },
+    spur: { x0: -778, x1: -768, z0: 722 },
+    yard: { x0: -1000, x1: -700, z0: 722, z1: 730 },
+    park: { x0: -758, x1: -662, z0: 802, z1: 904, in0: -728, in1: -712 },
+    house: { x0: -748, x1: -708, z0: 688, z1: 712, h: 6 },
+    stables: { x0: -1000, x1: -924, z0: 688, z1: 714, h: 4.2 },
+    hay: { x0: -912, x1: -884, z0: 690, z1: 714 },
+    pen: { x: -858, z: 708, r: 9.5 },
+    arena: { x0: -896, x1: -782, z0: 770, z1: 848 },
+    chutes: { x0: -912, x1: -898, z0: 788, z1: 830 },
+    paddocks: { x0: -1034, x1: -918, z: [738, 790, 846, 905] },
+  };
+
+  /** Steel pipe rails (a rodeo fence) along an axis-aligned line: 1.8 m, too tall to vault. */
+  function pipeRail(world, x0, z0, x1, z1, gaps) {
+    C().postRail(world, x0, z0, x1, z1, gaps, { h: 1.8, hex: 0x8e959c, rails: [0.45, 0.95, 1.4, 1.72] });
+  }
+
+  /**
+   * Bleachers along X from x0 to x1: `rows` tiers 0.42 m high and 0.85 m deep
+   * (Jay steps up them), rising from zFront in direction dir (+1 south, -1
+   * north), a back wall with a rail, end walls. Returns the top row's height and back edge.
+   */
+  function bleachers(world, x0, x1, zFront, dir, rows, seatHex) {
+    const d = 0.85, rise = 0.42;
+    for (let k = 0; k < rows; k++) {
+      const za = zFront + dir * k * d, zb = zFront + dir * (k + 1) * d;
+      const z0 = Math.min(za, zb), z1 = Math.max(za, zb);
+      const top = KERB + rise * (k + 1);
+      C().pieces(x0, x1, 40, (a, b) => {
+        const ctx = world.ctxAt((a + b) / 2, z0);
+        ctx.concrete.box(a, 0, z0, b, top, z1, VH.col(0xc8c4bc), { bottom: false });
+        // The seat plank along the tier's front edge.
+        const zs = dir > 0 ? z0 : z1 - 0.3;
+        ctx.prop.box(a + 0.1, top, zs, b - 0.1, top + 0.06, zs + 0.3, VH.col(k % 2 ? seatHex : 0xf2f2ee)); // solidity: passable (a seat plank on the tier)
+      });
+      world.physics.addBox(x0, 0, z0, x1, top, z1, 'building', F().ALL);
+    }
+    const back = zFront + dir * rows * d;
+    const topY = KERB + rise * rows;
+    const zb0 = Math.min(back, back + dir * 0.3), zb1 = Math.max(back, back + dir * 0.3);
+    C().pieces(x0, x1, 40, (a, b) => world.ctxAt((a + b) / 2, zb0).concrete.box(a, 0, zb0, b, topY + 1.1, zb1, VH.col(0xb8b4ac)));
+    world.physics.addBox(x0, 0, zb0, x1, topY + 1.1, zb1, 'building', F().ALL);
+    for (const x of [x0, x1]) {
+      const z0 = Math.min(zFront, back), z1 = Math.max(zFront, back);
+      W().solid(world, world.ctxAt(x, z0).concrete, x - (x === x0 ? 0.3 : 0), 0, z0, x + (x === x1 ? 0.3 : 0), topY + 1.1, z1, 0xb8b4ac, null, 'building');
+    }
+    return { y: topY, back };
+  }
+
+  /** A horse's head and neck looking out over a stable half-door (facing +z). */
+  function horseHead(ctx, x, z, hex) {
+    const c = VH.col(hex);
+    ctx.detailMatte.orientedBox(x, z + 0.15, 0.16, 0.3, 0.15, KERB + 1.45, KERB + 2.0, c); // the neck
+    ctx.detailMatte.orientedBox(x, z + 0.55, 0.13, 0.32, 0.25, KERB + 1.55, KERB + 1.85, c); // the head
+    ctx.detailMatte.box(x - 0.1, KERB + 1.85, z + 0.25, x + 0.1, KERB + 2.0, z + 0.32, VH.colMul(c, 0.7)); // the ears
+  }
+
+  function buildRanch(world) {
+    const K = C(), WN = W();
+    const P = RR, e = P.edge;
+    K.ground(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 'meadow', KERB + 0.002);
+    world.addLawn(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
+    // The ranch fence round the plot (dark timber), open at the gate and two walkers' gaps.
+    const fx0 = P.x0 + e + 0.5, fx1 = P.x1 - e - 0.5, fz0 = P.z0 + e + 0.5, fz1 = P.z1 - e - 0.5;
+    const rail = { hex: 0x5a4030, h: 1.3 };
+    K.postRail(world, fx0, fz0, fx1, fz0, [[-822, -818]], rail);
+    K.postRail(world, fx0, fz1, fx1, fz1, [[-722, -718]], rail);
+    K.postRail(world, fx0, fz0, fx0, fz1, [], rail);
+    K.postRail(world, fx1, fz0, fx1, fz1, [[P.gate.z0, P.gate.z1]], rail);
+    // Tracks: the drive, the spur to the yard, the yard track along the buildings.
+    K.ground(world, P.drive.x0, P.gate.z0, P.x1, P.gate.z1, 'soil', KERB + 0.01);
+    K.ground(world, P.spur.x0, P.spur.z0, P.spur.x1, P.gate.z0, 'soil', KERB + 0.01);
+    K.ground(world, P.yard.x0, P.yard.z0, P.yard.x1, P.yard.z1, 'soil', KERB + 0.01);
+    buildRanchGate(world);
+    buildRanchHouse(world);
+    buildStables(world);
+    buildHayBarn(world);
+    buildRoundPen(world);
+    buildPaddocks(world);
+    buildArena(world);
+    buildRanchPark(world);
+    // Shade trees along the north and south fences, lamps along the drive.
+    for (let x = P.x0 + 20; x < P.x1 - 20; x += 26) {
+      if (x > P.house.x0 - 8 && x < P.house.x1 + 8) continue;
+      if (x > P.stables.x0 - 6 && x < P.hay.x1 + 4) continue;
+      world.addProp(x % 3 ? 'tree' : 'treeB', x, KERB, fz0 + 4, x, 1.1);
+    }
+    for (let x = P.arena.x0; x < P.park.x0 - 6; x += 24) world.addProp('treeB', x, KERB, fz1 - 4, x, 1.05);
+    for (let x = P.drive.x0 + 10; x < P.x1 - 8; x += 30) world.addProp('streetlight', x, KERB, P.gate.z0 - 1.5, 0, 1);
+    for (let x = P.yard.x0 + 20; x < P.yard.x1 - 10; x += 40) world.addProp('streetlight', x, KERB, P.yard.z1 + 1.5, Math.PI, 1);
+  }
+
+  /** The ranch gate on Westgate Parkway: two log posts and a crossbar with the name, a cattle grid. */
+  function buildRanchGate(world) {
+    const P = RR;
+    const x = P.x1 - P.edge - 1.5;
+    const ctx = world.ctxAt(x, (P.gate.z0 + P.gate.z1) / 2);
+    const log = VH.col(0x7a5434);
+    for (const z of [P.gate.z0 - 0.6, P.gate.z1 + 0.6]) {
+      ctx.wood.cylinder(x, KERB, z, 0.38, 0.34, 6.4, 10, log, true);
+      for (let k = 0; k < 4; k++) world.physics.addOrientedBox(x, z, 0.38, 0.16, (k * Math.PI) / 4, 0, KERB + 6.4, 'pole', F().SOLID | F().SHOTS);
+    }
+    ctx.wood.box(x - 0.3, KERB + 5.6, P.gate.z0 - 1.6, x + 0.3, KERB + 6.2, P.gate.z1 + 1.6, log);
+    VH.Landmarks.sign(world, { x: x + 0.35, y: KERB + 4.75, z: (P.gate.z0 + P.gate.z1) / 2, yaw: Math.PI / 2, w: 9, h: 1.4, lines: ['REDWATER RANCH', 'Rodeo · Pony rides · Livery'], style: 'brand', colors: { bg: ['#6b3a22', '#4e2a18'], fg: '#f4e2b8' }, frame: 0x3a2a1c, twoSided: true });
+    // Horseshoes nailed to the crossbar ends.
+    for (const z of [P.gate.z0 - 1.2, P.gate.z1 + 1.2]) ctx.prop.cylinder(x + 0.32, KERB + 5.2, z, 0.25, 0.25, 0.05, 10, VH.col(0xa8a8a0), true);
+    for (let k = 0; k < 12; k++) ctx.detail.box(x - 6 + k * 0.4 - 0.05, KERB + 0.015, P.gate.z0 + 0.5, x - 6 + k * 0.4 + 0.05, KERB + 0.05, P.gate.z1 - 0.5, VH.col(0x6a6e72)); // the cattle grid
+  }
+
+  /** The ranch house: a two-storey timber house with a deep porch facing the yard. */
+  function buildRanchHouse(world) {
+    const K = C(), WN = W();
+    const h = RR.house;
+    const ctx = K.shed(world, h, { h: h.h, rise: 3.2, wall: 0xe8dcc0, roof: 0x6b3a22, axis: 'x', bay: 3.2, floorH: 3, ww: 0.45, wh: 0.55, seed: 7.7 });
+    // The porch: a deck along the south side under a lean-to on posts, the front door, rocking chairs, a lamp.
+    const pz0 = h.z1, pz1 = h.z1 + 3.2;
+    ctx.wood.topRect(h.x0 + 2, pz0, h.x1 - 2, pz1, KERB + 0.04, VH.col(0xa8885c), 2);
+    WN.tiltBox(ctx.prop, (h.x0 + h.x1) / 2, KERB + 3.25, (pz0 + pz1) / 2, h.x1 - h.x0 - 3.4, 0.16, pz1 - pz0 + 0.4, 0, 0.18, 0x6b3a22);
+    for (let x = h.x0 + 2.2; x <= h.x1 - 2.1; x += (h.x1 - h.x0 - 4.4) / 5) {
+      ctx.wood.box(x - 0.1, KERB, pz1 - 0.3, x + 0.1, KERB + 2.95, pz1 - 0.1, VH.col(0xf2efe6));
+      world.physics.addBox(x - 0.12, 0, pz1 - 0.32, x + 0.12, KERB + 2.95, pz1 - 0.08, 'pole', F().SOLID | F().SHOTS);
+    }
+    const dx = (h.x0 + h.x1) / 2;
+    ctx.prop.box(dx - 0.8, KERB, h.z1 - 0.02, dx + 0.8, KERB + 2.3, h.z1 + 0.06, VH.col(0x5a3a22));
+    ctx.screen.box(dx - 0.5, KERB + 1.4, h.z1 + 0.06, dx + 0.5, KERB + 2.1, h.z1 + 0.08, VH.col(0xffe0a8, 0.85));
+    for (const x of [dx - 4, dx + 4]) {
+      WN.solid(world, ctx.wood, x - 0.35, KERB, pz0 + 0.6, x + 0.35, KERB + 1.1, pz0 + 1.3, 0x6b4a30, null, 'bench', F().SOLID | F().SHOTS);
+    }
+    WN.lamp(world, dx + 1.4, h.z1 + 0.3, 0xffe2a0, 2.4, 0.2, KERB + 2.3);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: dx, z: pz1 + 2, r: 7, y: KERB + 0.03, strength: 0.6 });
+    // A mailbox on a post by the yard track and a wagon wheel against the porch.
+    WN.solid(world, ctx.detail, h.x1 + 3, KERB, pz1 + 1, h.x1 + 3.6, KERB + 1.25, pz1 + 1.4, 0x2a2d30, null, 'pole', F().SOLID | F().SHOTS);
+    K.wheel(ctx.detail, h.x0 + 1.2, KERB + 0.7, pz0 + 0.5, 0.7, 0.08, 0, VH.col(0x6b4a30));
+    world.physics.addBox(h.x0 + 1.1, 0, pz0 - 0.2, h.x0 + 1.3, KERB + 1.4, pz0 + 1.2, 'crate', F().SOLID | F().SHOTS);
+  }
+
+  /** The stables: a long red barn, a dozen stalls with half-doors along the yard, horses looking out. */
+  function buildStables(world) {
+    const K = C(), WN = W();
+    const s = RR.stables;
+    const ctx = K.shed(world, s, { h: s.h, rise: 3.4, wall: 0x8a3a2a, roof: 0x4a4c50, axis: 'x', style: 0, sides: { s: 'blank', n: 'blank' }, seed: 4.1 });
+    const white = VH.col(0xf2efe6);
+    ctx.prop.box(s.x0 - 0.05, KERB + s.h - 0.25, s.z1 - 0.02, s.x1 + 0.05, KERB + s.h, s.z1 + 0.08, white);
+    const cols = [0x6b4228, 0x3a2a20, 0x9a6a42, 0xd8cdb8, 0x2a2420, 0x8a5a3a];
+    let k = 0;
+    for (let x = s.x0 + 3.2; x < s.x1 - 2; x += 5.6, k++) {
+      // The stall: a dark doorway, a split door (the top half open), white cross-bracing on the lower half.
+      ctx.prop.box(x - 1.1, KERB, s.z1 - 0.02, x + 1.1, KERB + 2.6, s.z1 + 0.04, VH.col(0x1e1a16));
+      ctx.wood.box(x - 1.1, KERB, s.z1 + 0.04, x + 1.1, KERB + 1.3, s.z1 + 0.12, VH.col(0x8a3a2a));
+      WN.beam(ctx.prop, x - 1.0, KERB + 0.1, s.z1 + 0.14, x + 1.0, KERB + 1.2, s.z1 + 0.14, 0.08, white);
+      WN.beam(ctx.prop, x - 1.0, KERB + 1.2, s.z1 + 0.14, x + 1.0, KERB + 0.1, s.z1 + 0.14, 0.08, white);
+      ctx.prop.box(x - 1.2, KERB + 2.6, s.z1 - 0.02, x + 1.2, KERB + 2.75, s.z1 + 0.1, white);
+      if (k % 4 !== 3) {
+        horseHead(ctx, x, s.z1, cols[k % cols.length]);
+        world.physics.addBox(x - 0.22, KERB + 1.3, s.z1, x + 0.22, KERB + 2.05, s.z1 + 0.9, 'animal', F().SOLID | F().SHOTS); // the head over the door
+      }
+      // A name board over each stall.
+      ctx.detail.box(x - 0.45, KERB + 2.8, s.z1 + 0.04, x + 0.45, KERB + 3.05, s.z1 + 0.07, VH.col(0xf4e2b8));
+    }
+    world.physics.addBox(s.x0, 0, s.z1, s.x1, KERB + 1.3, s.z1 + 0.15, 'building', F().ALL); // the half-doors
+    // A cupola with a horse weathervane on the ridge.
+    const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2, ry = KERB + s.h + 3.4;
+    ctx.prop.box(cx - 1.2, ry - 0.8, cz - 1.2, cx + 1.2, ry + 1.2, cz + 1.2, white);
+    ctx.prop.box(cx - 1.21, ry, cz - 0.7, cx + 1.21, ry + 0.9, cz + 0.7, VH.col(0x3a3f45));
+    ctx.prop.cylinder(cx, ry + 1.2, cz, 1.75, 0.05, 1.6, 8, VH.col(0x4a4c50), false);
+    ctx.prop.box(cx - 0.02, ry + 2.7, cz - 0.02, cx + 0.02, ry + 3.6, cz + 0.02, VH.col(0x2a2d30));
+    ctx.prop.box(cx - 0.45, ry + 3.3, cz - 0.02, cx + 0.45, ry + 3.55, cz + 0.02, VH.col(0x2a2d30));
+    VH.Landmarks.sign(world, { x: s.x0 + 8, y: KERB + 3.6, z: s.z1 + 0.12, yaw: 0, w: 4.4, h: 0.7, lines: ['REDWATER STABLES'], style: 'plaque' });
+    // Tack and muck: a saddle rack, a wheelbarrow, buckets, a water trough in the yard.
+    WN.solid(world, ctx.wood, s.x1 + 1, KERB, s.z1 - 3, s.x1 + 1.6, KERB + 1.1, s.z1 - 0.5, 0x6b4a30, null, 'crate', F().SOLID | F().SHOTS);
+    ctx.detailMatte.box(s.x1 + 0.95, KERB + 1.1, s.z1 - 2.8, s.x1 + 1.65, KERB + 1.35, s.z1 - 0.7, VH.col(0x5a3418)); // saddles on the rack
+    world.physics.addBox(s.x1 + 0.95, KERB + 1.1, s.z1 - 2.8, s.x1 + 1.65, KERB + 1.35, s.z1 - 0.7, 'crate', F().SOLID | F().SHOTS);
+    trough(world, s.x0 + 30, s.z1 + 2.2, 0);
+    world.floodlights = world.floodlights || [];
+    world.floodlights.push({ x: cx - 15, z: s.z1 + 3, r: 8, y: KERB + 0.03, strength: 0.5 });
+    world.floodlights.push({ x: cx + 15, z: s.z1 + 3, r: 8, y: KERB + 0.03, strength: 0.5 });
+    for (let x = s.x0 + 6; x < s.x1; x += 16) WN.lamp(world, x, s.z1 + 0.3, 0xffe2a0, 2.2, 0.2, KERB + 3.1);
+  }
+
+  /** A galvanised water trough (solid, knee-high), along X (yaw 0) or Z. */
+  function trough(world, x, z, yaw) {
+    const ctx = world.ctxAt(x, z);
+    ctx.detail.orientedBox(x, z, 1.2, 0.4, yaw, KERB, KERB + 0.65, VH.col(0x9aa0a6));
+    ctx.detail.orientedBox(x, z, 1.1, 0.3, yaw, KERB + 0.66, KERB + 0.67, VH.col(0x4a7a9a));
+    world.physics.addOrientedBox(x, z, 1.2, 0.4, yaw, 0, KERB + 0.65, 'metal', F().SOLID | F().SHOTS);
+  }
+
+  /** The hay barn: a tall roof on posts over stacks of bales (climbable). */
+  function buildHayBarn(world) {
+    const K = C(), WN = W();
+    const b = RR.hay;
+    const ctx = world.ctxAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2);
+    for (const x of [b.x0, (b.x0 + b.x1) / 2, b.x1]) {
+      for (const z of [b.z0, b.z1]) {
+        ctx.prop.box(x - 0.15, KERB, z - 0.15, x + 0.15, KERB + 6, z + 0.15, VH.col(0x5a5f66));
+        world.physics.addBox(x - 0.17, 0, z - 0.17, x + 0.17, KERB + 6, z + 0.17, 'pole', F().SOLID | F().SHOTS);
+      }
+    }
+    WN.gable(ctx.prop, b.x0 - 0.4, b.z0 - 0.4, b.x1 + 0.4, b.z1 + 0.4, KERB + 6, 2.6, 'x', 0x7a3a2a);
+    world.physics.addBox(b.x0 - 0.5, KERB + 6, b.z0 - 0.5, b.x1 + 0.5, KERB + 7.6, b.z1 + 0.5, 'building', F().CAMERA | F().SHOTS);
+    // Stacks: a stepped heap so Jay can climb to the top.
+    for (let t = 0; t < 4; t++) {
+      const x0 = b.x0 + 1 + t * 1.2, x1 = b.x1 - 1 - t * 0.4, z0 = b.z0 + 1, z1 = b.z1 - 1 - t * 1.6;
+      K.bale(world, x0, KERB + t * 0.45, z0, x1, KERB + (t + 1) * 0.45, z1);
+    }
+    K.ground(world, b.x0 - 1, b.z0 - 1, b.x1 + 1, b.z1 + 1, 'straw', KERB + 0.012);
+  }
+
+  /** The round pen: a ring of pipe rails, sand inside, a pony and the pony-ride hut by its gate. */
+  function buildRoundPen(world) {
+    const K = C(), WN = W();
+    const p = RR.pen;
+    const N = 16;
+    const sandCol = VH.col(0xd8c08a);
+    ellipse(world, 'marks', p.x, p.z, p.r - 0.2, p.r - 0.2, 0, KERB + 0.03, sandCol);
+    const ctx = world.ctxAt(p.x, p.z);
+    const rail = VH.col(0x8e959c);
+    for (let i = 0; i < N; i++) {
+      if (i === 4) continue; // the gate (south)
+      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+      const ax = p.x + Math.sin(a0) * p.r, az = p.z + Math.cos(a0) * p.r, bx = p.x + Math.sin(a1) * p.r, bz = p.z + Math.cos(a1) * p.r;
+      for (const y of [0.45, 0.95, 1.45, 1.75]) WN.beam(ctx.detail, ax, KERB + y, az, bx, KERB + y, bz, 0.07, rail);
+      ctx.detail.box(ax - 0.06, KERB, az - 0.06, ax + 0.06, KERB + 1.85, az + 0.06, rail);
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2, len = Math.hypot(bx - ax, bz - az) / 2 + 0.06;
+      world.physics.addOrientedBox(mx, mz, 0.1, len, Math.atan2(bx - ax, bz - az), 0, KERB + 1.85, 'fence', F().SOLID | F().CAMERA);
+    }
+    // The last post by the gate.
+    const g1 = (5 / N) * Math.PI * 2, gx = p.x + Math.sin(g1) * p.r, gz = p.z + Math.cos(g1) * p.r;
+    ctx.detail.box(gx - 0.06, KERB, gz - 0.06, gx + 0.06, KERB + 1.85, gz + 0.06, rail);
+    K.animal(world, 'pony', p.x - 2, p.z - 1, 1.2, { color: 0xd8cdb8 });
+    // The pony-ride hut by the gate.
+    const hx = p.x + p.r + 4, hz = p.z + 4;
+    const hut = { x0: hx - 1.5, x1: hx + 1.5, z0: hz - 1.2, z1: hz + 1.2 };
+    K.shed(world, hut, { h: 2.4, rise: 0.9, wall: 0xe8dcc0, roof: 0x6b3a22, axis: 'x', style: 0 });
+    world.ctxAt(hx, hz).screen.box(hut.x0 + 0.5, KERB + 1.0, hut.z1 + 0.01, hut.x1 - 0.5, KERB + 1.8, hut.z1 + 0.04, VH.col(0xffe0a8, 0.85));
+    world.interactables.push({ id: 'ranch_pony', kind: 'redwaterPony', x: hx, y: KERB + 1.0, z: hut.z1 + 1.3, radius: 1.8, label: 'Pony ride round the pen', price: 5 });
+    VH.Landmarks.sign(world, { x: hx, y: KERB + 2.05, z: hut.z1 + 0.06, yaw: 0, w: 2.6, h: 0.5, lines: ['PONY RIDES $5'], style: 'plaque' });
+  }
+
+  /** Three paddocks in the west: rail fences with gates off the yard track, horses, a field shelter and a trough in each. */
+  function buildPaddocks(world) {
+    const K = C(), WN = W();
+    const P = RR.paddocks;
+    const rng = new VH.RNG('redwater-ranch-horses');
+    const rail = { hex: 0xf2efe6, h: 1.3 };
+    const zs = P.z;
+    // The outer line along the yard track side (east) with a gate into each paddock; the rails between them.
+    for (let i = 0; i < zs.length - 1; i++) {
+      const z0 = zs[i], z1 = zs[i + 1] - (i < zs.length - 2 ? 4 : 0);
+      K.postRail(world, P.x1, z0, P.x1, z1, [[z0 + 6, z0 + 10]], rail);
+      K.postRail(world, P.x0, z0, P.x1, z0, i === 0 ? [[P.x1 - 12, P.x1 - 8]] : [], rail);
+      if (i < zs.length - 2) K.postRail(world, P.x0, z1, P.x1, z1, [], rail);
+      K.postRail(world, P.x0, z0, P.x0, z1, [], rail);
+      // A field shelter against the west rail: an open-fronted timber box under a lean-to.
+      const sx0 = P.x0 + 1, sx1 = P.x0 + 6, sz0 = z0 + 8, sz1 = z0 + 20;
+      const ctx = world.ctxAt((sx0 + sx1) / 2, (sz0 + sz1) / 2);
+      WN.solid(world, ctx.wood, sx0, KERB, sz0, sx0 + 0.25, KERB + 2.8, sz1, 0x6b4a30, null, 'building', F().ALL);
+      WN.solid(world, ctx.wood, sx0, KERB, sz0, sx1, KERB + 2.6, sz0 + 0.25, 0x6b4a30, null, 'building', F().ALL);
+      WN.solid(world, ctx.wood, sx0, KERB, sz1 - 0.25, sx1, KERB + 2.6, sz1, 0x6b4a30, null, 'building', F().ALL);
+      WN.tiltBox(ctx.prop, (sx0 + sx1) / 2 + 0.1, KERB + 2.85, (sz0 + sz1) / 2, sx1 - sx0 + 0.8, 0.14, sz1 - sz0 + 0.6, Math.PI / 2, 0.08, 0x4a4c50);
+      world.physics.addBox(sx0 - 0.4, KERB + 2.55, sz0 - 0.3, sx1 + 0.5, KERB + 3.15, sz1 + 0.3, 'building', F().ALL);
+      trough(world, P.x1 - 8, z0 + 14, Math.PI / 2);
+      // Horses grazing.
+      const n = rng.int(3, 5);
+      for (let k = 0; k < n; k++) {
+        const x = rng.range(P.x0 + 14, P.x1 - 14), z = rng.range(z0 + 6, z1 - 6);
+        K.animal(world, rng.chance(0.25) ? 'pony' : 'horse', x, z, rng.range(0, Math.PI * 2), { color: rng.pick(K.ANIMALS.horse.colors), grazing: rng.chance(0.6) });
+      }
+    }
+  }
+
+  /** The rodeo arena: a dirt ring inside pipe rails, chutes at the west end, stands both sides, floodlights, barrels. */
+  function buildArena(world) {
+    const K = C(), WN = W();
+    const A = RR.arena;
+    K.ground(world, A.x0, A.z0, A.x1, A.z1, 'arena', KERB + 0.012);
+    const midZ = (A.z0 + A.z1) / 2;
+    // The rails: a gate at the east end (on the drive) and the chutes' gates at the west end.
+    pipeRail(world, A.x0, A.z0, A.x1, A.z0, [[A.x1 - 26, A.x1 - 22]]);
+    pipeRail(world, A.x0, A.z1, A.x1, A.z1, [[A.x1 - 26, A.x1 - 22]]);
+    pipeRail(world, A.x1, A.z0, A.x1, A.z1, [[RR.gate.z0, RR.gate.z1]]);
+    pipeRail(world, A.x0, A.z0, A.x0, RR.chutes.z0, []);
+    pipeRail(world, A.x0, RR.chutes.z1, A.x0, A.z1, []);
+    // The chutes: five narrow pens behind the west rail, their gates facing the ring.
+    const C2 = RR.chutes;
+    const w = (C2.z1 - C2.z0) / 5;
+    for (let i = 0; i <= 5; i++) pipeRail(world, C2.x0, C2.z0 + i * w, A.x0, C2.z0 + i * w, []);
+    pipeRail(world, C2.x0, C2.z0, C2.x0, C2.z1, []);
+    const gc = world.ctxAt(A.x0, (C2.z0 + C2.z1) / 2);
+    for (let i = 0; i < 5; i++) {
+      const z0 = C2.z0 + i * w + 0.3, z1 = C2.z0 + (i + 1) * w - 0.3;
+      for (const y of [0.5, 1.0, 1.5]) gc.detail.box(A.x0 - 0.05, KERB + y, z0, A.x0 + 0.05, KERB + y + 0.12, z1, VH.col(0xc8402c));
+      gc.detail.box(A.x0 - 0.12, KERB + 1.9, z0 + 0.2, A.x0 + 0.12, KERB + 2.2, z1 - 0.2, VH.col(0xf2efe6)); // the chute number board
+    }
+    world.physics.addBox(A.x0 - 0.12, 0, C2.z0, A.x0 + 0.12, KERB + 1.8, C2.z1, 'fence', F().SOLID | F().CAMERA);
+    K.ground(world, C2.x0, C2.z0, A.x0, C2.z1, 'arena', KERB + 0.012);
+    // A catwalk along the back of the chutes (stairs up at the north end).
+    WN.deck(world, gc.wood, C2.x0 - 1.6, C2.z0, C2.x0 - 0.2, C2.z1, KERB + 1.4, 0x8a6a48, 'plank', 0.15);
+    WN.stairs(world, gc.wood, C2.x0 - 0.9, C2.z0 - 3.5, 's', 3.5, 1.2, KERB, KERB + 1.4, 0x8a6a48, { railHex: 0x6b4a30 });
+    // Barrels for barrel racing (round, solid).
+    [[A.x0 + 40, midZ - 20, 0x2f6f9a], [A.x0 + 40, midZ + 20, 0x2f6f9a], [A.x0 + 75, midZ, 0xc8402c]].forEach(([x, z, col]) => {
+      const c = world.ctxAt(x, z);
+      c.detail.cylinder(x, KERB, z, 0.32, 0.32, 0.9, 12, VH.col(col), true);
+      for (const y of [0.3, 0.6]) c.detail.cylinder(x, KERB + y, z, 0.335, 0.335, 0.05, 12, VH.col(0x3a3f45), false);
+      for (let k = 0; k < 4; k++) world.physics.addOrientedBox(x, z, 0.33, 0.14, (k * Math.PI) / 4, 0, KERB + 0.9, 'metal', F().SOLID | F().SHOTS);
+    });
+    // The stands: the big one along the south side, a smaller one on the north with the announcer's box on top.
+    const sx0 = A.x0 + 14, sx1 = A.x1 - 30;
+    const south = bleachers(world, sx0, sx1, A.z1 + 1.2, 1, 8, 0xc8402c);
+    const north = bleachers(world, sx0 + 16, sx1 - 16, A.z0 - 1.2, -1, 5, 0x2f6f9a);
+    // Steps up the stands' ends are the tiers themselves (0.42 m each); a rail along the front of the south stand's first tier.
+    const bx = (sx0 + sx1) / 2;
+    const box = { x0: bx - 4, x1: bx + 4, z0: north.back - 3.4, z1: north.back - 0.3 };
+    const bc = world.ctxAt(bx, box.z0);
+    // The announcer's box: a little tower behind the north stand, its glass looking over the ring.
+    WN.building(world, box.x0, box.z0, box.x1, box.z1, north.y - KERB + 2.6, { wall: 0xf2efe6, roof: 0x6b3a22, style: 4, bay: 2, floorH: north.y - KERB + 2.6, ww: 0.8, wh: 0.3, parapet: 0.3, sides: { n: 'blank', e: 'blank', w: 'blank' } });
+    VH.Landmarks.sign(world, { x: bx, y: north.y + 3.4, z: box.z1 + 0.1, yaw: 0, w: 9, h: 1.2, lines: ['REDWATER RODEO', 'Saturdays · Barrels · Roping · Bronc riding'], style: 'brand', colors: { bg: ['#6b3a22', '#4e2a18'], fg: '#f4e2b8' }, frame: 0x3a2a1c });
+    VH.Landmarks.sign(world, { x: bx, y: south.y + 2.2, z: south.back - 0.05, yaw: Math.PI, w: 12, h: 1.6, lines: ['REDWATER RODEO'], style: 'brand', colors: { bg: ['#6b3a22', '#4e2a18'], fg: '#f4e2b8' }, frame: 0x3a2a1c });
+    bc.prop.box(bx - 0.1, south.y + 1.1, south.back, bx + 0.1, south.y + 1.5, south.back + 0.3, VH.col(0x3a3f45));
+    // The floodlights: four masts at the corners.
+    world.floodlights = world.floodlights || [];
+    for (const [x, z] of [[A.x0 + 4, A.z0 - 4], [A.x1 - 4, A.z0 - 4], [A.x0 + 4, A.z1 + 12], [A.x1 - 4, A.z1 + 12]]) {
+      const c = world.ctxAt(x, z);
+      c.prop.cylinder(x, KERB, z, 0.25, 0.18, 16, 8, VH.col(0x8e959c), true);
+      for (let k = 0; k < 4; k++) world.physics.addOrientedBox(x, z, 0.26, 0.11, (k * Math.PI) / 4, 0, KERB + 16, 'pole', F().SOLID | F().SHOTS);
+      c.prop.box(x - 1.6, KERB + 15.6, z - 0.4, x + 1.6, KERB + 17.2, z + 0.4, VH.col(0x3a3f45));
+      const fz = z < midZ ? 0.42 : -0.42;
+      c.screen.box(x - 1.4, KERB + 15.8, z + fz - 0.02, x + 1.4, KERB + 17.0, z + fz + 0.02, VH.col(0xfff4d8, 2.2));
+    }
+    world.floodlights.push({ x: A.x0 + 30, z: midZ, r: 30, y: KERB + 0.03, strength: 0.6 });
+    world.floodlights.push({ x: A.x1 - 30, z: midZ, r: 30, y: KERB + 0.03, strength: 0.6 });
+    // A snack hatch at the east end of the south stand.
+    const kx = sx1 + 6, kz = A.z1 + 6;
+    const kiosk = { x0: kx - 3, x1: kx + 3, z0: kz - 2.5, z1: kz + 2.5 };
+    const kc = K.shed(world, kiosk, { h: 2.8, rise: 1.0, wall: 0x8a3a2a, roof: 0x4a4c50, axis: 'x', style: 0 });
+    kc.screen.box(kiosk.x1 - 0.01, KERB + 1.0, kz - 1.6, kiosk.x1 + 0.02, KERB + 2.0, kz + 1.6, VH.col(0xffe8b8, 0.85));
+    world.interactables.push({ id: 'ranch_snacks', kind: 'redwaterBuy', x: kiosk.x1 + 1.4, y: KERB + 1.0, z: kz, radius: 1.8, label: 'Buy a corn dog', price: 4, heal: 30, what: 'corndog' });
+    VH.Landmarks.sign(world, { x: kiosk.x1 + 0.05, y: KERB + 2.35, z: kz, yaw: Math.PI / 2, w: 3.4, h: 0.5, lines: ['CORN DOGS · LEMONADE'], style: 'plaque' });
+    world.floodlights.push({ x: kiosk.x1 + 2, z: kz, r: 6, y: KERB + 0.03, strength: 0.6 });
+    RR.stands = { south, north };
+  }
+
+  /** The visitors' car park off the drive: gravel, timber sleepers at the bay heads, lamps; horse trailers parked. */
+  function buildRanchPark(world) {
+    const K = C(), WN = W();
+    const p = RR.park;
+    K.ground(world, p.x0, p.z0, p.x1, p.z1, 'gravel', KERB + 0.01);
+    K.ground(world, p.in0, RR.gate.z1, p.in1, p.z0, 'gravel', KERB + 0.01);
+    RR.bayRows = [];
+    for (const [z, dir] of [[p.z0 + 3, 1], [p.z0 + 33, -1], [p.z0 + 33, 1], [p.z0 + 63, -1], [p.z0 + 63, 1], [p.z1 - 3, -1]]) {
+      const zh = z + dir * 0.25;
+      for (let x = p.x0 + 3; x < p.x1 - 3; x += 2.7) world.ctxAt(x, zh).detailWood.box(x - 0.9, KERB, zh - 0.12, x + 0.9, KERB + 0.12, zh + 0.12, VH.col(0x6b5038));
+      RR.bayRows.push({ z: z + dir * 2.6, h: dir > 0 ? Math.PI : 0 });
+    }
+    for (const z of [p.z0 + 33, p.z0 + 63]) for (const x of [p.x0 + 20, p.x0 + 60]) world.addProp('streetlight', x, KERB, z, 0, 1);
+    // Horse trailers along the north edge of the drive by the stables track.
+    for (let i = 0; i < 3; i++) horseTrailer(world, -830 + i * 9, 748, Math.PI / 2, [0xf2efe6, 0x8a3a2a, 0x2f4a6a][i]);
+  }
+
+  /** A two-horse trailer (solid box on two axles, ramp at the back), facing yaw. */
+  function horseTrailer(world, x, z, yaw, hex) {
+    const ctx = world.ctxAt(x, z);
+    const s = ctx.detail;
+    const P = C().frame(x, z, yaw);
+    const body = VH.col(hex);
+    s.orientedBox(x, z, 1.05, 2.4, yaw, KERB + 0.45, KERB + 2.5, body);
+    const [sx, sz] = P(0, 1.06);
+    s.orientedBox(sx, sz, 0.02, 2.2, yaw, KERB + 1.5, KERB + 1.8, VH.col(0x2a2d30)); // the window band
+    const [tx, tz] = P(2.4 + 0.6, 0);
+    s.orientedBox(tx, tz, 0.08, 0.6, yaw, KERB + 0.45, KERB + 0.6, VH.col(0x2a2d30)); // the hitch
+    for (const f of [-0.4, 0.4]) {
+      for (const r of [-1.1, 1.1]) {
+        const [wx, wz] = P(f, r);
+        C().wheel(s, wx, KERB + 0.35, wz, 0.35, 0.2, yaw, VH.col(0x1b1d20));
+      }
+    }
+    world.physics.addOrientedBox(x, z, 1.1, 2.45, yaw, 0, KERB + 2.5, 'metal', F().ALL);
   }
 
   // -------------------------------------------------------------- the map
   if (VH.MapPainters) {
     VH.MapPainters.push((g, layout, o) => {
-      if (!layout.plots || !layout.plots.pelican_links) return;
+      if (!layout.plots || !layout.plots.pelican_links || !layout.plots.redwater_ranch) return;
       const P = PL, R = o.R;
       const poly = (pts, col) => {
         g.fillStyle = col;
@@ -619,6 +1017,22 @@
       for (const p of P.ponds) C().mapEllipse(g, p.x, p.z, p.rx, p.rz, '#4f9ac8');
       W().mapBox(g, R, P.club.x0, P.club.z0, P.club.x1, P.club.z1, '#e8e4d8');
       W().mapBox(g, R, P.park.x0, P.park.z0, P.park.x1, P.park.z1, '#8a8a88', false);
+      // Redwater Ranch: paddocks, tracks, the arena, the buildings.
+      const Q = RR;
+      g.fillStyle = '#8ab062';
+      R(Q.x0 + 1.6, Q.z0 + 1.6, Q.x1 - 1.6, Q.z1 - 1.6);
+      g.fillStyle = '#9cc070';
+      for (let i = 0; i < Q.paddocks.z.length - 1; i++) R(Q.paddocks.x0, Q.paddocks.z[i], Q.paddocks.x1, Q.paddocks.z[i + 1] - 4);
+      g.fillStyle = '#b89a6a';
+      R(Q.drive.x0, Q.gate.z0, Q.x1, Q.gate.z1);
+      R(Q.spur.x0, Q.spur.z0, Q.spur.x1, Q.gate.z0);
+      R(Q.yard.x0, Q.yard.z0, Q.yard.x1, Q.yard.z1);
+      W().mapBox(g, R, Q.arena.x0, Q.arena.z0, Q.arena.x1, Q.arena.z1, '#c4a070', false);
+      W().mapBox(g, R, Q.park.x0, Q.park.z0, Q.park.x1, Q.park.z1, '#b4aa92', false);
+      W().mapBox(g, R, Q.house.x0, Q.house.z0, Q.house.x1, Q.house.z1, '#6b3a22');
+      W().mapBox(g, R, Q.stables.x0, Q.stables.z0, Q.stables.x1, Q.stables.z1, '#8a3a2a');
+      W().mapBox(g, R, Q.hay.x0, Q.hay.z0, Q.hay.x1, Q.hay.z1, '#7a3a2a');
+      C().mapEllipse(g, Q.pen.x, Q.pen.z, Q.pen.r, Q.pen.r, '#d8c08a');
     });
   }
 
@@ -641,9 +1055,9 @@
           if (item.heal) player.heal(item.heal);
           VH.events.emit('money:changed', { delta: -item.price, reason: 'Redwater' });
           const gained = Math.round(player.health - before);
-          const LINES = { lemonade: ['Pink lemonade', 'Ice-cold, on the terrace. '] };
+          const LINES = { lemonade: ['Pink lemonade', 'Ice-cold, on the terrace. '], corndog: ['A corn dog', 'With mustard, rodeo style. '] };
           const [title, text] = LINES[item.what] || ['Thanks!', ''];
-          VH.events.emit('notify', { title, text: text + (item.heal ? (gained > 0 ? '+' + gained + ' health' : 'You were already feeling fine.') : ''), icon: '🍋' });
+          VH.events.emit('notify', { title, text: text + (item.heal ? (gained > 0 ? '+' + gained + ' health' : 'You were already feeling fine.') : ''), icon: item.what === 'corndog' ? '🌭' : '🍋' });
           return 1.5;
         });
         game.interaction.on('redwaterRange', (item, player) => {
@@ -667,21 +1081,35 @@
           if (game.audio && game.audio.purchase) game.audio.purchase();
           return 3;
         });
+        game.interaction.on('redwaterPony', (item, player) => {
+          if (player.money < item.price) {
+            VH.events.emit('notify', { title: 'Not enough cash', text: 'A pony ride is ' + VH.util.formatMoney(item.price) + '.', icon: '✕', tone: 'bad' });
+            return 1;
+          }
+          player.money -= item.price;
+          VH.events.emit('money:changed', { delta: -item.price, reason: 'Redwater Ranch' });
+          this.rides = (this.rides || 0) + 1;
+          const names = ['Biscuit', 'Duchess', 'Pepper', 'Marmalade'];
+          VH.events.emit('notify', { title: 'Pony ride', text: names[this.rides % names.length] + ' takes you twice round the pen' + (this.rides === 1 ? '. Your legs are a bit too long.' : ' at a gentle trot.'), icon: '🐴', tone: 'good' });
+          return 4;
+        });
       }
       // Cars in the club car park.
       const list = [];
       let seed = 4242;
-      for (const r of PL.bayRows || []) {
-        for (let x = PL.park.x0 + 4 + 1.35; x < PL.park.x1 - 4; x += 2.7) {
-          if ((seed * 7) % 5 < 2) {
-            seed++;
-            continue;
+      for (const [park, rows, m] of [[PL.park, PL.bayRows, 4], [RR.park, RR.bayRows, 3]]) {
+        for (const r of rows || []) {
+          for (let x = park.x0 + m + 1.35; x < park.x1 - m; x += 2.7) {
+            if ((seed * 7) % 5 < 2) {
+              seed++;
+              continue;
+            }
+            list.push(WN.parkedSpot(x, r.z, r.h, seed++));
           }
-          list.push(WN.parkedSpot(x, r.z, r.h, seed++));
         }
       }
       WN.addParkedSpots(game, list);
-      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670]]);
+      WN.clearSpots(game, [[PL.gate.x0 - 3, 640, PL.gate.x1 + 3, 670], [RR.x1 - 4, RR.gate.z0 - 3, RR.x1 + 14, RR.gate.z1 + 3]]);
     }
     update() {}
     serialize() {
@@ -698,11 +1126,12 @@
   VH.Districts.register({
     id: D,
     name: 'Redwater',
-    plots: ['pelican_links'],
+    plots: ['pelican_links', 'redwater_ranch'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.pelican_links || !VH.WNKit || !VH.CountryKit) return;
       buildGolf(world);
+      buildRanch(world);
       world.redwater = true;
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -714,6 +1143,7 @@
       };
       const c = PL.club, dx = (c.x0 + c.x1) / 2;
       add('pelican_links', { name: 'Pelican Links', x: dx, z: c.z0 - 9, yaw: 0, kind: 'golf', landmark: true });
+      add('redwater_ranch', { name: 'Redwater Ranch', x: RR.x1 - 12, z: (RR.gate.z0 + RR.gate.z1) / 2, yaw: -Math.PI / 2, kind: 'ranch', landmark: true });
       const extra = places.extra[D];
       if (extra) {
         const H = PL.holes;
@@ -728,6 +1158,14 @@
           { x: H[8].gx + H[8].rx * 18, z: H[8].gz + H[8].rz * 18, yaw: -H[8].yaw, kinds: ['golf', 'field', 'park'], name: 'The ninth green, Pelican Links' },
           { x: PL.ponds[0].x + PL.ponds[0].rx + 6, z: PL.ponds[0].z, yaw: -Math.PI / 2, kinds: ['golf', 'lake', 'pond', 'park'], name: 'The long pond, Pelican Links' },
           { x: H[5].gx + H[5].rx * -18, z: H[5].gz, yaw: Math.PI / 2, kinds: ['golf', 'field', 'woods'], name: 'The sixth green, Pelican Links' },
+          { x: RR.arena.x1 + 4, z: RR.gate.z0 + 7, yaw: -Math.PI / 2, kinds: ['ranch', 'rodeo', 'arena', 'stadium'], name: 'The rodeo arena gate, Redwater Ranch' },
+          { x: (RR.arena.x0 + RR.arena.x1) / 2, z: RR.stands.south.back - 1.2, y: RR.stands.south.y, yaw: Math.PI, kinds: ['ranch', 'rodeo', 'stands', 'overlook'], name: 'The top of the rodeo stand, Redwater Ranch' },
+          { x: RR.stables.x0 + 20, z: RR.stables.z1 + 4, yaw: Math.PI, kinds: ['ranch', 'stables', 'barn', 'farm'], name: 'The stables, Redwater Ranch' },
+          { x: RR.pen.x + RR.pen.r + 4, z: RR.pen.z + 7.5, yaw: Math.PI, kinds: ['ranch', 'farm', 'park'], name: 'The pony rides, Redwater Ranch' },
+          { x: (RR.house.x0 + RR.house.x1) / 2, z: RR.house.z1 + 6, yaw: Math.PI, kinds: ['ranch', 'farmhouse', 'house', 'front_door'], name: 'The ranch house porch, Redwater Ranch' },
+          { x: RR.paddocks.x1 + 3, z: RR.paddocks.z[1] + 8, yaw: -Math.PI / 2, kinds: ['ranch', 'field', 'farm', 'paddock'], name: 'The paddock gate, Redwater Ranch' },
+          { x: RR.hay.x1 + 3, z: (RR.hay.z0 + RR.hay.z1) / 2, yaw: -Math.PI / 2, kinds: ['ranch', 'barn', 'farm', 'storage'], name: 'The hay barn, Redwater Ranch' },
+          { x: (RR.park.x0 + RR.park.x1) / 2, z: RR.park.z0 + 20, yaw: 0, kinds: ['parking', 'ranch'], name: 'The car park, Redwater Ranch' },
         );
       }
     },

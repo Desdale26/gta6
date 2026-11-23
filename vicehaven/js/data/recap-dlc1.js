@@ -244,7 +244,7 @@
         'Behind the counter is an iron floor safe that nobody has opened in fifty years. Jay has the combination.',
       ],
       recap: [
-        'Benny Akande, the clerk, wasn\'t allowed to open the safe, even after Jay bought nineteen bags of crisps. So Jay pointed his gun and asked again.',
+        'Femi Akande, the clerk, wasn\'t allowed to open the safe, even after Jay bought nineteen bags of crisps. So Jay pointed his gun and asked again.',
         'Inside was old money, which Jay left, and an envelope, which he took. In it was a photo of baby June asleep in the Firecrest on race day, and another riddle about a claw and a wheel.',
         'Jay lost the police on the coast road.',
         'Then Toby rang: Guest Services were emptying lot 17, and all the parts were in it.',
@@ -363,7 +363,7 @@
     monty: { intro: 'd10_heritage_run', bio: 'Monty Sprake, the voice of the Southbay Speedway for thirty years. He knows every driver and every lap record, and never gets Jay\'s name right.' },
     teddy: { intro: 'd10_heritage_run', bio: 'Teddy Castellane, Leo\'s nephew and the Castellane Racing works driver. Talented, a bit spoilt, and Pip\'s rival at the Speedway.' },
     gully: { intro: 'd11_two_eyes', bio: 'A young Sandpiper Beach lifeguard with red shorts, a loud whistle and very strong feelings about people who climb his tower without a lifeguard qualification.' },
-    benny: { intro: 'd12_floor_safe', bio: 'Benny Akande, the clerk at the Sandpiper Kwik Pik, is studying engineering part-time. He opened a safe nobody had opened in fifty years, and asked Jay for a photo.' },
+    benny: { intro: 'd12_floor_safe', bio: 'Femi Akande, the clerk at the Sandpiper Kwik Pik, is studying engineering part-time. He opened a safe nobody had opened in fifty years, and asked Jay for a photo.' },
     daventry: { intro: 'd15_departures', bio: 'Captain Daventry flies Castellane\'s charter plane. He is also a Guest Services man with a gun, and says he can do either job.' },
     hob: { intro: 'd16_four_out_of_ten', bio: [
       'Hob Finnegan runs the Paloma Flying Club: chief instructor, only instructor, and cleaner. He gives every landing a mark out of ten.',

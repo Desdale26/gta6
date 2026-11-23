@@ -1070,10 +1070,218 @@
     townHouse(world, 1033, 344, 1055, 410, 8.2, 0xf4d9c6, 'w', 0.66);
     sbox(world, 'concrete', 1028, KERB + 4.2, 368, 1033, KERB + 6.0, 371, 0xd8c8a6, 'wall', { bottom: true });
     K().festoon(world, 1028, KERB + 6.4, 380, 1033, KERB + 6.4, 380, 0.2, [0xfff1c8], 1.0);
+    const lane = oldLane(world);
     for (let z = 350; z < 408; z += 14) world.addProp('streetlight', 1092, KERB, z, -PI / 2, 1);
     for (const z of [348, 380, 406]) world.addProp('streetlight', 1057, KERB, z, PI / 2, 1);
 
-    return { yB: tower.yB, bell: tower.bell };
+    return { yB: tower.yB, bell: tower.bell, lane };
+  }
+
+  /**
+   * The old lane between the two houses south-west of the church (x 1028..1033): stone steps up to a
+   * raised stretch under the arch and down again, the bakery's lit window and awning, pots, washing.
+   */
+  function oldLane(world) {
+    const x0 = 1028, x1 = 1033, xm = (x0 + x1) / 2, w = x1 - x0;
+    const up = 0.45;
+    pave(world, x0, 344, x1, 410, 0xb89a72, 'plazaTop', KERB + 0.035, 2);
+    K().stairs(world, world.ctxAt(xm, 354).concrete, xm, 352, 's', 2.4, w - 0.02, KERB, KERB + up, sc(0xd8cbb0), { rails: false, tag: 'stairs' });
+    sbox(world, 'concrete', x0 + 0.01, KERB, 354.4, x1 - 0.01, KERB + up, 385.6, 0xc9b48e, 'stairs');
+    K().stairs(world, world.ctxAt(xm, 387).concrete, xm, 388, 'n', 2.4, w - 0.02, KERB, KERB + up, sc(0xd8cbb0), { rails: false, tag: 'stairs' });
+    const ctx = world.ctxAt(xm, 380);
+    // Pots of geraniums along both walls (solid), on the raised stretch.
+    for (let z = 358; z < 384; z += 4.5) for (const [px, s2] of [[x0 + 0.45, 1], [x1 - 0.45, -1]]) {
+      const pz = z + (s2 > 0 ? 0 : 2.2);
+      S().drum(world, ctx.concrete, px, KERB + up, pz, 0.32, 0.45, 8, 0xb8603a, 'crate');
+      ctx.hedge.cylinder(px, KERB + up + 0.45, pz, 0.36, 0.3, 0.35, 7, VH.col(0x3f7a34), true);
+      for (let k = 0; k < 3; k++) ctx.hedge.box(px - 0.2 + k * 0.15, KERB + up + 0.78, pz - 0.08, px - 0.08 + k * 0.15, KERB + up + 0.9, pz + 0.04, VH.col(0xe8343a));
+    }
+    // Washing lines across the lane (well over head height).
+    const laundry = [0xffffff, 0xe86a6a, 0x7ab0e0, 0xf0c040, 0x9ad08a];
+    for (const z of [362, 376, 396]) {
+      K().beam(ctx.prop, x0, KERB + 5.2, z, x1, KERB + 5.1, z, 0.02, VH.col(0xdddddd));
+      for (let x = x0 + 0.4, i = 0; x < x1 - 0.6; x += 0.9, i++) ctx.prop.box(x, KERB + 4.3, z - 0.02, x + 0.6, KERB + 5.1, z + 0.02, VH.col(laundry[(i + z) % laundry.length]), { bottom: true });
+    }
+    // The bakery on the west side near Harbour Street: a lit window, a striped awning, a bread board.
+    const bz0 = 394, bz1 = 404;
+    glow(world, x0 + 0.01, KERB + 0.5, bz0 + 0.6, x0 + 0.05, KERB + 2.4, bz1 - 3.2, 0xffd9a0, 1.2);
+    draw(world, 'wood', x0, KERB, bz1 - 2.6, x0 + 0.08, KERB + 2.5, bz1 - 1.2, 0x5a3520);
+    for (let i = 0; i < 5; i++) {
+      const za = bz0 + (i * (bz1 - bz0)) / 5, zb = bz0 + ((i + 1) * (bz1 - bz0)) / 5;
+      ctx.prop.box(x0, KERB + 2.7, za, x0 + 1.3, KERB + 2.82, zb, VH.col(i % 2 ? 0xf6f1e4 : 0xc0392b), { bottom: true });
+    }
+    world.physics.addBox(x0, KERB + 2.6, bz0, x0 + 1.3, KERB + 2.82, bz1, 'crate', F().SOLID | F().SHOTS);
+    // Loaves on a trestle under the awning (solid).
+    sbox(world, 'wood', x0 + 0.1, KERB, bz0 + 1, x0 + 0.8, KERB + 0.9, bz0 + 4, 0x8a6a48, 'crate');
+    for (let z = bz0 + 1.2; z < bz0 + 3.8; z += 0.45) ctx.prop.cylinder(x0 + 0.45, KERB + 0.9, z, 0.16, 0.12, 0.14, 6, VH.col(0xc8883a), true);
+    K().sign(world, { x: x0 + 0.06, y: KERB + 3.3, z: (bz0 + bz1) / 2, yaw: PI / 2, w: 3.2, h: 0.6, lines: ['PANADERÍA ROSA'], style: 'plaque' });
+    wallLantern(world, x1, KERB + 3.0, 372, -1, 0);
+    wallLantern(world, x0, KERB + 3.0, 390, 1, 0);
+    return { x: xm, z: 399 };
+  }
+
+  // ---------------------------------------------------------- the harbour
+  // The fishing harbour: plot 783..973 x 583..783 (the shore is x 780; Seabreeze Street south, Paloma Way east).
+  const HARB = { x0: 783, x1: 973, z0: 583, z1: 783, quay: 820, mole: { z: 586, x: 700, zEnd: 700 } };
+
+  /** A fishing boat hauled out on trestles in the yard: hull, wheelhouse, solid. */
+  function hauledBoat(world, x, z, len, hex, trim) {
+    const ctx = world.ctxAt(x, z);
+    const w = len * 0.32, hl = len / 2, y0 = KERB + 1.1, y1 = y0 + 1.7;
+    ctx.prop.box(x - w / 2, y0, z - hl, x + w / 2, y1, z + hl * 0.4, VH.col(hex), { bottom: true });
+    ctx.prop.box(x - w / 2 - 0.02, y0 + 0.9, z - hl, x + w / 2 + 0.02, y0 + 1.15, z + hl * 0.4, VH.col(trim));
+    ctx.prop.box(x - w / 2 + 0.3, y0 - 0.5, z - hl + 0.5, x + w / 2 - 0.3, y0, z + hl * 0.3, VH.col(0x8a2a2a), { bottom: true }); // the keel, antifouled red
+    const tip = [x, y1 + 0.2, z + hl], tipLow = [x, y0 + 0.3, z + hl - 0.6];
+    const l = [x - w / 2, y1, z + hl * 0.4], r = [x + w / 2, y1, z + hl * 0.4], lb = [x - w / 2, y0, z + hl * 0.4], rb = [x + w / 2, y0, z + hl * 0.4];
+    ctx.prop.polygon([r, tip, l], VH.col(0xc8a878));
+    ctx.prop.polygon([l, tip, tipLow, lb], VH.col(hex));
+    ctx.prop.polygon([rb, tipLow, tip, r], VH.col(hex));
+    ctx.prop.box(x - w * 0.32, y1, z - hl * 0.55, x + w * 0.32, y1 + 1.8, z - hl * 0.05, VH.col(0xf4f2ec));
+    ctx.prop.box(x - w * 0.33, y1 + 0.9, z - hl * 0.5, x + w * 0.33, y1 + 1.5, z - hl * 0.1, VH.col(0x2a3a4a));
+    for (const tz of [z - hl * 0.6, z + hl * 0.1]) for (const s2 of [-1, 1]) ctx.wood.box(x + s2 * (w / 2 - 0.2) - 0.15, KERB, tz - 0.4, x + s2 * (w / 2 - 0.2) + 0.15, y0, tz + 0.4, VH.col(0x8a6a48));
+    world.physics.addBox(x - w / 2, 0, z - hl, x + w / 2, y1 + 1.8, z + hl, 'metal', F().ALL);
+  }
+
+  function buildHarbour(world) {
+    const Hb = HARB, qx = Hb.quay;
+    // --- the ground: setts on the quay, cobbles behind, a fish-scale of darker stone round the market
+    pave(world, Hb.x0, Hb.z0, qx, Hb.z1, 0xb8a888, 'plazaTop', KERB + 0.012, 3);
+    pave(world, qx, Hb.z0, Hb.x1, Hb.z1, COBBLE, 'plazaTop', KERB + 0.012, 3);
+    pave(world, Hb.x0 + 0.5, Hb.z0, Hb.x0 + 1.6, Hb.z1, 0xe6dcc4, 'plazaTop', KERB + 0.03, 1); // the granite quay edge
+    for (let z = Hb.z0 + 6; z < Hb.z1 - 3; z += 7.5) world.addProp('bollard', Hb.x0 + 2.2, KERB, z, 0, 1.3);
+    for (let z = Hb.z0 + 12; z < Hb.z1 - 6; z += 22) world.addProp('streetlight', qx - 1, KERB, z, -PI / 2, 1);
+    // --- the boats moored along the quay wall (solid: the hulls stop bullets and boats)
+    const boats = [
+      [604, 11, 0x1f4f7a, 0xf4f2ec, 0xf4f2ec], [622, 9, 0xc0392b, 0xf4f2ec, 0xf4f2ec], [640, 12, 0xf4f2ec, 0x2f7f86, 0xf4f2ec],
+      [660, 10, 0xf0c040, 0x1f4f7a, 0xf4f2ec], [679, 13, 0x2f6a4a, 0xf4f2ec, 0xf0e8d0], [700, 9, 0xf4f2ec, 0xc0392b, 0xf4f2ec],
+      [719, 11, 0x3d6b8f, 0xf0c040, 0xf4f2ec], [738, 10, 0xe86a3a, 0xf4f2ec, 0xf4f2ec], [757, 12, 0xf4f2ec, 0x1f4f7a, 0xf4f2ec],
+    ];
+    for (const [bz, len, hull, trim, cab] of boats) {
+      const w = len * 0.34;
+      K().boat(world, 780 - w / 2 - 1.2, bz, len, 'z', (bz * 7) % 2 > 1 ? 1 : -1, { hull, trim, cabinHex: cab, mast: len > 10 ? 6.5 : 0, cabin: 0.6, w, sail: 0x8a8a8a });
+      // a mooring line from a bollard to the bow and a fender or two
+      const ctx = world.ctxAt(778, bz);
+      K().beam(ctx.prop, Hb.x0 + 2.2, KERB + 0.7, bz + 2, 780 - 1.2, 0.6, bz + len * 0.3, 0.03, VH.col(0xd8c8a0));
+      for (const fz of [bz - len * 0.2, bz + len * 0.15]) ctx.prop.cylinder(780 - 1.25, -0.3, fz, 0.22, 0.22, 0.7, 8, VH.col(0x2a62b8), true);
+    }
+    // --- the harbour wall out in the bay (a stone mole with a parapet) and the green harbour light on its end
+    const M = Hb.mole;
+    const moleBox = (x0, z0, x1, z1) => {
+      for (const [xa, xb] of cuts(x0, x1)) for (const [za, zb] of cuts(z0, z1)) world.ctxAt((xa + xb) / 2, (za + zb) / 2).concrete.box(xa, -2.5, za, xb, KERB + 1.2, zb, sc(STONE_DK), { uvScale: 4 });
+      world.physics.addBox(x0, -3, z0, x1, KERB + 1.2, z1, 'wall', F().ALL);
+    };
+    moleBox(M.x, M.z - 4, 778, M.z + 4);
+    moleBox(M.x, M.z + 4, M.x + 8, M.zEnd);
+    draw(world, 'concrete', M.x, KERB + 1.2, M.z - 4, 778, KERB + 2.6, M.z - 2.8, STONE, { bottom: true }); // the parapet on the sea side
+    draw(world, 'concrete', M.x, KERB + 1.2, M.z - 2.8, M.x + 1.2, KERB + 2.6, M.zEnd, STONE, { bottom: true });
+    cbox(world, M.x, KERB + 1.2, M.z - 4, 778, KERB + 2.6, M.z - 2.8, 'wall');
+    cbox(world, M.x, KERB + 1.2, M.z - 2.8, M.x + 1.2, KERB + 2.6, M.zEnd, 'wall');
+    const lx = M.x + 4, lz = M.zEnd - 4;
+    const lctx = world.ctxAt(lx, lz);
+    S().drum(world, lctx.concrete, lx, KERB + 1.2, lz, 1.6, 6.5, 12, 0xf4f1ea, 'wall');
+    lctx.prop.cylinder(lx, KERB + 3.0, lz, 1.62, 1.62, 0.8, 12, VH.col(0x2f8a4a), false);
+    lctx.prop.cylinder(lx, KERB + 7.7, lz, 1.9, 1.9, 0.2, 12, VH.col(0x2a2d33), true);
+    glow(world, lx - 0.7, KERB + 7.9, lz - 0.7, lx + 0.7, KERB + 9.0, lz + 0.7, 0x40ff70, 2.6);
+    lctx.prop.cylinder(lx, KERB + 9.0, lz, 1.0, 0.1, 0.8, 10, VH.col(0x2f8a4a), false);
+    // Rocks heaped along the mole's sea face.
+    for (let x = M.x - 2; x < 776; x += 3.1) {
+      const rr = 1.1 + ((x * 13) % 7) / 10;
+      world.ctxAt(x, M.z - 5).propMatte.cylinder(x, -1.2, M.z - 5.2 - ((x * 7) % 3) / 3, rr, rr * 0.6, 1.6 + ((x * 3) % 5) / 5, 6, VH.col(0x8a8478), true);
+    }
+
+    // --- the fish market (la lonja): an open hall on stone piers under a tiled roof, the stalls inside
+    const L = { x0: 824, x1: 880, z0: 598, z1: 638, h: 5.2 };
+    for (let x = L.x0; x <= L.x1 + 0.01; x += (L.x1 - L.x0) / 7) for (const z of [L.z0, L.z1]) sbox(world, 'concrete', x - 0.4, KERB, z - 0.4, x + 0.4, KERB + L.h, z + 0.4, STONE, 'wall');
+    for (let z = L.z0 + 10; z < L.z1 - 1; z += 10) for (const x of [L.x0, L.x1]) sbox(world, 'concrete', x - 0.4, KERB, z - 0.4, x + 0.4, KERB + L.h, z + 0.4, STONE, 'wall');
+    draw(world, 'concrete', L.x0 - 0.6, KERB + L.h, L.z0 - 0.6, L.x1 + 0.6, KERB + L.h + 0.6, L.z1 + 0.6, STONE_LT, { bottom: true });
+    const lc = world.ctxAt((L.x0 + L.x1) / 2, (L.z0 + L.z1) / 2);
+    K().gable(lc.prop, L.x0 - 1.2, L.z0 - 1.2, L.x1 + 1.2, L.z1 + 1.2, KERB + L.h + 0.6, 4.2, 'x', TERRACOTTA, WHITEWASH);
+    pave(world, L.x0 - 2, L.z0 - 2, L.x1 + 2, L.z1 + 2, 0x9a8a72, 'plazaTop', KERB + 0.03, 2);
+    for (let i = 0; i < 6; i++) {
+      // a stall: a steel table under crushed ice, the catch laid out, a scale on a post
+      const sx = L.x0 + 6 + (i % 3) * 16, sz = L.z0 + 11 + Math.floor(i / 3) * 18;
+      sbox(world, 'prop', sx - 3, KERB, sz - 1.0, sx + 3, KERB + 0.9, sz + 1.0, 0xb8c0c8, 'metal');
+      lc.prop.box(sx - 2.9, KERB + 0.9, sz - 0.9, sx + 2.9, KERB + 1.0, sz + 0.9, VH.col(0xe8f4f8));
+      for (let k = 0; k < 9; k++) {
+        const fx = sx - 2.5 + (k % 9) * 0.62, fz = sz + ((k * 5) % 3 - 1) * 0.45;
+        lc.prop.orientedBox(fx, fz, 0.28, 0.09, 0.3 * ((k % 3) - 1), KERB + 1.0, KERB + 1.08, VH.col([0xa8b4c0, 0xd06a4a, 0x8a98a8][(k + i) % 3]));
+      }
+      lc.prop.box(sx + 2.6, KERB + 0.9, sz - 0.05, sx + 2.7, KERB + 2.2, sz + 0.05, VH.col(0x5a5f66));
+      lc.prop.box(sx + 2.3, KERB + 2.0, sz - 0.25, sx + 3.0, KERB + 2.1, sz + 0.25, VH.col(0xc9a227));
+      K().block(world, sx + 2.55, KERB + 0.9, sz - 0.1, sx + 2.75, KERB + 2.2, sz + 0.1, 'pole');
+      K().block(world, sx + 2.3, KERB + 2.0, sz - 0.25, sx + 3.0, KERB + 2.1, sz + 0.25, 'pole');
+      glow(world, sx - 0.3, KERB + L.h - 0.4, sz - 0.3, sx + 0.3, KERB + L.h - 0.2, sz + 0.3, 0xfff4e0, 1.8);
+    }
+    // Blue crates of fish and ice stacked at the hall's quay end (solid).
+    for (let k = 0; k < 10; k++) {
+      const cx = L.x0 - 4 + (k % 2) * 1.0, cz = L.z0 + 4 + Math.floor(k / 2) * 3.4;
+      const hgt = 0.4 * (1 + (k % 3));
+      sbox(world, 'prop', cx - 0.45, KERB, cz - 0.6, cx + 0.45, KERB + hgt, cz + 0.6, 0x2a62b8, 'crate');
+    }
+    K().sign(world, { x: (L.x0 + L.x1) / 2, y: KERB + L.h + 0.3, z: L.z0 - 0.62, yaw: PI, w: 8, h: 1.0, lines: ['LONJA DE PALOMA · FISH MARKET'], style: 'info' });
+
+    // --- the harbourmaster's office: white, a blue band, a flagstaff and a clock
+    const Hm = { x0: 826, x1: 844, z0: 654, z1: 672, h: 7.6 };
+    K().building(world, Hm.x0, Hm.z0, Hm.x1, Hm.z1, Hm.h, { wall: WHITEWASH, roof: 0xb8a890, style: 1, ww: 0.5, wh: 0.6, bay: 3, floorH: 3.6, seed: 0.28, parapet: 0.6 });
+    draw(world, 'prop', Hm.x0 - 0.05, KERB + 3.4, Hm.z0 - 0.05, Hm.x1 + 0.05, KERB + 3.8, Hm.z1 + 0.05, BLUE_DOOR);
+    const hmc = world.ctxAt(Hm.x0, (Hm.z0 + Hm.z1) / 2);
+    hmc.prop.box(Hm.x0 - 0.12, KERB + 5.2, 662.2, Hm.x0, KERB + 6.8, 663.8, VH.col(0xf4f1ea));
+    glow(world, Hm.x0 - 0.16, KERB + 5.4, 662.4, Hm.x0 - 0.12, KERB + 6.6, 663.6, 0xfff4d8, 1.3);
+    draw(world, 'wood', Hm.x0 - 0.06, KERB, 659.5, Hm.x0, KERB + 2.5, 661.3, 0x2a62b8);
+    sbox(world, 'prop', Hm.x0 - 6.1, KERB, 670.9, Hm.x0 - 5.9, KERB + 11, 671.1, 0xf4f1ea, 'pole');
+    hmc.prop.box(Hm.x0 - 5.9, KERB + 9.6, 671.0, Hm.x0 - 3.6, KERB + 10.9, 671.04, VH.col(0x2a62b8));
+    hmc.prop.box(Hm.x0 - 5.9, KERB + 10.1, 671.0, Hm.x0 - 3.6, KERB + 10.4, 671.05, VH.col(0xf4f1ea));
+    K().sign(world, { x: Hm.x0 - 0.1, y: KERB + 3.0, z: 664.2, yaw: -PI / 2, w: 3.2, h: 0.5, lines: ['CAPITANÍA'], style: 'plaque' });
+
+    // --- the net lofts along Paloma Way: tall old sheds with gable roofs, colour-washed
+    const lofts = [[588, 626, 0xd8a24a], [632, 672, 0x3d6b8f], [678, 716, 0xc0563a], [722, 760, 0x5a8a6a]];
+    for (const [z0, z1, c] of lofts) {
+      K().building(world, 938, z0, 970, z1, 7.4, { wall: c, roof: 0x8a8070, style: 1, ww: 0.4, wh: 0.5, bay: 3.4, floorH: 3.7, seed: (z0 % 7) / 7, parapet: false });
+      K().gable(world.ctxAt(954, (z0 + z1) / 2).prop, 937.4, z0 - 0.4, 970.6, z1 + 0.4, KERB + 7.4, 3.6, 'z', TERRACOTTA, c);
+      draw(world, 'wood', 937.9, KERB, (z0 + z1) / 2 - 2.5, 938, KERB + 4.2, (z0 + z1) / 2 + 2.5, 0x5a4a3a); // the big doors
+      wallLantern(world, 938, KERB + 4.5, (z0 + z1) / 2, -1, 0);
+    }
+    // Nets drying on racks and lobster pots stacked outside the lofts (solid).
+    for (const [rz0, rz1] of [[596, 618], [690, 708]]) {
+      for (const z of [rz0, rz1]) sbox(world, 'wood', 926 - 0.1, KERB, z - 0.1, 926 + 0.1, KERB + 2.4, z + 0.1, 0x6b4e33, 'pole');
+      draw(world, 'wood', 926 - 0.06, KERB + 2.3, rz0, 926 + 0.06, KERB + 2.42, rz1, 0x6b4e33, { bottom: true });
+      draw(world, 'prop', 925.9, KERB + 0.6, rz0 + 0.2, 926.1, KERB + 2.3, rz1 - 0.2, 0x2f5a4a);
+      cbox(world, 925.8, 0, rz0, 926.2, KERB + 2.42, rz1, 'fence', F().SOLID);
+    }
+    for (let k = 0; k < 14; k++) {
+      const px = 930 + (k % 2) * 1.0, pz = 640 + Math.floor(k / 2) * 1.0 + (k > 7 ? 30 : 0), lay = k % 3;
+      sbox(world, 'wood', px - 0.45, KERB + lay * 0.0, pz - 0.45, px + 0.45, KERB + 0.6 + lay * 0.6, pz + 0.45, 0x8a6a48, 'crate');
+      draw(world, 'prop', px - 0.4, KERB + 0.6 + lay * 0.6, pz - 0.4, px + 0.4, KERB + 0.62 + lay * 0.6, pz + 0.4, 0xd8c8a0);
+    }
+
+    // --- the boatyard: two boats hauled out on trestles, the travel hoist straddling one, crates
+    hauledBoat(world, 868, 724, 12, 0x1f4f7a, 0xf4f2ec);
+    hauledBoat(world, 890, 718, 10, 0xc0392b, 0xf4f2ec);
+    const tl = { x: 868, z: 724, hw: 3.6, hz: 4.5, h: 7.5 };
+    for (const [ax, az] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) sbox(world, 'prop', tl.x + ax * tl.hw - 0.25, KERB, tl.z + az * tl.hz - 0.25, tl.x + ax * tl.hw + 0.25, KERB + tl.h, tl.z + az * tl.hz + 0.25, 0x2a62b8, 'metal');
+    for (const ax of [-1, 1]) draw(world, 'prop', tl.x + ax * tl.hw - 0.3, KERB + tl.h, tl.z - tl.hz - 0.3, tl.x + ax * tl.hw + 0.3, KERB + tl.h + 0.6, tl.z + tl.hz + 0.3, 0x2a62b8, { bottom: true });
+    for (const az of [-1, 1]) draw(world, 'prop', tl.x - tl.hw, KERB + tl.h, tl.z + az * tl.hz - 0.25, tl.x + tl.hw, KERB + tl.h + 0.5, tl.z + az * tl.hz + 0.25, 0x2a62b8, { bottom: true });
+    pave(world, 850, 700, 910, 760, 0x8a8478, 'plazaTop', KERB + 0.03, 3);
+    for (let k = 0; k < 6; k++) sbox(world, 'wood', 900 + (k % 3) * 1.4, KERB, 742 + Math.floor(k / 3) * 1.4, 901.2 + (k % 3) * 1.4, KERB + 0.9 + (k % 2) * 0.5, 743.2 + Math.floor(k / 3) * 1.4, 0x9a7650, 'crate');
+    sbox(world, 'prop', 856, KERB, 748, 862, KERB + 2.6, 752.5, 0xd8d2c6, 'metal'); // the yard's container store
+    draw(world, 'prop', 855.95, KERB + 0.2, 748.4, 856, KERB + 2.4, 752.1, 0x9a3a2a);
+
+    // --- La Gaviota, the fish restaurant on the corner, its terrace under parasols
+    const Rs = { x0: 884, x1: 922, z0: 598, z1: 622, h: 6.4 };
+    K().building(world, Rs.x0, Rs.z0, Rs.x1, Rs.z1, Rs.h, { wall: 0xf4ead8, roof: 0xb8a890, style: 1, ww: 0.55, wh: 0.6, bay: 3.2, floorH: 3.2, seed: 0.71, parapet: 0.7 });
+    glow(world, Rs.x0 + 2, KERB + 0.6, Rs.z1 + 0.02, Rs.x1 - 2, KERB + 2.6, Rs.z1 + 0.06, 0xffd9a0, 1.2);
+    for (let i = 0; i < 10; i++) {
+      const x0 = Rs.x0 + (i * (Rs.x1 - Rs.x0)) / 10, x1 = Rs.x0 + ((i + 1) * (Rs.x1 - Rs.x0)) / 10;
+      draw(world, 'prop', x0, KERB + 3.0, Rs.z1, x1, KERB + 3.12, Rs.z1 + 2.6, i % 2 ? 0xf6f1e4 : 0x2a62b8, { bottom: true });
+    }
+    cbox(world, Rs.x0, KERB + 2.9, Rs.z1, Rs.x1, KERB + 3.12, Rs.z1 + 2.6, 'crate', F().SOLID | F().SHOTS);
+    K().sign(world, { x: (Rs.x0 + Rs.x1) / 2, y: KERB + 4.2, z: Rs.z1 + 0.1, yaw: 0, w: 6, h: 1.0, lines: ['LA GAVIOTA'], style: 'neon' });
+    pave(world, Rs.x0, Rs.z1, Rs.x1, Rs.z1 + 14, 0xd8c8a6, 'plazaTop', KERB + 0.03, 2);
+    for (let x = Rs.x0 + 4; x < Rs.x1 - 2; x += 7) for (const z of [Rs.z1 + 5.5, Rs.z1 + 11]) parasolTable(world, x, z, (x + z) % 2 > 1 ? 0x2a62b8 : 0xf6f1e4);
+    // Benches facing the boats, a few palms.
+    for (let z = 610; z < 770; z += 26) world.addProp('bench', qx - 4, KERB, z + 9, -PI / 2, 1);
+    for (const [px, pz] of [[qx + 4, 646], [qx + 4, 690], [qx + 4, 772], [930, 780], [880, 780]]) world.addProp('palmTall', px, KERB, pz, (px * 3) % 6, 0.95);
+    return { quay: { x: Hb.x0 + 14, z: 770 }, market: { x: (L.x0 + L.x1) / 2, z: L.z0 - 3 } };
   }
 
   // -------------------------------------------------------------- the map
@@ -1221,14 +1429,15 @@
   VH.Districts.register({
     id: D,
     name: 'Old Paloma',
-    plots: ['paloma_fort', 'paloma_plaza'],
+    plots: ['paloma_fort', 'paloma_plaza', 'paloma_harbour'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.paloma_fort || !VH.WNKit || !VH.SouthKit) return;
       S().withUndersides(() => {
         const fort = buildFort(world);
         const plaza = buildPlaza(world);
-        world.oldPaloma = Object.assign({ plaza }, fort);
+        const harbour = buildHarbour(world);
+        world.oldPaloma = Object.assign({ plaza, harbour }, fort);
       });
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -1256,9 +1465,16 @@
       // The flat roofs on the square's east side (they look straight across at the belfry).
       const er = Pz.east[3];
       add('plaza_roofs', { name: 'The roofs round Plaza Paloma', x: (Pz.ex0 + Pz.ex1) / 2, z: (er[0] + er[1]) / 2, y: KERB + er[2], yaw: -PI / 2, kind: 'rooftop', roof: true });
+      // The old lane by the church (steps, the arch, the bakery) and the fishing harbour.
+      add('old_lanes', { name: 'The old lanes, by the bakery', x: op.lane.x, z: op.lane.z, yaw: 0, kind: 'alley' });
+      const hb = world.oldPaloma.harbour;
+      add('paloma_harbour', { name: 'The fishing harbour, Old Paloma', x: hb.quay.x, z: hb.quay.z, yaw: -PI / 2, kind: 'dock', landmark: true });
       const extra = places.extra[D];
       if (extra) {
         extra.push(
+          { x: hb.market.x, z: hb.market.z, yaw: 0, kinds: ['market', 'warehouse', 'dock'], name: 'Lonja de Paloma, the fish market' },
+          { x: HARB.x0 + 6, z: 650, yaw: -PI / 2, kinds: ['pier', 'dock', 'boardwalk', 'overlook'], name: 'The harbour quay' },
+          { x: 934, z: 700, yaw: -PI / 2, kinds: ['warehouse', 'dock'], name: 'The net lofts' },
           { x: (Pz.church.x0 + Pz.church.x1) / 2, z: Pz.church.z0 - 4, yaw: 0, kinds: ['church', 'plaza', 'street'], name: 'The steps of San Albero' },
           { x: (Pz.market.x0 + Pz.market.x1) / 2, z: 359, yaw: 0, kinds: ['market', 'storefront', 'street'], name: 'Mercado de Paloma' },
           { x: Pz.band.x + 6.5, z: Pz.band.z + 4, yaw: -PI / 2, kinds: ['park', 'plaza'], name: 'The bandstand' },

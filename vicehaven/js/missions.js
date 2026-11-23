@@ -437,17 +437,40 @@
       this._feelT = 0;
       this._avoid = 0;
       this._l = {};
+      this._startT = 2.5; // engines starting: Jay gets a head start (and again after a checkpoint retry)
+      this._backT = 0; // just rammed him: ease off so two hunters can't pin his car to a wall
+      this._bumpCool = 0;
       const lp = this.game.roadnet.nearestLane(v.pos.x, v.pos.z, v.yaw);
       if (lp) this.lane.initAt(lp);
     }
 
-    onBump() {}
+    onBump(v, other) {
+      const p = this.game.player;
+      if (!p.inVehicle || other !== p.vehicle || this._bumpCool > 0) return;
+      this._backT = 0.9;
+      this._bumpCool = 2.2;
+    }
 
     update(v, dt) {
       const p = this.game.player;
       const tgt = p.inVehicle ? p.vehicle : p;
       const dist = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
       v.input.boost = 0;
+      this._bumpCool -= dt;
+      if (this._startT > 0) {
+        this._startT -= dt;
+        v.input.accel = 0;
+        v.input.steer = 0;
+        v.input.handbrake = 1;
+        return;
+      }
+      if (this._backT > 0) {
+        this._backT -= dt;
+        v.input.accel = v.vF > 1 ? -1 : -0.5;
+        v.input.steer = 0;
+        v.input.handbrake = 0;
+        return;
+      }
       if (this._reverseT > 0) {
         this._reverseT -= dt;
         v.input.accel = -0.8;
@@ -1046,9 +1069,9 @@
           v.driver = null;
           v.controller = null;
           v.plow = false;
-        } else if (c.ai === 'hunt' && !(v.controller instanceof HuntDriver)) {
+        } else if (c.ai === 'hunt') {
           v.driver = 'ai';
-          v.controller = new HuntDriver(this, v);
+          v.controller = new HuntDriver(this, v); // a fresh one: Jay gets his head start again
         }
       }
       for (const [id, a] of Array.from(run.actors)) {
@@ -1128,6 +1151,12 @@
       } else {
         p.teleport(sp.x, sp.z, sp.yaw, sp.y);
         game.cameraRig.snapBehind(p);
+      }
+      // A retry is a fresh go: the car he's in isn't one hit from a wreck (d01 came back at 312 with two hunters beside it).
+      if (p.vehicle && !p.vehicle.wrecked && p.vehicle.health < 600) {
+        p.vehicle.health = 600;
+        p.vehicle.burning = 0;
+        if (p.vehicle.model && p.vehicle.model.setDamage) p.vehicle.model.setDamage(0.36);
       }
       // The crew who were riding with him are back in.
       if (p.vehicle) {
@@ -2572,14 +2601,19 @@
       if (!car) return;
       const dest = this._place(step.to) || { x: car.pos.x + 300, z: car.pos.z };
       const drv = new TourDriver(this, car, dest, { speedMul: step.speed || 0.9 });
-      car.driver = 'ai';
-      car.controller = drv;
-      car.noEnter = true;
-      run.targetCars = [car];
       // min: 0 is a friendly escort: no "too close", and a bump is only a bump.
       const min = step.min !== undefined ? step.min : 12;
       const friendly = min <= 0;
       const max = step.max || 110;
+      // It waits at the kerb until Jay's within range (he may have found his car a long way off,
+      // d19's valet stand): you can't lose what you haven't found yet.
+      const p0 = game.player;
+      let found = Math.hypot(car.pos.x - p0.pos.x, car.pos.z - p0.pos.z) <= max;
+      const hold = { update: (v) => { v.input.accel = 0; v.input.steer = 0; v.input.handbrake = 1; v.input.boost = 0; }, onBump() {} };
+      car.driver = 'ai';
+      car.controller = found ? drv : hold;
+      car.noEnter = true;
+      run.targetCars = [car];
       let close = 0;
       let far = 0;
       this._objective(step.objective || 'Follow ' + carRef(car) + (friendly ? '' : ' — not too close'));
@@ -2588,6 +2622,11 @@
         const p = game.player;
         const d = Math.hypot(car.pos.x - p.pos.x, car.pos.z - p.pos.z);
         if (car.wrecked) throw new MissionFailed('You wrecked the car you were supposed to follow.');
+        if (!found) {
+          if (d > max * 0.85) return false;
+          found = true;
+          car.controller = drv;
+        }
         if (drv.bumped && !friendly) throw new MissionFailed('You hit them. Cover blown.');
         if (d < min) close += this._dt;
         else close = Math.max(0, close - this._dt * 0.5);

@@ -58,7 +58,7 @@
       bio: "Built the Firecrest with Dess Marlow fifty years ago and has kept the Coral Marina lighthouse for thirty-three. Dess gave him the tin box for her daughter's seventeenth birthday. He never delivered it.",
     },
     odie: {
-      name: 'Odie Wren', role: 'Keeper of the Paloma fort light', age: 79,
+      name: 'Odie Wren', role: 'Keeper of the Paloma fort light', age: 79, alias: 'dess', // the same woman: one credit, 'Dess Marlow (Odie Wren)'
       look: { skin: 0xc68a5e, hair: 0xe8e4dc, top: 0xd8471f, bottom: 0x2b2f35, shoes: 0x3a2a1a, build: 'slim' },
       voice: { gender: 'female', pitch: 0.96, rate: 1.0 },
       bio: 'Keeps the old lighthouse on the Paloma fort, buys twelve jam doughnuts every Tuesday and taps the counter three times when she pays. Nobody on the island knows where she came from.',
@@ -132,7 +132,7 @@
       bio: 'Torch, bicycle, and a deep personal commitment to the Halcyon quad.',
     },
     benny: {
-      name: 'Benny Akande', role: 'Clerk at the Sandpiper Kwik Pik', age: 24,
+      name: 'Femi Akande', role: 'Clerk at the Sandpiper Kwik Pik', age: 24,
       look: { skin: 0x6b4430, hair: 0x111111, top: 0xc8202a, bottom: 0x2b2f35, shoes: 0xf2f2ee, build: 'slim', hat: true },
       voice: { gender: 'male', pitch: 1.05, rate: 1.05 },
       bio: 'Has worked the promenade Kwik Pik for two summers and has never been asked to open the floor safe. Until now.',
@@ -156,7 +156,7 @@
       bio: 'Has watched people fail at the Golden Grabber for forty years. Has opinions about the claw.',
     },
     ines: {
-      name: 'Ines Duarte', role: 'Café owner on Paloma Plaza', age: 70,
+      name: 'Celeste Duarte', role: 'Café owner on Paloma Plaza', age: 70,
       look: { skin: 0xc48a62, hair: 0xd8d4cc, top: 0xefefea, bottom: 0x1f3a26, shoes: 0x3a2a1a, build: 'heavy' },
       voice: { gender: 'female', pitch: 0.95, rate: 1.05 },
       bio: "Runs the café on Paloma Plaza and is Hob's best doughnut customer. Knows everybody's order.",
@@ -318,7 +318,7 @@
     bridge_mainland: { district: 'harborpoint', kind: 'street', desc: 'Anchor Street, the mainland approach to the Paloma Bridge' },
     harbor_roadblock: { district: 'harborpoint', kind: 'street', desc: 'a Guest Services roadblock on Seawall Drive, trucks across the road' },
     // Old Paloma
-    plaza_cafe: { district: 'oldpaloma', kind: 'diner', desc: "Ines's café on Paloma Plaza: three tables outside, doughnuts under a glass cover, a counter Odie taps" },
+    plaza_cafe: { district: 'oldpaloma', kind: 'diner', desc: "Celeste's café on Paloma Plaza: three tables outside, doughnuts under a glass cover, a counter Odie taps" },
     bell_tower: { district: 'oldpaloma', kind: 'church', desc: 'the church on Paloma Plaza and its bell tower, the bell visible in the arch' },
     plaza_roofs: { district: 'oldpaloma', kind: 'rooftop', desc: 'the flat roofs round the plaza, washing lines and festival bunting' },
     old_lanes: { district: 'oldpaloma', kind: 'alley', desc: 'the narrow lanes of Old Paloma, steps and arches' },

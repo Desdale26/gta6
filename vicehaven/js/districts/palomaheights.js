@@ -45,7 +45,7 @@
     // plot 807..973 x -463..-295; Mirador Road north (z -470), Paloma Way east (x 980)
     wall: { x0: 809, x1: 971, z0: -461, z1: -297, t: 0.5, h: 2.6 },
     gate: { x: 890, w: 10 },
-    side: { z: -340, w: 3.2 }, // the garden gate in the east wall
+    side: { z: -352, w: 3.2 }, // the garden gate in the east wall (opposite the gardens' west gate)
     house: { x0: 836, x1: 944, z0: -424, z1: -392, h: 11.4 },
     study: { x0: 930, z0: -416, z1: -398, win: -408, ww: 1.7 }, // ground floor room at the east end (to house.x1)
     terr: 0.9, // the terraces' height above the slab
@@ -708,6 +708,270 @@
     return { yH, pad: { x: hx, z: hz }, front: { x: ex, z: cz1 + 3 } };
   }
 
+  // --------------------------------------------- the botanical gardens
+  // plot 987..1153 x -463..-295 (Mirador Road north, Paloma Way west, Lantana Avenue east, Bridge Street south)
+  const GDN = {
+    x0: 989, x1: 1151, z0: -461, z1: -297,
+    house: { x0: 1040, x1: 1100, z0: -452, z1: -426, cx0: 1060, cx1: 1080, cz0: -455, cz1: -423, hW: 6.5, hC: 9, dome: 10 },
+    pond: { x: 1070, z: -352, r: 8.5 },
+    axis: 1070, cross: -352, // the main paths
+  };
+
+  function buildGardens(world) {
+    const G = GDN, Hs = G.house, Pd = G.pond;
+    const glass = new VH.GeometryBuilder({});
+    const white = VH.col(0xf6f4ee);
+    const gcol = VH.col(0xffffff);
+    // --- ground: lawn everywhere, gravel paths on the two axes and round the pond
+    pave(world, G.x0, G.z0, G.x1, G.z1, 0xffffff, 'grassTop', KERB + 0.015, 6);
+    world.addLawn(G.x0, G.z0, G.x1, G.z1);
+    const gravel = 0xe8dcc0;
+    pave(world, G.axis - 4, G.z0, G.axis + 4, G.z1, gravel, 'plazaTop', KERB + 0.03, 3);
+    pave(world, G.x0, G.cross - 4, G.x1, G.cross + 4, gravel, 'plazaTop', KERB + 0.03, 3);
+    pave(world, Pd.x - 14, Pd.z - 14, Pd.x + 14, Pd.z + 14, gravel, 'plazaTop', KERB + 0.032, 3);
+    pave(world, Hs.x0 - 4, Hs.z1, Hs.x1 + 4, Hs.z1 + 8, gravel, 'plazaTop', KERB + 0.031, 3);
+    // --- the railings round the gardens (a stone plinth and iron bars, solid), gates N, W, S
+    const rail = (x0, z0, x1, z1, gaps) => {
+      const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+      const a0 = alongX ? Math.min(x0, x1) : Math.min(z0, z1), a1 = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
+      const c = alongX ? z0 : x0;
+      let cur = a0;
+      const segs = [];
+      for (const [g0, g1] of gaps) { if (g0 > cur) segs.push([cur, g0]); cur = Math.max(cur, g1); }
+      if (cur < a1) segs.push([cur, a1]);
+      for (const [s0, s1] of segs) {
+        for (const [p0, p1] of cuts(s0, s1)) {
+          const B = (q0, q1, c0, c1, y0, y1) => (alongX ? [q0, y0, c0, q1, y1, c1] : [c0, y0, q0, c1, y1, q1]);
+          const ctx = alongX ? world.ctxAt((p0 + p1) / 2, c) : world.ctxAt(c, (p0 + p1) / 2);
+          ctx.concrete.box(...B(p0, p1, c - 0.25, c + 0.25, KERB, KERB + 0.6), sc(0xd8cbb0));
+          ctx.prop.box(...B(p0, p1, c - 0.03, c + 0.03, KERB + 1.75, KERB + 1.82), VH.col(IRON));
+          for (let a = p0 + 0.1; a < p1; a += 0.16) {
+            const q = alongX ? [a, c] : [c, a];
+            ctx.prop.box(q[0] - 0.015, KERB + 0.6, q[1] - 0.015, q[0] + 0.015, KERB + 1.95, q[1] + 0.015, VH.col(IRON));
+          }
+          for (let a = p0 + 3; a < p1 - 1; a += 6) {
+            const q = alongX ? [a, c] : [c, a];
+            ctx.concrete.box(q[0] - 0.3, KERB, q[1] - 0.3, q[0] + 0.3, KERB + 2.1, q[1] + 0.3, sc(0xd8cbb0));
+          }
+        }
+        cbox(world, ...(alongX ? [s0, 0, c - 0.3, s1, KERB + 2.1, c + 0.3] : [c - 0.3, 0, s0, c + 0.3, KERB + 2.1, s1]), 'fence', F().SOLID | F().SHOTS);
+      }
+    };
+    rail(G.x0, G.z0, G.x1, G.z0, [[G.axis - 4, G.axis + 4]]);
+    rail(G.x0, G.z1, G.x1, G.z1, [[G.axis - 3, G.axis + 3]]);
+    rail(G.x0, G.z0, G.x0, G.z1, [[G.cross - 3, G.cross + 3]]);
+    rail(G.x1, G.z0, G.x1, G.z1, [[G.cross - 3, G.cross + 3]]);
+    for (const [px, pz] of [[G.axis - 4.6, G.z0], [G.axis + 4.6, G.z0], [G.axis - 3.6, G.z1], [G.axis + 3.6, G.z1], [G.x0, G.cross - 3.6], [G.x0, G.cross + 3.6], [G.x1, G.cross - 3.6], [G.x1, G.cross + 3.6]]) pier(world, px, pz, 0.55, 2.9);
+    K().sign(world, { x: G.axis, y: KERB + 4.6, z: G.z0 - 0.1, yaw: PI, w: 8.5, h: 1.1, lines: ['PALOMA BOTANICAL GARDENS'], style: 'park' });
+    // The arch over the main gate that carries the sign (iron, solid posts).
+    for (const x of [G.axis - 4.3, G.axis + 4.3]) sbox(world, 'prop', x - 0.12, KERB, G.z0 - 0.12, x + 0.12, KERB + 5.4, G.z0 + 0.12, IRON, 'pole');
+    draw(world, 'prop', G.axis - 4.4, KERB + 5.2, G.z0 - 0.1, G.axis + 4.4, KERB + 5.4, G.z0 + 0.1, IRON, { bottom: true });
+
+    // --- the palm house: white iron and glass, two wings and a domed centre, doors north and south
+    const pane = (x0, y0, z0, x1, y1, z1) => glass.box(x0, y0, z0, x1, y1, z1, gcol, { bottom: true });
+    const frameV = (x0, z0, x1, z1, y0, y1, step) => {
+      // mullions along a wall line every `step` m, plus rails at the base, middle and top
+      const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+      const a0 = alongX ? x0 : z0, a1 = alongX ? x1 : z1, c = alongX ? z0 : x0;
+      const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
+      for (let a = a0; a <= a1 + 1e-6; a += step) {
+        if (alongX) ctx.prop.box(a - 0.07, y0, c - 0.09, a + 0.07, y1, c + 0.09, white);
+        else ctx.prop.box(c - 0.09, y0, a - 0.07, c + 0.09, y1, a + 0.07, white);
+      }
+      for (const y of [y0 + 0.5, (y0 + y1) / 2, y1 - 0.12]) {
+        if (alongX) ctx.prop.box(a0, y, c - 0.08, a1, y + 0.12, c + 0.08, white, { bottom: true });
+        else ctx.prop.box(c - 0.08, y, a0, c + 0.08, y + 0.12, a1, white, { bottom: true });
+      }
+    };
+    const wallG = (x0, z0, x1, z1, y0, y1, gap) => {
+      // a glass wall on a low white plinth, solid, with an optional door gap [a0, a1] (3 m high)
+      const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+      const a0 = alongX ? x0 : z0, a1 = alongX ? x1 : z1, c = alongX ? z0 : x0;
+      const parts = gap ? [[a0, gap[0]], [gap[1], a1]] : [[a0, a1]];
+      for (const [p0, p1] of parts) {
+        if (alongX) { sbox(world, 'prop', p0, KERB, c - 0.12, p1, KERB + 0.5, c + 0.12, 0xf6f4ee, 'wall'); pane(p0, KERB + 0.5, c - 0.04, p1, y1, c + 0.04); cbox(world, p0, KERB + 0.5, c - 0.12, p1, y1, c + 0.12, 'glass', F().SOLID | F().SHOTS | F().CAMERA); }
+        else { sbox(world, 'prop', c - 0.12, KERB, p0, c + 0.12, KERB + 0.5, p1, 0xf6f4ee, 'wall'); pane(c - 0.04, KERB + 0.5, p0, c + 0.04, y1, p1); cbox(world, c - 0.12, KERB + 0.5, p0, c + 0.12, y1, p1, 'glass', F().SOLID | F().SHOTS | F().CAMERA); }
+      }
+      if (gap) {
+        if (alongX) { pane(gap[0], KERB + 3.2, c - 0.04, gap[1], y1, c + 0.04); cbox(world, gap[0], KERB + 3.2, c - 0.12, gap[1], y1, c + 0.12, 'glass'); }
+        else { pane(c - 0.04, KERB + 3.2, gap[0], c + 0.04, y1, gap[1]); cbox(world, c - 0.12, KERB + 3.2, gap[0], c + 0.12, y1, gap[1], 'glass'); }
+      }
+      frameV(x0, z0, x1, z1, KERB + 0.5, y1, 2.4);
+    };
+    const yW = KERB + Hs.hW, yC = KERB + Hs.hC;
+    // Wings.
+    for (const [x0, x1] of [[Hs.x0, Hs.cx0], [Hs.cx1, Hs.x1]]) {
+      wallG(x0, Hs.z0, x1, Hs.z0, KERB, yW);
+      wallG(x0, Hs.z1, x1, Hs.z1, KERB, yW);
+      // A barrel roof: four glass facets each side of the ridge, white ribs.
+      const w = (Hs.z1 - Hs.z0) / 2, mz = (Hs.z0 + Hs.z1) / 2;
+      for (let k = 0; k < 8; k++) {
+        const a0 = (k / 8) * PI, a1 = ((k + 1) / 8) * PI;
+        const za = mz - Math.cos(a0) * w, ya = yW + Math.sin(a0) * w * 0.45;
+        const zb = mz - Math.cos(a1) * w, yb = yW + Math.sin(a1) * w * 0.45;
+        const len = Math.hypot(zb - za, yb - ya), roll = Math.atan2(yb - ya, zb - za);
+        const m = new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2, (ya + yb) / 2, (za + zb) / 2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -roll), new THREE.Vector3(x1 - x0, 0.06, len));
+        glass.merge(new THREE.BoxGeometry(1, 1, 1), m, gcol);
+        for (let x = x0; x <= x1 + 1e-6; x += 2.4) K().beam(world.ctxAt(x, mz).prop, x, ya + 0.05, za, x, yb + 0.05, zb, 0.12, white);
+      }
+      const roofTop = yW + w * 0.45;
+      cbox(world, x0, yW, Hs.z0, x1, roofTop, Hs.z1, 'glass');
+      // The wing's outer end wall.
+      const ex = x0 === Hs.x0 ? Hs.x0 : Hs.x1;
+      wallG(ex, Hs.z0, ex, Hs.z1, KERB, yW);
+      // (the gable above the end wall: glass)
+      const gpts = [];
+      for (let k = 0; k <= 8; k++) { const a = (k / 8) * PI; gpts.push([mz - Math.cos(a) * w, yW + Math.sin(a) * w * 0.45]); }
+      for (let k = 0; k < 8; k++) glass.polygon([[ex, yW, gpts[k][0]], [ex, gpts[k][1], gpts[k][0]], [ex, gpts[k + 1][1], gpts[k + 1][0]], [ex, yW, gpts[k + 1][0]]], gcol);
+    }
+    // The centre: taller, doors on the main axis, a glass dome and a lantern on top.
+    wallG(Hs.cx0, Hs.cz0, Hs.cx1, Hs.cz0, KERB, yC, [G.axis - 1.6, G.axis + 1.6]);
+    wallG(Hs.cx0, Hs.cz1, Hs.cx1, Hs.cz1, KERB, yC, [G.axis - 1.6, G.axis + 1.6]);
+    wallG(Hs.cx0, Hs.cz0, Hs.cx0, Hs.z0, KERB, yC);
+    wallG(Hs.cx0, Hs.z1, Hs.cx0, Hs.cz1, KERB, yC);
+    wallG(Hs.cx1, Hs.cz0, Hs.cx1, Hs.z0, KERB, yC);
+    wallG(Hs.cx1, Hs.z1, Hs.cx1, Hs.cz1, KERB, yC);
+    // (where the wings meet the centre, above the wings' roofs: glass)
+    for (const x of [Hs.cx0, Hs.cx1]) { pane(x - 0.04, yW, Hs.z0, x + 0.04, yC, Hs.z1); cbox(world, x - 0.12, yW, Hs.z0, x + 0.12, yC, Hs.z1, 'glass'); }
+    glass.box(Hs.cx0, yC - 0.05, Hs.cz0, Hs.cx1, yC + 0.05, Hs.cz1, gcol, { bottom: true });
+    const dm = new THREE.SphereGeometry(Hs.dome * 0.98, 20, 8, 0, PI * 2, 0, PI / 2);
+    const m4 = new THREE.Matrix4();
+    glass.merge(dm, m4.makeTranslation(G.axis, yC, (Hs.cz0 + Hs.cz1) / 2), gcol);
+    dm.dispose();
+    const hctx = world.ctxAt(G.axis, (Hs.z0 + Hs.z1) / 2);
+    for (let k = 0; k < 12; k++) {
+      // the dome's white ribs
+      const a = (k / 12) * PI * 2;
+      let px = G.axis + Math.cos(a) * Hs.dome, py = yC, pz = (Hs.cz0 + Hs.cz1) / 2 + Math.sin(a) * Hs.dome;
+      for (let i = 1; i <= 6; i++) {
+        const e = (i / 6) * (PI / 2) * 0.97;
+        const nx = G.axis + Math.cos(a) * Hs.dome * Math.cos(e), ny = yC + Hs.dome * Math.sin(e), nz = (Hs.cz0 + Hs.cz1) / 2 + Math.sin(a) * Hs.dome * Math.cos(e);
+        K().beam(hctx.prop, px, py, pz, nx, ny, nz, 0.14, white);
+        px = nx; py = ny; pz = nz;
+      }
+    }
+    hctx.prop.cylinder(G.axis, yC + Hs.dome - 0.2, (Hs.cz0 + Hs.cz1) / 2, 1.2, 1.2, 1.4, 10, white, true);
+    hctx.prop.cylinder(G.axis, yC + Hs.dome + 1.2, (Hs.cz0 + Hs.cz1) / 2, 1.3, 0.1, 1.2, 10, VH.col(0x2f6a4a), false);
+    hctx.prop.box(G.axis - 0.05, yC + Hs.dome + 2.4, (Hs.cz0 + Hs.cz1) / 2 - 0.05, G.axis + 0.05, yC + Hs.dome + 3.6, (Hs.cz0 + Hs.cz1) / 2 + 0.05, VH.col(0xc9a227));
+    cbox(world, Hs.cx0, yC, Hs.cz0, Hs.cx1, yC + 0.12, Hs.cz1, 'glass');
+    for (let k = 0; k < 5; k++) S().disc(world, G.axis, (Hs.cz0 + Hs.cz1) / 2, Math.sqrt(Math.max(0.5, Hs.dome * Hs.dome - (k * 2 + 2) * (k * 2 + 2))), yC + k * 2, yC + k * 2 + 2, 'glass');
+    // Inside: a tiled path, beds of tropical planting, tall palms under the dome, a little pool, benches, lamps.
+    pave(world, Hs.x0 + 0.2, Hs.z0 + 0.2, Hs.x1 - 0.2, Hs.z1 - 0.2, 0xc9b48e, 'plazaTop', KERB + 0.035, 2);
+    pave(world, G.axis - 1.6, Hs.cz0, G.axis + 1.6, Hs.cz1, 0xe8dcc0, 'plazaTop', KERB + 0.04, 2);
+    pave(world, Hs.x0 + 1, (Hs.z0 + Hs.z1) / 2 - 1.3, Hs.x1 - 1, (Hs.z0 + Hs.z1) / 2 + 1.3, 0xe8dcc0, 'plazaTop', KERB + 0.04, 2);
+    for (const [bx0, bz0, bx1, bz1] of [[Hs.x0 + 1.5, Hs.z0 + 1.5, Hs.cx0 - 1.5, (Hs.z0 + Hs.z1) / 2 - 2.2], [Hs.x0 + 1.5, (Hs.z0 + Hs.z1) / 2 + 2.2, Hs.cx0 - 1.5, Hs.z1 - 1.5], [Hs.cx1 + 1.5, Hs.z0 + 1.5, Hs.x1 - 1.5, (Hs.z0 + Hs.z1) / 2 - 2.2], [Hs.cx1 + 1.5, (Hs.z0 + Hs.z1) / 2 + 2.2, Hs.x1 - 1.5, Hs.z1 - 1.5]]) {
+      sbox(world, 'concrete', bx0, KERB, bz0, bx1, KERB + 0.45, bz1, 0xcdbd98, 'wall');
+      pave(world, bx0 + 0.2, bz0 + 0.2, bx1 - 0.2, bz1 - 0.2, 0x4a3a28, 'decal', KERB + 0.46, 1);
+      const bc = world.ctxAt((bx0 + bx1) / 2, (bz0 + bz1) / 2);
+      for (let x = bx0 + 1.5; x < bx1 - 1; x += 3.2) for (let z = bz0 + 1.4; z < bz1 - 1; z += 3) {
+        // ferns and banana plants: clusters of green fronds (solid round their stems)
+        const h = 1.2 + ((x * 7 + z * 3) % 10) / 10;
+        bc.hedge.cylinder(x, KERB + 0.45, z, 0.25, 1.1, h, 7, VH.col((x + z) % 2 > 1 ? 0x3f8a3a : 0x2f6e2c), true);
+        bc.hedge.cylinder(x + 0.5, KERB + 0.45 + h * 0.6, z - 0.4, 0.1, 0.8, 0.6, 5, VH.col(0x5aa040), true);
+      }
+      cbox(world, bx0, 0, bz0, bx1, KERB + 2.4, bz1, 'hedge', F().SOLID | F().SHOTS);
+    }
+    for (const [px, pz] of [[G.axis - 6, Hs.cz0 + 5], [G.axis + 6, Hs.cz0 + 5], [G.axis - 6, Hs.cz1 - 5], [G.axis + 6, Hs.cz1 - 5]]) {
+      S().drum(world, hctx.concrete, px, KERB, pz, 1.4, 0.5, 10, 0xcdbd98, 'wall');
+      world.addProp('palmTall', px, KERB + 0.5, pz, (px * 3) % 6, 1.15);
+    }
+    hctx.propMatte.cylinder(G.axis, KERB, (Hs.cz0 + Hs.cz1) / 2, 2.0, 2.0, 0.45, 16, VH.col(0xe2d4b4), true);
+    hctx.screen.cylinder(G.axis, KERB + 0.3, (Hs.cz0 + Hs.cz1) / 2, 1.75, 1.75, 0.1, 16, VH.col(0x2a8a9a, 0.6), true);
+    S().disc(world, G.axis, (Hs.cz0 + Hs.cz1) / 2, 2.02, 0, KERB + 0.45, 'fountain');
+    for (const x of [Hs.x0 + 4, Hs.x0 + 12, Hs.x1 - 4, Hs.x1 - 12]) glow(world, x - 0.3, yW - 0.4, (Hs.z0 + Hs.z1) / 2 - 0.3, x + 0.3, yW - 0.2, (Hs.z0 + Hs.z1) / 2 + 0.3, 0xffe8b8, 1.8);
+    for (const [lx, lz] of [[G.axis - 8, (Hs.cz0 + Hs.cz1) / 2], [G.axis + 8, (Hs.cz0 + Hs.cz1) / 2]]) glow(world, lx - 0.3, yC - 0.6, lz - 0.3, lx + 0.3, yC - 0.35, lz + 0.3, 0xffe8b8, 1.8);
+    // The glass, all of it, as one transparent mesh.
+    const gGeo = glass.build();
+    const gMat = new THREE.MeshStandardMaterial({ color: 0xcfe9ee, transparent: true, opacity: 0.26, roughness: 0.08, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+    const gMesh = new THREE.Mesh(gGeo, gMat);
+    gMesh.name = 'palm house glass';
+    gMesh.renderOrder = 2;
+    world.scene.add(gMesh);
+
+    // --- the lily pond on the crossing: a stone rim, dark water, lily pads, a jet in the middle
+    const pctx = world.ctxAt(Pd.x, Pd.z);
+    const rimC = VH.col(0xe2d4b4);
+    pctx.propMatte.cylinder(Pd.x, KERB, Pd.z, Pd.r + 0.4, Pd.r + 0.4, 0.5, 28, rimC, true);
+    pctx.screen.cylinder(Pd.x, KERB + 0.42, Pd.z, Pd.r - 0.1, Pd.r - 0.1, 0.1, 28, VH.col(0x24606a, 0.55), true);
+    for (let k = 0; k < 16; k++) {
+      const a = k * 2.4, rr = 2.2 + (k * 1.7) % (Pd.r - 3);
+      const lx = Pd.x + Math.cos(a) * rr, lz = Pd.z + Math.sin(a) * rr;
+      pctx.hedge.cylinder(lx, KERB + 0.53, lz, 0.55, 0.55, 0.03, 8, VH.col(0x4f9a3a), true);
+      if (k % 3 === 0) pctx.hedge.cylinder(lx + 0.15, KERB + 0.56, lz, 0.12, 0.05, 0.12, 5, VH.col(0xf6c8d8), true);
+    }
+    pctx.propMatte.cylinder(Pd.x, KERB + 0.5, Pd.z, 0.6, 0.45, 1.3, 10, rimC, true);
+    world.fountains = world.fountains || [];
+    world.fountains.push({ x: Pd.x, y: KERB + 0.5, z: Pd.z, r: Pd.r - 0.5 });
+    S().disc(world, Pd.x, Pd.z, Pd.r + 0.42, 0, KERB + 0.5, 'fountain');
+    world.physics.addBox(Pd.x - 0.6, 0, Pd.z - 0.6, Pd.x + 0.6, KERB + 1.8, Pd.z + 0.6, 'fountain');
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * PI * 2 + PI / 8;
+      world.addProp('bench', Pd.x + Math.cos(a) * 12.4, KERB, Pd.z + Math.sin(a) * 12.4, -a - PI / 2, 1);
+    }
+
+    // --- the hedged rooms: four quarters of clipped yew rooms off the gravel walks, beds of flowers in them
+    const flowers = [[0xe8483a, 0xf0d050], [0xe86ab0, 0xffffff], [0x8a5aa0, 0xf0a030], [0xf0d050, 0x3d6b8f]];
+    const quarters = [
+      [G.x0 + 3, -418, G.axis - 6, G.cross - 6], [G.axis + 6, -418, G.x1 - 3, G.cross - 6],
+      [G.x0 + 3, G.cross + 6, G.axis - 6, G.z1 - 3], [G.axis + 6, G.cross + 6, G.x1 - 3, G.z1 - 3],
+    ];
+    let ri = 0;
+    for (const [qx0, qz0, qx1, qz1] of quarters) {
+      const nx = Math.max(1, Math.floor((qx1 - qx0 + 3) / 17)), nz = Math.max(1, Math.floor((qz1 - qz0 + 3) / 17));
+      const rw = (qx1 - qx0 - 3 * (nx - 1)) / nx, rd = (qz1 - qz0 - 3 * (nz - 1)) / nz;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+        const x0 = qx0 + i * (rw + 3), x1 = x0 + rw, z0 = qz0 + j * (rd + 3), z1 = z0 + rd;
+        // Skip rooms that would sit on the pond's gravel ring.
+        if (x1 > Pd.x - 15 && x0 < Pd.x + 15 && z1 > Pd.z - 15 && z0 < Pd.z + 15) continue;
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, t = 0.9, gw = 1.4;
+        hedge(world, x0, z0, mx - gw, z0 + t, 1.5);
+        hedge(world, mx + gw, z0, x1, z0 + t, 1.5);
+        hedge(world, x0, z1 - t, mx - gw, z1, 1.5);
+        hedge(world, mx + gw, z1 - t, x1, z1, 1.5);
+        hedge(world, x0, z0 + t, x0 + t, z1 - t, 1.5);
+        hedge(world, x1 - t, z0 + t, x1, z1 - t, 1.5);
+        const fl = flowers[ri++ % flowers.length];
+        const bctx = world.ctxAt(mx, mz);
+        if (ri % 4 === 0) {
+          world.addProp('treeB', mx, KERB, mz, ri % 6, 1.0);
+          world.addProp('bench', mx, KERB, z0 + 2.2, 0, 1);
+        } else {
+          // Four low beds round a sundial-like urn.
+          for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            const bx0 = mx + sx * 1.6 - (sx < 0 ? rw / 2 - 3.4 : 0), bx1 = mx + sx * 1.6 + (sx > 0 ? rw / 2 - 3.4 : 0);
+            const bz0 = mz + sz * 1.6 - (sz < 0 ? rd / 2 - 3.4 : 0), bz1 = mz + sz * 1.6 + (sz > 0 ? rd / 2 - 3.4 : 0);
+            const lo = Math.min(bx0, bx1), hi = Math.max(bx0, bx1), lz = Math.min(bz0, bz1), hz = Math.max(bz0, bz1);
+            if (hi - lo < 1 || hz - lz < 1) continue;
+            bctx.hedge.box(lo, KERB, lz, hi, KERB + 0.35, hz, VH.col(0x3f7a34));
+            for (let x = lo + 0.4; x < hi - 0.3; x += 0.8) for (let z = lz + 0.4; z < hz - 0.3; z += 0.8) bctx.hedge.box(x - 0.22, KERB + 0.35, z - 0.22, x + 0.22, KERB + 0.55, z + 0.22, VH.col(fl[Math.round(x + z) % 2]));
+            cbox(world, lo, 0, lz, hi, KERB + 0.55, hz, 'hedge', F().SOLID | F().SHOTS);
+          }
+          S().drum(world, bctx.concrete, mx, KERB, mz, 0.45, 1.0, 8, 0xe2d4b4, 'wall');
+        }
+      }
+    }
+    // Trees along the railings, palms along the main walk, lamps on the walks.
+    for (let x = G.x0 + 8; x < G.x1 - 4; x += 12) {
+      if (Math.abs(x - G.axis) < 8) continue;
+      world.addProp('tree', x, KERB, G.z1 + 1.8, (x * 3) % 6, 1.1);
+      if (x < Hs.x0 - 6 || x > Hs.x1 + 6) world.addProp('treeB', x, KERB, G.z0 + 2.2, (x * 7) % 6, 1.1);
+    }
+    for (let z = G.z0 + 10; z < G.z1 - 4; z += 12) {
+      if (Math.abs(z - G.cross) < 8) continue;
+      world.addProp('tree', G.x0 + 1.8, KERB, z, (z * 3) % 6, 1.05);
+      world.addProp('tree', G.x1 - 1.8, KERB, z, (z * 5) % 6, 1.05);
+    }
+    for (let z = -418; z < G.z1 - 3; z += 10) {
+      if (Math.abs(z - Pd.z) < 16) continue;
+      for (const x of [G.axis - 5.2, G.axis + 5.2]) world.addProp('palmTall', x, KERB, z, (z * 7) % 6, 0.9);
+    }
+    for (let x = G.x0 + 10; x < G.x1 - 6; x += 16) {
+      if (Math.abs(x - G.axis) < 18) continue;
+      world.addProp('streetlight', x, KERB, G.cross - 4.6, 0, 0.7);
+    }
+    return { westGate: { x: G.x0 + 8, z: G.cross }, house: { x: G.axis, z: Hs.cz1 + 4 } };
+  }
+
   /** A parked car drawn into the chunk (body, cabin, wheels), solid. */
   function parkedCar(world, x, z, yaw, hex) {
     const ctx = world.ctxAt(x, z);
@@ -751,7 +1015,7 @@
   VH.Districts.register({
     id: D,
     name: 'Paloma Heights',
-    plots: ['paloma_estate', 'paloma_observatory'],
+    plots: ['paloma_estate', 'paloma_observatory', 'paloma_gardens'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.paloma_estate || !VH.WNKit || !VH.SouthKit) return;
@@ -759,7 +1023,8 @@
         const estate = buildEstate(world);
         const observatory = buildObservatory(world);
         const clinic = buildClinic(world);
-        world.palomaHeights = { estate, observatory, clinic };
+        const gardens = buildGardens(world);
+        world.palomaHeights = { estate, observatory, clinic, gardens };
       });
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -783,8 +1048,16 @@
       add('observatory_lawn', { name: 'The observatory lawn', x: (LAWN.x0 + LAWN.x1) / 2, z: (LAWN.z0 + LAWN.z1) / 2, yaw: 0, kind: 'park' });
       add('paloma_clinic', { name: 'The Paloma Clinic', x: cl.front.x, z: cl.front.z, yaw: PI, kind: 'hospital_front' });
       add('clinic_helipad', { name: 'The Paloma Clinic helipad', x: cl.pad.x, z: cl.pad.z, y: cl.yH, yaw: 0, kind: 'rooftop', roof: true });
+      // The gardens: inside the west gate on the cross walk (Paloma Way and the estate's garden gate opposite).
+      const gd = ph.gardens;
+      add('paloma_gardens', { name: 'Paloma Botanical Gardens', x: gd.westGate.x, z: gd.westGate.z, yaw: -PI / 2, kind: 'park', landmark: true });
       const extra = places.extra[D];
       if (extra) {
+        extra.push(
+          { x: gd.house.x, z: gd.house.z, yaw: PI, kinds: ['park', 'storefront'], name: 'The palm house' },
+          { x: GDN.pond.x + 12.5, z: GDN.pond.z, yaw: -PI / 2, kinds: ['park', 'plaza'], name: 'The lily pond' },
+          { x: OBS.x - 14, z: OBS.z + 14, yaw: 0, kinds: ['park', 'overlook'], name: 'The observatory forecourt' },
+        );
         extra.push(
           { x: EST.gate.x, z: EST.house.z0 - 9, yaw: PI, kinds: ['mansion', 'parking'], name: 'The forecourt, Villa Castellane' },
           { x: EST.pool.x0 - 3, z: EST.pool.z1 + 5, yaw: PI, kinds: ['mansion', 'park'], name: 'The pool, Villa Castellane' },

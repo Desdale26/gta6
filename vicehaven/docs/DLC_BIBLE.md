@@ -322,11 +322,11 @@ Give each the look and voice in `dlc.js`; use these ids.
 - **Clem Ruddock** (`clem`), 70: Cinder Creek Storage manager and auctioneer, fastest mouth in the west (d01).
 - **Gorse** (no speaker; a name on a file): the Castellanes' private detective fifty years ago.
 - **Officer Plum** (`plum`), 59: Halcyon campus security, torch, bicycle, takes his job very seriously (d05).
-- **Benny Akande** (`benny`), 24: the Sandpiper Kwik Pik clerk who has to open a floor safe nobody has opened in fifty years for a man who doesn't want the money (d12).
+- **Femi Akande** (`benny`), 24: the Sandpiper Kwik Pik clerk who has to open a floor safe nobody has opened in fifty years for a man who doesn't want the money (d12).
 - **Gully** (`gully`), 22: Sandpiper lifeguard with a whistle and a grudge (d11, dsf1).
 - **Captain Daventry** (`daventry`), 50: Castellane's charter pilot, a Guest Services man in a pilot's hat (d15 to d16).
 - **Lorna Pike** (`lorna`), 66: the Wonder Wharf arcade attendant who has watched people fail at the Golden Grabber for forty years (d19).
-- **Ines Duarte** (`ines`), 70: runs the café on Paloma Plaza; Hob's best doughnut customer (d17, d21).
+- **Celeste Duarte** (`ines`), 70: runs the café on Paloma Plaza; Hob's best doughnut customer (d17, d21).
 - **Teddy Castellane** (`teddy`), 21: Leo's nephew and the Castellane Racing works driver; Pip's rival in *Summer Series*. Talented, spoilt, not a villain.
 - **Rosa Lindqvist** (`rosa`), 16: June's most nervous pupil (*Dual Control*).
 - **Guest Services staff** (`gs_staff`): generic teal-blazered goons. "Good afternoon." Then they shoot.
@@ -437,7 +437,7 @@ The police (`vpd`) work as in the main game: heat from crimes seen, the helicopt
 | `bridge_island_end` | neonstrand | street | the island end of the Paloma Bridge, where Guest Services put their roadblock |
 | `bridge_mainland` | harborpoint | street | Anchor Street, the mainland approach to the Paloma Bridge |
 | `harbor_roadblock` | harborpoint | street | a Guest Services roadblock on Seawall Drive, trucks across the road |
-| `plaza_cafe` | oldpaloma | diner | Ines's café on Paloma Plaza: three tables outside, doughnuts under a glass cover, a counter Odie taps |
+| `plaza_cafe` | oldpaloma | diner | Celeste's café on Paloma Plaza: three tables outside, doughnuts under a glass cover, a counter Odie taps |
 | `bell_tower` | oldpaloma | church | the church on Paloma Plaza and its bell tower, the bell visible in the arch |
 | `plaza_roofs` | oldpaloma | rooftop | the flat roofs round the plaza, washing lines, festival bunting |
 | `old_lanes` | oldpaloma | alley | the narrow lanes of Old Paloma, steps and arches |
@@ -701,7 +701,7 @@ R6's two eyes on two tall chairs are the lamps on lifeguard towers 7 and 8, but 
 
 #### d12_floor_safe: Not the Money
 `giver: pip` · `start: sandpiper_promenade` · `time: 19` · `estMinutes: 8` · Core: **shop hold-up** (aim at the clerk, make him open the floor safe)
-The speed shop's ghost letters are still above the Kwik Pik on the promenade (`promenade_kwikpik`), and the old floor safe behind the counter has never been opened: the clerk, Benny Akande, says nobody knows the combination and the owner says it's "structural". Jay tries asking nicely, then buying a lot of crisps, then holds up the shop with the engine's hold-up mechanic so Benny will open the safe with 7 - 17 - 50, leaving the till alone ("You're not taking the money?" "Just the envelope." "...Can I have a photo?"). The CCTV sends two stars after him; Jay loses them along the coast road (`loseHeat`) with Pip reading the envelope aloud: **R8**, plus a photo of baby June asleep on the Firecrest's passenger seat. As they lose the last patrol car, Toby phones from Cinder Creek: there's a teal truck outside lot 17 and the door is up. Reward $800 and a bag of crisps.
+The speed shop's ghost letters are still above the Kwik Pik on the promenade (`promenade_kwikpik`), and the old floor safe behind the counter has never been opened: the clerk, Femi Akande, says nobody knows the combination and the owner says it's "structural". Jay tries asking nicely, then buying a lot of crisps, then holds up the shop with the engine's hold-up mechanic so Femi will open the safe with 7 - 17 - 50, leaving the till alone ("You're not taking the money?" "Just the envelope." "...Can I have a photo?"). The CCTV sends two stars after him; Jay loses them along the coast road (`loseHeat`) with Pip reading the envelope aloud: **R8**, plus a photo of baby June asleep on the Firecrest's passenger seat. As they lose the last patrol car, Toby phones from Cinder Creek: there's a teal truck outside lot 17 and the door is up. Reward $800 and a bag of crisps.
 
 #### d13_the_crusher: The Crusher
 `giver: toby` · `start: lot_17` · `time: 19.5` · `estMinutes: 10` · Core: **timed rescue under fire** (`timer` to the scrapyard, `kill` groups, then `collect` off the conveyor against a second timer)
@@ -727,7 +727,7 @@ From here until d26 the Paloma Bridge is watched by Guest Services ("Welcome Che
 
 #### d17_contraband: Contraband
 `giver: hob` · `start: hob_hangar` · `time: 7.5` · `estMinutes: 9` · Core: **timed delivery** (`deliver: 'doughnut_van', to: 'plaza_cafe', maxDamage: 0.35, timeLimit: 240`)
-Hob, over a kettle in the hangar mouth, explains the island: Castellane owns every bakery on it, and only Castellane Croissants may be sold, so every Tuesday Hob flies in real doughnuts for the old folk of Old Paloma. In exchange for hiding the parts, Jay drives Hob's cream van of doughnuts from Paloma Field down the Neon Strand to Ines's café on Paloma Plaza, through a Guest Services "Welcome Check" at `strand_checkpoint` (Hob, riding along, hides the boxes under a tarpaulin marked AVIATION PARTS and talks the guards into a confused croissant debate) and past Wonder Wharf's big wheel (`camera: wonder_wharf`, no comment: the fair-play shot for R8). Doughnuts squash if the van is knocked about ("That's a jam casualty, son"). At the café an old woman in a flame-orange cardigan, the fort's lighthouse keeper Odie Wren (speaker `odie`), buys twelve jam ones, taps the counter three times, looks at the gold keyring on Jay's belt (Pip clipped it there that morning: "Driver holds the key") and says "Pretty bird," and goes. Milo, on the phone, solves R8: the wheel that goes nowhere is the big wheel, and the box where nobody wins is the Golden Grabber beside it. Reward $1,200 and a doughnut.
+Hob, over a kettle in the hangar mouth, explains the island: Castellane owns every bakery on it, and only Castellane Croissants may be sold, so every Tuesday Hob flies in real doughnuts for the old folk of Old Paloma. In exchange for hiding the parts, Jay drives Hob's cream van of doughnuts from Paloma Field down the Neon Strand to Celeste's café on Paloma Plaza, through a Guest Services "Welcome Check" at `strand_checkpoint` (Hob, riding along, hides the boxes under a tarpaulin marked AVIATION PARTS and talks the guards into a confused croissant debate) and past Wonder Wharf's big wheel (`camera: wonder_wharf`, no comment: the fair-play shot for R8). Doughnuts squash if the van is knocked about ("That's a jam casualty, son"). At the café an old woman in a flame-orange cardigan, the fort's lighthouse keeper Odie Wren (speaker `odie`), buys twelve jam ones, taps the counter three times, looks at the gold keyring on Jay's belt (Pip clipped it there that morning: "Driver holds the key") and says "Pretty bird," and goes. Milo, on the phone, solves R8: the wheel that goes nowhere is the big wheel, and the box where nobody wins is the Golden Grabber beside it. Reward $1,200 and a doughnut.
 
 #### d18_ground_school: Ground School
 `giver: hob` · `start: field_apron` · `time: 9.5` · `estMinutes: 10` · Core: **flying lesson** (Skylark: taxi, take off, `fly` rings, `land`)
@@ -743,7 +743,7 @@ Quill has crossed on the ferry (seasick; fine in the helicopter, which makes no 
 
 #### d21_ring_twice: Ring Twice
 `giver: milo` · `start: paloma_plaza` · `time: 11.5` · `estMinutes: 10` · Core: **rooftop shoot-out** (`kill` groups on `plaza_roofs`)
-R9's bell only swings for a wedding or a festival, and today is Old Paloma's harbour festival: bunting, a brass band, Ines's café doing a roaring trade. At noon, when the fishing boats come into `paloma_harbour` (`camera` shot), Jay climbs the bell tower (`goto: 'bell_tower'` on foot), rings the bell once, hears the clunk, and finds the ignition coil taped inside the hollow clapper (`collect`), wrapped in **R10**. Guest Services gunmen stand up on the roofs round the plaza; the crowd scatters and Jay fights across `plaza_roofs` (three groups; two with `dlc_dash_in`, because Dash and Kit, filming loudly in the square, draw one group down). Then down through `old_lanes` to `paloma_harbour`, where Hob's van waits with the engine running. Ines's verdict on the day: "Best festival in years." Reward $2,500, rifle.
+R9's bell only swings for a wedding or a festival, and today is Old Paloma's harbour festival: bunting, a brass band, Celeste's café doing a roaring trade. At noon, when the fishing boats come into `paloma_harbour` (`camera` shot), Jay climbs the bell tower (`goto: 'bell_tower'` on foot), rings the bell once, hears the clunk, and finds the ignition coil taped inside the hollow clapper (`collect`), wrapped in **R10**. Guest Services gunmen stand up on the roofs round the plaza; the crowd scatters and Jay fights across `plaza_roofs` (three groups; two with `dlc_dash_in`, because Dash and Kit, filming loudly in the square, draw one group down). Then down through `old_lanes` to `paloma_harbour`, where Hob's van waits with the engine running. Celeste's verdict on the day: "Best festival in years." Reward $2,500, rifle.
 
 #### d22_two_lights: Two Lights
 `giver: toby` · `start: field_apron` · `time: 21.5` · `estMinutes: 10` · Core: **night flight** (Skylark, a chain of `fly` rings along the beam, then `land`)

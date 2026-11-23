@@ -185,9 +185,9 @@
       { music: 'action', checkpoint: true },
       {
         deliver: 'doughnut_van', to: 'plaza_cafe', maxDamage: 0.35, timeLimit: 240,
-        objective: "Get the doughnuts to Ines's café before she opens (keep them in one piece)",
+        objective: "Get the doughnuts to Celeste's café before she opens (keep them in one piece)",
         say: [
-          ['hob', "Ines opens at eight. The croissant man walks past at eight. We've got till then."],
+          ['hob', "Celeste opens at eight. The croissant man walks past at eight. We've got till then."],
           ['jay', 'Or what?'],
           ['hob', 'Or he sees the boxes, and I get a letter. On very thick paper. I have a drawer of them.'],
           ['hob', 'Right, the orders. Mr Okafor: six glazed, no talking to him before he\'s had one.'],
@@ -218,9 +218,9 @@
       {
         scene: { at: 'plaza_cafe', cast: ['ines', 'odie', 'hob'] },
         say: [
-          ['caption', "Ines's café: three tables outside, a striped awning, a glass cover on the counter with nothing under it yet."],
+          ['caption', "Celeste's café: three tables outside, a striped awning, a glass cover on the counter with nothing under it yet."],
           ['ines', '(already holding the door, looking both ways along the plaza) Inside. Quick. Quick. The croissant man walks past at eight.'],
-          ['caption', 'Hob and Jay carry the boxes in like ammunition in a war film. Ines stacks them under the counter and drapes a tea towel over the top.'],
+          ['caption', 'Hob and Jay carry the boxes in like ammunition in a war film. Celeste stacks them under the counter and drapes a tea towel over the top.'],
           ['ines', '(to Jay, without looking up) You are new. You carry like a man who has never carried custard.'],
           ['jay', "I haven't."],
           ['ines', 'It shows.'],
@@ -233,7 +233,7 @@
           ['odie', 'I know. That was the look.'],
           ['caption', 'She puts the exact money on the counter in a neat pile, coins on top of the note.'],
           ['odie', '(tapping the counter three times, as if to a car) There.'],
-          ['caption', 'Ines bags twelve jam doughnuts. The old woman takes them, and then her eye lands on the little gold bird hanging from Jay\'s belt. She looks at it for a long moment.'],
+          ['caption', 'Celeste bags twelve jam doughnuts. The old woman takes them, and then her eye lands on the little gold bird hanging from Jay\'s belt. She looks at it for a long moment.'],
           ['odie', 'Pretty bird.'],
           ['caption', 'Then she goes, without hurrying, out across the plaza and down into the lanes.'],
           ['hob', "Odie Wren. Keeps the fort light. Twenty years I've done her doughnuts. Never once said thank you. Pays exact."],
@@ -374,8 +374,8 @@
         say: [
           ['hob', "Bank her round. Gentle. Gentle. Lean, don't throw. Out to the south shore."],
           ['hob', 'Old Paloma under your right wing. Church, plaza, harbour. Best fish on the island, worst parking.'],
-          ['jay', "Ines's place."],
-          ['hob', 'Ines. Married three times, all to fishermen, all called Tomás. She says it saves on monograms.'],
+          ['jay', "Celeste's place."],
+          ['hob', 'Celeste. Married three times, all to fishermen, all called Tomás. She says it saves on monograms.'],
           ['caption', 'Ahead, at the very tip of the island, an old star-shaped stone fort and a white lighthouse on its seaward wall.'],
         ],
       },
@@ -665,7 +665,13 @@
         ],
       },
       { leave: ['gs_driver1', 'gs_driver2'], vanish: true },
-      { loseHeat: true, objective: 'Lose the police before you go in' },
+      {
+        loseHeat: true, objective: 'Lose the police before you go in',
+        say: [
+          ['hob', "(phone) Anybody in blue behind you, son, lose them first. The sign doesn't work on police. I've tried."],
+          ['jay', 'Noted.'],
+        ],
+      },
       { music: 'hope' },
       {
         spawn: [

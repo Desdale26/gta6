@@ -1134,11 +1134,14 @@
       const ending = f.dlc_end_hers ? 'Ending: Hers' : f.dlc_end_everybody ? 'Ending: Everybody\'s' : f.dlc_end_gone ? 'Ending: Gone Again' : '';
       const chars = Object.assign({}, (VH.Data.story && VH.Data.story.characters) || {}, D.characters || {});
       // Jay, then the DLC's named cast in the header's order (the walk-ons, with no surname or a job for a name, stay out).
+      // A name somebody goes by for a while (`alias: 'dess'` on Odie Wren) shares that person's line: 'Dess Marlow (Odie Wren)'.
+      const aka = {};
+      for (const c of Object.values(D.characters || {})) if (c && c.alias && c.name) (aka[c.alias] = aka[c.alias] || []).push(c.name);
       const ids = ['jay'].concat(Object.keys(D.characters || {}).filter((id) => {
         const c = D.characters[id];
-        return c && c.name && /\s/.test(c.name) && !/^(Guest Services|Police|Vicehaven|Castellane|Studio|Popcorn)\b/.test(c.name);
+        return c && c.name && !c.alias && /\s/.test(c.name) && !/^(Guest Services|Police|Vicehaven|Castellane|Studio|Popcorn)\b/.test(c.name);
       }));
-      const cast = ids.filter((id) => chars[id]).map((id) => ({ name: chars[id].name, role: chars[id].role || '' }));
+      const cast = ids.filter((id) => chars[id]).map((id) => ({ name: chars[id].name + (aka[id] ? ' (' + aka[id].join(', ') + ')' : ''), role: chars[id].role || '' }));
       const pr = m.dlcProgress;
       const lessons = (m.dlcSide || []).length;
       const stats = [
