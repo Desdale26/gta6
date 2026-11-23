@@ -773,8 +773,10 @@
           baseLabel: null,
         };
         item.baseLabel = item.label;
-        this.game.interaction.register(item);
-        this._promptItems.push(item);
+        // register() keeps a copy: hold on to that one, so a changed label (or a prompt switched off) shows.
+        const I = this.game.interaction;
+        I.register(item);
+        this._promptItems.push(I.items[I.items.length - 1]);
       });
     }
 

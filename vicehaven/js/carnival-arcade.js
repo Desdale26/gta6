@@ -5241,7 +5241,7 @@
       'A gold bar across all four lanes is a clap: press the button. A press with nothing there, or a step missed, breaks your run.',
       'Steps in a row grow the conga line and the multiplier (up to x4). One song, 75 seconds; a new dance every go.',
     ],
-    keys: 'Arrows / W A S D / left stick / a flick of the mouse  step   ·   Space / click / A  clap',
+    keys: 'Arrows / W A S D / stick / flick the mouse  step   ·   Space / click / A  clap',
     prize: 'One for every 100 points',
     barks: ['Crab Conga! Shake a claw!', 'One dollar a dance! Can you keep up with the crab?'],
     tickets: (score) => score / 100,

@@ -431,10 +431,17 @@ candy floss, hot dogs, ice cream and doughnuts that restore health.
 skill with a fixed price, 30 to 60 seconds a go: the Golden Grabber claw
 machine, Sharpshooter Alley (a cork rifle at ducks and pop-up targets), Ring
 Fling hoopla, Tin Can Tumble, the Bell Ringer strongman, Crab Bonkers,
-Hook-a-Duck and Boardwalk Hoops. In Arcade Row three cabinets are playable,
-each with a table of high scores: Boardwalk Dash (run the pier), Seafront
-Sprint (a top-down time trial) and Bubble Sub (bubble the fish, then the Big
-Angler). Every game pays tickets by the score; at any of them press R to
+Hook-a-Duck and Boardwalk Hoops. (Nobody has ever won the Golden Grabber's
+famous gear stick, and nobody will; the teddies are fair game.) Arcade Row
+has eight proper cabinets, every one a little original game of 60 to 90
+seconds with its attract mode on its own screen and a table of high scores
+with initials: Boardwalk Dash (run the pier), Seafront Sprint (a sit-down
+top-down time trial), Bubble Sub (bubble the fish, then the Big Angler),
+Lighthouse Stack (drop the swinging floors into a tower), Catch of the Day
+(a bucket on the pier catching what the gulls drop, but not everything the
+gulls drop), Serpent Supper (grow a sea serpent), Reef Rebound (a clam-shell
+bat and a pearl against the coral) and Crab Conga (press the arrows in time
+to the band). Every game pays tickets by the score; at any of them press R to
 "challenge a friend" and two players take turns on the same go. Swap tickets
 at the Prize Shack for plush toys, the Wonder Wharf cap (Jay wears it),
 armour, a cash voucher, Wharf Gold paint for the body shops, or the giant

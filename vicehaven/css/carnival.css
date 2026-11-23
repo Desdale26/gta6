@@ -595,6 +595,16 @@ body.at-attraction .hud .hud-banner {
   display: block;
 }
 
+/* While a cabinet's screen is up, the line of controls stays on one line above it. */
+.cv-overlay:has(.cv-arcade.on) .cv-top {
+  max-width: 98vw;
+}
+
+.cv-overlay:has(.cv-arcade.on) .cv-hint {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .cv-arcade-screen {
   display: block;
   width: min(80vw, 96vh, 60rem);

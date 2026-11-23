@@ -244,7 +244,7 @@
       if (e.completed && e.tickets > 0 && A) {
         const own = c.midway && c.midway.won;
         const games = Carnival.Midway.games;
-        if (own && games.length && games.every((d) => own[d.id])) A.unlock('fair_midway');
+        if (own && games.length && games.every((d) => own[d.id] || (d.gone && d.gone(c)))) A.unlock('fair_midway'); // (not one the story took away)
       }
     },
 

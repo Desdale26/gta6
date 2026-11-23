@@ -86,7 +86,7 @@ const WEAPONS = new Set(['fists'].concat((ctx.window.VH.Data.weapons || []).map(
 const FACTIONS = new Set(['halberd', 'kings', 'salts', 'vpd', 'police', 'civilian', 'crew', 'friendly', 'gang'].concat(Object.keys(story.factions || {}), Object.keys((dlc && dlc.factions) || {})));
 const BEHAVIORS = new Set(['idle', 'guard', 'patrol', 'attack', 'flee', 'cower', 'follow', 'drive', 'wander']);
 const MUSIC = new Set(['tension', 'action', 'sad', 'hope', 'triumph', 'off']);
-const STEP_KEYS = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'objective', 'checkpoint', 'fly', 'land', 'holdup', 'explode', 'say'];
+const STEP_KEYS = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'fly', 'land', 'holdup', 'explode', 'objective', 'checkpoint', 'say']; // the engine's kindOf() order
 
 const chars = Object.assign({}, story.characters || {});
 for (const [id, c] of Object.entries((dlc && dlc.characters) || {})) {
@@ -170,6 +170,9 @@ function steps(where, list, st) {
       bad(w, 'no known step type in ' + JSON.stringify(Object.keys(s)));
       return;
     }
+    // Only the first action key runs (the engine's kindOf order); a second one is silently skipped.
+    const acts = STEP_KEYS.filter((k) => k !== 'objective' && k !== 'checkpoint' && k !== 'say' && s[k] !== undefined);
+    if (acts.length > 1) bad(w, 'two step types in one step (' + acts.join(', ') + '): only ' + acts[0] + ' would run');
     if (s.say && kind !== 'say') lines(w + ' (say)', s.say);
     switch (kind) {
       case 'say': lines(w, s.say); break;

@@ -1153,7 +1153,9 @@
     }
 
     static kindOf(step) {
-      const keys = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'objective', 'checkpoint', 'fly', 'land', 'holdup', 'explode'];
+      // 'objective' and 'checkpoint' ride along on other steps, so they come last:
+      // a { fly, objective } step is a fly step with a HUD line, not a bare objective.
+      const keys = ['scene', 'blackout', 'phone', 'text', 'goto', 'spawnCar', 'getIn', 'spawn', 'join', 'leave', 'kill', 'survive', 'protect', 'chase', 'follow', 'race', 'deliver', 'collect', 'destroy', 'heat', 'loseHeat', 'wait', 'timer', 'choice', 'if', 'setFlag', 'music', 'slowmo', 'setTime', 'fade', 'teleport', 'camera', 'reward', 'fly', 'land', 'holdup', 'explode', 'objective', 'checkpoint'];
       for (const k of keys) if (step[k] !== undefined) return k;
       if (step.say) return 'say';
       return 'none';
