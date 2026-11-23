@@ -160,8 +160,11 @@
       let steer = clamp(angle / 0.5, -1, 1);
       let accel = 1;
       if (Math.abs(angle) > 1.1 && v.speed > 12) accel = -0.4;
-      // Box in a stopped car instead of bouncing off it.
-      if (tgt.speed < 2 && dist < 9) accel = v.vF > 1 ? -1 : 0;
+      // Box in a stopped car instead of bouncing off it: braking in time to
+      // pull up beside it (from 9 m out the unit hit it at full speed: 260
+      // off a story car, and the cruiser itself went up).
+      if (tgt.speed < 2 && v.vF > Math.sqrt(2 * 7 * Math.max(0, dist - 8)) + 1) accel = -1;
+      else if (tgt.speed < 2 && dist < 9) accel = v.vF > 1 ? -1 : 0;
       v.input.steer = steer;
       v.input.accel = accel;
       v.input.handbrake = Math.abs(angle) > 1.3 && v.speed > 8 ? 1 : 0;

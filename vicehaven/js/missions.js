@@ -446,7 +446,14 @@
 
     onBump(v, other) {
       const p = this.game.player;
-      if (!p.inVehicle || other !== p.vehicle || this._bumpCool > 0) return;
+      if (!p.inVehicle || other !== p.vehicle) return;
+      // Its own ram: the dent it takes isn't Jay's doing (a hunter that wrecks
+      // itself on him and goes up isn't his explosion for the police).
+      const dx = other.pos.x - v.pos.x;
+      const dz = other.pos.z - v.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if ((v.vel.x * dx + v.vel.z * dz) / d > -(other.vel.x * dx + other.vel.z * dz) / d) this._ramT = this.game.time;
+      if (this._bumpCool > 0) return;
       this._backT = 0.9;
       this._bumpCool = 2.2;
     }
@@ -457,6 +464,7 @@
       const dist = Math.hypot(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
       v.input.boost = 0;
       this._bumpCool -= dt;
+      if (v.lastHitBy === 'player' && this.game.time - (this._ramT ?? -9) < 0.3) v.lastHitBy = null;
       if (this._startT > 0) {
         this._startT -= dt;
         v.input.accel = 0;
@@ -512,6 +520,13 @@
       v.input.accel = Math.abs(angle) > 1.1 && v.speed > 12 ? -0.4 : 1;
       v.input.handbrake = Math.abs(angle) > 1.3 && v.speed > 8 ? 1 : 0;
       v.topSpeedBoost = dist > 30 ? 1.1 : 1;
+      // A shove, not a missile: it closes on his car no faster than it could
+      // brake to about 10 m/s at contact. Flat out into his door was the 650
+      // cap (260 off a story car), and wrecked the hunter as well.
+      const closingNow = ((v.vel.x - tgt.vel.x) * (tgt.pos.x - v.pos.x) + (v.vel.z - tgt.vel.z) * (tgt.pos.z - v.pos.z)) / Math.max(dist, 0.1);
+      const allowed = Math.sqrt(100 + 12 * Math.max(0, dist - v.hz - (tgt.hz || 1) - 0.5));
+      if (closingNow > allowed + 2) v.input.accel = -1;
+      else if (closingNow > allowed) v.input.accel = Math.min(v.input.accel, 0);
       this._checkStuck(v, dt);
     }
 

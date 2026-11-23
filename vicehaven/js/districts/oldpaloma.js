@@ -1142,6 +1142,177 @@
     world.physics.addBox(x - w / 2, 0, z - hl, x + w / 2, y1 + 1.8, z + hl, 'metal', F().ALL);
   }
 
+  /** A fisherman's cottage facing south (Seabreeze Street): colour-washed, a tiled gable, shutters, a lantern by the door. */
+  function fisherCottage(world, x0, z0, x1, z1, h, wall, seed) {
+    K().building(world, x0, z0, x1, z1, h, { wall, roof: 0xb8a890, style: 1, ww: 0.4, wh: 0.58, bay: 3.0, floorH: 3.2, seed, parapet: false, sides: { s: 'blank' } });
+    const ctx = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
+    K().gable(ctx.prop, x0 - 0.3, z0 - 0.6, x1 + 0.3, z1 + 0.6, KERB + h, 2.6, 'x', TERRACOTTA, wall);
+    const xm = (x0 + x1) / 2, door = seed > 0.5 ? BLUE_DOOR : 0x2f7a4a;
+    // The front: the door, a window each side with shutters, two upstairs windows with a little balcony.
+    draw(world, 'wood', xm - 0.65, KERB, z1, xm + 0.65, KERB + 2.3, z1 + 0.06, door);
+    draw(world, 'prop', xm - 0.85, KERB + 2.3, z1, xm + 0.85, KERB + 2.5, z1 + 0.1, 0xf4f1ea);
+    for (const [wx, wy] of [[x0 + 2.6, 0.9], [x1 - 2.6, 0.9], [x0 + 3.4, 4.0], [x1 - 3.4, 4.0]]) {
+      draw(world, 'prop', wx - 0.6, KERB + wy, z1, wx + 0.6, KERB + wy + 1.4, z1 + 0.03, 0x22303a);
+      for (const s2 of [-1, 1]) draw(world, 'prop', wx + s2 * 0.6 + (s2 < 0 ? -0.62 : 0), KERB + wy - 0.05, z1, wx + s2 * 0.6 + (s2 > 0 ? 0.62 : 0), KERB + wy + 1.45, z1 + 0.07, door);
+      if (wy < 1) glow(world, wx - 0.5, KERB + wy + 0.1, z1 + 0.03, wx + 0.5, KERB + wy + 1.3, z1 + 0.04, 0xffd9a0, seed > 0.3 ? 1.1 : 0.4);
+    }
+    // A wrought-iron balcony upstairs (above head height: the line it hangs from is the wall).
+    draw(world, 'prop', xm - 1.6, KERB + 3.7, z1, xm + 1.6, KERB + 3.85, z1 + 0.9, 0xd8cbb0, { bottom: true });
+    draw(world, 'prop', xm - 1.6, KERB + 4.68, z1 + 0.82, xm + 1.6, KERB + 4.76, z1 + 0.9, 0x2a2d33);
+    for (let bx = xm - 1.55; bx <= xm + 1.56; bx += 0.31) draw(world, 'prop', bx - 0.02, KERB + 3.85, z1 + 0.84, bx + 0.02, KERB + 4.7, z1 + 0.88, 0x2a2d33);
+    draw(world, 'prop', xm - 0.6, KERB + 3.85, z1, xm + 0.6, KERB + 6.0, z1 + 0.03, 0x22303a);
+    wallLantern(world, xm + 1.1, KERB + 2.5, z1, 0, 1);
+    // Geraniums in pots either side of the door (knee height) and a step.
+    for (const s2 of [-1, 1]) {
+      sbox(world, 'prop', xm + s2 * 1.25 - 0.25, KERB, z1 + 0.15, xm + s2 * 1.25 + 0.25, KERB + 0.42, z1 + 0.65, 0xa4553c, 'crate');
+      ctx.hedge.box(xm + s2 * 1.25 - 0.3, KERB + 0.42, z1 + 0.1, xm + s2 * 1.25 + 0.3, KERB + 0.75, z1 + 0.7, VH.col(0x3f7a3a));
+      ctx.prop.box(xm + s2 * 1.25 - 0.18, KERB + 0.72, z1 + 0.25, xm + s2 * 1.25 + 0.18, KERB + 0.82, z1 + 0.55, VH.col(0xd8302a));
+    }
+  }
+
+  /**
+   * Fill the harbour yard: the ice plant, the fishermen's cottages on
+   * Seabreeze Street, the car park, the shrine on the quay, the anchor
+   * memorial, the jib crane, the diesel pump, a forklift, the yard fence,
+   * shade trees along the quay. All merged into the chunk builders; every
+   * piece taller than a knee has a collider.
+   */
+  function harbourFill(world) {
+    // --- the ice plant (la fábrica de hielo): white, a blue band, a loading dock under a canopy, a chute into a hopper
+    const IP = { x0: 886, x1: 918, z0: 648, z1: 682, h: 8.4 };
+    K().building(world, IP.x0, IP.z0, IP.x1, IP.z1, IP.h, { wall: 0xeef1f2, roof: 0xa8b0b6, style: 3, ww: 0.5, wh: 0.32, bay: 4, floorH: 4.2, seed: 0.4, parapet: 0.5, sides: { w: 'blank' } });
+    draw(world, 'prop', IP.x0 - 0.05, KERB + 6.0, IP.z0 - 0.05, IP.x1 + 0.05, KERB + 6.6, IP.z1 + 0.05, 0x2a62b8);
+    K().sign(world, { x: IP.x0 - 0.1, y: KERB + 7.4, z: (IP.z0 + IP.z1) / 2, yaw: -PI / 2, w: 10, h: 1.0, lines: ['FÁBRICA DE HIELO · ICE'], style: 'info' });
+    sbox(world, 'concrete', IP.x0 - 3, KERB, IP.z0 + 5, IP.x0, KERB + 1.1, IP.z1 - 5, STONE_LT, 'wall'); // the loading dock
+    for (const dz of [IP.z0 + 9, IP.z0 + 17, IP.z0 + 25]) draw(world, 'prop', IP.x0 - 0.06, KERB + 1.1, dz - 2, IP.x0, KERB + 4.1, dz + 2, 0x9aa4ac); // roller doors
+    draw(world, 'prop', IP.x0 - 6, KERB + 4.3, IP.z0 + 4, IP.x0, KERB + 4.5, IP.z1 - 4, 0x2a62b8, { bottom: true }); // the canopy
+    cbox(world, IP.x0 - 6, KERB + 4.3, IP.z0 + 4, IP.x0, KERB + 4.5, IP.z1 - 4, 'crate', F().SOLID | F().SHOTS);
+    for (const pz of [IP.z0 + 4.3, (IP.z0 + IP.z1) / 2, IP.z1 - 4.3]) sbox(world, 'prop', IP.x0 - 5.9, KERB, pz - 0.12, IP.x0 - 5.66, KERB + 4.3, pz + 0.12, 0xdcdcdc, 'pole');
+    for (let k = 0; k < 3; k++) wallLantern(world, IP.x0, KERB + 3.7, IP.z0 + 9 + k * 8, -1, 0);
+    const icx = world.ctxAt(IP.x1, (IP.z0 + IP.z1) / 2);
+    // The ice chute down the east wall into a steel hopper (one collider under the whole low end).
+    K().beam(icx.prop, IP.x1 + 0.4, KERB + 6.2, 660, IP.x1 + 3.6, KERB + 1.9, 660, 0.8, VH.col(0xc8d0d6));
+    sbox(world, 'prop', IP.x1 + 2.6, KERB, 658.6, IP.x1 + 4.6, KERB + 1.5, 661.4, 0x8a949c, 'metal');
+    cbox(world, IP.x1, 0, 659.5, IP.x1 + 4.6, KERB + 3.0, 660.5, 'metal');
+    // Roof plant: the compressors and a cooling stack.
+    draw(world, 'prop', IP.x0 + 4, KERB + IP.h, IP.z0 + 4, IP.x0 + 12, KERB + IP.h + 2.0, IP.z0 + 10, 0xc8ccd0);
+    icx.prop.cylinder(IP.x1 - 6, KERB + IP.h, IP.z1 - 7, 2.2, 1.8, 3.2, 12, VH.col(0xd8dcdf), true);
+    // Fish boxes waiting on the dock (solid stacks).
+    for (let k = 0; k < 8; k++) {
+      const bx = IP.x0 - 2.4 + (k % 2) * 1.1, bz = IP.z0 + 6.5 + Math.floor(k / 2) * 5.6, hh = 0.35 * (1 + (k % 3));
+      sbox(world, 'prop', bx - 0.45, KERB + 1.1, bz - 0.6, bx + 0.45, KERB + 1.1 + hh, bz + 0.6, k % 3 ? 0x2a62b8 : 0xd8302a, 'crate');
+    }
+
+    // --- the fishermen's cottages along Seabreeze Street
+    const cols = [0xf0d9a0, 0xf3eee2, 0x9fc6d8, 0xe8a088];
+    for (let i = 0; i < 4; i++) {
+      const x0 = 912 + i * 15, x1 = x0 + 15;
+      fisherCottage(world, x0 + 0.3, 765, x1 - 0.3, 781, 6.6, cols[i], [0.62, 0.21, 0.83, 0.44][i]);
+    }
+
+    // --- the car park by the harbourmaster's office: painted bays (the parked cars come from OldPalomaLife)
+    pave(world, 850, 646, 880, 696, 0x9c9a92, 'plazaTop', KERB + 0.03, 3);
+    for (let x = 851; x <= 879.1; x += 2.8) {
+      K().mark(world, x - 0.06, 647, x + 0.06, 652.5, 0xf4f4ef, KERB + 0.04);
+      K().mark(world, x - 0.06, 689.5, x + 0.06, 695, 0xf4f4ef, KERB + 0.04);
+    }
+    for (const z of [652.5, 689.5]) K().mark(world, 851, z - 0.06, 879.1, z + 0.06, 0xf4f4ef, KERB + 0.04);
+    for (const [lx, lz] of [[865, 671]]) world.addProp('streetlight', lx, KERB, lz, 0, 1);
+
+    // --- the boatyard fence on its north side (a gate gap for the travel hoist)
+    K().fence(world, 850, 700, 910, 700, [[860, 876]], 'chain', 2.0);
+
+    // --- Our Lady of the Sea: a whitewashed shrine on the quay, facing the boats, candles at her feet
+    const sh = { x: 811.6, z: 712 };
+    sbox(world, 'prop', sh.x - 1.0, KERB, sh.z - 1.5, sh.x + 1.0, KERB + 3.6, sh.z + 1.5, WHITEWASH, 'wall');
+    const shc = world.ctxAt(sh.x, sh.z);
+    K().gable(shc.prop, sh.x - 1.2, sh.z - 1.7, sh.x + 1.2, sh.z + 1.7, KERB + 3.6, 0.9, 'x', TERRACOTTA, WHITEWASH);
+    draw(world, 'prop', sh.x - 1.04, KERB + 1.2, sh.z - 0.7, sh.x - 1.0, KERB + 3.0, sh.z + 0.7, 0x1f3f7a); // the niche, blue inside
+    draw(world, 'concrete', sh.x - 1.5, KERB + 1.05, sh.z - 0.9, sh.x - 1.0, KERB + 1.2, sh.z + 0.9, STONE_LT); // the shelf
+    shc.prop.cylinder(sh.x - 1.25, KERB + 1.2, sh.z, 0.24, 0.16, 1.2, 8, VH.col(0x3a6ac8), true); // her robe
+    shc.prop.cylinder(sh.x - 1.25, KERB + 2.4, sh.z, 0.13, 0.13, 0.24, 8, VH.col(0xe8c8a8), true);
+    glow(world, sh.x - 1.3, KERB + 2.66, sh.z - 0.2, sh.x - 1.2, KERB + 2.72, sh.z + 0.2, 0xffe890, 2); // the halo
+    for (const dz of [-0.6, -0.35, 0.35, 0.6]) glow(world, sh.x - 1.42, KERB + 1.2, sh.z + dz - 0.04, sh.x - 1.34, KERB + 1.42, sh.z + dz + 0.04, 0xffc860, 2.6);
+    cbox(world, sh.x - 1.5, 0, sh.z - 1.5, sh.x + 1.0, KERB + 3.6, sh.z + 1.5, 'wall');
+    for (const dz of [-1.2, 1.2]) {
+      sbox(world, 'prop', sh.x - 1.9, KERB, sh.z + dz - 0.3, sh.x - 1.3, KERB + 0.5, sh.z + dz + 0.3, 0xe8e4dc, 'crate');
+      shc.hedge.box(sh.x - 1.95, KERB + 0.5, sh.z + dz - 0.35, sh.x - 1.25, KERB + 0.85, sh.z + dz + 0.35, VH.col(0xd84a6a));
+    }
+    K().sign(world, { x: sh.x - 1.06, y: KERB + 0.7, z: sh.z, yaw: -PI / 2, w: 1.6, h: 0.4, lines: ['NTRA. SRA. DEL MAR'], style: 'plaque', flat: true });
+
+    // --- the memorial anchor by Seabreeze Street: an old iron anchor on a stone plinth
+    const an = { x: 842, z: 770 };
+    sbox(world, 'concrete', an.x - 1.6, KERB, an.z - 1.6, an.x + 1.6, KERB + 1.2, an.z + 1.6, STONE, 'wall');
+    const anc = world.ctxAt(an.x, an.z), iron = VH.col(0x2a2d33), yb = KERB + 1.2;
+    anc.prop.box(an.x - 0.18, yb + 0.6, an.z - 0.18, an.x + 0.18, yb + 4.4, an.z + 0.18, iron); // the shank
+    anc.prop.box(an.x - 0.14, yb + 3.8, an.z - 1.3, an.x + 0.14, yb + 4.05, an.z + 1.3, iron); // the stock
+    anc.prop.cylinder(an.x, yb + 4.4, an.z, 0.34, 0.34, 0.12, 10, iron, true); // the ring (a flat hoop)
+    K().beam(anc.prop, an.x, yb + 0.7, an.z, an.x, yb + 1.9, an.z - 1.3, 0.3, iron);
+    K().beam(anc.prop, an.x, yb + 0.7, an.z, an.x, yb + 1.9, an.z + 1.3, 0.3, iron);
+    anc.prop.box(an.x - 0.3, yb, an.z - 0.5, an.x + 0.3, yb + 0.8, an.z + 0.5, iron); // the crown
+    cbox(world, an.x - 0.35, yb, an.z - 1.4, an.x + 0.35, yb + 4.5, an.z + 1.4, 'metal', F().SOLID | F().SHOTS);
+    K().sign(world, { x: an.x, y: KERB + 0.65, z: an.z + 1.62, yaw: 0, w: 2.8, h: 0.6, lines: ['A LOS QUE NO VOLVIERON', 'FOR THOSE WHO DID NOT COME HOME'], style: 'plaque', flat: true });
+    glow(world, an.x - 1.0, KERB + 0.02, an.z + 1.65, an.x + 1.0, KERB + 0.12, an.z + 1.75, 0xfff0d0, 1.6);
+
+    // --- the jib crane for landing the catch, yellow, on the quay edge
+    const jc = { x: 789.5, z: 631 };
+    const jcc = world.ctxAt(jc.x, jc.z), yel = VH.col(0xe8b820);
+    sbox(world, 'prop', jc.x - 0.6, KERB, jc.z - 0.6, jc.x + 0.6, KERB + 1.0, jc.z + 0.6, 0xe8b820, 'metal');
+    jcc.prop.box(jc.x - 0.2, KERB + 1.0, jc.z - 0.2, jc.x + 0.2, KERB + 6.4, jc.z + 0.2, yel);
+    K().beam(jcc.prop, jc.x + 0.6, KERB + 6.0, jc.z, 781.2, KERB + 6.0, jc.z, 0.32, yel);
+    K().beam(jcc.prop, jc.x, KERB + 4.4, jc.z, 784.5, KERB + 6.0, jc.z, 0.12, yel);
+    jcc.prop.box(781.6 - 0.02, KERB + 3.2, jc.z - 0.02, 781.6 + 0.02, KERB + 6.0, jc.z + 0.02, VH.col(0x3a3a3a));
+    jcc.prop.box(781.45, KERB + 2.9, jc.z - 0.15, 781.75, KERB + 3.2, jc.z + 0.15, VH.col(0xd8302a));
+    cbox(world, jc.x - 0.6, 0, jc.z - 0.6, jc.x + 0.6, KERB + 6.4, jc.z + 0.6, 'metal');
+
+    // --- the diesel pump for the boats
+    const dp = { x: 789.6, z: 734 };
+    sbox(world, 'prop', dp.x - 0.45, KERB, dp.z - 0.35, dp.x + 0.45, KERB + 1.7, dp.z + 0.35, 0xd8302a, 'metal');
+    draw(world, 'prop', dp.x - 0.47, KERB + 1.1, dp.z - 0.37, dp.x + 0.47, KERB + 1.55, dp.z + 0.37, 0xf4f1ea);
+    K().beam(world.ctxAt(dp.x, dp.z).prop, dp.x - 0.47, KERB + 1.2, dp.z, dp.x - 1.6, KERB + 0.4, dp.z + 0.4, 0.06, VH.col(0x1a1a1a));
+    K().sign(world, { x: dp.x + 0.5, y: KERB + 2.4, z: dp.z, yaw: PI / 2, w: 1.8, h: 0.5, lines: ['GASÓLEO PESCA'], style: 'info' });
+
+    // --- a forklift parked by the market, forks down
+    const fk = { x: 876, z: 646 };
+    const fkc = world.ctxAt(fk.x, fk.z), orange = VH.col(0xe86a1a), blk = VH.col(0x1a1a1a);
+    fkc.prop.box(fk.x - 0.6, KERB + 0.3, fk.z - 1.1, fk.x + 0.6, KERB + 1.3, fk.z + 0.9, orange);
+    for (const [ax, az] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) fkc.prop.box(fk.x + ax * 0.55 - 0.06, KERB + 1.3, fk.z + az * 0.6 - 0.06 - 0.2, fk.x + ax * 0.55 + 0.06, KERB + 2.3, fk.z + az * 0.6 + 0.06 - 0.2, blk);
+    fkc.prop.box(fk.x - 0.62, KERB + 2.3, fk.z - 0.9, fk.x + 0.62, KERB + 2.36, fk.z + 0.5, blk, { bottom: true });
+    fkc.prop.box(fk.x - 0.5, KERB + 0.1, fk.z + 0.95, fk.x + 0.5, KERB + 2.6, fk.z + 1.1, VH.col(0x3a3a3a)); // the mast
+    for (const s2 of [-0.3, 0.3]) fkc.prop.box(fk.x + s2 - 0.06, KERB + 0.02, fk.z + 1.1, fk.x + s2 + 0.06, KERB + 0.1, fk.z + 2.2, VH.col(0x5a5a5a));
+    for (const [ax, az] of [[-1, -0.8], [1, -0.8], [-1, 0.6], [1, 0.6]]) fkc.prop.box(fk.x + ax * 0.62 - 0.1, KERB, fk.z + az - 0.28, fk.x + ax * 0.62 + 0.1, KERB + 0.56, fk.z + az + 0.28, blk);
+    cbox(world, fk.x - 0.7, 0, fk.z - 1.15, fk.x + 0.7, KERB + 2.6, fk.z + 1.1, 'metal');
+
+    // --- the fishermen's guild (la cofradía): whitewashed, an arcade on the quay side, a clock
+    const Cf = { x0: 828, x1: 848, z0: 690, z1: 714, h: 7.2 };
+    K().building(world, Cf.x0, Cf.z0, Cf.x1, Cf.z1, Cf.h, { wall: WHITEWASH, roof: 0xb8a890, style: 1, ww: 0.42, wh: 0.6, bay: 3.0, floorH: 3.6, seed: 0.57, parapet: 0.8 });
+    draw(world, 'prop', Cf.x0 - 3.2, KERB + 3.3, Cf.z0, Cf.x0, KERB + 3.6, Cf.z1, 0xf3eee2, { bottom: true }); // the arcade roof
+    cbox(world, Cf.x0 - 3.2, KERB + 3.3, Cf.z0, Cf.x0, KERB + 3.6, Cf.z1, 'wall');
+    for (let z = Cf.z0 + 0.3; z <= Cf.z1 - 0.29; z += (Cf.z1 - Cf.z0 - 0.6) / 6) sbox(world, 'prop', Cf.x0 - 3.1, KERB, z - 0.3, Cf.x0 - 2.5, KERB + 3.3, z + 0.3, 0xf6f1e4, 'wall');
+    draw(world, 'prop', Cf.x0 - 0.05, KERB + 0.2, Cf.z0 + 0.2, Cf.x0, KERB + 0.9, Cf.z1 - 0.2, 0x2a62b8); // a blue dado under the arcade
+    K().sign(world, { x: Cf.x0 - 0.1, y: KERB + 4.5, z: (Cf.z0 + Cf.z1) / 2, yaw: -PI / 2, w: 9, h: 0.9, lines: ['COFRADÍA DE PESCADORES'], style: 'plaque' });
+    const cfc = world.ctxAt(Cf.x0, (Cf.z0 + Cf.z1) / 2);
+    cfc.prop.cylinder(Cf.x0 - 0.12, KERB + 6.1, (Cf.z0 + Cf.z1) / 2, 0.8, 0.8, 0.1, 16, VH.col(0xf6f1e4), true);
+    glow(world, Cf.x0 - 0.2, KERB + 5.6, (Cf.z0 + Cf.z1) / 2 - 0.5, Cf.x0 - 0.16, KERB + 6.6, (Cf.z0 + Cf.z1) / 2 + 0.5, 0xfff4d8, 1.2);
+    for (let z = Cf.z0 + 4; z < Cf.z1 - 2; z += 8) glow(world, Cf.x0 - 3.0, KERB + 3.0, z - 0.2, Cf.x0 - 2.6, KERB + 3.3, z + 0.2, 0xffd890, 2.2);
+    // Upturned dinghies on a two-tier rack behind the guild (one collider for the rack).
+    const dr = { x0: 829, x1: 847, z: 732 };
+    for (const x of [dr.x0, (dr.x0 + dr.x1) / 2, dr.x1]) for (const dz of [-1.3, 1.3]) draw(world, 'wood', x - 0.1, KERB, dr.z + dz - 0.1, x + 0.1, KERB + 2.6, dr.z + dz + 0.1, 0x6b4e33);
+    for (const y of [1.0, 2.2]) for (const dz of [-1.3, 1.3]) draw(world, 'wood', dr.x0, KERB + y - 0.1, dr.z + dz - 0.08, dr.x1, KERB + y, dr.z + dz + 0.08, 0x6b4e33);
+    const dhex = [0xf4f2ec, 0x2a62b8, 0xd8302a, 0x2f7a4a, 0xf0c040, 0x3d6b8f];
+    for (let i = 0; i < 6; i++) {
+      const x = dr.x0 + 1.6 + (i % 3) * 5.6, y = KERB + (i < 3 ? 1.0 : 2.2);
+      world.ctxAt(x, dr.z).prop.box(x - 2.2, y, dr.z - 0.75, x + 2.2, y + 0.45, dr.z + 0.75, VH.col(dhex[i]));
+      world.ctxAt(x, dr.z).prop.box(x - 2.0, y + 0.45, dr.z - 0.55, x + 2.0, y + 0.6, dr.z + 0.55, VH.col(dhex[(i + 3) % 6]));
+    }
+    cbox(world, dr.x0 - 0.15, 0, dr.z - 1.45, dr.x1 + 0.15, KERB + 2.85, dr.z + 1.45, 'wood');
+    // Lights over the yard and the hard-standing (it is a working harbour after dark too).
+    for (const [lx, lz, ly] of [[880, 704, PI], [912, 736, -PI / 2], [850, 742, PI / 2], [900, 694, 0], [860, 760, 0]]) world.addProp('streetlight', lx, KERB, lz, ly, 1);
+
+    // --- shade trees and planters down the quay between the benches
+    for (let z = 606; z < 770; z += 26) if (Math.abs(z - sh.z) > 4) world.addProp('tree', 811, KERB, z, (z * 7) % 6, 1);
+  }
+
   function buildHarbour(world) {
     const Hb = HARB, qx = Hb.quay;
     // --- the ground: setts on the quay, cobbles behind, a fish-scale of darker stone round the market
@@ -1261,7 +1432,7 @@
     for (const [ax, az] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) sbox(world, 'prop', tl.x + ax * tl.hw - 0.25, KERB, tl.z + az * tl.hz - 0.25, tl.x + ax * tl.hw + 0.25, KERB + tl.h, tl.z + az * tl.hz + 0.25, 0x2a62b8, 'metal');
     for (const ax of [-1, 1]) draw(world, 'prop', tl.x + ax * tl.hw - 0.3, KERB + tl.h, tl.z - tl.hz - 0.3, tl.x + ax * tl.hw + 0.3, KERB + tl.h + 0.6, tl.z + tl.hz + 0.3, 0x2a62b8, { bottom: true });
     for (const az of [-1, 1]) draw(world, 'prop', tl.x - tl.hw, KERB + tl.h, tl.z + az * tl.hz - 0.25, tl.x + tl.hw, KERB + tl.h + 0.5, tl.z + az * tl.hz + 0.25, 0x2a62b8, { bottom: true });
-    pave(world, 850, 700, 910, 760, 0x8a8478, 'plazaTop', KERB + 0.03, 3);
+    pave(world, 850, 700, 910, 760, 0xaaa496, 'plazaTop', KERB + 0.03, 3);
     for (let k = 0; k < 6; k++) sbox(world, 'wood', 900 + (k % 3) * 1.4, KERB, 742 + Math.floor(k / 3) * 1.4, 901.2 + (k % 3) * 1.4, KERB + 0.9 + (k % 2) * 0.5, 743.2 + Math.floor(k / 3) * 1.4, 0x9a7650, 'crate');
     sbox(world, 'prop', 856, KERB, 748, 862, KERB + 2.6, 752.5, 0xd8d2c6, 'metal'); // the yard's container store
     draw(world, 'prop', 855.95, KERB + 0.2, 748.4, 856, KERB + 2.4, 752.1, 0x9a3a2a);
@@ -1280,7 +1451,8 @@
     for (let x = Rs.x0 + 4; x < Rs.x1 - 2; x += 7) for (const z of [Rs.z1 + 5.5, Rs.z1 + 11]) parasolTable(world, x, z, (x + z) % 2 > 1 ? 0x2a62b8 : 0xf6f1e4);
     // Benches facing the boats, a few palms.
     for (let z = 610; z < 770; z += 26) world.addProp('bench', qx - 4, KERB, z + 9, -PI / 2, 1);
-    for (const [px, pz] of [[qx + 4, 646], [qx + 4, 690], [qx + 4, 772], [930, 780], [880, 780]]) world.addProp('palmTall', px, KERB, pz, (px * 3) % 6, 0.95);
+    for (const [px, pz] of [[qx + 4, 646], [qx + 4, 680], [qx + 4, 772], [880, 780], [904, 780]]) world.addProp('palmTall', px, KERB, pz, (px * 3) % 6, 0.95);
+    harbourFill(world);
     return { quay: { x: Hb.x0 + 14, z: 770 }, market: { x: (L.x0 + L.x1) / 2, z: L.z0 - 3 } };
   }
 
@@ -1338,6 +1510,11 @@
       this.ok = !!op;
       if (!this.ok) return;
       this.op = op;
+      // Parked cars in the harbour car park's bays (some bays empty).
+      const list = [];
+      let seed = 731;
+      for (const z of [649.8, 692.2]) for (let x = 852.4; x < 879; x += 2.8) if ((seed++ * 7) % 5 > 1) list.push(K().parkedSpot(x, z, z < 670 ? PI : 0, seed));
+      K().addParkedSpots(game, list);
       const Lh = FORT.light;
       const yT = KERB + Lh.shaft;
       // The lamp: a glowing glass drum and the lens inside it.
