@@ -514,6 +514,200 @@
     return { yT, study: { x: H.x1 + 1.3, z: St.win, y: yT }, garden: { x: 890, z: -366 }, gate: { x: E.gate.x, z: W.z0 + 4 } };
   }
 
+  // ------------------------------------------------- the observatory
+  // plot 1167..1293 x -463..-295 (Mirador Road north, Lantana Avenue west, Airfield Road east, Bridge Street south)
+  const OBS = { x: 1250, z: -414, rIn: 7.0, rOut: 10, h: 7.25, dome: 7.2, seg: 12 };
+  const LAWN = { x0: 1172, x1: 1230, z0: -458, z1: -374 };
+  const CLINIC = { x0: 1188, x1: 1272, z0: -362, z1: -322, h: 11 };
+
+  function flipped(g) {
+    const idx = g.index.array;
+    for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+    const n = g.attributes.normal;
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    return g;
+  }
+
+  function buildObservatory(world) {
+    const O = OBS;
+    const yTop = KERB + O.h; // the terrace round the dome
+    const ctx = world.ctxAt(O.x, O.z);
+    const N = O.seg, Ao = O.rOut * Math.cos(PI / N), hl = O.rOut * Math.sin(PI / N);
+    const Ai = O.rIn, hr = (Ao - Ai) / 2, rc = (Ao + Ai) / 2;
+    const WALL = 0xf2ede2;
+    // --- grounds: a gravel path from Mirador Road, the forecourt round the drum, the lawn to the west
+    pave(world, 1170, -461, 1290, -298, 0xffffff, 'grassTop', KERB + 0.015, 6);
+    world.addLawn(1170, -461, 1290, -370);
+    pave(world, O.x - 2.5, -461, O.x + 2.5, O.z - O.rOut - 2, 0xe6dcc4, 'plazaTop', KERB + 0.03, 3);
+    pave(world, O.x - 15, O.z - 15, O.x + 15, O.z + 22, 0xe6dcc4, 'plazaTop', KERB + 0.03, 3);
+    K().sign(world, { x: O.x + 6, y: KERB + 1.4, z: -458, yaw: PI, w: 5.2, h: 1.6, lines: ['PALOMA OBSERVATORY', 'Est. 1902 · Open Nights'], style: 'monolith' });
+    // --- the drum: twelve thick masonry segments (the terrace is their top), a door on the west side
+    const seg = (a, t0, t1, y0, y1) => {
+      // a piece of the segment at angle a between tangent offsets t0..t1 (metres from its centre)
+      const ux = -Math.sin(a), uz = Math.cos(a);
+      const mid = (t0 + t1) / 2;
+      const cx = O.x + Math.cos(a) * rc + ux * mid, cz = O.z + Math.sin(a) * rc + uz * mid;
+      sobox(world, 'b', cx, cz, (t1 - t0) / 2, hr, Math.atan2(-Math.cos(a), -Math.sin(a)), y0, y1, WALL, 'building');
+    };
+    const doorW = 1.0;
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * PI * 2;
+      if (k === N / 2) {
+        // West: the doorway.
+        seg(a, -hl, -doorW, KERB, yTop);
+        seg(a, doorW, hl, KERB, yTop);
+        seg(a, -doorW, doorW, KERB + 3.0, yTop);
+      } else seg(a, -hl, hl, KERB, yTop);
+      // A tall lit window on every other face, a pilaster strip at each corner.
+      const fx = O.x + Math.cos(a) * (Ao + 0.02), fz = O.z + Math.sin(a) * (Ao + 0.02);
+      const yaw = Math.atan2(-Math.cos(a), -Math.sin(a));
+      if (k % 2 === 1) ctx.screen.orientedBox(fx, fz, 0.5, 0.03, yaw, KERB + 2.2, KERB + 5.2, VH.col(0xffd9a0, 0.9));
+      const va = a + PI / N, vx = O.x + Math.cos(va) * O.rOut, vz = O.z + Math.sin(va) * O.rOut;
+      ctx.concrete.box(vx - 0.18, KERB, vz - 0.18, vx + 0.18, yTop + 0.05, vz + 0.18, sc(0xe2d4b4));
+    }
+    // (the pilasters stand on the drum's corners: one collider ring for them)
+    for (let k = 0; k < N; k++) {
+      const va = ((k + 0.5) / N) * PI * 2, vx = O.x + Math.cos(va) * O.rOut, vz = O.z + Math.sin(va) * O.rOut;
+      cbox(world, vx - 0.18, 0, vz - 0.18, vx + 0.18, yTop + 0.05, vz + 0.18, 'building');
+    }
+    // A cornice band round the top; the door frame and a lamp over it.
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * PI * 2;
+      const cx = O.x + Math.cos(a) * (Ao + 0.1), cz = O.z + Math.sin(a) * (Ao + 0.1);
+      ctx.concrete.orientedBox(cx, cz, hl + 0.1, 0.22, Math.atan2(-Math.cos(a), -Math.sin(a)), yTop - 0.45, yTop - 0.15, sc(0xe2d4b4));
+    }
+    const dX = O.x - Ao;
+    ctx.prop.box(dX - 0.12, KERB + 3.0, O.z - doorW - 0.15, dX + 0.02, KERB + 3.25, O.z + doorW + 0.15, VH.col(0x2a2d33), { bottom: true });
+    wallLantern(world, dX, KERB + 3.5, O.z, -1, 0);
+    // --- the terrace railing (open where the stair comes up on the south side)
+    const railY = yTop;
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * PI * 2;
+      const yaw = Math.atan2(-Math.cos(a), -Math.sin(a));
+      const pieces = k === N / 4 ? [[-hl, -1.7], [1.7, hl]] : [[-hl, hl]];
+      for (const [t0, t1] of pieces) {
+        const ux = -Math.sin(a), uz = Math.cos(a), mid = (t0 + t1) / 2;
+        const cx = O.x + Math.cos(a) * (Ao - 0.1) + ux * mid, cz = O.z + Math.sin(a) * (Ao - 0.1) + uz * mid;
+        ctx.prop.orientedBox(cx, cz, (t1 - t0) / 2, 0.05, yaw, railY + 0.95, railY + 1.05, VH.col(0x2a2d33));
+        ctx.prop.orientedBox(cx, cz, (t1 - t0) / 2, 0.015, yaw, railY + 0.1, railY + 0.95, VH.col(0x5a6068));
+        world.physics.addOrientedBox(cx, cz, (t1 - t0) / 2, 0.08, yaw, railY, railY + 1.05, 'railing', F().SOLID | F().SHOTS);
+      }
+    }
+    // --- the outside stair up to the terrace (south side), with rails
+    const sTop = O.z + Ao, sLen = 9.9;
+    K().stairs(world, ctx.concrete, O.x, sTop + sLen, 'n', sLen, 3.0, KERB, yTop, sc(0xe2d4b4), { tag: 'stairs', railHex: 0x2a2d33 });
+    // --- the dome: silver, a dark observing slit with a warm glow in it; stepped underneath so it can be stood on
+    const R = O.dome;
+    const m4 = new THREE.Matrix4();
+    const outer = new THREE.SphereGeometry(R, 28, 10, 0, PI * 2, 0, PI / 2);
+    ctx.prop.merge(outer, m4.makeTranslation(O.x, yTop, O.z), VH.col(0xdfe3e8));
+    const inner = flipped(new THREE.SphereGeometry(R - 0.12, 20, 8, 0, PI * 2, 0, PI / 2));
+    ctx.interior.merge(inner, m4.makeTranslation(O.x, yTop, O.z), VH.col(0x7d858f));
+    outer.dispose(); inner.dispose();
+    ctx.prop.cylinder(O.x, yTop, O.z, R + 0.25, R + 0.25, 0.45, 28, VH.col(0xb9c0c8), true);
+    const az = -PI * 0.75; // the slit faces south-west, over the lawn
+    for (let i = 0; i < 9; i++) {
+      const e = ((i + 0.5) / 9) * (PI / 2) * 0.96;
+      const rr = R + 0.03;
+      const px = O.x + Math.cos(az) * rr * Math.cos(e), py = yTop + rr * Math.sin(e), pz = O.z + Math.sin(az) * rr * Math.cos(e);
+      const yawS = Math.atan2(Math.cos(az), Math.sin(az));
+      K().tiltBox(ctx.prop, px, py, pz, 1.5, (R * PI) / 2 / 9 + 0.05, 0.06, yawS, -e, VH.col(0x1e2430));
+      if (i > 0 && i < 8) K().tiltBox(ctx.screen, px + Math.cos(az) * 0.02, py, pz + Math.sin(az) * 0.02, 0.35, (R * PI) / 2 / 9, 0.05, yawS, -e, VH.col(0xffcf80, 0.55));
+    }
+    // A lightning rod and a weather vane at the top.
+    ctx.prop.box(O.x - 0.04, yTop + R, O.z - 0.04, O.x + 0.04, yTop + R + 1.6, O.z + 0.04, VH.col(0x2a2d33));
+    for (let k = 0; k < 7; k++) S().disc(world, O.x, O.z, Math.sqrt(R * R - (k + 1) * (k + 1)), yTop + k, yTop + k + 1, 'metal');
+    S().disc(world, O.x, O.z, R + 0.25, yTop, yTop + 0.45, 'metal');
+    // --- inside: the floor, the great telescope on its pier, the desk and its screens
+    pave(world, O.x - Ai, O.z - Ai, O.x + Ai, O.z + Ai, 0x8a6a48, 'plazaTop', KERB + 0.04, 2);
+    const pierC = 0x9aa0a8;
+    S().drum(world, ctx.prop, O.x, KERB, O.z, 0.9, 1.4, 12, pierC, 'metal');
+    ctx.prop.box(O.x - 0.7, KERB + 1.4, O.z - 0.25, O.x + 0.7, KERB + 2.6, O.z + 0.25, VH.col(0x3a5a8a)); // the fork
+    cbox(world, O.x - 0.7, KERB + 1.4, O.z - 0.25, O.x + 0.7, KERB + 2.6, O.z + 0.25, 'metal');
+    const tx = Math.cos(az), tz = Math.sin(az);
+    K().beam(ctx.prop, O.x - tx * 1.6, KERB + 1.9, O.z - tz * 1.6, O.x + tx * 3.0, KERB + 5.4, O.z + tz * 3.0, 0.62, VH.col(0xeef0f2));
+    K().beam(ctx.prop, O.x + tx * 2.9, KERB + 5.32, O.z + tz * 2.9, O.x + tx * 3.1, KERB + 5.48, O.z + tz * 3.1, 0.7, VH.col(0x2a2d33));
+    K().beam(ctx.prop, O.x - tx * 0.8, KERB + 2.5, O.z - tz * 0.8, O.x - tx * 0.4, KERB + 3.6, O.z - tz * 0.4, 0.16, VH.col(0x2a2d33)); // the eyepiece
+    // (the tube's low end is over head height only beyond the pier: a collider for the part people could walk into)
+    cbox(world, O.x - tx * 1.9 - 0.4, KERB + 1.4, O.z - tz * 1.9 - 0.4, O.x - tx * 1.1 + 0.4, KERB + 2.6, O.z - tz * 1.1 + 0.4, 'metal');
+    // The desk against the wall to the north-east, two glowing screens, a chair; a star chart on the wall.
+    const dkx = O.x + 4.2, dkz = O.z - 3.0;
+    sobox(world, 'wood', dkx, dkz, 1.2, 0.45, PI / 4, KERB, KERB + 0.78, 0x6b4e33, 'crate');
+    ctx.screen.orientedBox(dkx + 0.15, dkz - 0.15, 0.35, 0.03, PI / 4, KERB + 0.82, KERB + 1.2, VH.col(0x6ab0ff, 1.4));
+    ctx.screen.orientedBox(dkx - 0.45, dkz + 0.45, 0.3, 0.03, PI / 4, KERB + 0.82, KERB + 1.15, VH.col(0xff8a5a, 1.2));
+    sobox(world, 'prop', dkx - 0.7, dkz + 0.7, 0.25, 0.25, PI / 4, KERB, KERB + 0.95, 0x2a2d33, 'crate');
+    // A ring of little lamps under the dome's rim.
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * PI * 2 + 0.2, lx = O.x + Math.cos(a) * (Ai - 0.15), lz = O.z + Math.sin(a) * (Ai - 0.15);
+      ctx.screen.box(lx - 0.12, yTop - 1.0, lz - 0.12, lx + 0.12, yTop - 0.8, lz + 0.12, VH.col(0xffe2a8, 1.8), { bottom: true });
+    }
+    // Benches round the forecourt; lamps on the path; the lawn's flower bed (Gerald's) by the hedge.
+    for (const [bx, bz, a] of [[O.x - 13, O.z + 6, PI / 2], [O.x + 13, O.z + 6, -PI / 2], [O.x - 13, O.z - 6, PI / 2], [O.x + 13, O.z - 6, -PI / 2]]) world.addProp('bench', bx, KERB, bz, a, 1);
+    for (let z = -452; z < O.z - O.rOut - 4; z += 10) for (const x of [O.x - 3.4, O.x + 3.4]) world.addProp('streetlight', x, KERB, z, x < O.x ? PI / 2 : -PI / 2, 0.75);
+    const gx = LAWN.x0 + 6, gz = LAWN.z0 + 5;
+    const gctx = world.ctxAt(gx, gz);
+    gctx.concrete.cylinder(gx, KERB, gz, 2.6, 2.6, 0.3, 14, sc(0xd8cbb0), true);
+    for (let k = 0; k < 18; k++) {
+      const a = (k / 18) * PI * 2, rr = 0.6 + (k % 3) * 0.6;
+      const fx = gx + Math.cos(a) * rr, fz = gz + Math.sin(a) * rr;
+      gctx.hedge.box(fx - 0.25, KERB + 0.3, fz - 0.25, fx + 0.25, KERB + 0.65, fz + 0.25, VH.col([0xe8483a, 0xf0d050, 0xe86ab0, 0xffffff][k % 4]));
+    }
+    S().disc(world, gx, gz, 2.6, 0, KERB + 0.65, 'hedge', F().SOLID | F().SHOTS);
+    // The lawn's edges: a clipped hedge along Lantana Avenue and the clinic side, trees only at the corners.
+    hedge(world, LAWN.x0 - 2.5, LAWN.z0, LAWN.x0 - 1.5, LAWN.z1, 1.2);
+    hedge(world, LAWN.x0 - 1.5, LAWN.z1 + 1, LAWN.x1, LAWN.z1 + 2, 1.2);
+    for (const [cx, cz] of [[1174, -300], [1286, -300], [1286, -456], [1270, -456]]) world.addProp('treeB', cx, KERB, cz, cx % 6, 1.1);
+    return { yTop, terrace: { x: O.x, z: O.z + Ao - 1.3 } };
+  }
+
+  // ------------------------------------------------------- the clinic
+  function buildClinic(world) {
+    const C = CLINIC;
+    const yR = KERB + C.h;
+    K().building(world, C.x0, C.z0, C.x1, C.z1, C.h, { wall: 0xf4f6f6, roof: 0x9aa0a4, style: 3, ww: 0.7, wh: 0.5, bay: 3.6, floorH: 3.65, seed: 0.33, parapet: 0.9 });
+    const ctx = world.ctxAt((C.x0 + C.x1) / 2, (C.z0 + C.z1) / 2);
+    // A teal band at each floor line, a glass entrance, the porte-cochère over the drop-off.
+    for (const y of [KERB + 3.65, KERB + 7.3]) draw(world, 'prop', C.x0 - 0.05, y - 0.2, C.z1, C.x1 + 0.05, y + 0.1, C.z1 + 0.06, 0x2f9a9a, { bottom: true });
+    const ex = (C.x0 + C.x1) / 2;
+    glow(world, ex - 4, KERB + 0.1, C.z1 + 0.02, ex + 4, KERB + 3.2, C.z1 + 0.06, 0xd8f0f0, 1.1);
+    for (let x = ex - 4; x <= ex + 4; x += 2) ctx.prop.box(x - 0.05, KERB, C.z1 + 0.04, x + 0.05, KERB + 3.3, C.z1 + 0.1, VH.col(0x8a9298));
+    const cz0 = C.z1, cz1 = C.z1 + 9;
+    sbox(world, 'prop', ex - 8, KERB + 4.2, cz0, ex + 8, KERB + 4.7, cz1, 0xf4f6f6, 'building', { bottom: true });
+    for (const [px, pz] of [[ex - 7.4, cz1 - 0.6], [ex + 7.4, cz1 - 0.6]]) S().drum(world, ctx.prop, px, KERB, pz, 0.3, 4.2, 10, 0xc8ced2, 'pole');
+    for (let x = ex - 6; x <= ex + 6; x += 3) glow(world, x - 0.4, KERB + 4.12, cz0 + 2, x + 0.4, KERB + 4.2, cz1 - 2, 0xffffff, 1.6);
+    K().sign(world, { x: ex, y: KERB + 5.3, z: cz1 + 0.05, yaw: 0, w: 8, h: 1.0, lines: ['PALOMA CLINIC'], style: 'neon' });
+    // The drop-off loop from Bridge Street, an ambulance at the bay.
+    pave(world, ex - 14, cz0, ex + 14, -296, 0x5b5f64, 'asphaltTop', KERB + 0.03, 6);
+    pave(world, ex - 9, cz0, ex + 9, cz0 + 2, 0xe6e8ea, 'plazaTop', KERB + 0.04, 2);
+    sbox(world, 'prop', C.x1 - 16, KERB + 0.4, cz0 + 2, C.x1 - 13.6, KERB + 2.9, cz0 + 8, 0xf6f6f2, 'metal');
+    draw(world, 'prop', C.x1 - 16.02, KERB + 1.4, cz0 + 2, C.x1 - 13.58, KERB + 1.8, cz0 + 8, 0xd03030);
+    glow(world, C.x1 - 15.6, KERB + 2.9, cz0 + 7.2, C.x1 - 14.0, KERB + 3.1, cz0 + 7.6, 0x3a7aff, 2.2);
+    cbox(world, C.x1 - 16, 0, cz0 + 2, C.x1 - 13.6, KERB + 0.4, cz0 + 8, 'metal');
+    for (const [wx, wz] of [[C.x1 - 16.05, cz0 + 3.2], [C.x1 - 13.75, cz0 + 3.2], [C.x1 - 16.05, cz0 + 6.8], [C.x1 - 13.75, cz0 + 6.8]]) ctx.prop.box(wx - 0.1, KERB, wz - 0.35, wx + 0.1, KERB + 0.7, wz + 0.35, VH.col(0x1a1a1a));
+    for (const [px, pz] of [[C.x0 + 4, cz0 + 6], [C.x0 + 16, cz0 + 6], [C.x1 - 4, cz0 + 12]]) world.addProp('palmTall', px, KERB, pz, px % 6, 0.9);
+    // --- the helipad on the roof: a raised deck, the H in its circle, edge lights, a windsock
+    const hx = ex, hz = (C.z0 + C.z1) / 2, hs = 11;
+    sbox(world, 'prop', hx - hs, yR, hz - hs + 2, hx + hs, yR + 0.4, hz + hs - 2, 0x4a5258, 'metal');
+    const yH = yR + 0.4;
+    const hc = world.ctxAt(hx, hz);
+    hc.marks.cylinder(hx, yH + 0.01, hz, 7, 7, 0.01, 32, VH.col(0xf0c040), true);
+    hc.prop.cylinder(hx, yH + 0.012, hz, 6.4, 6.4, 0.01, 32, VH.col(0x4a5258), true);
+    for (const [x0, z0, x1, z1] of [[hx - 2.4, hz - 3.2, hx - 1.4, hz + 3.2], [hx + 1.4, hz - 3.2, hx + 2.4, hz + 3.2], [hx - 1.4, hz - 0.5, hx + 1.4, hz + 0.5]]) hc.marks.topRect(x0, z0, x1, z1, yH + 0.02, VH.col(0xf6f6f2));
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * PI * 2, lx = hx + Math.cos(a) * 7.6, lz = hz + Math.sin(a) * 7.6;
+      hc.screen.box(lx - 0.12, yH, lz - 0.12, lx + 0.12, yH + 0.14, lz + 0.12, VH.col(0x40ff70, 2.2)); // solidity: passable (flush pad lights)
+    }
+    hc.prop.box(C.x1 - 3.1, yR, C.z0 + 2.9, C.x1 - 2.9, yR + 4, C.z0 + 3.1, VH.col(0xdddddd));
+    K().tiltBox(hc.prop, C.x1 - 3.0, yR + 3.7, C.z0 + 4.0, 0.5, 0.5, 1.8, 0, 0.15, VH.col(0xff7a2a));
+    cbox(world, C.x1 - 3.15, yR, C.z0 + 2.85, C.x1 - 2.85, yR + 4, C.z0 + 3.15, 'pole');
+    // The stair head and lift room on the roof.
+    sbox(world, 'b', C.x0 + 4, yR, C.z0 + 4, C.x0 + 12, yR + 3.2, C.z0 + 12, 0xe8ecec, 'building');
+    world.ctxAt(C.x0 + 8, C.z0 + 8).prop.box(C.x0 + 3.8, yR + 3.2, C.z0 + 3.8, C.x0 + 12.2, yR + 3.4, C.z0 + 12.2, VH.col(0x9aa0a4));
+    // A red light on each roof corner (lit).
+    for (const [lx, lz] of [[C.x0 + 0.6, C.z0 + 0.6], [C.x1 - 0.6, C.z0 + 0.6], [C.x0 + 0.6, C.z1 - 0.6], [C.x1 - 0.6, C.z1 - 0.6]]) glow(world, lx - 0.15, yR + 0.9, lz - 0.15, lx + 0.15, yR + 1.2, lz + 0.15, 0xff2a2a, 2.4);
+    return { yH, pad: { x: hx, z: hz }, front: { x: ex, z: cz1 + 3 } };
+  }
+
   /** A parked car drawn into the chunk (body, cabin, wheels), solid. */
   function parkedCar(world, x, z, yaw, hex) {
     const ctx = world.ctxAt(x, z);
@@ -557,13 +751,15 @@
   VH.Districts.register({
     id: D,
     name: 'Paloma Heights',
-    plots: ['paloma_estate'],
+    plots: ['paloma_estate', 'paloma_observatory'],
     build(world, layout) {
       const t0 = performance.now();
       if (!layout.plots || !layout.plots.paloma_estate || !VH.WNKit || !VH.SouthKit) return;
       S().withUndersides(() => {
         const estate = buildEstate(world);
-        world.palomaHeights = { estate };
+        const observatory = buildObservatory(world);
+        const clinic = buildClinic(world);
+        world.palomaHeights = { estate, observatory, clinic };
       });
       this.buildMs = Math.round(performance.now() - t0);
     },
@@ -581,6 +777,12 @@
       add('estate_study', { name: "Leo Castellane's study, the east terrace", x: es.study.x, z: es.study.z, y: es.study.y, yaw: -PI / 2, kind: 'mansion' });
       add('estate_garden', { name: 'The back lawn, Villa Castellane', x: es.garden.x, z: es.garden.z, yaw: PI, kind: 'mansion' });
       add('estate_gate', { name: 'The gates of Villa Castellane', x: es.gate.x, z: es.gate.z, yaw: PI, kind: 'street' });
+      // The observatory: on the terrace round the dome (a parachutist lands on the dome and steps down to it).
+      const ob = ph.observatory, cl = ph.clinic;
+      add('paloma_observatory', { name: 'Paloma Observatory, the dome terrace', x: ob.terrace.x, z: ob.terrace.z, y: ob.yTop, yaw: 0, kind: 'overlook', landmark: true });
+      add('observatory_lawn', { name: 'The observatory lawn', x: (LAWN.x0 + LAWN.x1) / 2, z: (LAWN.z0 + LAWN.z1) / 2, yaw: 0, kind: 'park' });
+      add('paloma_clinic', { name: 'The Paloma Clinic', x: cl.front.x, z: cl.front.z, yaw: PI, kind: 'hospital_front' });
+      add('clinic_helipad', { name: 'The Paloma Clinic helipad', x: cl.pad.x, z: cl.pad.z, y: cl.yH, yaw: 0, kind: 'rooftop', roof: true });
       const extra = places.extra[D];
       if (extra) {
         extra.push(

@@ -73,6 +73,25 @@
     return Math.hypot(x - ax - dx * t, z - az - dz * t);
   }
 
+  /** A tall ball-stop net along an axis-aligned line: poles every 12 m and a see-through mesh of cords; solid to people. */
+  function net(world, x0, z0, x1, z1, h) {
+    const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+    const c = alongX ? z0 : x0;
+    const a0 = alongX ? Math.min(x0, x1) : Math.min(z0, z1), a1 = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
+    const pole = VH.col(0x5a5f66), cord = VH.col(0x26332a);
+    const R = (q0, q1, cc0, cc1, y0, y1) => (alongX ? [q0, y0, cc0, q1, y1, cc1] : [cc0, y0, q0, cc1, y1, q1]);
+    C().pieces(a0, a1, 48, (a, b) => {
+      const ctx = world.ctxAt(alongX ? (a + b) / 2 : c, alongX ? c : (a + b) / 2);
+      for (let y = 0.6; y <= h + 0.01; y += 0.9) ctx.prop.box(...R(a, b, c - 0.015, c + 0.015, KERB + y, KERB + y + 0.035), cord);
+      for (let p = a; p <= b + 0.01; p += 0.9) ctx.prop.box(...R(p - 0.015, p + 0.015, c - 0.015, c + 0.015, KERB + 0.6, KERB + h), cord);
+    });
+    for (let p = a0; p <= a1 + 0.01; p += Math.max(6, (a1 - a0) / Math.max(1, Math.round((a1 - a0) / 12)))) {
+      world.ctxAt(alongX ? p : c, alongX ? c : p).prop.box(...R(p - 0.1, p + 0.1, c - 0.1, c + 0.1, KERB, KERB + h + 0.3), pole);
+    }
+    const bx = R(a0, a1, c - 0.12, c + 0.12, 0, KERB + h + 0.3);
+    world.physics.addBox(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], 'fence', F().SOLID | F().CAMERA);
+  }
+
   /** A parked golf buggy (a prop: solid, not driveable), facing yaw. */
   function buggy(world, x, z, yaw, hex) {
     const ctx = world.ctxAt(x, z);
@@ -115,7 +134,7 @@
     x0: -1582, x1: -1057, z0: 669, z1: 1181,
     edge: 1.6,
     range: { x0: -1572, x1: -1326, z0: 680, z1: 764, bays: -1342 },
-    club: { x0: -1278, x1: -1216, z0: 696, z1: 730, h: 7 },
+    club: { x0: -1272, x1: -1222, z0: 698, z1: 728, h: 7 },
     terrace: { z1: 744 },
     shed: { x0: -1206, x1: -1184, z0: 688, z1: 724 },
     park: { x0: -1176, x1: -1068, z0: 678, z1: 760 },
@@ -154,15 +173,15 @@
   });
 
   const GOLF = {
-    rough: VH.col(0xd8e4c0), fwA: VH.col(0x9fd27a, 1.25), fwB: VH.col(0x86c066, 1.25), tee: VH.col(0xa8dc84, 1.3),
-    fringe: VH.col(0x8fc86a, 1.25), green: VH.col(0xb8ec8e, 1.4), sand: VH.col(0xe6d4a0), path: VH.col(0xa9a59c), cup: VH.col(0x1a1c1a),
+    fwA: VH.col(0xd4fca8, 1.3), fwB: VH.col(0xbcec94, 1.3), tee: VH.col(0xdcffb4, 1.35),
+    fringe: VH.col(0xc4f4a0, 1.3), green: VH.col(0xe4ffc4, 1.55), sand: VH.col(0xeedcaa), path: VH.col(0xb4ab98), cup: VH.col(0x1a1c1a),
   };
 
   function buildGolf(world) {
     const K = C(), WN = W();
     const P = PL, e = P.edge;
     // The rough over the whole course, the paths and fairways over it.
-    WN.pave(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 0xd8e4c0, 'grassTop', KERB + 0.004);
+    WN.pave(world, P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e, 0xa6b888, 'grassTop', KERB + 0.004); // the rough: longer, darker grass
     world.addLawn(P.x0 + e, P.z0 + e, P.x1 - e, P.z1 - e);
     VH.Districts.open && VH.Districts.open(P.x0, P.range.z1, P.x1, P.z1, 'Pelican Links golf course');
     VH.Districts.open && VH.Districts.open(P.range.x0, P.range.z0, P.range.bays, P.range.z1, 'Pelican Links driving range');
@@ -247,12 +266,12 @@
     ellipse(world, 'grassTop', H.gx, H.gz, 14, 10.5, H.yaw, yG, GOLF.green);
     ellipse(world, 'marks', H.px, H.pz, 0.25, 0.25, 0, yG + 0.012, GOLF.cup, 10);
     const gc = world.ctxAt(H.px, H.pz);
-    gc.prop.cylinder(H.px, KERB, H.pz, 0.025, 0.025, 2.4, 6, VH.col(0xf2f2ee), true);
-    const fy = KERB + 2.4;
+    gc.prop.cylinder(H.px, KERB, H.pz, 0.03, 0.03, 2.7, 6, VH.col(0xf2f2ee), true);
+    const fy = KERB + 2.7;
     const flagCol = VH.col(H.n % 2 ? 0xe8302c : 0xf2c318);
     // The flag, streaming away from the south-west wind, both faces.
     const fx = Math.cos(0.6), fz = -Math.sin(0.6);
-    const f0 = [H.px, fy, H.pz], f1 = [H.px, fy - 0.55, H.pz], f2 = [H.px + fx * 0.85, fy - 0.27, H.pz + fz * 0.85];
+    const f0 = [H.px, fy, H.pz], f1 = [H.px, fy - 0.75, H.pz], f2 = [H.px + fx * 1.2, fy - 0.37, H.pz + fz * 1.2];
     gc.prop.polygon([f0, f1, f2], flagCol);
     gc.prop.polygon([f0, f2, f1], flagCol);
     world.physics.addBox(H.px - 0.06, 0, H.pz - 0.06, H.px + 0.06, fy, H.pz + 0.06, 'pole', F().SOLID | F().SHOTS);
@@ -269,8 +288,8 @@
     const P = PL;
     const y = KERB + 0.035;
     const pts = [];
-    const club = [-1236, 750];
-    pts.push([club, [-1236, 772], [P.holes[0].tx + 10, 772 + 6]]);
+    const club = [P.club.x1 - 2, P.terrace.z1 + 1.5]; // the terrace steps (east of the putting green)
+    pts.push([club, [P.club.x1 - 2, 772], [P.holes[0].tx + 10, 778]]);
     P.holes.forEach((H, i) => {
       const o = 24 * H.path;
       const a = [H.tx + H.rx * o - H.ux * 2, H.tz + H.rz * o - H.uz * 2];
@@ -280,14 +299,14 @@
       if (N) pts.push([b, [N.tx + N.rx * 24 * N.path - N.ux * 2, N.tz + N.rz * 24 * N.path - N.uz * 2]]);
     });
     const last = pts[pts.length - 1];
-    pts.push([last[last.length - 1], [-1420, 822], [-1340, 822], [-1262, 764], club]);
+    pts.push([last[last.length - 1], [-1420, 822], [-1340, 822], [-1250, 778], [P.club.x1 - 2, 772]]);
     PL.pathSegs = [];
     for (const line of pts) {
       for (let i = 0; i < line.length - 1; i++) {
         const [ax, az] = line[i], [bx, bz] = line[i + 1];
-        band(world, 'marks', ax, az, bx, bz, 3, y, GOLF.path);
+        band(world, 'marks', ax, az, bx, bz, 2.6, y, GOLF.path);
         // Round the joints.
-        ellipse(world, 'marks', bx, bz, 1.5, 1.5, 0, y, GOLF.path, 8);
+        ellipse(world, 'marks', bx, bz, 1.3, 1.3, 0, y, GOLF.path, 8);
         PL.pathSegs.push([ax, az, bx, bz]);
       }
     }
@@ -334,6 +353,19 @@
     const ctx = K.shed(world, c, { h: c.h, rise: 4.5, wall: 0xf2efe6, roof: 0x2a4a3a, axis: 'x', bay: 3.4, floorH: 3.5, ww: 0.5, wh: 0.55, seed: 21.3 });
     // A white band between the floors, dark green eaves boards.
     ctx.prop.box(c.x0 - 0.08, KERB + 3.4, c.z0 - 0.08, c.x1 + 0.08, KERB + 3.6, c.z1 + 0.08, VH.col(0xd8d4c8));
+    // The cupola on the ridge: white louvred lantern, a green spire, a weathervane.
+    {
+      const cx = (c.x0 + c.x1) / 2, cz = (c.z0 + c.z1) / 2, ry = KERB + c.h + 4.5;
+      ctx.prop.box(cx - 1.6, ry - 1.2, cz - 1.6, cx + 1.6, ry + 1.6, cz + 1.6, VH.col(0xf8f6f0));
+      for (const s of [-1, 1]) {
+        ctx.prop.box(cx - 0.9, ry + 0.2, cz + s * 1.6 - 0.02, cx + 0.9, ry + 1.3, cz + s * 1.6 + 0.02, VH.col(0x2a4a3a));
+        ctx.prop.box(cx + s * 1.6 - 0.02, ry + 0.2, cz - 0.9, cx + s * 1.6 + 0.02, ry + 1.3, cz + 0.9, VH.col(0x2a4a3a));
+      }
+      ctx.prop.cylinder(cx, ry + 1.6, cz, 2.25, 0.05, 2.6, 8, VH.col(0x2a4a3a), false);
+      ctx.prop.box(cx - 0.03, ry + 4.2, cz - 0.03, cx + 0.03, ry + 5.4, cz + 0.03, VH.col(0x3a3f45));
+      ctx.prop.box(cx - 0.6, ry + 5.0, cz - 0.02, cx + 0.6, ry + 5.25, cz + 0.02, VH.col(0x3a3f45));
+      world.physics.addBox(cx - 1.6, ry - 1.2, cz - 1.6, cx + 1.6, ry + 1.6, cz + 1.6, 'building', F().CAMERA | F().SHOTS);
+    }
     // The porch on the north side: a pediment on four white columns, the doors, the name.
     const dx = (c.x0 + c.x1) / 2;
     WN.pave(world, dx - 12, c.z0 - 18, dx + 12, c.z0, 0xd8ccb0, 'plazaTop', KERB + 0.02, 3);
@@ -345,7 +377,7 @@
     WN.gable(ctx.prop, dx - 5.6, c.z0 - 5.2, dx + 5.6, c.z0 + 0.2, KERB + 4.7, 1.6, 'z', 0x2a4a3a, 0xf8f6f0);
     ctx.prop.box(dx - 1.4, KERB, c.z0 - 0.08, dx + 1.4, KERB + 2.8, c.z0 + 0.02, VH.col(0x2a3a30));
     ctx.screen.box(dx - 1.2, KERB + 0.3, c.z0 - 0.1, dx + 1.2, KERB + 2.6, c.z0 - 0.08, VH.col(0xffe2b0, 0.8));
-    VH.Landmarks.sign(world, { x: dx, y: KERB + 5.9, z: c.z0 - 5.3, yaw: Math.PI, w: 5.5, h: 0.9, lines: ['PELICAN LINKS', 'Est. 1932'], style: 'plaque' });
+    VH.Landmarks.sign(world, { x: dx, y: KERB + 5.35, z: c.z0 - 5.6, yaw: Math.PI, w: 4.6, h: 0.8, lines: ['PELICAN LINKS', 'Est. 1932'], style: 'plaque' });
     for (const s of [-1, 1]) {
       // Box hedges and lamps either side of the steps.
       K.hedge(world, dx + s * 6, c.z0 - 17, dx + s * 6, c.z0 - 6, [], 0.8, 0.8);
@@ -353,7 +385,7 @@
       world.addProp('planter', dx + s * 3, KERB, c.z0 - 7, 0, 1);
     }
     // Flagpoles on the lawn in front.
-    for (const [x, col] of [[dx - 10, 0x1f4a36], [dx + 10, 0xe8302c]]) {
+    for (const [x, col] of [[dx - 10, 0x2f8a4a], [dx + 10, 0xe8302c]]) {
       ctx.prop.cylinder(x, KERB, c.z0 - 15, 0.07, 0.05, 9, 8, VH.col(0xf2f2ee), true);
       ctx.prop.box(x + 0.06, KERB + 7.4, c.z0 - 15.02, x + 2.2, KERB + 8.8, c.z0 - 14.98, VH.col(col));
       world.physics.addBox(x - 0.1, 0, c.z0 - 15.1, x + 0.1, KERB + 9, c.z0 - 14.9, 'pole', F().SOLID | F().SHOTS);
@@ -362,7 +394,7 @@
     const tz0 = c.z1, tz1 = PL.terrace.z1;
     ctx.wood.topRect(c.x0 - 2, tz0, c.x1 + 2, tz1, KERB + 0.03, VH.col(0xb89a72), 2);
     const rail = VH.col(0xf2f2ee);
-    const gap = [dx - 2.5, dx + 2.5];
+    const gap = [c.x1 - 4.5, c.x1 + 0.5]; // the steps down to the course, by the buggy path
     for (const [a0, a1] of [[c.x0 - 2, gap[0]], [gap[1], c.x1 + 2]]) {
       ctx.prop.box(a0, KERB + 0.95, tz1 - 0.08, a1, KERB + 1.05, tz1 + 0.08, rail);
       for (let x = a0; x <= a1 + 0.01; x += 1.2) ctx.prop.box(x - 0.04, KERB, tz1 - 0.04, x + 0.04, KERB + 0.95, tz1 + 0.04, rail);
@@ -454,9 +486,9 @@
     const R = PL.range;
     const bx = R.bays;
     // The tall nets along both long sides and the far end.
-    WN.fence(world, R.x0, R.z0, bx + 12, R.z0, [], 'chain', 7);
-    WN.fence(world, R.x0, R.z1, bx - 2, R.z1, [], 'chain', 7);
-    WN.fence(world, R.x0, R.z0, R.x0, R.z1, [], 'chain', 7);
+    net(world, R.x0, R.z0, bx + 8, R.z0, 8);
+    net(world, R.x0, R.z1, bx - 1, R.z1, 8);
+    net(world, R.x0, R.z0, R.x0, R.z1, 8);
     // The bays: a long shelter facing west, mats, dividers, ball machines.
     const ctx = world.ctxAt(bx + 6, (R.z0 + R.z1) / 2);
     const z0 = R.z0 + 4, z1 = R.z1 - 4;
