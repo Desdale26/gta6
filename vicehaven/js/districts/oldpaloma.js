@@ -661,8 +661,12 @@
     const hw = 1.8, hd = 1.1;
     // Counter along the front (+v), crates behind.
     const [cx, cz] = P(0, hd - 0.35);
-    ctx.wood.orientedBox(cx, cz, hw, 0.35, yaw, KERB, KERB + 0.95, VH.col(0x8a6a48), VH.col(0xa07a52));
-    world.physics.addOrientedBox(cx, cz, hw, 0.35, yaw, 0, KERB + 0.95, 'crate', F().ALL);
+    ctx.prop.orientedBox(cx, cz, hw, 0.35, yaw, KERB + 0.2, KERB + 0.95, VH.col(0xc49a68));
+    // A striped cloth skirt down the counter's front, to the ground.
+    const [kx, kz] = P(0, hd + 0.01);
+    ctx.prop.orientedBox(kx, kz, hw, 0.02, yaw, KERB, KERB + 0.9, VH.col(stripe));
+    ctx.prop.orientedBox(cx, cz, hw - 0.05, 0.3, yaw, KERB, KERB + 0.2, VH.col(0x6a4a30));
+    world.physics.addOrientedBox(cx, cz, hw, 0.37, yaw, 0, KERB + 0.95, 'crate', F().ALL);
     // Produce on the counter in three trays.
     for (let k = -1; k <= 1; k++) {
       const [gx, gz] = P(k * 1.15, hd - 0.35);
@@ -678,10 +682,20 @@
       const u0 = -hw - 0.15 + ((2 * hw + 0.3) * i) / 6, u1 = -hw - 0.15 + ((2 * hw + 0.3) * (i + 1)) / 6;
       const [ax, az] = P((u0 + u1) / 2, 0);
       ctx.prop.orientedBox(ax, az, (u1 - u0) / 2, hd + 0.35, yaw, KERB + 2.5, KERB + 2.62, VH.col(i % 2 ? 0xf6f1e4 : stripe), null);
+      // The valance: a scalloped strip hanging off the awning's front edge.
+      const [vx, vz] = P((u0 + u1) / 2, hd + 0.34);
+      ctx.prop.orientedBox(vx, vz, (u1 - u0) / 2, 0.01, yaw, KERB + 2.2, KERB + 2.5, VH.col(i % 2 ? stripe : 0xf6f1e4)); // solidity: passable (cloth above head height)
     }
+    // The awning is solid (it is head height to anyone up on the counter).
+    world.physics.addOrientedBox(x, z, hw + 0.15, hd + 0.35, yaw, KERB + 2.2, KERB + 2.62, 'crate', F().SOLID | F().SHOTS);
+    // A hand-painted price board on the awning post.
+    const [sx, sz] = P(hw * 0.97, hd * 0.97 + 0.06);
+    ctx.prop.orientedBox(sx, sz, 0.3, 0.02, yaw, KERB + 1.5, KERB + 1.95, VH.col(0x2a3a2e));
+    world.physics.addOrientedBox(sx, sz, 0.3, 0.05, yaw, KERB + 1.5, KERB + 1.95, 'crate', F().SOLID | F().SHOTS);
     // A crate or two behind the counter (solid).
     const [bx, bz] = P(-0.9, -hd + 0.45);
-    ctx.wood.orientedBox(bx, bz, 0.4, 0.3, yaw, KERB, KERB + 0.55, VH.col(0x9a7650));
+    ctx.prop.orientedBox(bx, bz, 0.4, 0.3, yaw, KERB, KERB + 0.55, VH.col(0xb88a58));
+    ctx.prop.orientedBox(bx, bz, 0.34, 0.24, yaw, KERB + 0.55, KERB + 0.62, VH.col(goods[0]));
     world.physics.addOrientedBox(bx, bz, 0.4, 0.3, yaw, 0, KERB + 0.55, 'crate', F().ALL);
   }
 
@@ -697,7 +711,7 @@
     const pier = 1.3; // half the newel pier
     const px0 = cxm - pier, px1 = cxm + pier, pz0 = czm - pier, pz1 = czm + pier;
     const ring = ix1 - px1; // corridor width (2.0)
-    const stoneC = 0xe4d6b6;
+    const stoneC = 0xf2e6c8;
     // The shaft's walls: solid, with the door (north face, at the NW corner) and the belfry's arches.
     const door = { x0: ix0 + 0.15, x1: ix0 + ring - 0.15, h: KERB + 2.6 };
     const op = 1.7; // belfry corner piers
@@ -708,7 +722,8 @@
       const a0 = along ? x0 : z0, a1 = along ? x1 : z1;
       const c0 = side === 'n' ? z0 : side === 's' ? z1 - w : side === 'w' ? x0 : x1 - w;
       const c1 = c0 + w;
-      const B = (p0, p1, y0, y1, hex, opts) => (along ? sbox(world, 'concrete', p0, y0, c0, p1, y1, c1, hex, 'wall', opts) : sbox(world, 'concrete', c0, y0, p0, c1, y1, p1, hex, 'wall', opts));
+      // (on the building surface: clean limewash, not the stained concrete)
+      const B = (p0, p1, y0, y1, hex, opts) => (along ? sbox(world, 'b', p0, y0, c0, p1, y1, c1, hex, 'wall', opts) : sbox(world, 'b', c0, y0, p0, c1, y1, p1, hex, 'wall', opts));
       if (side === 'n') {
         B(a0, door.x0, KERB, yB, stoneC);
         B(door.x1, a1, KERB, yB, stoneC);
@@ -797,6 +812,99 @@
     return { yB, bell: { x: bx, z: bzc } };
   }
 
+  /** A café table under a parasol, two chairs (all solid; the canopy is over head height). */
+  function parasolTable(world, x, z, hex) {
+    const ctx = world.ctxAt(x, z);
+    S().drum(world, ctx.prop, x, KERB, z, 0.42, 0.74, 10, 0xf2efe6, 'crate');
+    for (const s2 of [-1, 1]) sbox(world, 'prop', x + s2 * 0.8 - 0.21, KERB, z - 0.21, x + s2 * 0.8 + 0.21, KERB + 0.9, z + 0.21, 0x2a2d33, 'crate');
+    ctx.prop.box(x - 0.04, KERB + 0.74, z - 0.04, x + 0.04, KERB + 2.3, z + 0.04, VH.col(0xdcd6c8));
+    ctx.prop.cylinder(x, KERB + 2.05, z, 0.06, 1.55, 0.45, 8, VH.col(hex), false);
+    K().block(world, x - 0.06, KERB + 0.74, z - 0.06, x + 0.06, KERB + 2.3, z + 0.06, 'pole');
+    S().disc(world, x, z, 1.56, KERB + 2.05, KERB + 2.5, 'crate', F().SOLID | F().SHOTS);
+    S().capUnder(ctx.prop, x, KERB + 2.05, z, 1.55, 8, VH.colMul(VH.col(hex), 0.75));
+  }
+
+  /** Fill the square: plane-tree alleys, café terraces, a news kiosk, the flower seller, the founder's statue, flower beds. */
+  function plazaDressing(world) {
+    const Pz = PLAZA, Fn = Pz.fountain;
+    // Two double rows of shade trees down the long sides (the west pair stops short of the bandstand).
+    for (let z = 201; z <= 284; z += 9.2) for (const x of [1022, 1029]) world.addProp('tree', x, KERB, z, (z * 7) % 6, 1.05);
+    for (let z = 201; z <= 320; z += 9.2) for (const x of [1111, 1118]) world.addProp('tree', x, KERB, z, (z * 5) % 6, 1.05);
+    // Tree pits: a dark square of earth and a low iron guard round each (solid, knee-high).
+    // (drawn by the tree prop's own collider footprint; the pits are paint)
+    for (let z = 201; z <= 320; z += 9.2) for (const x of [1022, 1029, 1111, 1118]) {
+      if (x < 1100 && z > 284) continue;
+      K().pave(world, x - 0.9, z - 0.9, x + 0.9, z + 0.9, 0x5a4a38, 'plazaTop', KERB + 0.05, 1);
+    }
+    // The wave mosaic: dark setts laid in rolling bands across the open ends of the square (the sea, in stone).
+    for (const [za, zb] of [[198, 246], [279, 326]]) {
+      for (let zb0 = za; zb0 < zb; zb0 += 4.0) {
+        for (let x = 1035; x < 1105; x += 1.4) {
+          const zc = zb0 + 1.1 * Math.sin((x - 1035) * 0.28);
+          if (zc < za || zc + 0.9 > zb) continue;
+          if (Math.hypot(x - 1070, zc - 306) < 3.2 || (Math.abs(x - 1070) < 11 && zc > 250 && zc < 274)) continue;
+          K().pave(world, x, zc, x + 1.42, zc + 0.9, 0x4f5a66, 'plazaTop', KERB + 0.038, 1);
+        }
+      }
+    }
+    // Café terraces in front of the houses on both sides, between the lamp posts.
+    const umb = [0xe8483a, 0x2f7f86, 0xf0c040, 0xf6f1e4, 0x3d6b8f];
+    let k = 0;
+    for (let z = 202; z < 320; z += 26) {
+      parasolTable(world, 1015, z, umb[k++ % umb.length]);
+      parasolTable(world, 1125, z + 13, umb[k++ % umb.length]);
+    }
+    // The news kiosk (green, octagonal, solid) by the Mission Street entrance.
+    const kx = 1098, kz = 207;
+    const kc = world.ctxAt(kx, kz);
+    S().drum(world, kc.prop, kx, KERB, kz, 1.7, 2.7, 8, 0x2f6a4a, 'building');
+    kc.prop.cylinder(kx, KERB + 2.7, kz, 2.2, 2.2, 0.2, 8, VH.col(0x24533a), true);
+    kc.prop.cylinder(kx, KERB + 2.9, kz, 2.1, 0.15, 1.2, 8, VH.col(0x24533a), false);
+    S().capUnder(kc.prop, kx, KERB + 2.7, kz, 2.2, 8, VH.col(0x1c3f2c));
+    kc.prop.cylinder(kx, KERB + 4.1, kz, 0.18, 0.18, 0.3, 6, VH.col(0xc9a227), true);
+    glow(world, kx - 1.0, KERB + 0.9, kz - 1.74, kx + 1.0, KERB + 2.0, kz - 1.7, 0xffe8b0, 1.2);
+    // Magazines racked round its skirt.
+    const mags = [0xe8483a, 0xf0c040, 0x3d6b8f, 0xe86ab0, 0xffffff, 0x7ac04a];
+    for (let i = 0; i < 6; i++) kc.prop.box(kx - 1.5 + i * 0.5, KERB + 0.5, kz - 1.78, kx - 1.1 + i * 0.5, KERB + 0.85, kz - 1.7, VH.col(mags[i]));
+    K().sign(world, { x: kx, y: KERB + 2.35, z: kz - 1.75, yaw: PI, w: 2.2, h: 0.5, lines: ['PRENSA'], style: 'plaque' });
+    // The flower seller's barrow on the other side of the entrance.
+    stall(world, 1042, 207, 0, 0xe86ab0, [0xe86ab0, 0xf0d050, 0xffffff]);
+    for (const [bx, bz, c] of [[1040.2, 209.3, 0xe8483a], [1041.4, 209.4, 0xf0d050], [1042.6, 209.3, 0xe86ab0], [1043.8, 209.4, 0xffffff]]) {
+      S().drum(world, world.ctxAt(bx, bz).prop, bx, KERB, bz, 0.3, 0.45, 8, 0x5a6a72, 'crate');
+      world.ctxAt(bx, bz).hedge.cylinder(bx, KERB + 0.45, bz, 0.32, 0.22, 0.35, 7, VH.col(c), true);
+    }
+    // The founder on his plinth, facing the church steps: Albero the fisherman, net over his shoulder.
+    const sx = Fn.x, sz = 306;
+    const st = world.ctxAt(sx, sz);
+    sbox(world, 'concrete', sx - 1.6, KERB, sz - 1.6, sx + 1.6, KERB + 0.5, sz + 1.6, 0xcdbd98, 'wall');
+    sbox(world, 'concrete', sx - 1.0, KERB + 0.5, sz - 1.0, sx + 1.0, KERB + 2.6, sz + 1.0, 0xe4d6b6, 'wall');
+    draw(world, 'concrete', sx - 1.15, KERB + 2.6, sz - 1.15, sx + 1.15, KERB + 2.8, sz + 1.15, 0xcdbd98, { bottom: true });
+    const bronze = VH.col(0x4f7a62);
+    st.propMatte.cylinder(sx, KERB + 2.8, sz, 0.42, 0.5, 1.2, 8, bronze, true); // legs and coat
+    st.propMatte.cylinder(sx, KERB + 4.0, sz, 0.5, 0.42, 0.8, 8, bronze, true); // chest
+    st.propMatte.cylinder(sx, KERB + 4.8, sz, 0.2, 0.22, 0.25, 6, bronze, true); // neck
+    st.propMatte.cylinder(sx, KERB + 5.05, sz, 0.24, 0.22, 0.42, 8, bronze, true); // head
+    st.propMatte.cylinder(sx, KERB + 5.45, sz, 0.36, 0.36, 0.06, 8, bronze, true); // hat brim
+    st.propMatte.cylinder(sx, KERB + 5.51, sz, 0.2, 0.2, 0.18, 8, bronze, true);
+    K().tiltBox(st.propMatte, sx + 0.55, KERB + 4.35, sz, 0.2, 1.0, 0.2, 0, -0.5, bronze); // the arm raised to the sea
+    K().tiltBox(st.propMatte, sx - 0.45, KERB + 3.8, sz + 0.2, 0.5, 1.1, 0.12, 0, 0.25, VH.col(0x3f6650)); // the net over his shoulder
+    world.physics.addBox(sx - 1.0, KERB + 2.6, sz - 1.0, sx + 1.0, KERB + 5.7, sz + 1.0, 'wall', F().ALL);
+    K().sign(world, { x: sx, y: KERB + 1.6, z: sz - 1.03, yaw: PI, w: 1.6, h: 0.5, lines: ['ALBERO · 1741'], style: 'plaque' });
+    for (const [lx, lz] of [[sx - 1.45, sz - 1.45], [sx + 1.45, sz - 1.45]]) glow(world, lx - 0.12, KERB + 0.5, lz - 0.12, lx + 0.12, KERB + 0.62, lz + 0.12, 0xfff1c8, 1.8);
+    // Flower beds round the fountain's paving (low clipped box hedges in stone kerbs, solid).
+    for (const [x0, z0, x1, z1] of [[Fn.x - 10, Fn.z - 10, Fn.x - 4, Fn.z - 8.8], [Fn.x + 4, Fn.z - 10, Fn.x + 10, Fn.z - 8.8], [Fn.x - 10, Fn.z + 8.8, Fn.x - 4, Fn.z + 10], [Fn.x + 4, Fn.z + 8.8, Fn.x + 10, Fn.z + 10],
+      [Fn.x - 10, Fn.z - 8.8, Fn.x - 8.8, Fn.z - 3], [Fn.x - 10, Fn.z + 3, Fn.x - 8.8, Fn.z + 8.8], [Fn.x + 8.8, Fn.z - 8.8, Fn.x + 10, Fn.z - 3], [Fn.x + 8.8, Fn.z + 3, Fn.x + 10, Fn.z + 8.8]]) {
+      sbox(world, 'concrete', x0, KERB, z0, x1, KERB + 0.35, z1, 0xcdbd98, 'wall');
+      const fc = world.ctxAt((x0 + x1) / 2, (z0 + z1) / 2);
+      fc.hedge.box(x0 + 0.1, KERB + 0.35, z0 + 0.1, x1 - 0.1, KERB + 0.7, z1 - 0.1, VH.col(0x3f7a34));
+      for (let i = 0; i < 6; i++) {
+        const fx = x0 + 0.3 + ((x1 - x0 - 0.6) * (i + 0.5)) / 6, fz = z0 + 0.3 + ((z1 - z0 - 0.6) * ((i * 3) % 6 + 0.5)) / 6;
+        fc.hedge.box(fx - 0.14, KERB + 0.7, fz - 0.14, fx + 0.14, KERB + 0.82, fz + 0.14, VH.col([0xe8483a, 0xf0d050, 0xe86ab0][i % 3]));
+      }
+      world.physics.addBox(x0, 0, z0, x1, KERB + 0.82, z1, 'hedge', F().SOLID | F().SHOTS);
+    }
+  }
+
   function buildPlaza(world) {
     const Pz = PLAZA;
     const sq = Pz.sq;
@@ -845,8 +953,8 @@
     }
     world.physics.addBox(Fn.x - 0.55, 0, Fn.z - 0.55, Fn.x + 0.55, KERB + 3.5, Fn.z + 0.55, 'fountain');
     S().disc(world, Fn.x, Fn.z, 1.5, KERB + 2.25, KERB + 2.6, 'fountain');
-    // Palms in planters at the corners of the pale field, benches facing the fountain.
-    for (const [px, pz] of [[sq.x0 + 12, sq.z0 + 14], [sq.x1 - 12, sq.z0 + 14], [sq.x0 + 12, sq.z1 - 12], [sq.x1 - 12, sq.z1 - 12], [Fn.x - 26, Fn.z], [Fn.x + 26, Fn.z]]) {
+    // Palms in planters either side of the fountain, benches facing it.
+    for (const [px, pz] of [[Fn.x - 26, Fn.z], [Fn.x + 26, Fn.z]]) {
       world.addProp('planter', px, KERB, pz, 0, 1.2);
       world.addProp('palmTall', px, KERB + 0.7, pz, (px * 3) % 6, 0.9);
     }
@@ -855,12 +963,13 @@
     for (let x = sq.x0 + 4; x <= sq.x1 - 4; x += 22) { world.addProp('streetlight', x, KERB, sq.z0 + 3, PI, 1); world.addProp('streetlight', x, KERB, sq.z1 - 3, 0, 1); }
     for (let z = sq.z0 + 26; z < sq.z1 - 10; z += 26) { world.addProp('streetlight', sq.x0 + 3, KERB, z, PI / 2, 1); world.addProp('streetlight', sq.x1 - 3, KERB, z, -PI / 2, 1); }
     for (let x = sq.x0 + 2; x <= sq.x1 - 2; x += 3) if (Math.abs(x - 1070) > 5) world.addProp('bollard', x, KERB, 189.6, 0, 1);
+    plazaDressing(world);
 
     // --- the bandstand: an octagonal platform on steps, eight columns, a tiled roof
     const Bd = Pz.band;
     const bctx = world.ctxAt(Bd.x, Bd.z);
     bctx.concrete.cylinder(Bd.x, KERB, Bd.z, Bd.r, Bd.r, Bd.h, 8, sc(0xe8dcc0), true, sc(0xd8cbb0));
-    S().disc(world, Bd.x, Bd.z, Bd.r * 0.96, 0, KERB + Bd.h, 'stone');
+    S().disc(world, Bd.x, Bd.z, Bd.r * 1.01, 0, KERB + Bd.h, 'stone');
     K().stairs(world, bctx.concrete, Bd.x + Bd.r - 0.4 + 2.4, Bd.z, 'w', 2.4, 2.4, KERB, KERB + Bd.h, sc(0xe8dcc0), { rails: false, tag: 'stairs' });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * PI * 2 + PI / 8;
@@ -945,8 +1054,8 @@
     const stripes = [0xe8483a, 0x2f7f86, 0xf0a030, 0x3d6b8f];
     let si = 0;
     for (const z of [350, 368, 386, 402]) {
-      for (let x = Mk.x0 + 5; x < Mk.x1 - 3; x += 9) {
-        stall(world, x, z, z === 402 ? PI : 0, stripes[si % 4], goodsSets[si % 4]);
+      for (let x = Mk.x0 + 4.5; x < Mk.x1 - 3; x += 7.4) {
+        stall(world, x, z, z === 368 || z === 402 ? PI : 0, stripes[si % 4], goodsSets[si % 4]);
         si++;
       }
     }

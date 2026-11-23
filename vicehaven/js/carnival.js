@@ -856,6 +856,12 @@
       p.aiming = false;
       g.interaction.enabled = false;
       this._rigMode = g.cameraRig.modeIndex;
+      // A barker still calling would sit over the game's own panel: cut him off (story lines carry on).
+      const dl = g.dialogue;
+      if (dl && dl.current && dl.current.mode === 'ambient' && dl.current.lines[0] && dl.current.lines[0][0] === 'barker' && dl._finishCurrent) {
+        dl._finishCurrent(true);
+        dl._next();
+      }
       this.overlay.show(true);
       this.overlay.title(d.name, d.hint || (d.kind === 'ride' ? 'Mouse / right stick  look around   ·   V  change view   ·   Esc / B  get off at the next stop' : 'Esc / B  stop'));
       g.cameraShot = this._shotFn;

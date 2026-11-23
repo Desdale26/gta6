@@ -1037,7 +1037,7 @@
     ['armour', 'Bumper-car body armour', 45, 'armour', 0x37b8ff, 'A padded vest from the dodgems crew: full armour.'],
     ['voucher', '$50 cash voucher', 70, 'cash', 0x7dcf6a, 'Fifty dollars, cash, from the office.'],
     ['gold', 'Gold paint card', 150, 'paint', 0xd4a017, 'Wharf Gold at any Fresh Coat body shop.'],
-    ['crab', 'GIANT plush crab', 600, 'giant', 0xff5a3c, 'As big as Jay. The top prize. Nobody wins it.'],
+    ['crab', 'GIANT plush crab', 600, 'giant', 0xff5a3c, 'As big as Jay. The top prize. Hardly anybody wins it.'],
   ].map(([id, name, cost, kind, color, line]) => ({ id, name, cost, kind, color, line }));
 
   const Midway = {

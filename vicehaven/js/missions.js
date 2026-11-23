@@ -2062,7 +2062,8 @@
         if (!v) return false;
         if (!run.marker || run.marker.x !== place.x || run.marker.z !== place.z) this._setMarker(place, { r: radius, noRoute: true });
         if (v.flying || Math.hypot(v.pos.x - place.x, v.pos.z - place.z) > radius) {
-          this._objective(label);
+          // Down but short of the ring (or past it): a plane taxis on the ground with W and A/D.
+          this._objective(!v.flying && v.speed < 6 ? 'Taxi into the marker' : label);
           return false;
         }
         if (v.speed > 1.5) {
@@ -2219,6 +2220,8 @@
     async _establish(placeId, seconds, run) {
       const place = this._place(placeId);
       if (!place) return;
+      const rig = this.game.cameraRig;
+      const look = { yaw: rig.yaw, pitch: rig.pitch };
       this.cinematic = Object.assign({ establish: place, t: 0, dur: seconds }, this._establishOrbit(place, seconds));
       document.body.classList.add('cutscene');
       this.game.dialogue.letterbox(true);
@@ -2226,7 +2229,14 @@
       this.cinematic = null;
       this.game.dialogue.letterbox(false);
       document.body.classList.remove('cutscene');
-      this.game.cameraRig.snapBehind(this.game.player);
+      rig.snapBehind(this.game.player);
+      // A flying plane goes where the view looks: hand the pilot back the view they had,
+      // not the default down-tilt, which would ease the plane into a dive (d18's fort shot).
+      const pv = this.game.player.vehicle;
+      if (MissionEngine.isAircraft(pv) && pv.flying) {
+        rig.yaw = look.yaw;
+        rig.pitch = look.pitch;
+      }
     }
 
     /** The cutscene camera: over the shoulder of whoever listens, on whoever speaks. */

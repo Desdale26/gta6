@@ -10,6 +10,17 @@
  *                      across the farm track the pick-your-own pumpkin patch
  *                      (the giant pumpkin, scarecrows, wheelbarrows, a hay
  *                      ride parked, jack-o'-lanterns that glow after dark)
+ *   corn_maze          the Haverly Corn Maze on Westfield Road: a real maze
+ *                      of standing corn (48 x 20 cells, generated once from a
+ *                      fixed seed) round a clearing with the scarecrow, the
+ *                      bell and the golden cob; a clock runs from the way in
+ *                      to the bell ($500 the first time, $100 for a new best);
+ *                      the ticket hut, the lookout tower and the yard
+ *   haverly_windfarm   the Haverly Wind Farm along the world's north edge:
+ *                      eleven turbines (65 m to the tips) that turn, with red
+ *                      lights blinking on the nacelles and the blade tips,
+ *                      sheep pasture, the access track, the substation and
+ *                      the viewpoint with a blade on show
  *
  * Static parts are merged into the chunk builders (VH.WNKit, VH.CountryKit);
  * nothing makes a mesh of its own apart from the signs.
@@ -288,7 +299,7 @@
     const t = FS.track;
     K.ground(world, t.x0, FS.z0, t.x1, FS.z1, 'track', KERB + 0.012);
     // A grass crown down the middle between the wheel ruts.
-    WN.pave(world, (t.x0 + t.x1) / 2 - 1.2, FS.z0 + 3, (t.x0 + t.x1) / 2 + 1.2, FS.z1 - 3, 0xe0e8c8, 'grassTop', KERB + 0.018);
+    K.ground(world, (t.x0 + t.x1) / 2 - 1.2, FS.z0 + 3, (t.x0 + t.x1) / 2 + 1.2, FS.z1 - 3, 'meadow', KERB + 0.018);
     // Field gates (open) at both lanes.
     for (const z of [FS.z0 + 2.2, FS.z1 - 2.2]) {
       const ctx = world.ctxAt((t.x0 + t.x1) / 2, z);
@@ -549,7 +560,7 @@
     const M = MZ, s = M.cell, t = M.wall / 2;
     const rng = new VH.RNG('haverly-maze-dress');
     // The ground: trodden straw over the maze, gravel in the yard, the pavement edge kept.
-    K.ground(world, M.mx0 - 2, M.z0 + 1.6, M.x1 - 1.6, M.z1 - 1.6, 'straw', KERB + 0.01);
+    K.ground(world, M.mx0 - 2, M.z0 + 1.6, M.x1 - 1.6, M.z1 - 1.6, 'chaff', KERB + 0.01);
     K.ground(world, M.yard.x0, M.z0 + 1.6, M.mx0 - 2, M.z1 - 1.6, 'meadow', KERB + 0.008);
     world.addLawn(M.yard.x0, M.z0 + 1.6, M.mx0 - 2, M.z1 - 1.6);
     K.ground(world, M.hut.x0 - 4, M.hut.z0 - 3, M.tower.x1 + 3, M.z1 - 1.6, 'gravel', KERB + 0.012);
@@ -584,7 +595,7 @@
     cornWall(world, M.mx1 + t, M.exitZ + s / 2 - t, M.x1 - e - 0.6, M.mz1 + t, rng);
     cornWall(world, M.mx0 - t, M.mz1 + t, M.x1 - e - 0.6, M.z1 - e - 0.6, rng);
     // The way out onto Mill Lane: a trodden path through the standing corn, a low sign (the approach band).
-    K.ground(world, M.mx1, M.exitZ - s / 2 + t, M.x1, M.exitZ + s / 2 - t, 'track', KERB + 0.016);
+    K.ground(world, M.mx1, M.exitZ - s / 2 + t, M.x1, M.exitZ + s / 2 - t, 'sand', KERB + 0.016);
     VH.Landmarks.sign(world, { x: M.x1 - 2.2, y: KERB + 1.7, z: M.exitZ - s / 2 - 0.4, yaw: Math.PI / 2, w: 1.6, h: 0.6, lines: ['MAZE EXIT', 'Well done!'], style: 'plaque', posts: true });
 
     buildMazeYard(world);
@@ -663,7 +674,7 @@
     const M = MZ;
     const cx = M.ccx, cz = M.ccz;
     const ctx = world.ctxAt(cx, cz);
-    K.ground(world, M.cx0 + 0.7, M.cz0 + 0.7, M.cx1 - 0.7, M.cz1 - 0.7, 'dirt', KERB + 0.016);
+    K.ground(world, M.cx0 + 0.7, M.cz0 + 0.7, M.cx1 - 0.7, M.cz1 - 0.7, 'sand', KERB + 0.016);
     // The platform (Jay steps up onto it) and the scarecrow.
     WN.solid(world, ctx.wood, cx - 3, KERB, cz - 3, cx + 3, KERB + 0.45, cz + 3, 0xc8a070, null, 'plank', F().SOLID | F().SHOTS);
     K.scarecrow(world, cx, cz - 1.2, 0, 0xc8402c, KERB + 0.45);
@@ -734,7 +745,7 @@
     for (let k = 0; k < 3; k++) {
       const a = (k * Math.PI * 2) / 3;
       const g = new THREE.SphereGeometry(0.42, 6, 4);
-      g.translate(Math.sin(a) * (WF.blade - 0.1), Math.cos(a) * (WF.blade - 0.1), 0);
+      g.translate(Math.sin(a) * (WF.blade - 0.1), -Math.cos(a) * (WF.blade - 0.1), 0); // where rotorGeometry's rotateX puts blade k's tip
       parts.push(g);
     }
     const out = THREE.BufferGeometryUtils ? THREE.BufferGeometryUtils.mergeBufferGeometries(parts) : null;
@@ -878,16 +889,17 @@
     const ctx = world.ctxAt((V.x0 + V.x1) / 2, bz);
     const bx0 = V.x0 + 6, bx1 = V.x0 + 6 + WF.blade;
     ctx.prop.cylinder(bx0 - 0.3, KERB, bz, 1.6, 1.6, 0.4, 12, VH.col(0x6a7078), true);
+    for (let k = 0; k < 4; k++) world.physics.addOrientedBox(bx0 - 0.3, bz, 1.6 * 0.98, 1.6 * 0.4, (k * Math.PI) / 4, 0, KERB + 0.4, 'metal', F().SOLID | F().SHOTS); // the hub ring (round-ish)
     const segs = [[0, 0.25, 0.9, 0.55], [0.25, 0.55, 0.75, 0.42], [0.55, 0.89, 0.55, 0.3], [0.89, 1, 0.38, 0.22]];
     for (const [t0, t1, half, thick] of segs) {
       const a = bx0 + (bx1 - bx0) * t0, b = bx0 + (bx1 - bx0) * t1;
       ctx.prop.box(a, KERB + 1.4 - thick, bz - half, b, KERB + 1.4 + thick, bz + half, t0 >= 0.89 ? VH.col(0xc8302c) : VH.col(0xf2f4f4));
+      world.physics.addBox(a, KERB + 1.4 - thick, bz - half, b, KERB + 1.4 + thick, bz + half, 'metal', F().ALL);
     }
     for (const t of [0.15, 0.7]) {
       const x = bx0 + (bx1 - bx0) * t;
-      WN.solid(world, ctx.prop, x - 0.4, KERB, bz - 1.1, x + 0.4, KERB + 0.9, bz + 1.1, 0xe0b12e, null, 'metal');
+      WN.solid(world, ctx.prop, x - 0.4, KERB, bz - 1.1, x + 0.4, KERB + (t < 0.25 ? 0.85 : 1.1), bz + 1.1, 0xe0b12e, null, 'metal'); // up to the blade's underside
     }
-    world.physics.addBox(bx0, 0, bz - 0.95, bx1, KERB + 1.95, bz + 0.95, 'metal', F().ALL);
     VH.Landmarks.sign(world, { x: bx0 + 4, y: KERB + 1.0, z: bz + 2.2, yaw: 0, w: 2.6, h: 0.9, lines: ['ONE BLADE', '20 m long · 6 tonnes · turns 15 times a minute'], style: 'plaque', posts: true });
     // The board, benches, a lamp.
     VH.Landmarks.sign(world, { x: V.x0 + 30, y: KERB + 1.8, z: V.z1 - 13.5, yaw: 0, w: 4.2, h: 1.7, lines: ['HAVERLY WIND FARM', 'Eleven turbines · power for 9,000 homes', 'Please keep dogs on leads: sheep about'], style: 'info', posts: true });

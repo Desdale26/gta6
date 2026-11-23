@@ -66,6 +66,11 @@
     };
     put.F = F;
     put.ctx = ctx;
+    // Solid to walk into (a counter is climbable, so what is behind it must be solid too); shots and the camera pass.
+    put.hard = (u0, y0, v0, u1, y1, v1) => {
+      F.box(u0, v0, u1, v1, r);
+      world.physics.addBox(r[0], y0, r[1], r[2], y1, r[3], 'prop', VH.COLLIDE.SOLID);
+    };
     return put;
   }
   const decorate = (f) => Carnival.Midway.builders.push(f);
@@ -711,8 +716,10 @@
     put('screen', 4.3, KERB + 2.6, -2.76, 4.8, KERB + 3.05, -2.75, 0xfff1a8);
     // The bullseyes' shelf, and the two rows of water the ducks ride along (waves on the boards in front).
     put('prop', -5.85, KERB + 1.6, SH.popV + 0.12, 5.85, KERB + 2.22, SH.popV + 0.16, wood);
+    put.hard(-5.85, KERB + 1.6, SH.popV + 0.12, 5.85, KERB + 2.22, SH.popV + 0.16);
     for (const R of SH.rows) {
       put('prop', -5.85, R.y - 0.35, R.v + 0.14, 5.85, R.y + 0.02, R.v + 0.18, blue);
+      put.hard(-5.85, R.y - 0.37, R.v - 0.1, 5.85, R.y + 0.09, R.v + 0.18);
       for (let u = -5.7; u < 5.6; u += 0.6) put('prop', u, R.y + 0.02, R.v + 0.15, u + 0.3, R.y + 0.09, R.v + 0.18, crest);
       put('prop', -5.85, R.y - 0.37, R.v - 0.1, 5.85, R.y - 0.35, R.v + 0.18, dark);
     }
@@ -1067,12 +1074,14 @@
     HP.rowV.forEach((v, r) => {
       const top = HP.tier(r);
       put('prop', -3.75, KERB, v - 0.45, 3.75, top, v + 0.45, r % 2 ? 0x27784a : baize);
+      put.hard(-3.75, 0, v - 0.45, 3.75, top, v + 0.45);
       put('prop', -3.75, top - 0.04, v + 0.43, 3.75, top + 0.01, v + 0.47, edge);
     });
     // The pegs, each with a prize on top; the gold one at the back is worth a hundred.
     for (const P of PEGS) {
       const gold = P.pts === 100;
       put('prop', P.u - 0.045, P.top - HP.pegH, P.v - 0.045, P.u + 0.045, P.top, P.v + 0.045, gold ? 0xd4a017 : wood);
+      put.hard(P.u - 0.07, P.top - HP.pegH, P.v - 0.07, P.u + 0.07, P.top + 0.09, P.v + 0.07);
       put(gold ? 'screen' : 'prop', P.u - 0.07, P.top, P.v - 0.07, P.u + 0.07, P.top + 0.09, P.v + 0.07, gold ? 0xffd96a : RING_TINTS[(PEGS.indexOf(P) * 3) % RING_TINTS.length]);
     }
     // The points painted along each tier's edge: a coloured tab per row.
@@ -1365,6 +1374,8 @@
     // The shelf on its post, a red curtain behind, sacking on the floor.
     put('wood', -S.hu, S.top - 0.06, S.v - S.hv, S.hu, S.top, S.v + S.hv, 0xb8874f);
     put('prop', -0.08, KERB, S.v - 0.08, 0.08, S.top - 0.06, S.v + 0.08, 0x6b4a32);
+    put.hard(-0.08, 0, S.v - 0.08, 0.08, S.top - 0.06, S.v + 0.08);
+    put.hard(-S.hu, S.top - 0.06, S.v - S.hv, S.hu, S.top, S.v + S.hv);
     put('prop', -0.5, KERB, S.v - 0.3, 0.5, KERB + 0.06, S.v + 0.3, 0x6b4a32);
     put('prop', -3.85, KERB + 0.04, CN.back - 0.03, 3.85, KERB + 3.2, CN.back, 0x8a1c2c);
     for (let u = -3.6; u < 3.7; u += 0.5) put('prop', u, KERB + 0.04, CN.back, u + 0.08, KERB + 3.2, CN.back + 0.03, 0x6e1422);
@@ -2119,6 +2130,7 @@
     // Sand on the floor; the table: wooden sides, sand on top; a painted beach behind.
     put('prop', -3.3, KERB + 0.02, -2.7, 3.3, KERB + 0.05, 2.42, 0xf2d48a);
     put('prop', -1.2, KERB + 0.02, 0.98, 1.2, CB.top - 0.04, 2.45, 0x8a5a3a);
+    put.hard(-1.28, 0, 0.9, 1.28, CB.top + 0.06, 2.45);
     put('prop', -1.24, CB.top - 0.06, 0.94, 1.24, CB.top, 2.45, 0xf6dc96);
     for (const s of [-1, 1]) put('wood', s * 1.24 - 0.04, CB.top - 0.06, 0.94, s * 1.24 + 0.04, CB.top + 0.06, 2.45, 0xb8874f);
     put('wood', -1.24, CB.top - 0.06, 0.9, 1.24, CB.top + 0.06, 0.98, 0xb8874f);
@@ -2519,6 +2531,10 @@
     put('wood', -4.02, KERB, 2.4, 4.02, HD.rim, 2.46, wood);
     put('wood', -4.02, KERB, 0.14, 4.02, HD.rim, 0.2, wood);
     for (const s of [-1, 1]) put('wood', s * 3.95 - (s < 0 ? 0.07 : 0), KERB, 0.14, s * 3.95 + (s > 0 ? 0.07 : 0), HD.rim, 2.46, wood);
+    put.hard(-4.04, 0, 2.38, 4.04, HD.rim + 0.025, 2.48);
+    put.hard(-4.04, 0, 0.12, 4.04, HD.rim + 0.025, 0.22);
+    for (const s of [-1, 1]) put.hard(s * 3.98 - 0.06, 0, 0.12, s * 3.98 + 0.06, HD.rim + 0.025, 2.48);
+    put.hard(-sl - 0.3, 0, vc - 0.3, sl + 0.3, HD.water + 0.06, vc + 0.3);
     put('prop', -4.04, HD.rim, 2.38, 4.04, HD.rim + 0.025, 2.48, rim);
     put('prop', -4.04, HD.rim, 0.12, 4.04, HD.rim + 0.025, 0.22, rim);
     for (const s of [-1, 1]) put('prop', s * 3.98 - 0.06, HD.rim, 0.12, s * 3.98 + 0.06, HD.rim + 0.025, 2.48, rim);
@@ -2535,6 +2551,7 @@
     put('prop', -0.36, HD.water + 0.36, vc - 0.25, 0.36, HD.water + 0.42, vc + 0.25, 0xe0403a);
     put('prop', -0.24, HD.water + 0.42, vc - 0.16, 0.24, HD.water + 0.48, vc + 0.16, 0xe0403a);
     put('prop', -0.08, HD.water + 0.08, vc + 0.2, 0.08, HD.water + 0.24, vc + 0.21, 0x2a1a12);
+    put.hard(-0.36, HD.water + 0.06, vc - 0.25, 0.36, HD.water + 0.48, vc + 0.25);
     // The bucket on the counter, where the hooked ducks go.
     const [bu, bv] = HD.bucket;
     ctx.prop.cylinder(F.wx(bu, bv), KERB + 1.04, F.wz(bu, bv), 0.13, 0.16, 0.2, 14, VH.col(0x37b8ff), true, VH.col(0x1b3e6e));

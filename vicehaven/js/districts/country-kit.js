@@ -69,12 +69,16 @@
    */
   const GROUND = {
     earth: ['asphaltTop', 0x6b4f35, 4.5], dirt: ['asphaltTop', 0xa4865c, 4.5], track: ['asphaltTop', 0x9a8466, 4.4],
-    gravel: ['decal', 0x9c9486, 1], sand: ['decal', 0xc9b07a, 1], straw: ['grassTop', 0xffe6a0, 1.1], meadow: ['grassTop', 0xf0f4e0, 1],
+    // The flat ones paint on the road-marking surface: its stronger polygon offset keeps them over the grass from afar.
+    gravel: ['marks', 0x9c9486, 1], sand: ['marks', 0xc9b07a, 1], chaff: ['marks', 0xcdb47c, 1], // chaff: a trodden path of earth and chopped straw
+    straw: ['grassTop', 0xffe6a0, 1.1], meadow: ['grassTop', 0xf0f4e0, 1],
   };
   function ground(world, x0, z0, x1, z1, kind, y) {
     const g = GROUND[kind] || GROUND.dirt;
     const col = VH.col(g[1], g[2]);
-    W().tiles(world, x0, z0, x1, z1, (a, b, c, d, ctx) => ctx[g[0]].topRect(a, b, c, d, y === undefined ? KERB + 0.01 : y, col, 6));
+    // Layers lie a few millimetres apart (y); the gaps are tripled so they don't flicker seen from a few hundred metres up.
+    const yy = KERB + ((y === undefined ? KERB + 0.01 : y) - KERB) * 3;
+    W().tiles(world, x0, z0, x1, z1, (a, b, c, d, ctx) => ctx[g[0]].topRect(a, b, c, d, yy, col, 6));
   }
 
   /** Split [a0, a1] round the gaps [[g0, g1], ...]. */
@@ -314,7 +318,8 @@
     const rise = o.rise === undefined ? span * 0.3 : o.rise;
     W().gable(ctx.prop, r.x0, r.z0, r.x1, r.z1, KERB + h, rise, axis, o.roof || 0x5c5f63, o.wall || 0x4a3a2c);
     // A low roof's eaves are within reach: solid out to the overhang.
-    if (KERB + h < 2.6) world.physics.addBox(r.x0 - 0.65, KERB + h - 0.1, r.z0 - 0.65, r.x1 + 0.65, KERB + h + rise * 0.6, r.z1 + 0.65, 'building', F().ALL);
+    // (The roof slabs are 0.25 m thick and tilted, so their lower edge hangs about 0.3 m below the eaves.)
+    if (KERB + h < 3.2) world.physics.addBox(r.x0 - 0.65, KERB + h - 0.35, r.z0 - 0.65, r.x1 + 0.65, KERB + h + rise * 0.6, r.z1 + 0.65, 'building', F().ALL);
     return ctx;
   }
 
