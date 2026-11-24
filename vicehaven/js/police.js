@@ -67,6 +67,15 @@
       if (!other || other.driver !== 'player') return;
       // One collision is one crime: contact lasts several steps, and each step
       // rolled the 25% extra star (heat 2 to 5 in half a second, d01).
+      // And only his doing counts: a patrol car ramming, boxing in or PITting
+      // him isn't him hitting a cop (each of their shoves was a 25% extra
+      // star, so a two-star chase climbed to four on its own, d01).
+      if (other.pos && other.vel) {
+        const dx = other.pos.x - v.pos.x;
+        const dz = other.pos.z - v.pos.z;
+        const d = Math.hypot(dx, dz) || 1;
+        if ((v.vel.x * dx + v.vel.z * dz) / d >= -(other.vel.x * dx + other.vel.z * dz) / d) return;
+      }
       const t = this.game.time;
       if (t - (this._hitT ?? -9) < 1.5) return;
       this._hitT = t;

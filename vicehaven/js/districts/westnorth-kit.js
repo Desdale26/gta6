@@ -388,12 +388,19 @@
       beam(ctx.prop, fx0, yy, fz0, fx0, yy, fz1, 0.06, legC);
       beam(ctx.prop, fx1, yy, fz0, fx1, yy, fz1, 0.06, legC);
     }
-    // Guard bars on the outer side and both ends, all the way up (the colliders below are this cage).
+    // The doorway: the outer side is open at the foot of the first flight (between the west end and
+    // where the first flight starts) up to door height, so Jay can walk in from the ground. The
+    // second flight's landing is two storeys up, so there is headroom.
+    const dx1 = sx - run / 2 - 0.05, doorTop = KERB + 2.4;
+    ctx.prop.box(dx1 - 0.06, KERB, fz1 - 0.06, dx1 + 0.06, yTop + 1.05, fz1 + 0.06, legC);
+    beam(ctx.prop, fx0, doorTop, fz1, dx1, doorTop, fz1, 0.06, legC);
+    // Guard bars on the outer side (not across the doorway) and both ends, all the way up (the colliders below are this cage).
     for (let yy = KERB + 0.55; yy < yTop + 1.0; yy += 1.1) {
-      beam(ctx.prop, fx0, yy, fz1, fx1, yy, fz1, 0.05, legC);
+      beam(ctx.prop, yy < doorTop ? dx1 : fx0, yy, fz1, fx1, yy, fz1, 0.05, legC);
       if (yy > KERB + 0.6) for (const px of [fx0, fx1]) beam(ctx.prop, px, yy, fz0, px, yy, fz1, 0.05, legC);
     }
-    world.physics.addBox(fx0 - 0.1, 0, fz1, fx1 + 0.1, yTop + 1.05, fz1 + 0.12, 'railing', F().SOLID);
+    world.physics.addBox(dx1 - 0.06, 0, fz1, fx1 + 0.1, yTop + 1.05, fz1 + 0.12, 'railing', F().SOLID);
+    world.physics.addBox(fx0 - 0.1, doorTop, fz1, dx1, yTop + 1.05, fz1 + 0.12, 'railing', F().SOLID);
     world.physics.addBox(fx0 - 0.12, KERB + 0.6, fz0, fx0, yTop + 1.05, fz1, 'railing', F().SOLID);
     world.physics.addBox(fx1, KERB + 0.6, fz0, fx1 + 0.12, yTop + 1.05, fz1, 'railing', F().SOLID);
     // The last landing (the top of the stair) is at the east end when the flight count is odd.

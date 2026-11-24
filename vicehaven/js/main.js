@@ -39,6 +39,7 @@
     'Vicehaven: 312 days of sunshine a year. The other 53 are complicated.',
     'Tip: Settings → Graphics → Quality "Low" helps on older laptops.',
     'Harbor Point hotels offer a sea view, a pool and absolutely no questions.',
+    'Tip: Walk up to a Sunloop Shuttle stop to add it, then ride between the stops you have found for a few dollars.',
   ];
 
   // --------------------------------------------------------- scheduler

@@ -443,6 +443,7 @@
       reset.classList.add('btn-ghost');
       pane.append(table, reset);
       pane.append(el('p', 'pane-note', 'Controllers (Xbox, PlayStation and most others) work automatically: left stick moves, right stick looks, A/Cross jumps, B/Circle crouches, L3 sprints, LT aims, RB changes camera, Y/Triangle interacts, Menu/Options pauses.'));
+      pane.append(el('p', 'pane-note', 'Getting about: walk up to a Sunloop Shuttle stop (the teal bus on the map) to add it, then press Interact there on foot to ride to any stop you have found, for a small fare.'));
     }
 
     _refreshBindings() {

@@ -310,3 +310,8 @@
   font-size: 0.85rem;
   color: var(--vh-muted);
 }
+
+/* The "E · Take the shuttle" prompt steps aside while the panel is up. */
+body.ft-open .hud-prompt {
+  visibility: hidden;
+}

@@ -417,6 +417,20 @@ at red lights, queues, overtakes parked cars and honks at you. Pedestrians
 walk the blocks, wait at crossings, and scatter from gunfire and
 pavement-driving.
 
+**The Sunloop Shuttle (fast travel).** Eight shuttle stops, one per big
+region: Civic Plaza, the airport, the Neon Strand and Old Paloma on Isla
+Paloma, Sunreel Studios, Halcyon University, Sandpiper Beach and Redwater.
+Each is a teal bus shelter with a lit map board and a sign by the kerb.
+Civic Plaza is open from the start; walk up to any other stop once to add
+it (grey bus on the map until you do, teal after). On foot at an open stop,
+**E** (**Y** on a controller) opens the shuttle panel: pick a stop with
+**W / S**, the mouse or the stick, and **E** / **Enter** / **A** rides
+there for $10 to $60 depending on distance (the clock moves on up to 40
+minutes). **Esc** or **B** closes it. The driver won't stop while the
+police are after Jay, and not during a job, a race or a challenge.
+Stats show stops found and trips taken; finding all eight earns
+*Next Stop: Everywhere*.
+
 **Wonder Wharf.** The funfair on Isla Paloma is always open, and every ride
 is rideable: walk up to its gate and press E. Ride a full turn of the
 Wonder Wheel (with a pause at the top over the bay), the Riptide roller

@@ -553,11 +553,15 @@
       if (p.inVehicle) return 'Get out of the vehicle first.';
       if (g.missions && g.missions.run) return BUSY;
       if (g.challenges && g.challenges.run) return BUSY;
-      if (g.activities && g.activities.taxi && g.activities.taxi.on) return BUSY;
+      const taxi = g.activities && g.activities.taxi;
+      if (taxi && (taxi.on || taxi.fare)) return BUSY;
       if (g.oddJobs && g.oddJobs.shift) return BUSY;
-      if (g.stores && g.stores.holdup && g.stores.holdup.active) return BUSY;
+      const hu = g.stores && g.stores.holdup;
+      if (hu && (hu.active || hu._inside)) return BUSY;
+      if (g.chopShops && g.chopShops.job) return BUSY;
       if (g.planeSteal && g.planeSteal.job) return BUSY;
-      if (g.carnival && (g.carnival.session || g.carnival._card)) return BUSY;
+      if (g.carnival && (g.carnival.session || g.carnival._card)) return BUSY; // a ride, a stall or a cabinet
+      if (g.club && g.club.dance) return BUSY;
       if (g.state !== 'playing' || p.state === 'dead' || p.frozen || g.frozenControls || g._arresting) return BUSY;
       const b = document.body.classList;
       if (b.contains('cutscene') || (!this.isOpen && b.contains('shop-open')) || b.contains('photo-mode') || b.contains('phone-open')) return BUSY;
@@ -608,7 +612,7 @@
       this._openedAt = performance.now();
       this._fill();
       this.panel.classList.add('visible');
-      document.body.classList.add('shop-open'); // the checklist and weapon panel step aside
+      document.body.classList.add('shop-open', 'ft-open'); // the checklist, the weapon panel and the prompt step aside
       if (g.audio && g.audio.click) g.audio.click();
     }
 
@@ -619,7 +623,7 @@
       this.isOpen = false;
       window.removeEventListener('keydown', this._onKeyBound, true);
       this.panel.classList.remove('visible');
-      document.body.classList.remove('shop-open');
+      document.body.classList.remove('shop-open', 'ft-open');
       const inp = g.input;
       inp.clearPresses();
       inp.releaseAll();
@@ -837,7 +841,8 @@
         }
       } else h.dir = 0;
       if (now.size) this._keys();
-      this._padPrev = new Set(now);
+      this._padPrev.clear();
+      for (const a of now) this._padPrev.add(a);
     }
 
     // ------------------------------------------------------------ the trip
