@@ -659,6 +659,24 @@ Causeway. Allotments and greens line the edges of the map. 17 new roads
 and 21 longer old ones tie it all to the ring road, with traffic lights,
 traffic, pedestrians, the GPS and every name on the HUD and the maps.
 
+**Out in the country.** In Haverly Farms: the **Haverly Farm Shop** on
+Airport Road (strawberries, a cream tea at the Hayloft Café, eggs from the
+honesty box, a goat pen, a straw-bale fort and a pick-your-own pumpkin
+patch whose lanterns glow at night), the **Haverly Corn Maze** (a real maze
+of standing corn: a clock runs from the way in to the bell by the scarecrow
+in the middle, $500 the first time and $100 for a new best) and the
+**Haverly Wind Farm**, eleven turbines along the north edge that turn, with
+red lights blinking at night. In Redwater: **Pelican Links**, a nine-hole
+golf course you can walk or drive across, with a clubhouse and a driving
+range (hit a bucket of balls; your longest drive is saved); **Redwater
+Ranch** (stables, paddocks, pony rides, a rodeo arena with stands);
+**Willow Lake** (cabins, a campsite, a jetty, rowing boats to hire and
+fishing; your biggest catch is saved); the **Redwater Solar Farm** (sheep
+among the panels, a viewing tower, and a visitor centre that tells you the
+farm's output right now); and the **Redwater Recycling Centre**, where you
+can drive up onto the skip deck, throw junk over the rail, smash bottles
+into the banks and browse the re-use shop.
+
 **Daytime on / off.** Press **T** (D-pad right on a controller) at any time:
 the sun comes straight up and stays up, even in story scenes. Press it again
 for the day and night cycle. The pause menu has the same switch, and so does

@@ -21,6 +21,18 @@
  *                      catch is saved), five log cabins on the north shore, a
  *                      campsite of tents and caravans with a shower block and
  *                      a campfire circle, the reception and camp shop
+ *   redwater_solar     Redwater Solar Farm on South Coast Highway: 9,408
+ *                      panels in rows behind a deer fence, sheep grazing
+ *                      between them, inverters, the battery store and the
+ *                      substation, the Sunhouse visitor centre (its board and
+ *                      counter tell the farm's live output from the sun) and
+ *                      a viewing tower you can climb
+ *   redwater_recycling Redwater Recycling Centre on South Coast Highway: in at
+ *                      the west gate, up the ramp onto the skip deck (throw
+ *                      junk over the rail), down and out at the east gate;
+ *                      bottle banks, Second Chance (the re-use shop), the
+ *                      staff yard with lorries, a loader and bales, and the
+ *                      compost rows
  *
  * Static parts are merged into the chunk builders (VH.WNKit, VH.CountryKit);
  * nothing makes a mesh of its own apart from the signs and the ponds' water.

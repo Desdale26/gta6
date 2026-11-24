@@ -745,3 +745,12 @@ Run the scan on your own districts (`emptiness.mjs haverly redwater`,
 `... gateway lantern southgate palomacove`, `... fort airport crestline`)
 until only deliberate open ground is left; declare that with
 `VH.Districts.open` and a label that says what it is.
+
+**Done since (FILL-COUNTRY):** the eight Haverly Farms and Redwater plots
+are built, in js/districts/haverly.js (farm shop, corn maze, wind farm) and
+js/districts/redwater.js (Pelican Links, Redwater Ranch, Willow Lake, the
+solar farm, the recycling centre), with their shared parts in
+js/districts/country-kit.js (`VH.CountryKit`). Each file's header lists
+what is on each plot. The scan now finds 0 empty and 0 plot cells in both
+districts (the golf course and the driving range are also declared open
+ground with `VH.Districts.open`).
